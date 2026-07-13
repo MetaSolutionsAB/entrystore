@@ -56,6 +56,7 @@ import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.GregorianCalendar;
@@ -282,6 +283,9 @@ public class EntryImpl implements Entry {
 		Set<URI> readResourcePrincipals = null;
 		Set<URI> writeResourcePrincipals = null;
 		Set<IRI> contributors = new HashSet<>();
+		// B3: collected during the pass and bucketed after entry/resource/metadata URIs are known,
+		// since ACL triples may appear before or after those statements in the graph.
+		List<Statement> aclStatements = new ArrayList<>();
 		IRI entryURI = null;
 		IRI resURI = null;
 		IRI localMdURI = null;
@@ -335,11 +339,11 @@ public class EntryImpl implements Entry {
 				} catch (NullPointerException e) {
 					log.error(e.getMessage());
 				}
+			} else if (predicate.equals(RepositoryProperties.Read) || predicate.equals(RepositoryProperties.Write)) {
+				aclStatements.add(statement);
 			} else {
 				//Check if statement refer other entries that affect their inv-rel cache.
-				if (!predicate.equals(RepositoryProperties.Read)
-						&& !predicate.equals(RepositoryProperties.Write)
-						&& !predicate.equals(RepositoryProperties.Pipeline)
+				if (!predicate.equals(RepositoryProperties.Pipeline)
 						&& !predicate.equals(RepositoryProperties.originallyCreatedIn)) {
 					Value obj = statement.getObject();
 					org.eclipse.rdf4j.model.Resource subj = statement.getSubject();
@@ -376,6 +380,41 @@ public class EntryImpl implements Entry {
 			}
 		}
 
+		// B3: bucket the collected ACL triples into the five principal sets, mirroring
+		// getAccessSubject/getAccessPredicate exactly, so the first authorization check needs no
+		// extra per-property queries. Only populated when ACL triples exist; otherwise the sets stay
+		// null and getAllowedPrincipalsFor falls back to its lazy load (and caches an empty set).
+		if (!aclStatements.isEmpty()) {
+			administerPrincipals = new HashSet<>();
+			readMetadataPrincipals = new HashSet<>();
+			writeMetadataPrincipals = new HashSet<>();
+			readResourcePrincipals = new HashSet<>();
+			writeResourcePrincipals = new HashSet<>();
+			for (Statement st : aclStatements) {
+				if (!(st.getObject() instanceof IRI objIri)) {
+					continue;
+				}
+				URI principal = URI.create(objIri.stringValue());
+				org.eclipse.rdf4j.model.Resource subj = st.getSubject();
+				IRI pred = st.getPredicate();
+				if (subj.equals(entryURI) && pred.equals(RepositoryProperties.Write)) {
+					administerPrincipals.add(principal);
+				} else if (subj.equals(localMdURI)) {
+					if (pred.equals(RepositoryProperties.Read)) {
+						readMetadataPrincipals.add(principal);
+					} else if (pred.equals(RepositoryProperties.Write)) {
+						writeMetadataPrincipals.add(principal);
+					}
+				} else if (subj.equals(resURI)) {
+					if (pred.equals(RepositoryProperties.Read)) {
+						readResourcePrincipals.add(principal);
+					} else if (pred.equals(RepositoryProperties.Write)) {
+						writeResourcePrincipals.add(principal);
+					}
+				}
+			}
+		}
+
 		// We set all values at once to avoid any delays and possible
 		// inconsistencies that could occur when setting in the loop above
 		this.administerPrincipals = administerPrincipals;
@@ -383,6 +422,9 @@ public class EntryImpl implements Entry {
 		this.writeMetadataPrincipals = writeMetadataPrincipals;
 		this.readResourcePrincipals = readResourcePrincipals;
 		this.writeResourcePrincipals = writeResourcePrincipals;
+		// B3: whether the entry carries its own ACL (any es:read/es:write in its graph), matching
+		// hasAllowedPrincipals(); saves that method its own lazy hasStatement probe.
+		this.readOrWrite = aclStatements.isEmpty() ? Boolean.FALSE : Boolean.TRUE;
 		this.contributors = contributors;
 		this.entryURI = entryURI;
 		this.entryUriCache = null;
