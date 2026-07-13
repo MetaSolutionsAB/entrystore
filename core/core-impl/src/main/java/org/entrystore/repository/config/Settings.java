@@ -175,6 +175,7 @@ public interface Settings {
 	String SOLR_RELATED_PROPERTIES = "entrystore.solr.related.properties";
 	String SOLR_COMMIT_WITHIN = "entrystore.solr.commit-within";
 	String SOLR_COMMIT_WITHIN_MAX = "entrystore.solr.commit-within-max";
+	String SOLR_MAX_OFFSET = "entrystore.solr.max-offset";
 	String SOLR_REINDEX_CONCURRENCY = "entrystore.solr.reindex-concurrency";
 
 	String SYNDICATION_URL_TEMPLATE = "entrystore.syndication.url-template";
