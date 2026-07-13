@@ -47,6 +47,7 @@ public class Arguments {
 	Boolean forceSync;
 	String solrUrl;
 	boolean readAsGroupUser = false;
+	int seededPrincipals = 0;
 	File storePath;
 	File solrPath;
 	File dataPath;
