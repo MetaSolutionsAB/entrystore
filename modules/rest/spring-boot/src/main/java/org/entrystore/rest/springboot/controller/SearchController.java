@@ -72,6 +72,9 @@ public class SearchController {
 	@Value("${entrystore.solr.facet-max-limit:1000}")
 	private int solrMaxFacetLimit;
 
+	@Value("${entrystore.solr.max-offset:10000}")
+	private int solrMaxOffset;
+
 	@Operation(summary = "Searches the repository and returns entries")
 	@GetMapping(
 			params = "type=sparql"
@@ -128,6 +131,10 @@ public class SearchController {
 		}
 		if (offset < 0) {
 			offset = 0;
+		} else if (offset > solrMaxOffset) {
+			// A17: cap deep paging. An unbounded offset forces Solr to walk millions of documents on
+			// a public endpoint; clients needing to page deeper should narrow the query.
+			throw new BadRequestException("Query parameter 'offset' must not exceed " + solrMaxOffset);
 		}
 
 		// Query parameter: limit

@@ -163,6 +163,20 @@ public class ResourceJsonSerializer {
 		return resourceObj;
 	}
 
+	/**
+	 * Loads a single list child by the id embedded in its URI, logging (like the previous inline
+	 * loop) when the referenced child is missing. Returns null if the child does not exist.
+	 */
+	private Entry loadListChild(org.entrystore.List list, URI uri, ContextManager cm) {
+		String u = uri.toString();
+		String id = u.substring(u.lastIndexOf('/') + 1);
+		Entry childEntry = list.getEntry().getContext().get(id);
+		if (childEntry == null) {
+			log.warn("Child resource [{}] in context [{}] does not exist, but is referenced by a list.", id, cm.getURI());
+		}
+		return childEntry;
+	}
+
 	public JSONObject serializeResourceList(Resource resource, ListParams params, String rdfFormat) {
 		ContextManager cm = repositoryManager.getContextManager();
 
@@ -174,37 +188,64 @@ public class ResourceJsonSerializer {
 			try {
 				JSONArray childrenArray = new JSONArray();
 
-				int maxPos = offset + limit;
-				if (limit == 0) {
-					maxPos = Integer.MAX_VALUE;
-				}
+				// long math avoids int overflow when a client supplies a very large offset
+				long maxPos = limit == 0 ? Long.MAX_VALUE : (long) offset + limit;
 
 				List<URI> childrenURIs = list.getChildren();
-				Set<String> childrenIDs = new HashSet<>();
-				List<Entry> childrenEntries = new ArrayList<>();
 
+				// D2: the "allUnsorted" id list is derived from the URIs by substring - no entry load.
+				Set<String> childrenIDs = new HashSet<>();
 				for (URI uri : childrenURIs) {
 					String u = uri.toString();
-					String id = u.substring(u.lastIndexOf('/') + 1);
-					childrenIDs.add(id);
-					Entry childEntry = list.getEntry().getContext().get(id);
-					if (childEntry != null) {
+					childrenIDs.add(u.substring(u.lastIndexOf('/') + 1));
+				}
+
+				// Sorting needs the whole (loaded) list; otherwise we only load the requested page.
+				// The <501 cap uses the total child count (the previous code capped on the loaded
+				// count, which is the same when nothing is missing).
+				boolean doSort = params.sort() != null && childrenURIs.size() < 501;
+				List<Entry> childrenEntries = new ArrayList<>();
+
+				if (doSort) {
+					for (URI uri : childrenURIs) {
+						Entry childEntry = loadListChild(list, uri, cm);
+						if (childEntry != null) {
+							childrenEntries.add(childEntry);
+						}
+					}
+
+					sortChildrenEntries(childrenEntries, params);
+
+					// paginate the sorted list to [offset, maxPos)
+					int from = Math.min(offset, childrenEntries.size());
+					int to = (int) Math.min(maxPos, childrenEntries.size());
+					childrenEntries = new ArrayList<>(childrenEntries.subList(from, Math.max(from, to)));
+				} else {
+					if (params.sort() != null) {
+						log.warn("Ignoring sort parameter for performance reasons because list has more than 500 children");
+					}
+					// D2: load only the requested page of non-null children, skipping the first
+					// `offset` successfully-loaded children (matching the previous pagination over the
+					// loaded list, but without loading the tail beyond the page).
+					int skipped = 0;
+					for (URI uri : childrenURIs) {
+						if (limit != 0 && childrenEntries.size() >= limit) {
+							break;
+						}
+						Entry childEntry = loadListChild(list, uri, cm);
+						if (childEntry == null) {
+							continue;
+						}
+						if (skipped < offset) {
+							skipped++;
+							continue;
+						}
 						childrenEntries.add(childEntry);
-					} else {
-						log.warn("Child resource [{}] in context [{}] does not exist, but is referenced by a list.", id, cm.getURI());
 					}
 				}
 
-				if (params.sort() != null && (childrenEntries.size() < 501)) {
-					sortChildrenEntries(childrenEntries, params);
-				} else if (params.sort() != null) {
-					log.warn("Ignoring sort parameter for performance reasons because list has more than 500 children");
-				}
-
-				//for (int i = 0; i < childrenURIs.size(); i++) {
-				for (int i = offset; i < maxPos && i < childrenEntries.size(); i++) {
+				for (Entry childEntry : childrenEntries) {
 					JSONObject childJSON = new JSONObject();
-					Entry childEntry = childrenEntries.get(i);
 
 					/*
 					 * Children-rights

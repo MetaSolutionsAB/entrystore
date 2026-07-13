@@ -42,6 +42,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -184,11 +185,20 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterTitle(List<Entry> entries, final String language, final boolean ascending, final GraphType prioritizedResourceType) {
+		// D12: decorate-sort-undecorate. getTitle loads the metadata graph (and runs an ACL check)
+		// per call; a comparator calling it does O(N log N) graph loads. Precompute each title once
+		// into an IdentityHashMap keyed by entry so the comparator is a pure string compare.
+		final Map<Entry, String> titleByEntry = new IdentityHashMap<>();
+		for (Entry e : entries) {
+			if (e != null && !titleByEntry.containsKey(e)) {
+				titleByEntry.put(e, getTitle(e, language));
+			}
+		}
 		entries.sort((e1, e2) -> {
 			int result = 0;
 			if (e1 != null && e2 != null) {
-				String title1 = getTitle(e1, language);
-				String title2 = getTitle(e2, language);
+				String title1 = titleByEntry.get(e1);
+				String title2 = titleByEntry.get(e2);
 				if (title1 != null && title2 != null) {
 					result = title1.compareToIgnoreCase(title2);
 				} else if (title1 == null && title2 != null) {

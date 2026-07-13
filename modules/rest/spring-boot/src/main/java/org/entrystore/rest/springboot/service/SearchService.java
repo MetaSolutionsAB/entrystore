@@ -236,7 +236,8 @@ public class SearchService {
 
 		log.debug("Graph fetching and serialization took {} ms ", Duration.between(startTime, Instant.now()).toMillis());
 
-		return result.toString(2);
+		// D3: compact output; pretty-printing inflates the search payload and costs CPU per request.
+		return result.toString(0);
 	}
 
 	private static @NotNull JSONArray getFacetFieldsArr(QueryResultsDto queryResults) {

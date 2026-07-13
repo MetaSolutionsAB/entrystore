@@ -107,17 +107,12 @@ public class ContextService {
 			}
 		}
 
+		// D4: the entry id is the last segment of the entry URI (same derivation the deleted-entries
+		// branch above uses), so we do not load every entry just to read its id.
 		return context.getEntries()
 				.stream()
-				.map(uri -> {
-					Entry entry = context.getByEntryURI(uri);
-					if (entry == null) {
-						log.warn("No entry found for this referenced URI: {}", uri);
-						return null;
-					}
-					return entry.getId();
-				})
-				.filter(Objects::nonNull)
+				.map(URI::toString)
+				.map(uri -> uri.substring(uri.lastIndexOf("/") + 1))
 				.toList();
 	}
 
