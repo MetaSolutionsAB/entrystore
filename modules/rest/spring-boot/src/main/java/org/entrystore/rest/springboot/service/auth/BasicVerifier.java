@@ -23,8 +23,6 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
 
-import java.net.URI;
-
 
 /**
  * Does a simple lookup for the secret of a principal.
@@ -35,10 +33,7 @@ import java.net.URI;
 public class BasicVerifier {
 
 	public static String getSaltedHashedSecret(PrincipalManager pm, String identifier) {
-		URI authUser = pm.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		return PrincipalManagerUtil.runAsAdmin(pm, () -> {
 			Entry userEntry = pm.getPrincipalEntry(identifier);
 			if (userEntry != null && GraphType.User.equals(userEntry.getGraphType())) {
 				User user = ((User) userEntry.getResource());
@@ -48,27 +43,13 @@ public class BasicVerifier {
 					log.error("No secret found for principal: {}", identifier);
 				}
 			}
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, authUser, primary);
-		}
-
-		return null;
+			return null;
+		});
 	}
 
 	public static boolean isUserDisabled(PrincipalManager pm, User user) {
-		URI currentUser = pm.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		return PrincipalManagerUtil.runAsAdmin(pm, () -> {
 			return user.isDisabled();
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
-		}
+		});
 	}
 }

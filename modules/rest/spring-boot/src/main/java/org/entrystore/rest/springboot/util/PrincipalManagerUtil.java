@@ -21,9 +21,42 @@ import lombok.NoArgsConstructor;
 import org.entrystore.PrincipalManager;
 
 import java.net.URI;
+import java.util.function.Supplier;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PrincipalManagerUtil {
+
+	/**
+	 * Runs {@code action} with the per-thread authenticated user elevated to the admin user, restoring
+	 * the previous user in all cases (including when {@code action} throws) via
+	 * {@link #restoreAuthenticatedUserSafely(PrincipalManager, URI, Throwable)}.
+	 * <p>
+	 * If the action's body needs the pre-elevation user URI as a value (e.g. to set a creator or grant
+	 * ACLs), the caller must capture {@code pm.getAuthenticatedUserURI()} before invoking this method.
+	 */
+	public static <T> T runAsAdmin(PrincipalManager pm, Supplier<T> action) {
+		URI previous = pm.getAuthenticatedUserURI();
+		Throwable primary = null;
+		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+			return action.get();
+		} catch (Throwable t) {
+			primary = t;
+			throw t;
+		} finally {
+			restoreAuthenticatedUserSafely(pm, previous, primary);
+		}
+	}
+
+	/**
+	 * Runs {@code action} as the admin user; see {@link #runAsAdmin(PrincipalManager, Supplier)}.
+	 */
+	public static void runAsAdmin(PrincipalManager pm, Runnable action) {
+		runAsAdmin(pm, () -> {
+			action.run();
+			return null;
+		});
+	}
 
 	/**
 	 * Restore the per-thread authenticated user URI to {@code previous} from inside a {@code finally}

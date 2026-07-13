@@ -36,7 +36,6 @@ import org.springframework.util.CollectionUtils;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryManagerMXBean;
-import java.net.URI;
 import java.time.ZoneId;
 import java.util.Collections;
 import java.util.List;
@@ -178,10 +177,7 @@ public class StatusService {
 
 	private Map<String, Object> buildCountStats() {
 		PrincipalManager pm = repositoryManager.getPrincipalManager();
-		URI currentUser = pm.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		return PrincipalManagerUtil.runAsAdmin(pm, () -> {
 			return Map.of(
 				"contextCount", repositoryManager.getContextManager().getEntries().size(),
 				"groupCount", pm.getGroupUris().size(),
@@ -189,12 +185,7 @@ public class StatusService {
 				"namedGraphCount", repositoryManager.getNamedGraphCount(),
 				"tripleCount", repositoryManager.getTripleCount()
 			);
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
-		}
+		});
 	}
 
 	private Map<String, Object> buildRelationStats(boolean verbose) {

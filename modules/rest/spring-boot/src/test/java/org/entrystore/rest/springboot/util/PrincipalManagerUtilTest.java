@@ -17,27 +17,39 @@
 package org.entrystore.rest.springboot.util;
 
 import org.entrystore.PrincipalManager;
+import org.entrystore.User;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class PrincipalManagerUtilTest {
 
 	private static final URI PREVIOUS = URI.create("http://localhost/store/_principals/resource/42");
+	private static final URI ADMIN = URI.create("http://localhost/store/_principals/resource/_admin");
 
 	@Mock
 	private PrincipalManager pm;
+
+	@Mock
+	private User adminUser;
 
 	@Test
 	void restoreAuthenticatedUserSafely_happyPath_withNullPrimary_returnsSilently() {
@@ -87,5 +99,76 @@ class PrincipalManagerUtilTest {
 		Throwable[] suppressed = tryBodyFailure.getSuppressed();
 		assertArrayEquals(new Throwable[]{cleanupFailure}, suppressed,
 				"cleanup failure should be attached to primary as the sole suppressed exception");
+	}
+
+	@Test
+	void runAsAdmin_returnsSupplierValueAndRestoresPreviousUser() {
+		stubAdminElevation();
+		List<URI> uriChanges = recordUriChanges();
+
+		String result = PrincipalManagerUtil.runAsAdmin(pm, () -> "value");
+
+		assertEquals("value", result);
+		assertEquals(List.of(ADMIN, PREVIOUS), uriChanges, "must elevate to admin, then restore the previous user");
+	}
+
+	@Test
+	void runAsAdmin_runsActionWhileImpersonatingAdmin() {
+		stubAdminElevation();
+		List<URI> uriChanges = recordUriChanges();
+
+		PrincipalManagerUtil.runAsAdmin(pm, () -> {
+			assertEquals(List.of(ADMIN), uriChanges, "action must run after elevation and before restore");
+		});
+
+		assertEquals(List.of(ADMIN, PREVIOUS), uriChanges);
+	}
+
+	@Test
+	void runAsAdmin_actionThrows_restoresAndRethrows() {
+		stubAdminElevation();
+		RuntimeException actionFailure = new RuntimeException("action blew up");
+		Runnable failingAction = () -> {
+			throw actionFailure;
+		};
+
+		RuntimeException thrown = assertThrows(RuntimeException.class,
+				() -> PrincipalManagerUtil.runAsAdmin(pm, failingAction));
+
+		assertSame(actionFailure, thrown);
+		verify(pm).setAuthenticatedUserURI(PREVIOUS);
+	}
+
+	@Test
+	void runAsAdmin_restoreFailsAfterActionThrew_attachesCleanupFailureAsSuppressed() {
+		stubAdminElevation();
+		RuntimeException actionFailure = new RuntimeException("action blew up");
+		RuntimeException cleanupFailure = new RuntimeException("restore failed");
+		// stub both argument values: strict stubbing rejects the elevation call (ADMIN) when only
+		// the restore call (PREVIOUS) has a stubbing on the same method
+		doNothing().when(pm).setAuthenticatedUserURI(ADMIN);
+		doThrow(cleanupFailure).when(pm).setAuthenticatedUserURI(PREVIOUS);
+		Runnable failingAction = () -> {
+			throw actionFailure;
+		};
+
+		RuntimeException thrown = assertThrows(RuntimeException.class,
+				() -> PrincipalManagerUtil.runAsAdmin(pm, failingAction));
+
+		assertSame(actionFailure, thrown, "the action's exception must keep propagating");
+		assertArrayEquals(new Throwable[]{cleanupFailure}, thrown.getSuppressed());
+	}
+
+	private void stubAdminElevation() {
+		when(pm.getAuthenticatedUserURI()).thenReturn(PREVIOUS);
+		when(pm.getAdminUser()).thenReturn(adminUser);
+		when(adminUser.getURI()).thenReturn(ADMIN);
+	}
+
+	private List<URI> recordUriChanges() {
+		List<URI> uriChanges = new ArrayList<>();
+		doAnswer(invocation -> uriChanges.add(invocation.getArgument(0)))
+				.when(pm).setAuthenticatedUserURI(any());
+		return uriChanges;
 	}
 }

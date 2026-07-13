@@ -316,11 +316,7 @@ public class AuthService {
 	}
 
 	private String applyPasswordReset(SignupInfo ci, String title) {
-		URI authUser = principalManager.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
-
+		PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(ci.getEmail());
 			User u;
 			if (userEntry != null) {
@@ -361,12 +357,7 @@ public class AuthService {
 					}
 				}
 			}
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser, primary);
-		}
+		});
 
 		if (ci.getUrlSuccess() != null) {
 			handleUrlRedirect(ci.getUrlSuccess());
@@ -423,13 +414,7 @@ public class AuthService {
 			}
 		}
 
-		URI authUser = principalManager.getAuthenticatedUserURI();
-		boolean shouldSend = false;
-		Throwable primary = null;
-
-		try {
-			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
-
+		boolean shouldSend = PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(ci.getEmail());
 			User u;
 			if (userEntry != null) {
@@ -444,18 +429,14 @@ public class AuthService {
 			// endpoint does not leak which usernames exist or are active; the actual outcome is only logged.
 			if (u == null) {
 				log.info("Ignoring password reset attempt for non-existing user {}", HttpUtil.sanitizeForLog(ci.getEmail()));
+				return false;
 			} else if (u.isDisabled()) {
 				log.info("Ignoring password reset attempt for disabled user {}", HttpUtil.sanitizeForLog(ci.getEmail()));
-			} else {
-				shouldSend = true;
-				log.info("Resolved active user for password reset attempt {}", HttpUtil.sanitizeForLog(ci.getEmail()));
+				return false;
 			}
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser, primary);
-		}
+			log.info("Resolved active user for password reset attempt {}", HttpUtil.sanitizeForLog(ci.getEmail()));
+			return true;
+		});
 
 		// The expensive work (token generation + bcrypt + SMTP send) runs on a background thread so
 		// all three branches (nonexistent / disabled / active) return to the client without the
@@ -562,18 +543,14 @@ public class AuthService {
 	}
 
 	private String createUserFromSignup(SignupInfo signupInfo, String title) {
-		URI authUser = principalManager.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
-
+		PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(signupInfo.getEmail());
 
 			if ((userEntry != null && GraphType.User.equals(userEntry.getGraphType())) ||
 					principalManager.getUserByExternalID(signupInfo.getEmail()) != null) {
 				if (signupInfo.getUrlFailure() != null) {
 					handleUrlRedirect(signupInfo.getUrlFailure());
-					return null;
+					return;
 				} else {
 					throw new DataConflictHtmlException(USER_ALREADY_EXISTS_MESSAGE, title);
 				}
@@ -585,7 +562,7 @@ public class AuthService {
 				log.error("Error when creating new user during sign-up ");
 				if (signupInfo.getUrlFailure() != null) {
 					handleUrlRedirect(signupInfo.getUrlFailure());
-					return null;
+					return;
 				} else {
 					throw new InternalServerErrorException(UNABLE_TO_CREATE_USER_MESSAGE);
 				}
@@ -612,13 +589,7 @@ public class AuthService {
 					log.info("Set home context of user {} to {}", u.getURI(), homeContext.getResourceURI());
 				}
 			}
-
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser, primary);
-		}
+		});
 
 		if (signupInfo.getUrlSuccess() != null) {
 			handleUrlRedirect(signupInfo.getUrlSuccess());
