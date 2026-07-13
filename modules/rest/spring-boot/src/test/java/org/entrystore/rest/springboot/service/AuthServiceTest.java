@@ -18,6 +18,8 @@ package org.entrystore.rest.springboot.service;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.entrystore.Entry;
+import org.entrystore.User;
 import org.entrystore.rest.springboot.model.auth.SignupInfo;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,15 +27,25 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.core.session.SessionInformation;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.net.URI;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -90,5 +102,70 @@ class AuthServiceTest {
 
 		assertEquals(0.0, meterRegistry.counter("auth.pwreset.rejected").count(),
 				"Happy path must not increment the rejection counter");
+	}
+
+	@Test
+	void expireUserSessions_nullExceptSessionId_expiresAllSessions() {
+		SessionRegistry sessionRegistry = mock(SessionRegistry.class);
+		AuthService service = authServiceWithSessionRegistry(sessionRegistry);
+		UserDetails principal = principalFor("http://example.com/_principals/resource/42");
+		SessionInformation first = mock(SessionInformation.class);
+		SessionInformation second = mock(SessionInformation.class);
+		when(sessionRegistry.getAllPrincipals()).thenReturn(List.of(principal));
+		when(sessionRegistry.getAllSessions(principal, false)).thenReturn(List.of(first, second));
+
+		service.expireUserSessions(userWithResourceUri("http://example.com/_principals/resource/42"), null);
+
+		verify(first).expireNow();
+		verify(second).expireNow();
+	}
+
+	@Test
+	void expireUserSessions_exceptSessionId_sparesThatSession() {
+		SessionRegistry sessionRegistry = mock(SessionRegistry.class);
+		AuthService service = authServiceWithSessionRegistry(sessionRegistry);
+		UserDetails principal = principalFor("http://example.com/_principals/resource/42");
+		SessionInformation current = mock(SessionInformation.class);
+		SessionInformation other = mock(SessionInformation.class);
+		when(current.getSessionId()).thenReturn("current-session");
+		when(other.getSessionId()).thenReturn("other-session");
+		when(sessionRegistry.getAllPrincipals()).thenReturn(List.of(principal));
+		when(sessionRegistry.getAllSessions(principal, false)).thenReturn(List.of(current, other));
+
+		service.expireUserSessions(userWithResourceUri("http://example.com/_principals/resource/42"), "current-session");
+
+		verify(other).expireNow();
+		verify(current, never()).expireNow();
+	}
+
+	@Test
+	void expireUserSessions_noMatchingPrincipal_isNoop() {
+		SessionRegistry sessionRegistry = mock(SessionRegistry.class);
+		AuthService service = authServiceWithSessionRegistry(sessionRegistry);
+		UserDetails otherPrincipal = principalFor("http://example.com/_principals/resource/somebody-else");
+		when(sessionRegistry.getAllPrincipals()).thenReturn(List.of(otherPrincipal));
+
+		service.expireUserSessions(userWithResourceUri("http://example.com/_principals/resource/42"), null);
+
+		verify(sessionRegistry, never()).getAllSessions(any(), anyBoolean());
+	}
+
+	private AuthService authServiceWithSessionRegistry(SessionRegistry sessionRegistry) {
+		return new AuthService(null, null, null, null, null, null, new EmailValidator(),
+				null, sessionRegistry, null, null, meterRegistry, null);
+	}
+
+	private static UserDetails principalFor(String username) {
+		UserDetails principal = mock(UserDetails.class);
+		when(principal.getUsername()).thenReturn(username);
+		return principal;
+	}
+
+	private static User userWithResourceUri(String resourceUri) {
+		User user = mock(User.class);
+		Entry entry = mock(Entry.class);
+		when(user.getEntry()).thenReturn(entry);
+		when(entry.getResourceURI()).thenReturn(URI.create(resourceUri));
+		return user;
 	}
 }

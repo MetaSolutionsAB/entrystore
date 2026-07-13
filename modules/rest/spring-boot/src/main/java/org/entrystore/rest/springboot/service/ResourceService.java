@@ -66,9 +66,6 @@ import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.security.core.session.SessionInformation;
-import org.springframework.security.core.session.SessionRegistry;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.NotAcceptableStatusException;
@@ -112,7 +109,7 @@ public class ResourceService {
 
 	private final SsrfValidator ssrfValidator;
 
-	private final SessionRegistry sessionRegistry;
+	private final AuthService authService;
 
 	@Value("${entrystore.import.tmpdir:${java.io.tmpdir}}")
 	@Setter(AccessLevel.PACKAGE)
@@ -398,21 +395,7 @@ public class ResourceService {
 						// the test only asks if the authenticatedUser is the same as the user, whose password is to be changed
 						// because no user can change password of another user, only admin
 						boolean expireAllSessions = !pm.getAuthenticatedUserURI().equals(resourceUser.getURI());
-						List<Object> allPrincipals = sessionRegistry.getAllPrincipals();
-
-						// go through all principals
-						// if the principal matches the principal, whose password is being changed, expire his sessions
-						for (Object principal : allPrincipals) {
-							if (principal instanceof UserDetails user && user.getUsername().equals(resourceUser.getEntry().getResourceURI().toString())) {
-								for (SessionInformation session : sessionRegistry.getAllSessions(user, false)) {
-									// do not expire the current session, in case an admin or user is changing his own password
-									if (expireAllSessions || !session.getSessionId().equals(currentSessionId)) {
-										session.expireNow();
-									}
-								}
-								break;
-							}
-						}
+						authService.expireUserSessions(resourceUser, expireAllSessions ? null : currentSessionId);
 
 						Email.sendPasswordChangeConfirmation(repositoryManager.getConfiguration(), entry);
 					} else {

@@ -274,6 +274,25 @@ public class AuthService {
 	}
 
 	/**
+	 * Expires all registered sessions of the given user. A non-null {@code exceptSessionId} is
+	 * spared — used when a user (or admin) changes their own password so the session performing
+	 * the change stays alive.
+	 */
+	public void expireUserSessions(User user, String exceptSessionId) {
+		String username = user.getEntry().getResourceURI().toString();
+		for (Object principal : sessionRegistry.getAllPrincipals()) {
+			if (principal instanceof UserDetails userDetails && userDetails.getUsername().equals(username)) {
+				for (SessionInformation session : sessionRegistry.getAllSessions(userDetails, false)) {
+					if (exceptSessionId == null || !session.getSessionId().equals(exceptSessionId)) {
+						session.expireNow();
+					}
+				}
+				break;
+			}
+		}
+	}
+
+	/**
 	 * Legacy password-reset confirmation: clicking the emailed link immediately applies the password
 	 * the requester chose at request time. Used when {@code entrystore.auth.confirmation.legacy=true}.
 	 */
@@ -336,14 +355,7 @@ public class AuthService {
 					signupTokenCache.removeAllTokens(ci.getEmail());
 					log.debug("Removed any authentication tokens belonging to user {}", u.getURI());
 
-					List<Object> allPrincipals = sessionRegistry.getAllPrincipals();
-					for (Object principal : allPrincipals) {
-						if (principal instanceof UserDetails user && user.getUsername().equals(u.getEntry().getResourceURI().toString())) {
-							for (SessionInformation session : sessionRegistry.getAllSessions(principal, false)) {
-								session.expireNow();
-							}
-						}
-					}
+					expireUserSessions(u, null);
 					Email.sendPasswordChangeConfirmation(config, u.getEntry());
 					log.info("Reset password for user {}", u.getURI());
 				} else {

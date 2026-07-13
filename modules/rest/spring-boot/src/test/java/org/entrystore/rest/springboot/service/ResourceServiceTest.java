@@ -39,7 +39,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.core.session.SessionRegistry;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -88,7 +87,7 @@ class ResourceServiceTest {
 	private SsrfValidator ssrfValidator;
 
 	@Mock
-	private SessionRegistry sessionRegistry;
+	private AuthService authService;
 
 	@Mock
 	private Entry entry;
@@ -97,7 +96,7 @@ class ResourceServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, ssrfValidator, sessionRegistry);
+		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, ssrfValidator, authService);
 		// Point importTmpDir at the JUnit-managed isolated directory so the
 		// temp-file cleanup assertions are scoped to this test and cannot be
 		// polluted by other processes or orphan files in the shared system temp.
