@@ -87,6 +87,16 @@ What the single-writer run *does* confirm: the restructure adds no
 wall-clock regression, the queue drains promptly, and end-to-end
 indexing correctness is intact (759 ITs).
 
+## Addendum (2026-07-13) — AC re-run: flat confirmed
+
+Re-run under stable AC conditions (same snapshots, interleaved,
+order-alternated, canaries 218–246 ms): before avg 42 634 ms, after avg
+43 835 ms — rounds mixed (+907 / +3 733 / −1 037) with spread larger than
+the delta, i.e. **flat within noise**, matching the original verdict.
+The single-writer harness cannot exhibit this change's benefit either on
+battery or on AC; the value remains the lock-scope, heap-bounding and
+latency arguments below.
+
 ## Value that the benchmark cannot show
 
 - **A9 (bounded heap)** — the queue holds URIs, not built documents; a
