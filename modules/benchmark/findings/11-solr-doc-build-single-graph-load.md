@@ -77,6 +77,24 @@ Excluded runs, for the record: `before-1` (cold, canary 1 362 ms,
 elevated at 74 041 ms — single background spike), `after-4` (canary
 786 ms).
 
+## Addendum (2026-07-13) — AC re-run: −6.9%, confirmed
+
+The table above was measured on battery power. Re-run under stable AC
+conditions with the same jar snapshots (interleaved, order-alternated,
+canaries 215–260 ms):
+
+| Round | after | before |
+|---|---:|---:|
+| 1 | 42 485 | 46 413 |
+| 2 (after ran first) | 41 804 | 44 755 |
+| 3 | 42 878 | 45 465 |
+| **avg** | **42 389** | **45 544** |
+
+**−6.9%**, after wins all three rounds including when running first, and
+the ranges do not overlap (41.8–42.9 k vs 44.8–46.4 k). The result is
+envelope-independent — battery gave −7.7%, AC gives −6.9%. This is the
+most robust measured win of the whole round.
+
 ## Interpretation
 
 The saving (~4.7 s over 4 000 documents ≈ **~1.2 ms/document**) is the
