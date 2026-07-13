@@ -21,10 +21,7 @@ From the repository root:
 ./mvnw clean verify -pl modules/rest/integration-test
 
 # A single IT class
-./mvnw clean verify -pl modules/rest/integration-test -Dtest=ProxyIT
-
-# Skip OWASP dependency-check for faster local runs
-./mvnw clean verify -pl modules/rest/integration-test -DskipDependencyCheck=true
+./mvnw clean verify -pl modules/rest/integration-test -Dit.test=ProxyIT
 ```
 
 Configuration:

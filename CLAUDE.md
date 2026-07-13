@@ -6,48 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 EntryStore is the reference implementation of the Resource and Metadata Management Model (ReM3) - a Linked Data framework for managing resources and their metadata using "entries". Built with Java 25, RDF4J, and Solr. The REST layer uses Spring Boot 4.1 (Jetty 12).
 
-## Build Commands
+## Build & Test
 
 **Always use `./mvnw clean`** — stale artifacts from other branches cause subtle failures.
 
-Maven is supplied by the Maven Wrapper (`./mvnw` / `mvnw.cmd`), pinned to 3.9.16. No system Maven install required.
-
-**Java 25 required** — Lombok annotation processing is configured explicitly via `annotationProcessorPaths` (required since JDK 23+).
+Maven is supplied by the Maven Wrapper (`./mvnw` / `mvnw.cmd`), pinned to 3.9.16 — no system Maven install required. **Java 25 required** — Lombok annotation processing is configured explicitly via `annotationProcessorPaths` (required since JDK 23+).
 
 ```bash
-# Quick build (skip tests)
-./mvnw clean install -Dmaven.test.skip=true
-# or use the provided script:
-./build.sh install
-
-# Full build with all tests
-./mvnw clean install
-
-# Build specific module
-./mvnw clean install -pl core/core-impl
-./mvnw clean install -pl modules/rest/spring-boot
-
-# Build Spring Boot module and all its dependencies
-./mvnw clean install -pl modules/rest/spring-boot -am -DskipTests
-```
-
-## Testing
-
-```bash
-# Run all tests (unit + integration)
-./mvnw clean install
-
-# Unit tests only
-./mvnw clean test
-
-# Integration tests only (runs all ITs)
-./mvnw clean verify -pl modules/rest/integration-test
-
-# Run a specific integration test class
-./mvnw clean verify -pl modules/rest/integration-test -Dtest=ProxyIT
-
-# Run specific unit test
-./mvnw clean test -Dtest=EntryImplTest
+./mvnw clean install                                                # full build: unit + integration tests
+./mvnw clean install -Dmaven.test.skip=true                         # quick build without tests (or: ./build.sh clean)
+./mvnw clean install -pl core/core-impl                             # single module
+./mvnw clean install -pl modules/rest/spring-boot -am -DskipTests   # single module plus its dependencies
+./mvnw clean test                                                   # unit tests only (one class: -Dtest=EntryImplTest)
+./mvnw clean verify -pl modules/rest/integration-test               # integration tests only (one class: -Dit.test=ProxyIT)
 ```
 
 **Test structure:**
@@ -72,7 +43,8 @@ entrystore/
 │   │   ├── spring-boot/       # Spring Boot REST layer (active development)
 │   │   └── integration-test/  # Groovy/Spock integration tests (Testcontainers)
 │   ├── harvesting/            # OAI-PMH harvesting
-│   └── transforms/            # Data format transformations
+│   ├── transforms/            # Data format transformations
+│   └── benchmark/             # Benchmarks
 └── templates/                 # HTML/CSS templates
 ```
 
@@ -102,17 +74,16 @@ springboot/
 ```
 
 **Key patterns:**
-- Spring Boot **4.1** (`spring-boot-starter-parent` version in root `pom.xml`). Verify APIs against Boot 4.1, not Boot 3.x — 4.x relocated/renamed packages. Prefer `RestClient` over the deprecated `RestTemplate`.
+- Spring Boot **4.1** (`spring-boot-starter-parent` version in root `pom.xml`) on embedded Jetty 12 (`spring-boot-starter-jetty`), not Tomcat. Verify APIs against Boot 4.1, not Boot 3.x — 4.x relocated/renamed packages. Prefer `RestClient` over the deprecated `RestTemplate`.
 - Controllers: `@RestController` + `@RequiredArgsConstructor` (Lombok) + `@Operation` (Swagger)
 - Services: `@Slf4j` + `@Service` + `@RequiredArgsConstructor`
 - For new services, read config via Spring Boot mechanisms (`@Value("${prop:default}")` or `@ConfigurationProperties`). Some services still call `repositoryManager.getConfiguration().get*` directly — migrate when touching them.
+- `@ConfigurationProperties` records must declare only the canonical constructor — a second constructor silently makes nested binding return empty values (no error).
 - Config: `application.yaml` imports `entrystore.properties` via `spring.config.import` — every `entrystore.*` key is bound to the Spring `Environment` and is readable via `@Value`, `@ConfigurationProperties`, and `@ConditionalOnProperty`, not only via the legacy `Config` wrapper
-- Default port: 8080 (production), 8181 (integration tests)
-- Embedded server: Jetty 12 (`spring-boot-starter-jetty`), not Tomcat
 - JSON: Jackson 3 — use `tools.jackson.*` (not `com.fasterxml.jackson.*`); annotations stay in `com.fasterxml.jackson.annotation.*` **except** `@JsonSerialize`/`@JsonDeserialize` (`tools.jackson.databind.annotation.*`). Custom serializers extend `ValueSerializer`/`ValueDeserializer`; mappers are immutable (`JsonMapper.builder()...build()`).
 
-**REST routes** (Spring Boot controllers):
-`/{context-id}/entry/{entry-id}`, `/{context-id}/resource/{entry-id}`, `/{context-id}/metadata/{entry-id}`, `/{context-id}/relation/{entry-id}`, `/search`, `/proxy`, `/{context-id}/proxy`, `/echo`, `/validator`, `/auth/*`, `/management/*`
+**REST routes** (one controller per route family in `controller/`):
+`/{context-id}` (the context itself, plus `/{context-id}/export`, `/{context-id}/import`), `/{context-id}/entry/{entry-id}`, `/{context-id}/resource/{entry-id}`, `/{context-id}/metadata/{entry-id}`, `/{context-id}/relations/{entry-id}`, `/{context-id}/merge`, `/{context-id}/execute`, `/search`, `/sparql`, `/lookup`, `/proxy` (each of `/sparql`, `/lookup`, `/proxy` also exists context-scoped, e.g. `/{context-id}/proxy`), `/message`, `/echo`, `/validator`, `/_principals/groups`, `/auth/*`, `/management/*`
 
 **Spring bean dependency rules:**
 - **Avoid and verify that no circular bean dependencies are introduced.** A `@Configuration` class is a wiring spec, not an actor — if it needs to do something beyond constructing objects, that logic belongs in a separate `@Service` or `@Component`. A common violation: a `@Configuration` class injecting a bean it itself produces (via constructor / `@RequiredArgsConstructor`), creating a self-referencing cycle that prevents startup.
@@ -165,16 +136,7 @@ From `.editorconfig`:
 
 ## CI/CD
 
-Bitbucket Pipelines with Eclipse Temurin 25; Maven is supplied by the wrapper (`./mvnw`, pinned to 3.9.16). Integration tests use Docker (TestContainers with `TESTCONTAINERS_RYUK_DISABLED=true`).
-
-**Build optimization flags:**
-```bash
-# Skip OWASP dependency check (faster local builds)
-./mvnw clean install -DskipDependencyCheck=true
-
-# Debug mode
-./mvnw clean install -X
-```
+Bitbucket Pipelines (`bitbucket-pipelines.yml`) with Eclipse Temurin 25, building via `./mvnw`. Integration tests use Docker (TestContainers with `TESTCONTAINERS_RYUK_DISABLED=true`).
 
 ## Running EntryStore
 
@@ -219,7 +181,7 @@ Example config: `modules/rest/spring-boot/src/main/resources/entrystore.properti
 
 ## Model Compatibility
 
-This project targets Claude Opus 4.7 as the primary model. Prompts must be safe under 4.7's literal instruction interpretation:
+This project targets the latest Claude models — no pinned version. Write prompt content (agents, skills, instruction files) to be safe under the most literal instruction interpretation, so it works unchanged across model upgrades:
 
 - Use inspectable predicates (file-pattern matches, regex, explicit enum lists) instead of vague adjectives like "relevant" or "appropriate"
 - State subagent-launch rules explicitly (which agents, one Task call each, same assistant message)
