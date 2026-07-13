@@ -47,6 +47,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
@@ -229,6 +230,53 @@ class ResourceJsonSerializerTest {
 		JSONObject childJson = result.getJSONArray("children").getJSONObject(0);
 		assertTrue(childJson.has("rights"));
 		assertEquals(0, childJson.getJSONArray("rights").length());
+	}
+
+	@Test
+	void appendMetadataInfoAndRelations_flagFalse_propagatesInfoAuthorizationException() {
+		// The list path relies on info/relations exceptions reaching serializeResourceList's
+		// outer catch — the helper must not guard them when flagNoAccess is false.
+		Entry child = mockListChild("a", new Date(1000));
+		when(child.getGraph()).thenThrow(new AuthorizationException(null, null, null));
+
+		assertThrows(AuthorizationException.class,
+				() -> serializer.appendMetadataInfoAndRelations(child, new JSONObject(), null, false));
+	}
+
+	@Test
+	void appendMetadataInfoAndRelations_flagTrue_capturesAllThreeFlags() {
+		Entry child = mockListChild("a", new Date(1000));
+		when(child.getLocalMetadata()).thenThrow(new AuthorizationException(null, null, null));
+		when(child.getGraph()).thenThrow(new AuthorizationException(null, null, null));
+		when(child.getRelations()).thenThrow(new AuthorizationException(null, null, null));
+		JSONObject childJson = new JSONObject();
+
+		serializer.appendMetadataInfoAndRelations(child, childJson, null, true);
+
+		assertTrue(childJson.getBoolean("noAccessToMetadata"));
+		assertTrue(childJson.getBoolean("noAccessToEntryInfo"));
+		assertTrue(childJson.getBoolean("noAccessToRelations"));
+	}
+
+	@Test
+	void sortChildrenEntries_unknownSortValue_leavesOrderUnchanged() {
+		Entry a = mockListChild("a", new Date(3000));
+		Entry b = mockListChild("b", new Date(1000));
+		List<Entry> children = new ArrayList<>(List.of(a, b));
+		var params = new ResourceJsonSerializer.ListParams("banana", null, null, null, true, 0, 0);
+
+		ResourceJsonSerializer.sortChildrenEntries(children, params);
+
+		assertEquals(List.of(a, b), children);
+	}
+
+	@Test
+	void sortChildrenEntries_invalidPrio_throwsIllegalArgument() {
+		List<Entry> children = new ArrayList<>();
+		var params = new ResourceJsonSerializer.ListParams("modified", null, "NotAGraphType", null, true, 0, 0);
+
+		assertThrows(IllegalArgumentException.class,
+				() -> ResourceJsonSerializer.sortChildrenEntries(children, params));
 	}
 
 	/**

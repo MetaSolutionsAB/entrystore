@@ -51,6 +51,7 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -194,23 +195,7 @@ public class ResourceJsonSerializer {
 				}
 
 				if (params.sort() != null && (childrenEntries.size() < 501)) {
-					Date before = new Date();
-					GraphType prioritizedGraphType = null;
-					if (params.prio() != null) {
-						prioritizedGraphType = GraphType.valueOf(params.prio());
-					}
-					String sortType = params.sort();
-					if ("title".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterTitle(childrenEntries, params.lang(), params.ascendingOrder(), prioritizedGraphType);
-					} else if ("modified".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterModificationDate(childrenEntries, params.ascendingOrder(), prioritizedGraphType);
-					} else if ("created".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterCreationDate(childrenEntries, params.ascendingOrder(), prioritizedGraphType);
-					} else if ("size".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterFileSize(childrenEntries, params.ascendingOrder(), prioritizedGraphType);
-					}
-					long sortDuration = new Date().getTime() - before.getTime();
-					log.debug("List resource sorting took " + sortDuration + " ms");
+					sortChildrenEntries(childrenEntries, params);
 				} else if (params.sort() != null) {
 					log.warn("Ignoring sort parameter for performance reasons because list has more than 500 children");
 				}
@@ -250,44 +235,7 @@ public class ResourceJsonSerializer {
 						childJSON.put("name", ((Group) childEntry.getResource()).getName());
 					}
 
-					try {
-						EntryType entryType = childEntry.getEntryType();
-						if (entryType == Reference || entryType == LinkReference) {
-							Metadata cachedExternalMetaData = childEntry.getCachedExternalMetadata();
-							if (cachedExternalMetaData != null) {
-								Model cachedExternalMetaDataGraph = cachedExternalMetaData.getGraph();
-								if (cachedExternalMetaDataGraph != null) {
-									JSONObject childCachedExternalMetaDataJSON = GraphUtil.serializeGraphToJson(cachedExternalMetaDataGraph, rdfFormat);
-									childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, childCachedExternalMetaDataJSON);
-								}
-							}
-						}
-
-						if (entryType == Local || entryType == Link || entryType == LinkReference) {
-							Metadata localMetadata = childEntry.getLocalMetadata();
-							if (localMetadata != null) {
-								Model localMetadataGraph = localMetadata.getGraph();
-								if (localMetadataGraph != null) {
-									JSONObject localMDJSON = GraphUtil.serializeGraphToJson(localMetadataGraph, rdfFormat);
-									childJSON.accumulate(RepositoryProperties.MD_PATH, localMDJSON);
-								}
-							}
-						}
-					} catch (AuthorizationException e) {
-						//childJSON.accumulate("noAccessToMetadata", true);
-						//ODO: Replaced by using "rights" in json, do something else in this catch-clause
-						// childJSON.accumulate(RepositoryProperties.MD_PATH_STUB, new JSONObject());
-					}
-
-					Model childEntryGraph = childEntry.getGraph();
-					JSONObject childInfo = GraphUtil.serializeGraphToJson(childEntryGraph, rdfFormat);
-					childJSON.accumulate("info", childInfo);
-
-					Model childRelationsGraph = childEntry.getRelations();
-					if (childRelationsGraph != null) {
-						JSONObject childRelationObj = GraphUtil.serializeGraphToJson(childRelationsGraph, rdfFormat);
-						childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
-					}
+					appendMetadataInfoAndRelations(childEntry, childJSON, rdfFormat, false);
 
 					childrenArray.put(childJSON);
 				}
@@ -310,6 +258,98 @@ public class ResourceJsonSerializer {
 			throw new IllegalArgumentException("Resource not instance of List");
 		}
 		return resourceObj;
+	}
+
+	/**
+	 * Appends the cached-external-metadata, local-metadata, entry-info and relations sections of an
+	 * entry to {@code childJSON}. With {@code flagNoAccess=true} (search behavior) each section
+	 * catches {@link AuthorizationException} and records a {@code noAccessToMetadata} /
+	 * {@code noAccessToEntryInfo} / {@code noAccessToRelations} flag instead. With
+	 * {@code flagNoAccess=false} (list behavior) a metadata {@link AuthorizationException} is
+	 * swallowed silently and the info/relations sections are left unguarded so the exception
+	 * propagates to the caller.
+	 */
+	public void appendMetadataInfoAndRelations(Entry entry, JSONObject childJSON, String rdfFormat, boolean flagNoAccess) {
+		try {
+			EntryType entryType = entry.getEntryType();
+			if (entryType == Reference || entryType == LinkReference) {
+				Metadata cachedExternalMetadata = entry.getCachedExternalMetadata();
+				if (cachedExternalMetadata != null) {
+					Model cachedExternalMetadataGraph = cachedExternalMetadata.getGraph();
+					if (cachedExternalMetadataGraph != null) {
+						childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH,
+								GraphUtil.serializeGraphToJson(cachedExternalMetadataGraph, rdfFormat));
+					}
+				}
+			}
+
+			if (entryType == Local || entryType == Link || entryType == LinkReference) {
+				Metadata localMetadata = entry.getLocalMetadata();
+				if (localMetadata != null) {
+					Model localMetadataGraph = localMetadata.getGraph();
+					if (localMetadataGraph != null) {
+						childJSON.accumulate(RepositoryProperties.MD_PATH,
+								GraphUtil.serializeGraphToJson(localMetadataGraph, rdfFormat));
+					}
+				}
+			}
+		} catch (AuthorizationException ae) {
+			if (flagNoAccess) {
+				childJSON.accumulate("noAccessToMetadata", true);
+			}
+		}
+
+		if (flagNoAccess) {
+			try {
+				JSONObject info = GraphUtil.serializeGraphToJson(entry.getGraph(), rdfFormat);
+				childJSON.accumulate("info", Objects.requireNonNullElseGet(info, JSONObject::new));
+			} catch (AuthorizationException ae) {
+				childJSON.accumulate("noAccessToEntryInfo", true);
+			}
+
+			try {
+				Model relationsGraph = entry.getRelations();
+				if (relationsGraph != null) {
+					childJSON.accumulate(RepositoryProperties.RELATION,
+							GraphUtil.serializeGraphToJson(relationsGraph, rdfFormat));
+				}
+			} catch (AuthorizationException ae) {
+				childJSON.accumulate("noAccessToRelations", true);
+			}
+		} else {
+			childJSON.accumulate("info", GraphUtil.serializeGraphToJson(entry.getGraph(), rdfFormat));
+
+			Model relationsGraph = entry.getRelations();
+			if (relationsGraph != null) {
+				childJSON.accumulate(RepositoryProperties.RELATION,
+						GraphUtil.serializeGraphToJson(relationsGraph, rdfFormat));
+			}
+		}
+	}
+
+	/**
+	 * Sorts {@code children} in place according to the sort/lang/prio/order list parameters.
+	 * Applying the &gt;500-children performance cap is the caller's decision — the two list
+	 * serializers count children differently.
+	 */
+	public static void sortChildrenEntries(List<Entry> children, ListParams params) {
+		Date before = new Date();
+		GraphType prioritizedGraphType = null;
+		if (params.prio() != null) {
+			prioritizedGraphType = GraphType.valueOf(params.prio());
+		}
+		String sortType = params.sort();
+		if ("title".equalsIgnoreCase(sortType)) {
+			EntryUtil.sortAfterTitle(children, params.lang(), params.ascendingOrder(), prioritizedGraphType);
+		} else if ("modified".equalsIgnoreCase(sortType)) {
+			EntryUtil.sortAfterModificationDate(children, params.ascendingOrder(), prioritizedGraphType);
+		} else if ("created".equalsIgnoreCase(sortType)) {
+			EntryUtil.sortAfterCreationDate(children, params.ascendingOrder(), prioritizedGraphType);
+		} else if ("size".equalsIgnoreCase(sortType)) {
+			EntryUtil.sortAfterFileSize(children, params.ascendingOrder(), prioritizedGraphType);
+		}
+		long sortDuration = new Date().getTime() - before.getTime();
+		log.debug("List sorting took {} ms", sortDuration);
 	}
 
 	public JSONObject serializeResourceGraph(Resource resource, String rdfFormat) {

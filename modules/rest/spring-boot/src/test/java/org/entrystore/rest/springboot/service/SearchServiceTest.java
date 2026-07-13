@@ -28,6 +28,8 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.model.dto.QueryResultsDto;
+import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
+import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,13 +60,25 @@ class SearchServiceTest {
 	@Mock
 	private Config esConfig;
 
+	@Mock
+	private LoginAttemptService loginAttemptService;
+
+	/**
+	 * generateJson delegates the per-entry sections and rights to ResourceJsonSerializer, so the
+	 * tests use a real serializer (over the same mocks) instead of a mock to keep asserting the
+	 * produced JSON.
+	 */
+	private ResourceJsonSerializer realSerializer() {
+		return new ResourceJsonSerializer(principalManager, repositoryManager, loginAttemptService);
+	}
+
 	@Test
 	void buildRequestUri_redactsSensitiveQueryParameters() throws Exception {
 		// Verifies the redactor is wired into buildRequestUri so the Atom/RSS self-link
 		// emitted by SearchService.searchFeed cannot echo a sensitive token back into a
 		// publicly-visible response body. Regression sentinel for ENTRYSTORE-1009.
 		when(repositoryManager.getRepositoryURL()).thenReturn(new URL("https://example.test/store/"));
-		var service = new SearchService(repositoryManager, principalManager, esConfig);
+		var service = new SearchService(repositoryManager, esConfig, realSerializer());
 
 		var request = new MockHttpServletRequest("GET", "/search");
 		request.setServletPath("/search");
@@ -80,7 +94,7 @@ class SearchServiceTest {
 	@Test
 	void buildRequestUri_withNoQueryString_omitsQuestionMark() throws Exception {
 		when(repositoryManager.getRepositoryURL()).thenReturn(new URL("https://example.test/store/"));
-		var service = new SearchService(repositoryManager, principalManager, esConfig);
+		var service = new SearchService(repositoryManager, esConfig, realSerializer());
 
 		var request = new MockHttpServletRequest("GET", "/search");
 		request.setServletPath("/search");
@@ -97,7 +111,7 @@ class SearchServiceTest {
 		// %63onfirm to its `confirm` @RequestParam, so the request flow runs with the real
 		// token; the self-link must not echo the plaintext value either.
 		when(repositoryManager.getRepositoryURL()).thenReturn(new URL("https://example.test/store/"));
-		var service = new SearchService(repositoryManager, principalManager, esConfig);
+		var service = new SearchService(repositoryManager, esConfig, realSerializer());
 
 		var request = new MockHttpServletRequest("GET", "/search");
 		request.setServletPath("/search");
@@ -112,7 +126,7 @@ class SearchServiceTest {
 	void generateJson_authorizationOnMetadata_flagsNoAccessToMetadata() {
 		Entry entry = mockSearchHit("e1");
 		when(entry.getLocalMetadata()).thenThrow(new AuthorizationException(null, null, null));
-		var service = new SearchService(repositoryManager, principalManager, esConfig);
+		var service = new SearchService(repositoryManager, esConfig, realSerializer());
 
 		JSONObject child = firstChild(service.generateJson(0, 10, new QueryResultsDto(List.of(entry)), null));
 
@@ -124,7 +138,7 @@ class SearchServiceTest {
 	void generateJson_authorizationOnEntryInfo_flagsNoAccessToEntryInfo() {
 		Entry entry = mockSearchHit("e1");
 		when(entry.getGraph()).thenThrow(new AuthorizationException(null, null, null));
-		var service = new SearchService(repositoryManager, principalManager, esConfig);
+		var service = new SearchService(repositoryManager, esConfig, realSerializer());
 
 		JSONObject child = firstChild(service.generateJson(0, 10, new QueryResultsDto(List.of(entry)), null));
 
@@ -135,7 +149,7 @@ class SearchServiceTest {
 	void generateJson_authorizationOnRelations_flagsNoAccessToRelations() {
 		Entry entry = mockSearchHit("e1");
 		when(entry.getRelations()).thenThrow(new AuthorizationException(null, null, null));
-		var service = new SearchService(repositoryManager, principalManager, esConfig);
+		var service = new SearchService(repositoryManager, esConfig, realSerializer());
 
 		JSONObject child = firstChild(service.generateJson(0, 10, new QueryResultsDto(List.of(entry)), null));
 
@@ -148,7 +162,7 @@ class SearchServiceTest {
 		// creates the key lazily) — unlike list serialization, which always emits the key.
 		Entry entry = mockSearchHit("e1");
 		when(principalManager.getRights(entry)).thenReturn(Set.of());
-		var service = new SearchService(repositoryManager, principalManager, esConfig);
+		var service = new SearchService(repositoryManager, esConfig, realSerializer());
 
 		JSONObject child = firstChild(service.generateJson(0, 10, new QueryResultsDto(List.of(entry)), null));
 
@@ -159,7 +173,7 @@ class SearchServiceTest {
 	void generateJson_withRights_emitsRightsArray() {
 		Entry entry = mockSearchHit("e1");
 		when(principalManager.getRights(entry)).thenReturn(Set.of(AccessProperty.ReadMetadata));
-		var service = new SearchService(repositoryManager, principalManager, esConfig);
+		var service = new SearchService(repositoryManager, esConfig, realSerializer());
 
 		JSONObject child = firstChild(service.generateJson(0, 10, new QueryResultsDto(List.of(entry)), null));
 
