@@ -114,6 +114,10 @@ per side, canaries 407–509 ms on both sides):
 −2.7%, inside the ±7% run spread → **below the noise floor**. Kept as
 allocation hygiene; `URISplitTest` 30/30 green.
 
+*Addendum (2026-07-13): re-run under stable AC conditions — before avg
+18 113 ms, after avg 18 037 ms (−0.4%) → noise verdict confirmed,
+envelope-independent.*
+
 ## Batch verdict
 
 Four of the six items are correctness or production-path fixes the
