@@ -152,6 +152,10 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private boolean relatedContainsGlobal = false;
 
+	// A8: cached set of all RegularContexts for the global "related" index; only populated when
+	// entrystore.solr.related is configured with a ",global" property. Invalidated on context add/remove.
+	private volatile Set<Context> cachedGlobalRegularContexts;
+
 	private final RepositoryManager rm;
 
 	private final SolrClient solrServer;
@@ -455,6 +459,9 @@ public class SolrSearchIndex implements SearchIndex {
 				return Map.of();
 			}
 
+			// A7: entries in one batch are heavily context-clustered (especially during reindex), so a
+			// per-batch cache of context -> projectType collapses the repeated context-graph reads.
+			Map<URI, String> projectTypeCache = new HashMap<>();
 			Map<URI, SolrInputDocument> batch = new LinkedHashMap<>();
 			List<URI> toBuild = new ArrayList<>();
 			drained.forEach((entryURI, document) -> {
@@ -481,7 +488,7 @@ public class SolrSearchIndex implements SearchIndex {
 							forgetBuildAttempts(entryURI);
 							continue;
 						}
-						batch.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+						batch.put(entryURI, constructSolrInputDocument(entry, extractFulltext, projectTypeCache));
 						forgetBuildAttempts(entryURI);
 					} catch (Exception | StackOverflowError e) {
 						if (recordBuildFailure(entryURI) < MAX_BUILD_ATTEMPTS) {
@@ -645,6 +652,7 @@ public class SolrSearchIndex implements SearchIndex {
 		defaultSortLang = rm.getConfiguration().getString(Settings.SOLR_DEFAULT_SORTING_LANG);
 		commitWithin = rm.getConfiguration().getInt(Settings.SOLR_COMMIT_WITHIN, SOLR_COMMIT_WITHIN_DEFAULT);
 		commitWithinMax = rm.getConfiguration().getInt(Settings.SOLR_COMMIT_WITHIN_MAX, SOLR_COMMIT_WITHIN_MAX_DEFAULT);
+		projectTypePredicate = valueFactory.createIRI("http://entryscape.com/terms/projectType");
 		if (related) {
 			List<String> relPropsSetting = rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<>());
 			if (relPropsSetting.isEmpty()) {
@@ -1297,6 +1305,8 @@ public class SolrSearchIndex implements SearchIndex {
 			return ContextPostResult.unresolved();
 		}
 		URI lastQueuedEntryURI = null;
+		// A7: every entry of the context shares its projectType, so it is read once per reindex
+		Map<URI, String> projectTypeCache = new HashMap<>();
 		int loadedEntries = 0;
 		int corruptEntries = 0;
 		int unresolvedEntries = 0;
@@ -1340,7 +1350,7 @@ public class SolrSearchIndex implements SearchIndex {
 						continue;
 					}
 					log.info("Adding entry to Solr post queue: {}", entryURI);
-					queueDocument(entryURI, constructSolrInputDocument(entry, extractFulltext));
+					queueDocument(entryURI, constructSolrInputDocument(entry, extractFulltext, projectTypeCache));
 					lastQueuedEntryURI = entryURI;
 				} catch (Exception | StackOverflowError e) {
 					unindexableEntries++;
@@ -1449,6 +1459,17 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext) {
+		return constructSolrInputDocument(entry, extractFulltext, null);
+	}
+
+	/**
+	 * @param projectTypeCache optional per-batch cache of context-resource-URI to projectType (A7).
+	 *                         Non-Context entries all read their context's projectType, so caching it
+	 *                         avoids re-reading the context graph once per indexed entry. Pass null to
+	 *                         disable (e.g. single-document indexing).
+	 */
+	/** Package-private so a test can stub the build both queueing paths go through. */
+	SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext, Map<URI, String> projectTypeCache) {
 		Model mdGraph = entry.getMetadataGraph();
 		Model entryGraph = entry.getGraph();
 		URI resourceURI = entry.getResourceURI();
@@ -1502,27 +1523,10 @@ public class SolrSearchIndex implements SearchIndex {
 			log.warn("Local metadata URI of entry is null: {}", entry.getEntryURI());
 		}
 
-		// project type
-		// FIXME this can be optimized by not checking the context for every single indexed entry, perhaps we can
-		// remember the context status for a limited amount of time instead of fetching and querying the context graph
-		// every time
-		Model graphWithProjectType;
-		URI resourceUriForProjectType;
-		if (GraphType.Context.equals(entry.getGraphType())) {
-			graphWithProjectType = entryGraph;
-			resourceUriForProjectType = resourceURI;
-		} else {
-			Entry contextEntry = entry.getContext().getEntry();
-			graphWithProjectType = contextEntry.getGraph();
-			resourceUriForProjectType = contextEntry.getResourceURI();
-		}
-
-		for (String projectTypeURI : EntryUtil.getResourceValues(
-				graphWithProjectType,
-				resourceUriForProjectType,
-				Collections.singleton(valueFactory.createIRI("http://entryscape.com/terms/projectType")))) {
-			doc.setField("projectType", projectTypeURI);
-			break; // we only need the first match
+		// project type (A7: cached per batch to avoid re-reading the context graph per entry)
+		String projectType = resolveProjectType(entry, entryGraph, resourceURI, projectTypeCache);
+		if (projectType != null) {
+			doc.setField("projectType", projectType);
 		}
 
 		// creator
@@ -1676,6 +1680,45 @@ public class SolrSearchIndex implements SearchIndex {
 		return doc;
 	}
 
+	// A7 sentinel: distinguishes a cached "context has no projectType" from "not cached yet"
+	// while remaining null-value-free so the cache can be a ConcurrentHashMap.
+	private static final String NO_PROJECT_TYPE = "";
+
+	private final IRI projectTypePredicate;
+
+	private String resolveProjectType(Entry entry, Model entryGraph, URI resourceURI, Map<URI, String> cache) {
+		boolean isContext = GraphType.Context.equals(entry.getGraphType());
+		Model graphWithProjectType;
+		URI resourceUriForProjectType;
+		if (isContext) {
+			// A context's projectType lives in its own graph and is not shared, so it is never cached.
+			graphWithProjectType = entryGraph;
+			resourceUriForProjectType = resourceURI;
+		} else {
+			Entry contextEntry = entry.getContext().getEntry();
+			resourceUriForProjectType = contextEntry.getResourceURI();
+			if (cache != null) {
+				String cached = cache.get(resourceUriForProjectType);
+				if (cached != null) {
+					return NO_PROJECT_TYPE.equals(cached) ? null : cached;
+				}
+			}
+			graphWithProjectType = contextEntry.getGraph();
+		}
+
+		String result = null;
+		for (String projectTypeURI : EntryUtil.getResourceValues(graphWithProjectType, resourceUriForProjectType,
+				Collections.singleton(projectTypePredicate))) {
+			result = projectTypeURI;
+			break; // we only need the first match
+		}
+
+		if (cache != null && !isContext) {
+			cache.put(resourceUriForProjectType, result == null ? NO_PROJECT_TYPE : result);
+		}
+		return result;
+	}
+
 	/**
 	 * Indexes the IRI and literal objects of the graph (blank-node objects are skipped) into the dynamic
 	 * {@code metadata.predicate.*} fields, {@code related.}-prefixed for the related graph, plus the flat
@@ -1753,25 +1796,39 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
+	private Set<Context> getGlobalRegularContexts() {
+		Set<Context> cached = cachedGlobalRegularContexts;
+		if (cached != null) {
+			return cached;
+		}
+		Set<Context> contexts = new HashSet<>();
+		ContextManager cm = rm.getContextManager();
+		for (URI contextURI : cm.getEntries()) {
+			Context c = cm.getContext(contextURI);
+			if (c instanceof RegularContext) {
+				contexts.add(c);
+			}
+		}
+		cached = Set.copyOf(contexts);
+		cachedGlobalRegularContexts = cached;
+		return cached;
+	}
+
+	private void invalidateRelatedContextCacheIfNeeded(Entry entry) {
+		if (relatedContainsGlobal && GraphType.Context.equals(entry.getGraphType())) {
+			cachedGlobalRegularContexts = null;
+		}
+	}
+
 	private void addRelatedFields(SolrInputDocument doc, Entry entry, Model mdGraph, URI resourceURI) {
 		if (doc == null || entry == null) {
 			throw new IllegalArgumentException("Neither SolrInputDocument nor Entry must be null");
 		}
 
-		Set<Context> contexts = new HashSet<>();
-		if (relatedContainsGlobal) {
-			// TODO there is room for optimization, the contexts are loaded now once per indexed entry.
-			//  possible solution: provide getter method and load only if set is null; set to null when there are
-			//  relevant changes, e.g. context removed or added (ContextManager needs to tell SolrSearchIndex that
-			//  contexts have changed)
-			ContextManager cm = entry.getRepositoryManager().getContextManager();
-			for (URI contextURI : cm.getEntries()) {
-				Context c = cm.getContext(contextURI);
-				if (c instanceof RegularContext) {
-					contexts.add(c);
-				}
-			}
-		}
+		// A8: the global set of RegularContexts is cached and invalidated when a Context entry is
+		// added or removed (see invalidateRelatedContextCacheIfNeeded), instead of being enumerated
+		// once per indexed entry.
+		Set<Context> contexts = relatedContainsGlobal ? getGlobalRegularContexts() : Set.of();
 
 		Set<Entry> relatedEntries = new HashSet<>();
 		for (IRI relProp : relatedProperties.keySet()) {
@@ -1824,6 +1881,7 @@ public class SolrSearchIndex implements SearchIndex {
 		// the submitter (drainAndBuildPostBatch), because postEntry runs under synchronized(repository) ->
 		// synchronized(repositoryListeners) via fireRepositoryEvent.
 		URI entryURI = entry.getEntryURI();
+		invalidateRelatedContextCacheIfNeeded(entry);
 		synchronized (postQueue) {
 			// Checked under the monitor removeEntryDocument takes: queueing drops a pending deletion, so queueing a
 			// concurrently deleted entry would cancel its deletion and then skip it at build time
@@ -1838,6 +1896,7 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public void removeEntry(Entry entry) {
+		invalidateRelatedContextCacheIfNeeded(entry);
 		removeEntryDocument(entry.getEntryURI());
 
 		// if entry is a context, also remove all entries inside. A15: run the (potentially slow)
