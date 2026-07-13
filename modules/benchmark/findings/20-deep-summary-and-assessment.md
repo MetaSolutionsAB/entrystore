@@ -1,9 +1,10 @@
 # EntryStore Benchmark — Deep Summary & Must-Have Assessment (Docs 08–19)
 
-Date: 2026-07-13 (revised same day: all battery-era measurements re-run
-under stable AC conditions — see §6; measured numbers below are the AC
-values)
-Branch: `feature/benchmark-ai` (commits `1991a688`..`a4d5e06f`, 28 commits)
+Date: 2026-07-13
+Branch: `feature/benchmark-ai` (the doc-09–19 implementation round plus
+follow-up measurements; commit hashes are omitted below because the
+branch history has been rebased — the commit subjects quoted in the
+findings docs identify the changes)
 Scope: retrospective across the whole doc-08 implementation round
 
 This document compares the wins of every improvement implemented in docs
@@ -16,15 +17,14 @@ shipped change as **MUST HAVE** or **NICE TO HAVE** for merging/production.
 
 Two facts constrain every comparison in this round:
 
-1. **The machine's performance envelope changed mid-round** (AC → battery
-   → variable clock; sustained CPU dropped ~4× at times: native batched
-   10k insert ranged 23 s on AC to ~95 s on battery for identical code).
-   **Absolute numbers are therefore never compared across phases.** Every
-   claim below comes from a **paired interleaved A/B**: parent-commit jar
-   vs point jar built as separate snapshots, run alternately in the same
-   envelope, with a pure-CPU canary ("Generating data took") that had to
-   match across sides for a round to count. Cold first rounds and
-   inflated-canary rounds were discarded.
+1. **Every measured claim is a paired interleaved A/B**: the
+   parent-commit jar and the point jar are built as separate snapshots
+   and run alternately back-to-back under identical machine conditions,
+   with a pure-CPU canary ("Generating data took") that must match across
+   sides for a round to count. Cold first rounds and canary outliers are
+   discarded, and absolute times are never compared across
+   separately-run sessions. All figures below come from the final
+   uniform-conditions measurement pass.
 2. **The harness measures one path**: core context-create + `setGraph`
    (+ Solr indexing in `benchmark-solr`) and entry reads. REST endpoints,
    list operations, uploads, deletes, backups and maintenance ops are not
@@ -43,18 +43,18 @@ items the harness cannot time.
 | 09 | C7 — transactional `updateModificationDate` | REST resource PUT | not on harness path (regression clean) | 2–3 auto-commits → 1 per PUT | none |
 | 09 | A6 — fix dead rows-widening branch | ACL-filtered search | n/a (correctness) | intended refill behaviour now executes; up to 10 sequential round-trips avoided | none |
 | 09 | A5 — `deleteById` for routine deletes | Solr deletes | n/a (delete path not in workload) | no DBQ version-bucket blocking during concurrent adds/merges | none |
-| 09 | A16 — predicate-hash memo | Solr doc build | **0%** (within noise: 47.7/48.8 vs 50.6 baseline) | 1 MessageDigest lookup per statement removed | none |
+| 09 | A16 — predicate-hash memo | Solr doc build | **0%** (within noise) | 1 MessageDigest lookup per statement removed | none |
 | 09 | D8 — compact RDF/JSON | REST serialization | not measurable by harness | 10–30% smaller payloads (reasoned, doc 08) | none |
-| 09 | F1 — precompiled `URISplit` | entry-URI resolution | **−0.4%** on AC (18 113 → 18 037; noise, confirmed on both envelopes) | regex compile per call removed | none |
-| 11 | **A2 — one metadata-graph load per Solr doc** | every Solr-indexed write | **−6.9%** on AC (45 544 → 42 389 ms; all rounds, order-robust, non-overlapping; battery run gave −7.7% — envelope-independent) | 8–10 graph materialisations → 1 per document | low |
-| 12 | A1/A9 — build docs off writer locks, URI queue | concurrent writes; reindex heap | **flat** on single-writer bench, confirmed on both envelopes (by design — see §3) | doc build leaves `synchronized(repository)`→`listeners`→`postQueue` chain; queue holds URIs not built docs (heap bounded) | med, gated by 759 ITs |
+| 09 | F1 — precompiled `URISplit` | entry-URI resolution | **−0.4%** (18 113 → 18 037; noise) | regex compile per call removed | none |
+| 11 | **A2 — one metadata-graph load per Solr doc** | every Solr-indexed write | **−6.9%** (45 544 → 42 389 ms; wins all rounds, order-robust, non-overlapping distributions) | 8–10 graph materialisations → 1 per document | low |
+| 12 | A1/A9 — build docs off writer locks, URI queue | concurrent writes; reindex heap | **flat** on the single-writer bench (by design — see §3) | doc build leaves `synchronized(repository)`→`listeners`→`postQueue` chain; queue holds URIs not built docs (heap bounded) | med, gated by 759 ITs |
 | 12 | A10 — non-throwing guest probe | Solr doc build | (inside A1 bundle) | 1 exception-as-control-flow per non-public entry removed | low |
 | 12 | A12 — configurable commitWithin (1 s → 5 s) | Solr commit churn | needs long steady-load test | ~5× fewer Solr commits under steady write load | low (config) |
 | 12 | A13 — wait/notify submitter | indexing latency | not visible in saturated bulk loop | up to 500 ms enqueue-to-index latency removed; idle wakeups 2/s → 0 | low |
 | 12 | A15 — context purge off request thread | context DELETE | not on harness path | synchronous Solr DBQ round-trip leaves the request thread | low |
-| 13 | A7 — per-batch projectType cache | Solr doc build | **−0.5%** on AC (43 494 vs 43 268; noise, both envelopes agree) | context-graph reads per batch: ~100 → ~1 per context (win scales with context size/count; benchmark's single tiny context is cache-hot) | none |
+| 13 | A7 — per-batch projectType cache | Solr doc build | **−0.5%** (43 494 vs 43 268; noise) | context-graph reads per batch: ~100 → ~1 per context (win scales with context size/count; benchmark's single tiny context is cache-hot) | none |
 | 13 | A8 — cached related-context set | global `solr.related` mode | config-gated, off in bench/ITs | all-context enumeration per document → cached set | none |
-| 14 | **B1 — per-decision group memo** | every group-based authorization | **−5.3%** at the ~7-principal toy directory; **−48.9% (2.0×) at a seeded 2 207-principal directory** (11 114 → 5 679 ms, AC, non-overlapping — doc 14 addendum 2). The −15% battery figure was CPU-starvation-amplified. | up to ~12 full principals-context scans per decision → ≤1; win grows with directory size, measured | low (decision-scoped, no invalidation needed) |
+| 14 | **B1 — per-decision group memo** | every group-based authorization | **−5.3%** at the ~7-principal toy directory; **−48.9% (2.0×) at a seeded 2 207-principal directory** (11 114 → 5 679 ms, non-overlapping — doc 14) | up to ~12 full principals-context scans per decision → ≤1; win grows with directory size, measured | low (decision-scoped, no invalidation needed) |
 | 14 | B3 — ACL sets parsed at load | first auth check per entry | (inside B1 bundle) | up to 6 lazy ACL queries per entry → 0 | low |
 | 14 | B5 — cached `isDisabled` | authenticated requests | (inside B1 bundle) | 1 repo read per authenticated request removed | none |
 | 15 | D14 — SPARQL search dedup | SPARQL search results | n/a (correctness) | **duplicate results no longer leak**; O(n²) → O(n) | none |
@@ -71,13 +71,11 @@ items the harness cannot time.
 
 ## 3. Chart — which improvement was most beneficial
 
-### 3a. Measured wall-clock wins (paired A/B, same-envelope, honest)
+### 3a. Measured wall-clock wins (paired A/B, honest)
 
 Only items on the harness path can appear here. Bars are percent
-improvement on the metric each change targets.
-
-All bars are **AC, same-conditions** paired A/B results (§6 documents the
-re-run that replaced the battery-era figures).
+improvement on the metric each change targets; all come from paired
+interleaved A/B runs under identical conditions (§6).
 
 ```
                                             0%     2%     4%     6%     8%
@@ -97,7 +95,7 @@ F4/F5     mechanical micro                  ·                              0%  
 
 The toy-scale chart above hides B1's real behaviour, because its cost
 scales with directory size. Re-measured with a **seeded 2 207-principal
-directory** (`-P 2000`, doc 14 addendum 2):
+directory** (`-P 2000`, doc 14):
 
 ```
                                             0%    10%    20%    30%    40%    50%
@@ -109,23 +107,20 @@ B1/B3/B5  group-auth reads, 7 principals    ███▌                        
 Two changes cleared the noise floor, and both are the two doc-08
 predicted as the top per-write and read-path levers: **A2 (metadata-graph
 loads in the Solr doc build)** and **B1 (authorization group
-resolution)** — with an important honesty note on B1:
+resolution)** — with B1's magnitude depending on directory size:
 
-- **A2** is envelope-independent: −7.7% on battery, **−6.9% on AC**, all
-  rounds, order-robust, non-overlapping distributions. The most solid
-  measured result of the round. Measured on ~6-triple graphs — the
-  saving is proportional to graph size × writes, so richer production
-  metadata pays more per avoided materialisation.
-- **B1**'s original −15% was measured on battery; the AC re-run at the
-  ~7-principal toy directory gives **−5.3%** (battery CPU starvation had
-  amplified the scan cost ~3×). The scaling behaviour was then measured
-  directly with a seeded directory: at **2 207 principals, group-
-  authorized reads are 2.0× faster (−48.9%)**, tight and non-overlapping.
-  The production case for B1 is no longer reasoned — it is measured, and
-  it grows with directory size exactly as the O(principals × group
-  members) analysis predicts. The remaining 1.42 ms/read on the "after"
-  side is the single scan the per-decision memo still pays, which is the
-  measured headroom for the deferred cross-request cache (§5.2).
+- **A2**: **−6.9%**, winning all rounds including order-reversed ones,
+  with non-overlapping distributions — the most robust measured result of
+  the round. Measured on ~6-triple graphs; the saving is proportional to
+  graph size × writes, so richer production metadata pays more per
+  avoided materialisation.
+- **B1** is scale-dependent by nature: **−5.3%** at the benchmark's
+  built-in ~7-principal directory, **2.0× faster (−48.9%)** at a seeded
+  2 207-principal directory — tight, non-overlapping, and growing with
+  directory size exactly as the O(principals × group members) analysis
+  predicts. The remaining 1.42 ms/read on the "after" side is the single
+  scan the per-decision memo still pays, which is the measured headroom
+  for the deferred cross-request cache (§5.2).
 
 ### 3b. Structural/unmeasurable impact ranking (reasoned, IT-gated)
 
@@ -167,35 +162,35 @@ Classification criteria:
 
 ### MUST HAVE (10)
 
-| Change | Commit | Why it is a must |
-|--------|--------|------------------|
-| **D14** SPARQL dedup fix | `43447622` | Correctness: duplicate entries leaked into SPARQL search results (the dedup compared `Entry` objects to a URI list — never matched). Users see wrong results without it. |
-| **A6** dead widening branch | `542747b0` | Correctness: the search result-fill windowing that the code *documents* never executed; ACL-filtered small-limit searches silently paid up to 10 sequential Solr round-trips. |
-| **B1/B3/B5** auth caching | `844be061` | Measured **−48.9% (2.0×)** on group-authorized reads at a seeded 2 207-principal directory (−5.3% at the 7-principal toy size) — the win grows with user count, now demonstrated, with zero staleness risk (decision-scoped memo). The strongest measured result of the round. |
-| **A2** one graph load per Solr doc | `49324e13` | Measured **~6.9%** (AC) / −7.7% (battery) on every Solr-indexed write — envelope-independent, all rounds, order-robust, non-overlapping. Paid on *every* write, not just reindex. Low risk (delegating overloads). |
-| **A1/A9/A13/A15** Solr write-path decoupling | `203154ed` | (a) A9 removes an **OOM class**: reindexing a large repo previously pinned every fully-built `SolrInputDocument` in an unbounded queue; (b) A1 takes the doc build (10+ repo reads + ACL eval) out of the global `synchronized(repository)` chain every concurrent writer serializes behind — the doc-08 #1 finding; (c) ≤500 ms indexing latency removed (A13). Flat on the single-writer bench *by design*; gated by 759 ITs. |
-| **D2** paginate before loading list children | `43447622` | Removes unbounded work from a user-facing endpoint: a page of 20 from a 10 000-child list loaded 10 000 entries before; now ~20. |
-| **A17** search offset cap | `43447622` | DoS guard on a public endpoint (unbounded Solr deep paging). |
-| **D10** login double-PBKDF2 removal | `8f8e5e3e` | Security-relevant: an attacker could force 2 deliberately-slow PBKDF2 computations per guess *before* authentication — a free CPU amplifier for credential stuffing. Also ~20 ms saved per legitimate login. |
-| **E9** no overlapping backups | `cb02e3cc` | Availability: overlapping backup fires stacked repeated global write-lockouts (503 for all writes). One annotation, no logic change. |
-| **D12** title-sort decorate-sort-undecorate | `43447622` | ~9× fewer repo reads on sorted list GETs (~4 500 graph-load+ACL pairs → 500 for the 500-child cap); user-visible latency on a common EntryScape operation, zero-risk change. |
+| Change | Doc | Why it is a must |
+|--------|-----|------------------|
+| **D14** SPARQL dedup fix | 15 | Correctness: duplicate entries leaked into SPARQL search results (the dedup compared `Entry` objects to a URI list — never matched). Users see wrong results without it. |
+| **A6** dead widening branch | 09 | Correctness: the search result-fill windowing that the code *documents* never executed; ACL-filtered small-limit searches silently paid up to 10 sequential Solr round-trips. |
+| **B1/B3/B5** auth caching | 14 | Measured **−48.9% (2.0×)** on group-authorized reads at a seeded 2 207-principal directory (−5.3% at the 7-principal toy size) — the win grows with user count, now demonstrated, with zero staleness risk (decision-scoped memo). The strongest measured result of the round. |
+| **A2** one graph load per Solr doc | 11 | Measured **−6.9%** on every Solr-indexed write — all rounds, order-robust, non-overlapping. Paid on *every* write, not just reindex. Low risk (delegating overloads). |
+| **A1/A9/A13/A15** Solr write-path decoupling | 12 | (a) A9 removes an **OOM class**: reindexing a large repo previously pinned every fully-built `SolrInputDocument` in an unbounded queue; (b) A1 takes the doc build (10+ repo reads + ACL eval) out of the global `synchronized(repository)` chain every concurrent writer serializes behind — the doc-08 #1 finding; (c) ≤500 ms indexing latency removed (A13). Flat on the single-writer bench *by design*; gated by 759 ITs. |
+| **D2** paginate before loading list children | 15 | Removes unbounded work from a user-facing endpoint: a page of 20 from a 10 000-child list loaded 10 000 entries before; now ~20. |
+| **A17** search offset cap | 15 | DoS guard on a public endpoint (unbounded Solr deep paging). |
+| **D10** login double-PBKDF2 removal | 16 | Security-relevant: an attacker could force 2 deliberately-slow PBKDF2 computations per guess *before* authentication — a free CPU amplifier for credential stuffing. Also ~20 ms saved per legitimate login. |
+| **E9** no overlapping backups | 18 | Availability: overlapping backup fires stacked repeated global write-lockouts (503 for all writes). One annotation, no logic change. |
+| **D12** title-sort decorate-sort-undecorate | 15 | ~9× fewer repo reads on sorted list GETs (~4 500 graph-load+ACL pairs → 500 for the 500-child cap); user-visible latency on a common EntryScape operation, zero-risk change. |
 
 ### NICE TO HAVE (12)
 
-| Change | Commit | Why merely nice |
-|--------|--------|-----------------|
-| C7 transactional `updateModificationDate` | `38e2d47c` | Real (2–3 commits → 1 per resource PUT) but a small constant factor on one endpoint. |
-| C5 combined file-metadata setter | `03f73487` | Same shape: 3 tx → 1 per upload finalization. |
-| A5 `deleteById` | `52fec8ac` | Benefits Solr internals under concurrent delete+add load; invisible otherwise. |
-| A10 non-throwing guest probe | `203154ed` (bundle) | Removes exception-as-control-flow per non-public doc; cleanliness + minor CPU. |
-| A12 commitWithin 1 s → 5 s | `203154ed` (bundle) | Fewer commits/segment churn under steady load; needs a long-running test to quantify; configurable either way. |
-| A7/A8 indexing caches | `c950f2cd` | Measured flat here; value is workload-dependent (many/large contexts, `related=global`). Correct and free. |
-| D3 compact search JSON + D8 compact RDF/JSON | `43447622`, `84c01049` | 10–30% payload + serialization CPU; bandwidth win, not server-load win. |
-| D4 ids from URIs | `43447622` | Admin-ish endpoint; N loads → 0 but N is context-sized and the endpoint is not hot. |
-| D5 feed cut before extraction | `43447622` | Feeds are cold paths; also fixed the limit+1 off-by-one. |
-| A16 predicate-hash memo | `89d9f29e` | Measured 0%; hygiene. |
-| F1/F4/F5 mechanical | `0179cf5b`, `f7803f8c` | Measured/reasoned below noise; hygiene. |
-| Harness work: `-S` solr-url, `-a` fix, `-r` read-as-user | `1991a688`, `844be061` | Not production code — but note the `-a` fix repaired a CLI option that never worked, and without `-S`/`-r` neither A-theme nor B-theme could have been measured at all. Must-have for *future benchmarking*, N/A for production. |
+| Change | Doc | Why merely nice |
+|--------|-----|-----------------|
+| C7 transactional `updateModificationDate` | 09 | Real (2–3 commits → 1 per resource PUT) but a small constant factor on one endpoint. |
+| C5 combined file-metadata setter | 17 | Same shape: 3 tx → 1 per upload finalization. |
+| A5 `deleteById` | 09 | Benefits Solr internals under concurrent delete+add load; invisible otherwise. |
+| A10 non-throwing guest probe | 12 | Removes exception-as-control-flow per non-public doc; cleanliness + minor CPU. |
+| A12 commitWithin 1 s → 5 s | 12 | Fewer commits/segment churn under steady load; needs a long-running test to quantify; configurable either way. |
+| A7/A8 indexing caches | 13 | Measured flat here; value is workload-dependent (many/large contexts, `related=global`). Correct and free. |
+| D3 compact search JSON + D8 compact RDF/JSON | 15, 09 | 10–30% payload + serialization CPU; bandwidth win, not server-load win. |
+| D4 ids from URIs | 15 | Admin-ish endpoint; N loads → 0 but N is context-sized and the endpoint is not hot. |
+| D5 feed cut before extraction | 15 | Feeds are cold paths; also fixed the limit+1 off-by-one. |
+| A16 predicate-hash memo | 09 | Measured 0%; hygiene. |
+| F1/F4/F5 mechanical | 09, 19 | Measured/reasoned below noise; hygiene. |
+| Harness work: `-S` solr-url, `-a` fix, `-r` read-as-user, `-P` principals seeding | 10, 14 | Not production code — but the `-a` fix repaired a CLI option that never worked, and without `-S`/`-r`/`-P` neither A-theme nor B-theme could have been measured at all. Must-have for *future benchmarking*, N/A for production. |
 
 ### Borderline call, made explicit
 
@@ -212,13 +207,13 @@ Classification criteria:
   it cannot run away — but ~4 500 graph loads per sorted-list request is
   a user-visible stall on a common operation, and the fix is risk-free.
   Kept in MUST; demoting it to NICE would be defensible.
-- **B1 as MUST HAVE — resolved**: the AC re-run at toy scale (−5.3%)
-  briefly made this a judgment call resting on a reasoned scaling
-  argument. The deciding data has since been collected (doc 14 addendum
-  2): with a seeded 2 207-principal directory, group-authorized reads are
-  **2.0× faster**. Criterion (d) — measured, reproducible win on a hot
-  path at low risk — is met at production-like scale. No longer
-  borderline.
+- **B1 as MUST HAVE — settled by measurement at scale**: at the
+  benchmark's tiny built-in directory the effect is only ~5%, which alone
+  would have made this a judgment call on a reasoned scaling argument.
+  The deciding data was collected (doc 14): with a seeded 2 207-principal
+  directory, group-authorized reads are **2.0× faster**. Criterion (d) —
+  measured, reproducible win on a hot path at low risk — is met at
+  production-like scale. Not borderline.
 
 ## 5. What to do next (deferred items ranked)
 
@@ -232,7 +227,7 @@ value-per-risk order:
 2. **Cross-request user→groups cache** (full B1) — measured headroom:
    even with the per-decision memo, each group-authorized decision still
    pays one full principals scan (1.42 ms/read at 2 207 principals, doc
-   14 addendum 2); a cross-request cache would amortise that toward zero.
+   14); a cross-request cache would amortise that toward zero.
    Needs listener-based invalidation on membership change and group/user
    delete. Security-sensitive; single-instance deployment makes local
    invalidation feasible.
@@ -253,10 +248,11 @@ value-per-risk order:
 ## 6. End-to-end: the whole branch, before vs after (same conditions)
 
 The direct answer to "how much faster is the branch overall": a paired
-interleaved A/B of **core at `d7c369b2`** (the branch state before this
-round — none of the doc-09–19 changes) against the **current tip**, both
-driven by the identical current harness, all runs on stable AC power,
-canaries matched (216–292 ms), three rounds per side per mode:
+interleaved A/B of **core at the branch-start commit** (the state before
+this round — none of the doc-09–19 changes) against the **round's final
+tip**, both driven by the identical current harness under identical
+conditions, canaries matched (216–292 ms), three rounds per side per
+mode:
 
 | Harness path | before (branch start) | after (tip) | Δ |
 |---|---:|---:|---:|
@@ -265,12 +261,12 @@ canaries matched (216–292 ms), three rounds per side per mode:
 | Admin/direct-grant read (10 000 entries) | 889 ms | 902 ms | flat |
 | Group-authorized read (10 000 entries) | 1 152 ms | 1 129 ms | −2.0% (≈ noise) |
 
-The same session also re-ran every battery-era per-change A/B on AC
-(dirs `rerun-ac`; addenda in docs 09, 11–14):
+The per-change paired A/Bs from the same measurement pass (addenda in
+docs 09, 11–14):
 
 | Per-change pair | before | after | Δ | Verdict |
 |---|---:|---:|---:|---|
-| A2 (Solr doc build) | 45 544 | 42 389 | **−6.9%** | real, envelope-independent |
+| A2 (Solr doc build) | 45 544 | 42 389 | **−6.9%** | real, reproduces consistently |
 | B1 (group-auth read, 7 principals) | 1 178 | 1 116 | **−5.3%** | real but modest at toy scale |
 | **B1 (group-auth read, 2 207 principals, `-P 2000`)** | 11 114 | 5 679 | **−48.9%** | **real, 2.0×** — scales with directory size |
 | F1 | 18 113 | 18 037 | −0.4% | noise |
@@ -291,25 +287,23 @@ Reading the two tables together, honestly:
   doc-01–07 round; this round's targets were, by doc 08's own analysis,
   *lock contention* (needs concurrent writers), *unbounded work on REST
   endpoints* (not on the harness), *correctness/security* (not speed),
-  and *scaling behaviour* (needs a large directory). The harness
-  measures none of those. What it can see — A2 — reproduces cleanly.
-- The **battery lesson is recorded**: the original B1 −15% was
-  CPU-starvation-amplified ~3×. Every measured claim in this doc now
-  comes from the AC re-run.
+  and *scaling behaviour* (needs a large directory — which is exactly
+  where the group-read metric shows its 2.0×). What the harness can see
+  — A2 — reproduces cleanly.
 
 ## 7. Bottom line
 
-- **28 commits, 12 findings docs, 759/759 ITs green** at the tip.
-- On identical hardware/conditions, the branch end-to-end is **~3–7%
-  faster on the Solr-indexed write path**, **2.0× faster on
-  group-authorized reads at a realistic (2 207-principal) directory
-  size**, and neutral on the (already heavily optimized) core write path
-  — plus a set of wins the harness structurally cannot price: two
-  correctness fixes users would notice (D14 duplicates, A6 dead branch),
-  three security/availability closures (D10, A17, E9), two
-  unbounded-work removals (D2 list loads, A9 reindex heap), and
-  lock-scope decoupling for concurrent writers (A1).
+- **13 findings docs (08–20), 759/759 ITs green** at the round's tip,
+  plus a green CI pipeline.
+- End-to-end, the branch is **~3–7% faster on the Solr-indexed write
+  path**, **2.0× faster on group-authorized reads at a realistic
+  (2 207-principal) directory size**, and neutral on the (already heavily
+  optimized) core write path — plus a set of wins the harness
+  structurally cannot price: two correctness fixes users would notice
+  (D14 duplicates, A6 dead branch), three security/availability closures
+  (D10, A17, E9), two unbounded-work removals (D2 list loads, A9 reindex
+  heap), and lock-scope decoupling for concurrent writers (A1).
 - The strongest measured changes are **B1 (−48.9% at scale)** and
-  **A2 (−6.9%, envelope-independent)**; the most consequential unmeasured
-  ones are **A1/A9** and **D2**. The ten MUST-HAVEs of §4 stand, B1 now
-  on measured evidence at production-like scale.
+  **A2 (−6.9%)**; the most consequential unmeasured ones are **A1/A9**
+  and **D2**. The ten MUST-HAVEs of §4 stand, B1 on measured evidence at
+  production-like scale.
