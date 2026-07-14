@@ -177,14 +177,17 @@ public class DataImpl extends ResourceImpl implements Data {
 	}
 
 	/**
-	 * Tells whether the resource has a file on disk, without any access control check.
+	 * Tells whether the resource has a file on disk, without any access control check. Fails open: an
+	 * undeterminable file state reports true, so callers attempt a deletion rather than leaving a possibly
+	 * present file behind.
 	 */
 	protected boolean hasFile() {
 		try {
 			File f = getFile();
 			return f != null && f.exists();
 		} catch (IOException e) {
-			return false;
+			log.error("Could not determine whether entry {} has a data file, assuming it has one", entry.getEntryURI(), e);
+			return true;
 		}
 	}
 

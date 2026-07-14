@@ -60,6 +60,7 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1350,6 +1351,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	protected void removeNonSystemEntries(RepositoryConnection rc, List<EntryImpl> removedEntries,
 			List<DataImpl> deferredFileDeletions, List<EntryImpl> prunedSurvivingLists) throws Exception {
 		synchronized (this.entry.repository) {
+			Map<URI, SurvivingListPrune> survivingListPrunes = new LinkedHashMap<>();
 			// Collected and then discarded: both required follow-ups unpublish the two indexes, so the
 			// next read rebuilds them from the store. Applying an op instead would buffer a pop into
 			// pendingIndexOps while they are unpublished, and a rolled-back removal would have that pop
@@ -1368,10 +1370,19 @@ public class ContextImpl extends ResourceImpl implements Context {
 				}
 				checkAccess(removeEntry, AccessProperty.Administer);
 				log.info("Removing {}", entryURI);
-				removeFromSurvivingLists(removeEntry, rc, prunedSurvivingLists);
+				collectSurvivingListPrunes(removeEntry, survivingListPrunes);
 				removedEntries.add(removeEntry);
 				removeFromIndex(removeEntry, rc, discardedOps);
 				removeEntry.remove(rc, deferredFileDeletions);
+			}
+			// prune each surviving list once for all of its removed members: one graph read and rewrite
+			// per list instead of one per member
+			for (SurvivingListPrune prune : survivingListPrunes.values()) {
+				EntryImpl listEntry = (EntryImpl) prune.list().getEntry();
+				if (!prunedSurvivingLists.contains(listEntry)) {
+					prunedSurvivingLists.add(listEntry);
+				}
+				prune.list().removeChildrenInTransaction(prune.memberURIsToRemove(), rc);
 			}
 			this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
 		}
@@ -1383,15 +1394,16 @@ public class ContextImpl extends ResourceImpl implements Context {
 		rc.remove((Resource) null, RepositoryProperties.mdHasEntry, entryIRI, this.resourceURI);
 	}
 
+	/** The members to prune from one surviving list after the bulk-removal loop has finished. */
+	private record SurvivingListPrune(ListImpl list, List<URI> memberURIsToRemove) {}
+
 	/**
-	 * Prunes the entry from referring lists in this context that survive the bulk removal (system entries and
+	 * Collects the prunes needed for referring lists that survive the bulk removal (system entries and
 	 * entries with an id starting with "_"), so no dangling member references remain after the transaction
-	 * commits. Lists that are themselves being removed are left alone — their graphs are cleared by their own
-	 * removal. Every pruned list's entry is added to {@code prunedSurvivingLists} (once) so the caller can
-	 * refresh it after a rollback.
+	 * commits. Keyed by list entry URI, so each surviving list is pruned exactly once. Lists that are
+	 * themselves being removed are left alone — their graphs are cleared by their own removal.
 	 */
-	private void removeFromSurvivingLists(EntryImpl removeEntry, RepositoryConnection rc,
-			List<EntryImpl> prunedSurvivingLists) throws RepositoryException {
+	private void collectSurvivingListPrunes(EntryImpl removeEntry, Map<URI, SurvivingListPrune> survivingListPrunes) {
 		for (URI listURI : removeEntry.getReferringListsInSameContext()) {
 			boolean handled = false;
 			for (Entry referringEntry : getByResourceURI(listURI)) {
@@ -1403,10 +1415,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 					continue;
 				}
 				if (listEntry.getResource() instanceof ListImpl list) {
-					list.removeChildInTransaction(removeEntry.getEntryURI(), rc);
-					if (!prunedSurvivingLists.contains(listEntry)) {
-						prunedSurvivingLists.add(listEntry);
-					}
+					survivingListPrunes
+							.computeIfAbsent(listEntry.getEntryURI(), uri -> new SurvivingListPrune(list, new ArrayList<>()))
+							.memberURIsToRemove().add(removeEntry.getEntryURI());
 					handled = true;
 				}
 			}

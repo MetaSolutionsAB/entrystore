@@ -596,6 +596,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 		// copy resources/files to data dir of context
 
+		List<String> failedResourceCopies = new ArrayList<>();
 		try {
 			File dstDir = new File(entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER), contextEntry.getId());
 			if (!dstDir.exists() && !dstDir.mkdirs()) {
@@ -610,6 +611,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 						try {
 							FileOperations.copyFile(src, dst);
 						} catch (Exception e) {
+							failedResourceCopies.add(src.getName());
 							log.error("Failed to copy imported resource file {} to {}, the corresponding entry will have no data",
 									src, dst, e);
 						}
@@ -618,6 +620,11 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			}
 		} catch (Exception e) {
 			log.error("Failed to copy imported resource files to the data directory", e);
+		}
+		if (!failedResourceCopies.isEmpty()) {
+			log.error("Import of context {} committed, but {} resource file(s) could not be copied "
+							+ "and the entries with the following ids have no data: {}",
+					contextEntry.getId(), failedResourceCopies.size(), failedResourceCopies);
 		}
 
 		// reindex the context to get everything reloaded

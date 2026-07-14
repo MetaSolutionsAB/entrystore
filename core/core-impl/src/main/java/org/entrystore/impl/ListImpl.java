@@ -46,6 +46,7 @@ import org.entrystore.repository.security.DisallowedException;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -665,19 +666,18 @@ public class ListImpl extends RDFResource implements List {
 	}
 
 	/**
-	 * Removes a child from this list as part of the supplied transaction, without firing repository events or
-	 * checking for orphans. The children are read and written through the supplied connection only, so that
-	 * earlier uncommitted removals in the same transaction are seen and no uncommitted state is published to
-	 * concurrent readers; the in-memory children are cleared so they are reloaded from the repository on next
-	 * access regardless of the transaction outcome. The list entry's in-memory modification date and
-	 * contributors are updated as part of the save, so after a rollback the caller must refresh the list entry
-	 * from the repository.
+	 * Removes several children from this list as part of the supplied transaction — one graph read and one
+	 * rewrite for the whole batch — without firing repository events or checking for orphans. Reads and
+	 * writes go through the supplied connection only, so earlier uncommitted removals in the same transaction
+	 * are seen and nothing uncommitted is published to concurrent readers; the in-memory children are cleared
+	 * so they are reloaded on next access whatever the transaction outcome. The list entry's modification date
+	 * and contributors are updated in memory, so after a rollback the caller must refresh it.
 	 */
-	protected void removeChildInTransaction(URI child, RepositoryConnection rc) throws RepositoryException {
+	protected void removeChildrenInTransaction(Collection<URI> childrenToRemove, RepositoryConnection rc) throws RepositoryException {
 		synchronized (this.entry.repository) {
 			Model graph = new LinkedHashModel(Iterations.asList(rc.getStatements(this.resourceURI, null, null, false, this.resourceURI)));
 			Vector<URI> inTransactionChildren = loadChildren(graph);
-			if (inTransactionChildren.remove(child)) {
+			if (inTransactionChildren.removeAll(childrenToRemove)) {
 				saveChildren(inTransactionChildren, rc);
 			}
 			children = null;
