@@ -100,6 +100,37 @@ class HttpUtilTest {
 	}
 
 	@Test
+	void determineMediaType_formatWithSpace_restoresPlus() {
+		// Spring decodes an unencoded '+' in the format param to a space; the util must restore it.
+		assertEquals("application/rdf+xml", HttpUtil.determineMediaType("application/rdf xml", null));
+	}
+
+	@Test
+	void determineMediaType_trimsFormat() {
+		assertEquals("text/turtle", HttpUtil.determineMediaType(" text/turtle ", null));
+	}
+
+	@Test
+	void determineMediaType_formatTakesPrecedenceOverContentType() {
+		assertEquals("text/turtle", HttpUtil.determineMediaType("text/turtle", "application/json; charset=UTF-8"));
+	}
+
+	@Test
+	void determineMediaType_nullFormat_fallsBackToNormalizedContentType() {
+		assertEquals("application/json", HttpUtil.determineMediaType(null, "application/json; charset=UTF-8"));
+	}
+
+	@Test
+	void determineMediaType_nullFormatAndUnparseableContentType_returnsNull() {
+		assertNull(HttpUtil.determineMediaType(null, "not a media type"));
+	}
+
+	@Test
+	void determineMediaType_nullFormatAndNullContentType_returnsNull() {
+		assertNull(HttpUtil.determineMediaType(null, null));
+	}
+
+	@Test
 	void clearAuthenticatedSession_clearsContextAndInvalidatesSession() {
 		SecurityContextHolder.getContext().setAuthentication(
 				new UsernamePasswordAuthenticationToken("u", "p", List.of()));
