@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.springboot.model.api;
 
-import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.jspecify.annotations.NonNull;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.http.InvalidMediaTypeException;
@@ -26,18 +25,24 @@ import org.springframework.stereotype.Component;
 /**
  * Binds media-type request parameters (e.g. {@code format}, {@code rdfFormat}) to {@link MediaType}.
  * Media types should be sent properly encoded — i.e. '+' as %2B — but the non-encoded form is also
- * supported: the servlet layer decodes an unencoded '+' to a space, which is restored here.
+ * supported: the servlet layer decodes an unencoded '+' to a space, which is restored here. Note that
+ * every space is rewritten, so a media type containing a properly %20-encoded space is altered too.
+ *
+ * <p>Blank input converts to {@code null} (parameter treated as absent), matching the convention of
+ * Spring's built-in String converters. Unparseable input throws {@link InvalidMediaTypeException} and
+ * is deliberately not translated to an application exception: {@code TypeConverterDelegate} swallows
+ * any exception thrown by a {@code Converter} and falls back to spring-web's {@code MediaTypeEditor},
+ * so the client-facing 400 message is crafted in {@code AppExceptionHandler} from the resulting
+ * {@code MethodArgumentTypeMismatchException} instead.
  */
 @Component
 public class MediaTypeConverter implements Converter<String, MediaType> {
 
 	@Override
 	public MediaType convert(@NonNull String input) {
-		String normalized = input.trim().replace(' ', '+');
-		try {
-			return MediaType.parseMediaType(normalized);
-		} catch (InvalidMediaTypeException e) {
-			throw new BadRequestException("Invalid media type: " + normalized);
+		if (input.isBlank()) {
+			return null;
 		}
+		return MediaType.parseMediaType(input.trim().replace(' ', '+'));
 	}
 }

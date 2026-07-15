@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 
 import java.io.StringWriter;
 
@@ -243,6 +244,37 @@ class GraphUtilTest {
 	@Test
 	void normalizeLegacyMediaType_shouldReturnNullForNullInput() {
 		assertNull(GraphUtil.normalizeLegacyMediaType(null));
+	}
+
+	@Test
+	void resolveRdfMediaType_formatParameterWinsOverAcceptHeader() {
+		assertEquals("text/turtle",
+				GraphUtil.resolveRdfMediaType(MediaType.parseMediaType("text/turtle"), "application/json"));
+	}
+
+	@Test
+	void resolveRdfMediaType_unsupportedFormat_rejectedWith406() {
+		CustomResponseException exception = assertThrows(
+				CustomResponseException.class,
+				() -> GraphUtil.resolveRdfMediaType(MediaType.TEXT_HTML, "application/json"));
+		assertEquals(HttpStatus.NOT_ACCEPTABLE, exception.getStatus());
+	}
+
+	@Test
+	void resolveRdfMediaType_nullFormat_negotiatesAcceptHeader() {
+		assertEquals("application/json",
+				GraphUtil.resolveRdfMediaType(null, "text/html, application/json"));
+	}
+
+	@Test
+	void resolveRdfMediaType_formatWithParameters_rejectedWith406() {
+		// Pins current behavior: the format parameter is matched with its parameters intact, so a
+		// supported base type with a charset parameter is rejected — unlike the Accept-header path,
+		// which strips parameters before the lookup.
+		CustomResponseException exception = assertThrows(
+				CustomResponseException.class,
+				() -> GraphUtil.resolveRdfMediaType(MediaType.parseMediaType("text/turtle;charset=UTF-8"), null));
+		assertEquals(HttpStatus.NOT_ACCEPTABLE, exception.getStatus());
 	}
 
 	@Test

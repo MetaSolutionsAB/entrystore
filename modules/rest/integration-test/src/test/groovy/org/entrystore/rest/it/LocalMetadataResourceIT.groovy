@@ -917,6 +917,25 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryMetaConn.getContentType().contains('application/rdf+xml')
 	}
 
+	def "GET /{context-id}/metadata/{entryId} with empty format should be treated as absent and return 200"() {
+		given:
+		// an empty format= binds to null (MediaTypeConverter returns null for blank input), so the
+		// endpoint falls back to Accept-header negotiation — proven by the turtle response below
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + '?format=', 'admin', 'text/turtle')
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_OK
+		entryMetaConn.getContentType().contains('text/turtle')
+	}
+
 	def "GET /{context-id}/metadata/{entryId} with Accept header containing supported type among unsupported ones should return 200"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]

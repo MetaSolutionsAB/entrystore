@@ -57,12 +57,7 @@ public class RelationController {
 			@RequestParam(required = false) MediaType format,
 			@RequestHeader(value = "Accept", defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
 	) {
-		String mediaType;
-		if (format != null) {
-			mediaType = GraphUtil.validateRdfMediaType(format.toString());
-		} else {
-			mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, GraphUtil.DEFAULT_RDF_MEDIA_TYPE);
-		}
+		String mediaType = GraphUtil.resolveRdfMediaType(format, acceptHeader);
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 		String relationsGraph = relationService.getEntryRelations(entry, mediaType);

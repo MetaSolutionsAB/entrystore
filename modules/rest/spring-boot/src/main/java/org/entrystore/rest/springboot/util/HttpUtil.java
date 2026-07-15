@@ -58,7 +58,8 @@ public class HttpUtil {
 	 *
 	 * @param format The format parameter from the request, bound via {@code MediaTypeConverter}.
 	 * @param contentType The raw content-type header string from the request.
-	 * @return The determined and normalized media type string, or null if neither can be determined.
+	 * @return The format parameter's string form if present (parameters preserved), otherwise the
+	 *         normalized content type (type/subtype only), or null if neither can be determined.
 	 */
 	public static String determineMediaType(MediaType format, String contentType) {
 		if (format != null) {

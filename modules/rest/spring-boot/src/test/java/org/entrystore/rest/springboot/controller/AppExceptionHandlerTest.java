@@ -31,7 +31,10 @@ import org.entrystore.User;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.InvalidMediaTypeException;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -40,6 +43,8 @@ import org.springframework.security.authorization.AuthorizationResult;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -311,5 +316,71 @@ class AppExceptionHandlerTest {
 		ErrorResponse body = response.getBody();
 		assertNotNull(body, "Expected non-null ErrorResponse body");
 		assertEquals(500, body.status());
+	}
+
+	@Test
+	void handleSpringBadRequestException_typeMismatch_craftsParameterSpecificMessage() throws Exception {
+		// Pins the converter-binding path: an exception thrown by a Converter (e.g. MediaTypeConverter)
+		// never survives binding — TypeConverterDelegate swallows it and falls back to spring-web's
+		// MediaTypeEditor — so this handler is the only place that can tell the client which parameter
+		// was invalid, using the parameter name and offending value from the exception itself.
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/ctx/metadata/42");
+		MethodArgumentTypeMismatchException ex = new MethodArgumentTypeMismatchException(
+				"notamediatype", MediaType.class, "format", formatParameter(),
+				new InvalidMediaTypeException("notamediatype", "does not contain '/'"));
+
+		ResponseEntity<ErrorResponse> response = handler.handleSpringBadRequestException(ex, req);
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertEquals(400, body.status());
+		assertEquals("Invalid value 'notamediatype' for parameter 'format'", body.error());
+		assertEquals("/ctx/metadata/42", body.path());
+	}
+
+	@Test
+	void handleSpringBadRequestException_typeMismatchWithControlCharacters_sanitizesEchoedValue() throws Exception {
+		// The offending value is client input echoed into the response; mid-string CR/LF must not
+		// survive (CWE-117 log forging via the handler's log line and the JSON body).
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/ctx/metadata/42");
+		MethodArgumentTypeMismatchException ex = new MethodArgumentTypeMismatchException(
+				"text\nforged log line", MediaType.class, "format", formatParameter(),
+				new InvalidMediaTypeException("text\nforged log line", "does not contain '/'"));
+
+		ResponseEntity<ErrorResponse> response = handler.handleSpringBadRequestException(ex, req);
+
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertFalse(body.error().contains("\n"));
+		assertEquals("Invalid value 'text?forged log line' for parameter 'format'", body.error());
+	}
+
+	@Test
+	void handleSpringBadRequestException_nonTypeMismatch_staysGeneric() {
+		// The generic-body contract must hold for the other handled types: Spring/Jackson internals in
+		// ex.getMessage() must not leak just because type mismatches get a crafted message.
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/search");
+
+		ResponseEntity<ErrorResponse> response = handler.handleSpringBadRequestException(
+				new MissingServletRequestParameterException("query", "String"), req);
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertEquals(400, body.status());
+		assertEquals("Bad Request", body.error());
+	}
+
+	private MethodParameter formatParameter() throws NoSuchMethodException {
+		return new MethodParameter(
+				AppExceptionHandlerTest.class.getDeclaredMethod("bindingTarget", MediaType.class), 0);
+	}
+
+	@SuppressWarnings("unused")
+	private void bindingTarget(MediaType format) {
 	}
 }

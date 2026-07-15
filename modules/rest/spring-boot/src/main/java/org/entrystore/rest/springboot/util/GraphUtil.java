@@ -320,6 +320,18 @@ public class GraphUtil {
 		throw new CustomResponseException("Unsupported media type", HttpStatus.NOT_ACCEPTABLE);
 	}
 
+	/**
+	 * Resolves the effective RDF media type for a request: an explicit format parameter wins (validated
+	 * and normalized — lowercased, legacy {@code text/rdf+n3} mapped to {@code text/n3}), otherwise
+	 * content negotiation over the Accept header with the RDF default.
+	 */
+	public static String resolveRdfMediaType(MediaType format, String acceptHeader) {
+		if (format != null) {
+			return validateRdfMediaType(format.toString());
+		}
+		return resolveAcceptedMediaType(acceptHeader, DEFAULT_RDF_MEDIA_TYPE);
+	}
+
 	public static String serializeGraph(Model graph, String mediaType) {
 		mediaType = normalizeLegacyMediaType(mediaType);
 		if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(mediaType)) {

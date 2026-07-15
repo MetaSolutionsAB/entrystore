@@ -57,7 +57,7 @@ public class LookupController {
 			@RequestParam(required = false) MediaType format,
 			@RequestHeader(value = "Accept", defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
 	) {
-		String mediaType = resolveMediaType(format, acceptHeader);
+		String mediaType = GraphUtil.resolveRdfMediaType(format, acceptHeader);
 		Entry entry = lookupService.lookupGlobal(uri);
 		return buildResponse(entry, scope, mediaType);
 	}
@@ -79,16 +79,9 @@ public class LookupController {
 			@RequestParam(required = false) MediaType format,
 			@RequestHeader(value = "Accept", defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
 	) {
-		String mediaType = resolveMediaType(format, acceptHeader);
+		String mediaType = GraphUtil.resolveRdfMediaType(format, acceptHeader);
 		Entry entry = lookupService.lookupInContext(contextId, uri);
 		return buildResponse(entry, scope, mediaType);
-	}
-
-	private String resolveMediaType(MediaType format, String acceptHeader) {
-		if (format != null) {
-			return GraphUtil.validateRdfMediaType(format.toString());
-		}
-		return GraphUtil.resolveAcceptedMediaType(acceptHeader, GraphUtil.DEFAULT_RDF_MEDIA_TYPE);
 	}
 
 	private ResponseEntity<String> buildResponse(Entry entry, LookupScope scope, String mediaType) {

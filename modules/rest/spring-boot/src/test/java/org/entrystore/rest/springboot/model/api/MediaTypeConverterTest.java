@@ -16,11 +16,12 @@
 
 package org.entrystore.rest.springboot.model.api;
 
-import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MediaTypeConverterTest {
@@ -49,12 +50,18 @@ class MediaTypeConverterTest {
 	}
 
 	@Test
-	void convert_unparseable_throwsBadRequest() {
-		assertThrows(BadRequestException.class, () -> converter.convert("not a media type"));
+	void convert_blank_returnsNullSoParamIsTreatedAsAbsent() {
+		// Matches the convention of Spring's built-in String converters: an empty format= param binds
+		// to null and the endpoint falls back to Accept-header negotiation instead of failing.
+		assertNull(converter.convert(""));
+		assertNull(converter.convert("   "));
 	}
 
 	@Test
-	void convert_empty_throwsBadRequest() {
-		assertThrows(BadRequestException.class, () -> converter.convert(""));
+	void convert_unparseable_throwsInvalidMediaType() {
+		// Deliberately not translated to an application exception: binding swallows converter exceptions
+		// (TypeConverterDelegate falls back to spring-web's MediaTypeEditor), so the client-facing 400
+		// message is crafted in AppExceptionHandler from the MethodArgumentTypeMismatchException.
+		assertThrows(InvalidMediaTypeException.class, () -> converter.convert("not a media type"));
 	}
 }

@@ -122,11 +122,7 @@ public class ResourceController {
 		} else {
 			GraphType graphType = entry.getGraphType();
 			if (graphType == GraphType.Graph || graphType == GraphType.List) {
-				if (rdfFormat != null) {
-					mediaType = GraphUtil.validateRdfMediaType(mediaType);
-				} else {
-					mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, GraphUtil.DEFAULT_RDF_MEDIA_TYPE);
-				}
+				mediaType = GraphUtil.resolveRdfMediaType(rdfFormat, acceptHeader);
 				responseMediaType = MediaType.parseMediaType(mediaType);
 			} else {
 				responseMediaType = MediaType.APPLICATION_JSON;

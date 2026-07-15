@@ -82,12 +82,7 @@ public class MetadataController {
 			@RequestParam(required = false) String download,
 			@RequestHeader(value = "Accept", required = false, defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
 	) {
-		String mediaType;
-		if (format != null) {
-			mediaType = GraphUtil.validateRdfMediaType(format.toString());
-		} else {
-			mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, GraphUtil.DEFAULT_RDF_MEDIA_TYPE);
-		}
+		String mediaType = GraphUtil.resolveRdfMediaType(format, acceptHeader);
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 
