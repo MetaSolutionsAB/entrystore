@@ -27,9 +27,12 @@ import org.entrystore.repository.security.Password;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.CorsConfig;
 import org.entrystore.rest.springboot.configuration.HttpBasicAuthConfiguration;
+import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.auth.UserAuthRole;
+import org.entrystore.rest.springboot.service.OidcAuthService;
+import org.entrystore.rest.springboot.service.auth.OidcAuthStateCache;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
@@ -54,6 +57,7 @@ import org.springframework.security.config.annotation.web.configurers.HeadersCon
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
 import org.springframework.security.saml2.provider.service.web.DefaultRelyingPartyRegistrationResolver;
 import org.springframework.security.saml2.provider.service.web.authentication.OpenSaml5AuthenticationRequestResolver;
@@ -106,6 +110,14 @@ public class SecurityConfig {
 	private final CasCustomConfiguration casConfiguration;
 	private final Optional<CasAuthenticationProvider> casAuthenticationProvider;
 	private final Optional<CasLoginSuccessHandler> casLoginSuccessHandler;
+
+	// OIDC-auth related beans (success handler optional — only present when entrystore.auth.oidc.enabled=true)
+	private final OidcCustomConfiguration oidcConfiguration;
+	private final Optional<OidcLoginSuccessHandler> oidcLoginSuccessHandler;
+	private final Optional<ClientRegistrationRepository> clientRegistrationRepository; // optional as it will be injected only when Spring's OAuth2 client registrations are configured
+	private final OidcAuthService oidcAuthService;
+	private final OidcAuthStateCache oidcAuthStateCache;
+	private final CacheOAuth2AuthorizationRequestRepository oauth2AuthorizationRequestRepository;
 
 	private final HttpBasicAuthConfiguration httpBasicConfig;
 
@@ -279,6 +291,59 @@ public class SecurityConfig {
 			http.addFilterBefore(casFilter, UsernamePasswordAuthenticationFilter.class);
 		} else {
 			log.info("CAS Auth Disabled");
+		}
+
+		if (oidcConfiguration.enabled()) {
+			log.info("OIDC Auth Enabled");
+			oidcConfiguration.provider().forEach((id, provider) ->
+					log.info("OIDC provider \"{}\" - Domains: {}, Auto Provisioning: {}, Username Claim: {}",
+							id, provider.domains(), provider.userAutoProvisioning(), provider.usernameClaim()));
+			log.info("OIDC Default Provider: {}", oidcConfiguration.defaultProvider());
+			oidcConfiguration.redirectDomainWhitelist().forEach(domain -> log.info("Allowed domain for redirects: {}", domain));
+
+			var oidcHandler = oidcLoginSuccessHandler.orElseThrow(() -> new IllegalStateException(
+					"OIDC is enabled but OidcLoginSuccessHandler bean is missing — check the " +
+							"entrystore.auth.oidc.enabled binding."));
+			// Custom success URLs flow through the validated state-keyed cache (OidcAuthorizationRequestResolver);
+			// the handler must NOT read a request parameter for the target — see the SAML branch above for the
+			// ENTRYSTORE-996 open-redirect rationale. Only the trusted default target is configured here.
+			oidcHandler.setDefaultTargetUrl(oidcConfiguration.redirectSuccess().url());
+			// See the SAML branch above for the Cache-Control rationale.
+			oidcHandler.setRedirectStrategy(cacheAwareRedirectStrategy);
+
+			var registrations = clientRegistrationRepository.orElseThrow(() -> new IllegalStateException(
+					"OIDC is enabled but no ClientRegistrationRepository is available — configure at least " +
+							"one client under spring.security.oauth2.client.registration.*"));
+
+			http.oauth2Login(oidcLogin -> oidcLogin
+					.loginPage("/auth/oidc")
+					.authorizationEndpoint(authorization -> authorization
+							.authorizationRequestResolver(new OidcAuthorizationRequestResolver(
+									registrations, oidcAuthService, oidcAuthStateCache))
+							// Keyed by the state parameter instead of the HTTP session so the flow survives
+							// SameSite=Strict session cookies on the cross-site callback redirect.
+							.authorizationRequestRepository(oauth2AuthorizationRequestRepository))
+					// Names the principal after the per-provider username claim (default: email), so
+					// authentication.getName() resolves the EntryStore username consistently in the
+					// success handler and SetUserURIAfterAuthenticationFilter.
+					.userInfoEndpoint(userInfo -> userInfo.oidcUserService(new UsernameClaimOidcUserService(oidcAuthService)))
+					.successHandler(oidcHandler)
+					// Surface code-exchange and ID-token validation failures at WARN with the full stack
+					// trace; the default failure logging is at DEBUG level, which makes provider-down,
+					// bad-client-secret, and clock-skew errors invisible in production.
+					.failureHandler(new SimpleUrlAuthenticationFailureHandler(
+							oidcConfiguration.redirectFailure().url()) {
+						@Override
+						public void onAuthenticationFailure(HttpServletRequest request,
+															HttpServletResponse response,
+															AuthenticationException exception) throws IOException, ServletException {
+							log.warn("OIDC authentication failed at '{}': {}",
+									request.getRequestURI(), exception.getMessage(), exception);
+							super.onAuthenticationFailure(request, response, exception);
+						}
+					}));
+		} else {
+			log.info("OIDC Auth Disabled");
 		}
 
 		return http.build();

@@ -1,0 +1,13 @@
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: entrystore-oidc
+            client-secret: oidc-test-secret
+            scope: openid,profile,email
+        provider:
+          keycloak:
+            # for Keycloak below value is typically http://localhost:xxx/realms/test
+            issuer-uri: value-will-be-overridden-by-tests

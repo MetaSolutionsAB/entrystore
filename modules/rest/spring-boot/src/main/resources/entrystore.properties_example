@@ -190,11 +190,34 @@ entrystore.auth.temp.lockout.duration=0ms
 ## "CAS Auth Enabled" / "CAS Auth Disabled" to verify the state.
 # entrystore.auth.cas.enabled=true|false
 
-## OpenID (deprecated)
-# entrystore.auth.openid=on|off (default: off)
-# entrystore.auth.openid.google=on
-# entrystore.auth.openid.yahoo=off
-# entrystore.auth.openid.myopenid=off
+## OpenID Connect (OIDC) authentication (default: false)
+## Check the startup log for "OIDC Auth Enabled" / "OIDC Auth Disabled" to verify the state.
+# entrystore.auth.oidc.enabled=true|false
+## Default provider id used when the request carries no provider/username hint.
+# entrystore.auth.oidc.default-provider=myProvider
+## Per-provider settings, keyed by provider id. The id must match the Spring client-registration id
+## (spring.security.oauth2.client.registration.{id}.*). A provider is defined by the presence of any
+## `provider.{id}.*` key.
+## domains: comma-separated email domains routed to this provider (default: * — wildcard fallback).
+## user-auto-provisioning: create the EntryStore user on first login (default: false).
+## username-claim: ID-token claim mapped to the EntryStore username (default: email). The
+## registration's scopes must make the provider emit the claim (e.g. scope=openid,profile,email).
+# entrystore.auth.oidc.provider.myProvider.domains=example.com,example.org
+# entrystore.auth.oidc.provider.myProvider.user-auto-provisioning=true
+# entrystore.auth.oidc.provider.myProvider.username-claim=email
+## Comma-separated host whitelist for post-login successurl/failureurl redirects;
+## a redirect to any host not listed here is dropped (open-redirect protection).
+# entrystore.auth.oidc.redirect-domain-whitelist=app.example.com,portal.example.com
+## Post-login redirect targets when the request carries no (whitelisted) successurl/failureurl
+## (default: /auth/user for both).
+# entrystore.auth.oidc.redirect-success.url=https://app.example.com/
+# entrystore.auth.oidc.redirect-failure.url=https://app.example.com/login
+## Client id/secret, scopes and issuer are configured via Spring Boot's native properties. The
+## issuer-uri drives OIDC discovery (.well-known/openid-configuration) including JWKS key rotation.
+# spring.security.oauth2.client.registration.myProvider.client-id=entrystore
+# spring.security.oauth2.client.registration.myProvider.client-secret=...
+# spring.security.oauth2.client.registration.myProvider.scope=openid,profile,email
+# spring.security.oauth2.client.provider.myProvider.issuer-uri=https://idp.example.com/realms/myrealm
 
 ## Solr
 entrystore.solr=on

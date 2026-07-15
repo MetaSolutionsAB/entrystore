@@ -29,6 +29,7 @@ import org.entrystore.rest.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.springboot.model.auth.ConfirmationResult;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.service.AuthService;
+import org.entrystore.rest.springboot.service.OidcAuthService;
 import org.entrystore.rest.springboot.service.SamlAuthService;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.beans.factory.annotation.Value;
@@ -70,8 +71,12 @@ public class AuthController {
 	@Value("${entrystore.auth.saml.enabled:false}")
 	private boolean isSamlAuthEnabled;
 
+	@Value("${entrystore.auth.oidc.enabled:false}")
+	private boolean isOidcAuthEnabled;
+
 	private final AuthService authService;
 	private final SamlAuthService samlAuthService;
+	private final OidcAuthService oidcAuthService;
 	private final CasCustomConfiguration casConfiguration;
 	private final Optional<ServiceProperties> casServiceProperties;
 
@@ -114,6 +119,34 @@ public class AuthController {
 		redirectAttributes.addAttribute("idpId", idpId);
 
 		return "redirect:/saml2/authenticate/{idpId}";
+	}
+
+	// Endpoint initiates OIDC authentication by redirecting to the provider's authorization endpoint
+	@GetMapping("/auth/oidc")
+	public String startOidcLogin(@RequestParam(required = false) String username,
+								 @RequestParam(required = false) String provider,
+								 @RequestParam(name = "successurl", required = false) String successUrl,
+								 @RequestParam(name = "failureurl", required = false) String failureUrl,
+								 RedirectAttributes redirectAttributes) {
+
+		if (!isOidcAuthEnabled) {
+			throw new EntityNotFoundException("Not Found");
+		}
+
+		if (successUrl != null && oidcAuthService.isValidRedirectUrl(successUrl)) {
+			redirectAttributes.addAttribute("successurl", successUrl);
+		}
+
+		if (failureUrl != null && oidcAuthService.isValidRedirectUrl(failureUrl)) {
+			redirectAttributes.addAttribute("failureurl", failureUrl);
+		}
+
+		String providerId = oidcAuthService.findProviderIdForRequest(username, provider);
+		redirectAttributes.addAttribute("providerId", providerId);
+
+		// Spring Security's OAuth2AuthorizationRequestRedirectFilter serves this path;
+		// OidcAuthorizationRequestResolver re-validates and caches the redirect URLs there.
+		return "redirect:/oauth2/authorization/{providerId}";
 	}
 
 	@Operation(

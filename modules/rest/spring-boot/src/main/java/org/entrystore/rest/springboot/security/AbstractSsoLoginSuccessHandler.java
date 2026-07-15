@@ -34,7 +34,7 @@ import java.io.IOException;
 import java.util.Set;
 
 /**
- * Shared SSO login success flow for CAS and SAML: token-type guard, reserved-name check,
+ * Shared SSO login success flow for CAS, SAML and OIDC: token-type guard, reserved-name check,
  * auto-provisioning, disabled-user check, and the clear-session-then-redirect failure path.
  * Subclasses contribute the protocol-specific parts through the hook methods, optionally
  * carrying per-request state of type {@code C} (resolved once via

@@ -79,6 +79,15 @@
 			</exclusions>
 		</dependency>
 
+		<!-- OIDC relying-party support (oauth2Login). Unlike SAML, the starter pulls the Boot 4
+		     auto-configuration module (spring-boot-security-oauth2-client, providing
+		     OAuth2ClientProperties -> ClientRegistrationRepository) transitively, together with
+		     spring-security-oauth2-client and spring-security-oauth2-jose. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-oauth2-client</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>

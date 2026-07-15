@@ -50,12 +50,12 @@ public final class HttpQueryRedactor {
 	 * case-insensitive comparison via {@link String#toLowerCase(Locale)} with
 	 * {@link Locale#ROOT}. Covers EntryStore's actual auth surface
 	 * (password-reset and signup confirmation tokens, form-login password,
-	 * SAML 2.0 {@code RelayState}, CAS {@code ticket}) plus defence-in-depth
-	 * entries for credential-bearing names from related frameworks
-	 * ({@code token}, {@code secret}, {@code code}, {@code state},
-	 * {@code api_key}, {@code apikey}) that are not currently accepted as
-	 * query parameters by any EntryStore endpoint but would slip into logs
-	 * the moment one were added.
+	 * SAML 2.0 {@code RelayState}, CAS {@code ticket}, the OIDC callback's
+	 * {@code code}/{@code state}) plus defence-in-depth entries for
+	 * credential-bearing names from related frameworks ({@code token},
+	 * {@code secret}, {@code api_key}, {@code apikey}) that are not currently
+	 * accepted as query parameters by any EntryStore endpoint but would slip
+	 * into logs the moment one were added.
 	 */
 	private static final Set<String> SENSITIVE_NAMES = Set.of(
 			"confirm",          // password-reset + signup confirmation tokens
@@ -63,8 +63,8 @@ public final class HttpQueryRedactor {
 			"password",         // never accepted as a query param today
 			"auth_password",    // form-login parameter name
 			"secret",
-			"code",
-			"state",
+			"code",             // OIDC authorization code (/login/oauth2/code/{id} callback)
+			"state",            // OIDC state correlation token, keys the auth-state cache
 			"relaystate",       // SAML 2.0 relay-state correlation token
 			"ticket",           // CAS service ticket
 			"api_key",

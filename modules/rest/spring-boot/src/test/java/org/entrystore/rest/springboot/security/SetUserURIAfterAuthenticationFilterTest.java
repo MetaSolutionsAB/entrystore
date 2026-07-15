@@ -40,10 +40,15 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.oidc.OidcIdToken;
+import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.saml2.provider.service.authentication.Saml2Authentication;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -299,6 +304,45 @@ class SetUserURIAfterAuthenticationFilterTest {
 	}
 
 	@Test
+	void oidcAuthenticated_userFound_setsUserURIAndCallsChain() throws Exception {
+		when(aliceUser.getURI()).thenReturn(ALICE_URI);
+		when(userDetailsService.loadUser("alice@example.com")).thenReturn(aliceUser);
+		SecurityContextHolder.getContext().setAuthentication(oidcAuth("alice@example.com"));
+		var chain = new MockFilterChain();
+
+		filter.doFilter(new MockHttpServletRequest(), new MockHttpServletResponse(), chain);
+
+		InOrder order = inOrder(pm);
+		order.verify(pm).setAuthenticatedUserURI(GUEST_URI);
+		order.verify(pm).setAuthenticatedUserURI(ALICE_URI);
+		assertNotNull(chain.getRequest(), "Chain must be invoked after a successful OIDC user lookup");
+	}
+
+	@Test
+	void oidcAuthenticated_userNotFound_writes403AndStopsChain() throws Exception {
+		when(userDetailsService.loadUser("ghost@example.com")).thenReturn(null);
+		SecurityContextHolder.getContext().setAuthentication(oidcAuth("ghost@example.com"));
+		var request = new MockHttpServletRequest("GET", "/some/resource");
+		request.getSession(true);
+		var response = new MockHttpServletResponse();
+		var chain = new MockFilterChain();
+
+		filter.doFilter(request, response, chain);
+
+		InOrder order = inOrder(pm);
+		order.verify(pm).setAuthenticatedUserURI(GUEST_URI);
+		order.verifyNoMoreInteractions();
+		assertEquals(HttpServletResponse.SC_FORBIDDEN, response.getStatus());
+		assertEquals("application/json", response.getContentType());
+		assertTrue(response.getContentAsString().contains("OIDC user not found"),
+				"Forbidden body must name the OIDC branch so operators can correlate the diagnostic");
+		assertNull(SecurityContextHolder.getContext().getAuthentication(),
+				"Security context must be cleared on OIDC user-not-found");
+		assertNull(chain.getRequest(),
+				"Chain must NOT be invoked when OIDC user is not found in EntryStore");
+	}
+
+	@Test
 	void cookieAuth_setsUserURIAndCallsChain() throws Exception {
 		when(aliceUser.getURI()).thenReturn(ALICE_URI);
 		var sessionDetails = newSessionDetails("alice", aliceUser);
@@ -431,6 +475,15 @@ class SetUserURIAfterAuthenticationFilterTest {
 		var assertion = mock(Assertion.class);
 		return new CasAuthenticationToken("cas-key", userDetails, "ticket",
 				List.of(new SimpleGrantedAuthority("ROLE_USER")), userDetails, assertion);
+	}
+
+	private static OAuth2AuthenticationToken oidcAuth(String username) {
+		// Mirrors what UsernameClaimOidcUserService produces at login: the principal is named
+		// after the username claim (email by default), so getName() yields the EntryStore username.
+		var idToken = new OidcIdToken("id-token", Instant.now(), Instant.now().plusSeconds(60),
+				Map.of("sub", "subject-" + username, "email", username));
+		var principal = new DefaultOidcUser(List.of(new SimpleGrantedAuthority("ROLE_USER")), idToken, "email");
+		return new OAuth2AuthenticationToken(principal, List.of(new SimpleGrantedAuthority("ROLE_USER")), "keycloak");
 	}
 
 	private static ESUserSessionDetails newSessionDetails(String username, User esUser) {
