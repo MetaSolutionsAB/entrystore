@@ -19,13 +19,19 @@ package org.entrystore.rest.springboot.security;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.entrystore.rest.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.springboot.service.OidcAuthService;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * {@link OidcUserService} that names the principal after the per-provider configured claim
@@ -65,6 +71,12 @@ public class UsernameClaimOidcUserService extends OidcUserService {
 							+ registrationId + "'", null));
 		}
 
-		return new DefaultOidcUser(oidcUser.getAuthorities(), oidcUser.getIdToken(), oidcUser.getUserInfo(), usernameClaim);
+		// Role parity with the other SSO protocols: Spring's SAML provider grants ROLE_USER by
+		// default and CasConfig grants it explicitly, while OidcUserService yields only
+		// OIDC_USER/SCOPE_* authorities — without ROLE_USER an OIDC login would be denied on
+		// endpoints gated by hasAnyRole(USER, ADMIN) in SecurityConfig (e.g. GET /auth/tokens).
+		Set<GrantedAuthority> authorities = new LinkedHashSet<>(oidcUser.getAuthorities());
+		authorities.add(new SimpleGrantedAuthority("ROLE_" + UserAuthRole.USER.name()));
+		return new DefaultOidcUser(authorities, oidcUser.getIdToken(), oidcUser.getUserInfo(), usernameClaim);
 	}
 }

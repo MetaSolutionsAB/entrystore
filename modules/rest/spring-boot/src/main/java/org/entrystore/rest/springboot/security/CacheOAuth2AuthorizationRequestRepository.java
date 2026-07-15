@@ -40,9 +40,15 @@ import java.util.concurrent.TimeUnit;
 public class CacheOAuth2AuthorizationRequestRepository
 		implements AuthorizationRequestRepository<OAuth2AuthorizationRequest>, CaffeineCacheSource {
 
+	// Cardinality bound: every anonymous request to /oauth2/authorization/{registrationId} mints an
+	// entry, and expireAfterWrite bounds only lifetime — without a cap, request-rate × 120 s of
+	// entries could exhaust the heap. 10k entries ≈ a few MB, far above legitimate concurrent logins.
+	static final long MAX_ENTRIES = 10_000;
+
 	private final Cache<String, OAuth2AuthorizationRequest> cache =
 			Caffeine.newBuilder()
 					.expireAfterWrite(2, TimeUnit.MINUTES)
+					.maximumSize(MAX_ENTRIES)
 					.recordStats()
 					.build();
 

@@ -181,6 +181,13 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		userJson['id'] != null
 		userJson['user'] == testUserEmail
 		(userJson['uri'] as String).startsWith(EntryStoreClient.baseUrl + '/_principals/entry/')
+
+		and: 'the OIDC session carries ROLE_USER (parity with SAML/CAS) — /auth/tokens must not be denied'
+		// SecurityConfig gates /auth/tokens on hasAnyRole(USER, ADMIN); Spring's OIDC login only
+		// grants OIDC_USER/SCOPE_* by itself, so this locks the ROLE_USER remapping in
+		// UsernameClaimOidcUserService.
+		def tokensConn = EntryStoreClient.getRequest('/auth/tokens', null, null, [Cookie: spCookies.join('; ')])
+		tokensConn.getResponseCode() == HTTP_OK
 	}
 
 	def '5. Replaying the consumed callback must not establish an authenticated session'() {

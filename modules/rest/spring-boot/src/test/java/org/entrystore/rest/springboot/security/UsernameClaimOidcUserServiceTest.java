@@ -34,6 +34,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -73,6 +74,21 @@ class UsernameClaimOidcUserServiceTest {
 		var user = service.loadUser(userRequest(Map.of("sub", "opaque-subject", "email", "jane@example.com")));
 
 		assertEquals("jane@example.com", user.getName());
+	}
+
+	@Test
+	void principalIsGrantedRoleUserAlongsideTheOidcAuthorities() {
+		when(oidcAuthService.usernameClaimFor(REGISTRATION_ID)).thenReturn("email");
+		var service = new UsernameClaimOidcUserService(oidcAuthService);
+
+		var user = service.loadUser(userRequest(Map.of("sub", "opaque-subject", "email", "jane@example.com")));
+
+		// Role parity with SAML (Spring grants ROLE_USER by default) and CAS (CasConfig grants it
+		// explicitly): without it, endpoints gated by hasAnyRole(USER, ADMIN) — e.g. GET /auth/tokens —
+		// return 403 for OIDC logins. The OIDC_USER authority must survive the remapping.
+		var authorityNames = user.getAuthorities().stream().map(a -> a.getAuthority()).toList();
+		assertTrue(authorityNames.contains("ROLE_USER"), "ROLE_USER missing: " + authorityNames);
+		assertTrue(authorityNames.contains("OIDC_USER"), "OIDC_USER lost in remapping: " + authorityNames);
 	}
 
 	@Test

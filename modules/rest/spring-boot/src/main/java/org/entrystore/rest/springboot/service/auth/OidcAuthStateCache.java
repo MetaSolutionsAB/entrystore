@@ -34,8 +34,14 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class OidcAuthStateCache implements CaffeineCacheSource {
 
+	// Cardinality bound: anonymous logins with a whitelisted successurl/failureurl mint entries, and
+	// expireAfterWrite bounds only lifetime — cap the size so an initiation flood cannot exhaust the
+	// heap (mirrors CacheOAuth2AuthorizationRequestRepository).
+	static final long MAX_ENTRIES = 10_000;
+
 	private final Cache<String, AuthState> requestCache = Caffeine.newBuilder()
 			.expireAfterWrite(2, TimeUnit.MINUTES)
+			.maximumSize(MAX_ENTRIES)
 			.recordStats()
 			.build();
 
