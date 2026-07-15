@@ -20,6 +20,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -40,8 +41,12 @@ public record OidcCustomConfiguration(
 	public OidcCustomConfiguration {
 		if (redirectSuccess == null) redirectSuccess = new RedirectUrl("/auth/user");
 		if (redirectFailure == null) redirectFailure = new RedirectUrl("/auth/user");
-		// Copy the bound collections so a consumer cannot mutate the redirect whitelist or provider routing.
-		redirectDomainWhitelist = redirectDomainWhitelist == null ? List.of() : List.copyOf(redirectDomainWhitelist);
+		// Copy the bound collections so a consumer cannot mutate the redirect whitelist or provider
+		// routing. The whitelist is lowercased because hostnames are case-insensitive and
+		// OidcAuthService compares against the lowercased request-side host — an uppercase config
+		// entry would otherwise silently reject legitimate redirect URLs.
+		redirectDomainWhitelist = redirectDomainWhitelist == null ? List.of()
+				: redirectDomainWhitelist.stream().map(host -> host.toLowerCase(Locale.ROOT)).toList();
 		provider = provider == null ? Map.of() : Map.copyOf(provider);
 	}
 
@@ -56,11 +61,25 @@ public record OidcCustomConfiguration(
 		public static final String DEFAULT_USERNAME_CLAIM = "email";
 
 		public Provider {
-			domains = domains == null ? List.of("*") : List.copyOf(domains);
+			// Copy + lowercase: email domains are case-insensitive, and the routing lookup
+			// (OidcAuthService.findProviderIdForDomain) compares against a lowercased request domain —
+			// an uppercase config entry would otherwise silently misroute to the wildcard/default.
+			domains = domains == null ? List.of("*")
+					: domains.stream().map(domain -> domain.toLowerCase(Locale.ROOT)).toList();
 			// Blank covers programmatic construction; property binding applies the @DefaultValue on null.
 			usernameClaim = usernameClaim == null || usernameClaim.isBlank() ? DEFAULT_USERNAME_CLAIM : usernameClaim;
 		}
 	}
 
-	public record RedirectUrl(String url) {}
+	public record RedirectUrl(String url) {
+		public RedirectUrl {
+			// A blank binding (e.g. `entrystore.auth.oidc.redirect-success.url=`) would bypass the
+			// null-only defaulting in the outer constructor and produce an empty Location header on
+			// every post-login redirect — fail fast at startup instead.
+			if (url == null || url.isBlank()) {
+				throw new IllegalArgumentException(
+						"entrystore.auth.oidc redirect-success.url/redirect-failure.url must not be blank when configured");
+			}
+		}
+	}
 }

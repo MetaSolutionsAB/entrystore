@@ -200,8 +200,9 @@ entrystore.auth.temp.lockout.duration=0ms
 ## `provider.{id}.*` key.
 ## domains: comma-separated email domains routed to this provider (default: * — wildcard fallback).
 ## user-auto-provisioning: create the EntryStore user on first login (default: false).
-## username-claim: ID-token claim mapped to the EntryStore username (default: email). The
-## registration's scopes must make the provider emit the claim (e.g. scope=openid,profile,email).
+## username-claim: claim mapped to the EntryStore username, resolved from the merged ID-token and
+## userinfo claims (default: email). The registration's scopes must make the provider emit the
+## claim (e.g. scope=openid,profile,email).
 # entrystore.auth.oidc.provider.myProvider.domains=example.com,example.org
 # entrystore.auth.oidc.provider.myProvider.user-auto-provisioning=true
 # entrystore.auth.oidc.provider.myProvider.username-claim=email

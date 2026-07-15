@@ -92,6 +92,29 @@ class OidcCustomConfigurationTest {
 		assertEquals(List.of("example.com"), provider.domains());
 	}
 
+	// Hostnames and email domains are case-insensitive; the routing/whitelist lookups compare
+	// against lowercased request-side values, so uppercase config entries must be normalized at
+	// binding time or they would silently never match.
+	@Test
+	void providerDomainsAreLowercasedAtBinding() {
+		var provider = new Provider(List.of("EXAMPLE.com", "*"), false, null);
+		assertEquals(List.of("example.com", "*"), provider.domains());
+	}
+
+	@Test
+	void redirectDomainWhitelistIsLowercasedAtBinding() {
+		var config = new OidcCustomConfiguration(true, null, List.of("APP.Example.com"), null, null, null);
+		assertEquals(List.of("app.example.com"), config.redirectDomainWhitelist());
+	}
+
+	// A blank binding (`entrystore.auth.oidc.redirect-success.url=`) bypasses the null-only
+	// defaulting and would produce an empty Location header on every post-login redirect.
+	@Test
+	void blankRedirectUrlFailsFast() {
+		assertThrows(IllegalArgumentException.class, () -> new OidcCustomConfiguration.RedirectUrl("  "));
+		assertThrows(IllegalArgumentException.class, () -> new OidcCustomConfiguration.RedirectUrl(null));
+	}
+
 	// The default Map.of()/Map.copyOf() results must be usable with the routing lookups in
 	// OidcAuthService, which call get() with arbitrary provider ids.
 	@Test

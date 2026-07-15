@@ -27,6 +27,7 @@ import org.entrystore.rest.springboot.model.api.ConfirmRequestBody;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.springboot.model.auth.ConfirmationResult;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.service.AuthService;
 import org.entrystore.rest.springboot.service.OidcAuthService;
@@ -36,6 +37,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.cas.ServiceProperties;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.MultiValueMap;
@@ -79,6 +81,8 @@ public class AuthController {
 	private final OidcAuthService oidcAuthService;
 	private final CasCustomConfiguration casConfiguration;
 	private final Optional<ServiceProperties> casServiceProperties;
+	// Optional: the bean exists only when spring.security.oauth2.client registrations are configured.
+	private final Optional<ClientRegistrationRepository> clientRegistrationRepository;
 
 	@GetMapping("/auth/cas")
 	public void startCasLogin(HttpServletResponse response) throws IOException {
@@ -142,6 +146,15 @@ public class AuthController {
 		}
 
 		String providerId = oidcAuthService.findProviderIdForRequest(username, provider);
+		// An unknown registration id would otherwise surface deep inside Spring Security's
+		// OAuth2AuthorizationRequestRedirectFilter as an HTML 500 that bypasses AppExceptionHandler —
+		// fail early with a 400 (covers both a bogus ?provider= parameter and a default-provider typo).
+		boolean knownProvider = clientRegistrationRepository
+				.map(registrations -> registrations.findByRegistrationId(providerId) != null)
+				.orElse(false);
+		if (!knownProvider) {
+			throw new BadRequestException("Unknown OIDC provider: " + providerId);
+		}
 		redirectAttributes.addAttribute("providerId", providerId);
 
 		// Spring Security's OAuth2AuthorizationRequestRedirectFilter serves this path;

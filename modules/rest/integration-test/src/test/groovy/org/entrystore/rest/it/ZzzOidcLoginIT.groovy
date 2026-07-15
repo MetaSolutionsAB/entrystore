@@ -38,6 +38,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 	static def testUserEmail = 'testoidcuser@test.com'
 	static def successLoginUrl = 'http://localhost:8181/GREAT-OIDC-SUCCESS/'
 	static def failureLoginUrl = 'http://localhost:8181/OIDC-FAILURE/'
+	static def customFailureUrl = 'http://localhost:8181/CUSTOM-OIDC-FAILURE/'
 
 	static def keycloakIssuerUrl = ''
 
@@ -60,8 +61,13 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
 			'--entrystore.auth.oidc.enabled=true',
 			'--entrystore.auth.oidc.redirect-failure.url=' + failureLoginUrl,
+			// Second provider against the same realm with a non-default username claim; distinct
+			// domains so it does not compete with the primary provider's wildcard routing.
+			'--entrystore.auth.oidc.provider.keycloak2.username-claim=preferred_username',
+			'--entrystore.auth.oidc.provider.keycloak2.domains=oidc2.example.org',
 			'--spring.profiles.active=oidc',
-			'--spring.security.oauth2.client.provider.keycloak.issuer-uri=' + keycloakIssuerUrl
+			'--spring.security.oauth2.client.provider.keycloak.issuer-uri=' + keycloakIssuerUrl,
+			'--spring.security.oauth2.client.provider.keycloak2.issuer-uri=' + keycloakIssuerUrl
 		] as String[]
 		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
 		appStarted = true
@@ -233,5 +239,59 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		authorizationLocation.contains('/oauth2/authorization/keycloak')
 		!authorizationLocation.contains('successurl')
 		!authorizationLocation.contains('evil.example.org')
+	}
+
+	def '7. Second provider with preferred_username claim: reserved admin is denied to the per-request failureurl'() {
+		// Covers four seams in one flow: explicit multi-provider selection (?provider=), a
+		// non-default username-claim (preferred_username — the email claim maps Keycloak's admin to
+		// admin@test.com, which is NOT reserved), end-to-end failureurl propagation
+		// (controller -> authorization-request resolver -> state cache -> success handler), and the
+		// reserved-username guard.
+		given: 'an OIDC login against the second registration with a whitelisted failureurl'
+		def initConn = EntryStoreClient.getRequest('/auth/oidc'
+			+ convertMapToQueryParams([provider: 'keycloak2', failureurl: customFailureUrl]), '')
+		assert initConn.getResponseCode() in [302, 303]
+		def authorizationLocation = initConn.getHeaderField('Location')
+		assert authorizationLocation.contains('/oauth2/authorization/keycloak2')
+		assert authorizationLocation.contains('failureurl=')
+
+		and: 'the Keycloak login page for the second registration'
+		def authorizationConn = EntryStoreClient.getRequest(authorizationLocation, '')
+		assert authorizationConn.getResponseCode() in [302, 303]
+		def loginPageConn = EntryStoreClient.getRequest(authorizationConn.getHeaderField('Location'), '', '')
+		assert loginPageConn.getResponseCode() == HTTP_OK
+		def loginPageHtml = loginPageConn.inputStream.text
+		def idpCookies = loginPageConn.getHeaderFields()['Set-Cookie']
+		def cookieHeader = idpCookies.collect { it.split(';')[0] }.join('; ')
+		def formActionMatcher = loginPageHtml =~ /action="([^"]+)"/
+		def formActionUrl = StringEscapeUtils.unescapeHtml4(formActionMatcher[0][1] as String)
+
+		when: 'authenticating at Keycloak as the reserved admin user'
+		def submitConn = EntryStoreClient.postRequest(formActionUrl,
+			createFormBody([username: 'admin', password: 'adminpassword']), '',
+			'application/x-www-form-urlencoded', [Cookie: cookieHeader])
+		assert submitConn.getResponseCode() in [302, 303, 307]
+		def callbackUrl = submitConn.getHeaderField('Location')
+		assert callbackUrl.contains('/login/oauth2/code/keycloak2')
+		assert callbackUrl.contains('code=')
+		def callbackConn = EntryStoreClient.getRequest(callbackUrl, '')
+
+		then: 'the reserved username is rejected, redirecting to the whitelist-validated per-request failureurl'
+		callbackConn.getResponseCode() in [302, 303, 307]
+		callbackConn.getHeaderField('Location') == customFailureUrl
+
+		and: 'no authenticated session leaks (same rationale as step 5)'
+		def leakedCookies = callbackConn.getHeaderFields()['Set-Cookie']
+		def userConn
+		if (leakedCookies != null && !leakedCookies.isEmpty()) {
+			userConn = EntryStoreClient.getRequest('/auth/user', '', null,
+				[Cookie: leakedCookies.collect { it.split(';')[0] }.join('; ')])
+		} else {
+			userConn = EntryStoreClient.getRequest('/auth/user', '')
+		}
+		def responseCode = userConn.getResponseCode()
+		def responseUser = responseCode == HTTP_OK ? JSON_PARSER.parseText(userConn.inputStream.text)['user'] : null
+		responseCode == HTTP_UNAUTHORIZED ||
+			(responseCode == HTTP_OK && responseUser != null && !responseUser.toString().equalsIgnoreCase('admin'))
 	}
 }

@@ -7,7 +7,16 @@ spring:
             client-id: entrystore-oidc
             client-secret: oidc-test-secret
             scope: openid,profile,email
+          # Second registration against the same realm/client, used by ZzzOidcLoginIT to exercise
+          # multi-provider setups with a non-default username claim (preferred_username, configured
+          # via entrystore.auth.oidc.provider.keycloak2.* CLI args in the test).
+          keycloak2:
+            client-id: entrystore-oidc
+            client-secret: oidc-test-secret
+            scope: openid,profile,email
         provider:
           keycloak:
             # for Keycloak below value is typically http://localhost:xxx/realms/test
+            issuer-uri: value-will-be-overridden-by-tests
+          keycloak2:
             issuer-uri: value-will-be-overridden-by-tests

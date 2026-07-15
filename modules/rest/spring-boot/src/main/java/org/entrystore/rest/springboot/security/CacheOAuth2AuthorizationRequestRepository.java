@@ -81,11 +81,9 @@ public class CacheOAuth2AuthorizationRequestRepository
 	public OAuth2AuthorizationRequest removeAuthorizationRequest(HttpServletRequest request,
 																 HttpServletResponse response) {
 		String state = request.getParameter(OAuth2ParameterNames.STATE);
-		if (state != null) {
-			OAuth2AuthorizationRequest authorizationRequest = cache.getIfPresent(state);
-			cache.invalidate(state);
-			return authorizationRequest;
-		}
-		return null;
+		// Atomic retrieve-and-remove: a getIfPresent + invalidate pair would let two concurrent
+		// callbacks carrying the same state both observe the request, weakening the single-use
+		// replay guard to the IdP's code single-use alone.
+		return (state != null) ? cache.asMap().remove(state) : null;
 	}
 }

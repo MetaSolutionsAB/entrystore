@@ -35,8 +35,9 @@ import java.util.Set;
 
 /**
  * {@link OidcUserService} that names the principal after the per-provider configured claim
- * ({@code entrystore.auth.oidc.provider.{id}.username-claim}, default {@code email}). The shared
- * SSO success flow ({@code AbstractSsoLoginSuccessHandler}) and the per-request principal mapping
+ * ({@code entrystore.auth.oidc.provider.{id}.username-claim}, default {@code email}), resolved
+ * from the merged ID-token and userinfo claims. The shared SSO success flow
+ * ({@code AbstractSsoLoginSuccessHandler}) and the per-request principal mapping
  * ({@code SetUserURIAfterAuthenticationFilter}) both derive the EntryStore username from
  * {@code authentication.getName()}, so remapping the name here is the single point that keeps
  * the two consistent.
@@ -57,7 +58,12 @@ public class UsernameClaimOidcUserService extends OidcUserService {
 	@Override
 	public OidcUser loadUser(OidcUserRequest userRequest) throws OAuth2AuthenticationException {
 		OidcUser oidcUser = super.loadUser(userRequest);
-		String registrationId = userRequest.getClientRegistration().getRegistrationId();
+		return remapPrincipalName(oidcUser, userRequest.getClientRegistration().getRegistrationId());
+	}
+
+	// Package-private so the claim resolution (merged ID-token + userinfo claims) is unit-testable
+	// without the userinfo-endpoint fetch super.loadUser performs when one is configured.
+	OidcUser remapPrincipalName(OidcUser oidcUser, String registrationId) {
 		String usernameClaim = oidcAuthService.usernameClaimFor(registrationId);
 
 		// getClaimAsString consults the merged ID-token + userinfo claims, matching what the

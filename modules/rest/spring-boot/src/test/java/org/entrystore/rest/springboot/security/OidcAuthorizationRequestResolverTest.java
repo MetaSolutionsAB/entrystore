@@ -139,8 +139,10 @@ class OidcAuthorizationRequestResolverTest {
 		verify(oidcAuthStateCache, never()).storeAuthState(any(), any());
 	}
 
-	// The filter probes resolve() for every request below /oauth2/authorization; a null delegate
-	// result (no registration id in the path) must pass through without touching the cache.
+	// OAuth2AuthorizationRequestRedirectFilter calls resolve() for EVERY request passing through the
+	// security chain — path matching happens inside the delegate, which returns null for anything
+	// that is not an /oauth2/authorization/{registrationId} request. A null result must pass through
+	// without touching the cache (and without adding per-request work).
 	@Test
 	void nullDelegateResultPassesThroughWithoutCaching() {
 		when(delegate.resolve(request)).thenReturn(null);

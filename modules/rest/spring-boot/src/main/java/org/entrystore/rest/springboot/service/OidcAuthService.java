@@ -25,6 +25,7 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.util.Locale;
 
 /**
  * OIDC counterpart of {@link SamlAuthService}: redirect-URL whitelist validation, email-domain
@@ -49,8 +50,10 @@ public class OidcAuthService {
 			}
 			// A hostless URL (relative path, opaque URI) can never match a host whitelist; guard
 			// explicitly because the whitelist is an immutable List, whose contains(null) throws.
+			// Hostnames are case-insensitive: normalize the request side; the configured whitelist
+			// is lowercased at binding time (OidcCustomConfiguration).
 			var host = uri.getHost();
-			return host != null && oidcConfiguration.redirectDomainWhitelist().contains(host);
+			return host != null && oidcConfiguration.redirectDomainWhitelist().contains(host.toLowerCase(Locale.ROOT));
 		} catch (IllegalArgumentException e) {
 			return false;
 		}
@@ -114,7 +117,8 @@ public class OidcAuthService {
 	}
 
 	/**
-	 * The ID-token claim mapped to the EntryStore username for the given client registration.
+	 * The claim mapped to the EntryStore username for the given client registration — resolved
+	 * against the merged ID-token and userinfo claims (see {@code UsernameClaimOidcUserService}).
 	 * A registration without an {@code entrystore.auth.oidc.provider.{id}.*} entry uses the
 	 * default claim — such a provider can still log in existing users, but never auto-provisions
 	 * (see {@code OidcLoginSuccessHandler#isAutoProvisioningEnabled}).

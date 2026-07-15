@@ -25,10 +25,14 @@ import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
+import org.springframework.security.oauth2.core.oidc.OidcUserInfo;
+import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -111,6 +115,23 @@ class UsernameClaimOidcUserServiceTest {
 				() -> service.loadUser(userRequest(Map.of("sub", "opaque-subject"))));
 
 		assertEquals(UsernameClaimOidcUserService.ERROR_CODE_INVALID_USERNAME_CLAIM, ex.getError().getErrorCode());
+	}
+
+	// Some IdPs deliver claims like `email` only via the userinfo endpoint, not the ID token —
+	// the claim must resolve from the merged claim view. Exercised via remapPrincipalName because
+	// loadUser's userinfo fetch cannot run without network I/O.
+	@Test
+	void claimDeliveredOnlyViaUserinfoIsResolved() {
+		when(oidcAuthService.usernameClaimFor(REGISTRATION_ID)).thenReturn("email");
+		var service = new UsernameClaimOidcUserService(oidcAuthService);
+		var idToken = new OidcIdToken("id-token", Instant.now(), Instant.now().plusSeconds(60),
+				Map.of("sub", "opaque-subject"));
+		var userInfo = new OidcUserInfo(Map.of("sub", "opaque-subject", "email", "jane@example.com"));
+		var oidcUser = new DefaultOidcUser(List.of(new SimpleGrantedAuthority("OIDC_USER")), idToken, userInfo, "sub");
+
+		var remapped = service.remapPrincipalName(oidcUser, REGISTRATION_ID);
+
+		assertEquals("jane@example.com", remapped.getName());
 	}
 
 	@Test

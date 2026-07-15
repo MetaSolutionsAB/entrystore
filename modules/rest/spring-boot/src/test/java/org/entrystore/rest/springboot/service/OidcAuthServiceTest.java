@@ -51,7 +51,10 @@ class OidcAuthServiceTest {
 				Arguments.of("http://localhost@evil.com/x", false), // userinfo trick: real host is evil.com
 				Arguments.of("//evil.com/x", false),                // scheme-relative: host is evil.com
 				Arguments.of("https://localhost.evil.com/x", false), // look-alike subdomain
-				Arguments.of("HTTP://LOCALHOST/x", false),           // whitelist match is case-sensitive (fail-closed)
+				// Deliberate deviation from the SAML equivalent (which fails closed on case): hostnames
+				// are case-insensitive, so the request-side host is lowercased before the whitelist
+				// lookup. No bypass — lowercasing cannot turn a non-whitelisted host into a match.
+				Arguments.of("HTTP://LOCALHOST/x", true),
 				Arguments.of("ftp://localhost/x", false),            // disallowed scheme even on a whitelisted host
 				Arguments.of("/relative/path", false),               // no host
 				Arguments.of("http://exa mple.com/x", false),        // malformed: URI.create throws -> rejected, not propagated
@@ -68,6 +71,23 @@ class OidcAuthServiceTest {
 
 	private static OidcAuthService serviceWithProviders(String defaultProvider, Map<String, Provider> providers) {
 		return new OidcAuthService(new OidcCustomConfiguration(true, defaultProvider, List.of(), providers, null, null));
+	}
+
+	// Config-side case variance: an uppercase whitelist entry must still match (normalized at binding).
+	@Test
+	void isValidRedirectUrl_matchesUppercaseConfiguredWhitelistEntry() {
+		var config = new OidcCustomConfiguration(true, null, List.of("APP.example.com"), Map.of(), null, null);
+		assertEquals(true, new OidcAuthService(config).isValidRedirectUrl("http://app.example.com/welcome"));
+	}
+
+	// Config-side case variance: an uppercase domains entry must still route (normalized at binding).
+	@Test
+	void findProviderIdForRequest_matchesUppercaseConfiguredDomain() {
+		var svc = serviceWithProviders("keycloak", Map.of(
+				"keycloak", new Provider(List.of("*"), true, null),
+				"corp", new Provider(List.of("EXAMPLE.com"), false, null)));
+
+		assertEquals("corp", svc.findProviderIdForRequest("user@Example.COM", null));
 	}
 
 	@Test
