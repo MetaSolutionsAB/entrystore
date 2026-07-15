@@ -804,7 +804,7 @@ public class EntryService {
 	}
 
 	/**
-	 * Extracts entry info from the request body and sets it as the entry's local metadata graph.
+	 * Extracts entry info from the request body and sets it as the entry's graph.
 	 * Since it assumes this is the creation step, the Entries URIs was not available
 	 * on the client, hence the special "_newId" entryId has been used.
 	 * Make sure this is replaced with the new entryId first.

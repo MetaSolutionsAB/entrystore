@@ -355,7 +355,7 @@ public class AuthService {
 		});
 
 		if (ci.getUrlSuccess() != null) {
-			handleUrlRedirect(ci.getUrlSuccess());
+			throw handleUrlRedirect(ci.getUrlSuccess());
 		}
 
 		return CONFIRM_PASSWORD_RESET_SUCCESS_MESSAGE;
@@ -579,7 +579,7 @@ public class AuthService {
 		});
 
 		if (signupInfo.getUrlSuccess() != null) {
-			handleUrlRedirect(signupInfo.getUrlSuccess());
+			throw handleUrlRedirect(signupInfo.getUrlSuccess());
 		}
 
 		return CONFIRM_SIGNUP_SUCCESS_MESSAGE;
@@ -778,18 +778,26 @@ public class AuthService {
 	}
 
 	/**
-	 * Terminates a failure branch: redirects to {@code urlFailure} when one was provided, otherwise
-	 * throws {@code fallback}. Never returns normally — the {@link RuntimeException} return type only
-	 * lets call sites write {@code throw failWithRedirectOr(...)} so the compiler sees the branch end.
+	 * Terminates a failure branch. When {@code urlFailure} is provided, delegates to
+	 * {@link #handleUrlRedirect(String)}, which always throws — a {@link RedirectTemporaryException}
+	 * for permitted URLs, or an {@link InternalServerErrorException} for non-permitted ones (no
+	 * redirect happens then). Otherwise throws {@code fallback}. Never returns normally — the
+	 * {@link RuntimeException} return type only lets call sites write
+	 * {@code throw failWithRedirectOr(...)} so the compiler sees the branch end.
 	 */
 	private RuntimeException failWithRedirectOr(String urlFailure, Supplier<RuntimeException> fallback) {
 		if (urlFailure != null) {
-			handleUrlRedirect(urlFailure);
+			throw handleUrlRedirect(urlFailure);
 		}
 		throw fallback.get();
 	}
 
-	private void handleUrlRedirect(String url) {
+	/**
+	 * Always throws: {@link RedirectTemporaryException} for a permitted URL, otherwise
+	 * {@link InternalServerErrorException}. The {@link RuntimeException} return type lets call
+	 * sites write {@code throw handleUrlRedirect(...)} so the compiler sees the branch end.
+	 */
+	private RuntimeException handleUrlRedirect(String url) {
 		if (!redirectUrlValidator.isPermitted(url)) {
 			throw new InternalServerErrorException("Redirect to non-permitted URL blocked: " + url);
 		}

@@ -175,4 +175,47 @@ class EntryServiceTest {
 		verify(entry).setGraphType(GraphType.List);
 		verify(contextImpl).copyACL(listUri, entry);
 	}
+
+	@Test
+	void createReferenceEntry_metadataBodyIgnored_onlyCachedMetadataAndInfoSet() {
+		// setLocalMetadataGraph must no-op for Reference entries even when the body carries metadata.
+		when(context.createReference(any(), any(), any(), any())).thenReturn(entry);
+		when(entry.getEntryType()).thenReturn(EntryType.Reference);
+		when(entry.getId()).thenReturn("e1");
+		Metadata cachedMetadata = mock(Metadata.class);
+		when(entry.getCachedExternalMetadata()).thenReturn(cachedMetadata);
+		String rdfJson = "{\"http://example.org/1/resource/e1\":"
+				+ "{\"http://purl.org/dc/terms/title\":[{\"value\":\"t\",\"type\":\"literal\"}]}}";
+		CreateEntryRequestBody body = new CreateEntryRequestBody(null, rdfJson, rdfJson, rdfJson);
+
+		Entry result = service.createReferenceEntry(context, "e1", null,
+				URI.create("http://external.example.com/doc"), null,
+				URI.create("http://external.example.com/md"), body);
+
+		assertSame(entry, result);
+		verify(entry, never()).getLocalMetadata();
+		verify(cachedMetadata).setGraph(any());
+		verify(entry).setGraph(any());
+	}
+
+	@Test
+	void createLinkEntry_cachedExternalMetadataBodyIgnored_onlyLocalMetadataAndInfoSet() {
+		// setCachedMetadataGraph must no-op for Link entries even when the body carries cachedExternalMetadata.
+		when(context.createLink(any(), any(), any())).thenReturn(entry);
+		when(entry.getEntryType()).thenReturn(EntryType.Link);
+		when(entry.getId()).thenReturn("e1");
+		Metadata localMetadata = mock(Metadata.class);
+		when(entry.getLocalMetadata()).thenReturn(localMetadata);
+		String rdfJson = "{\"http://example.org/1/resource/e1\":"
+				+ "{\"http://purl.org/dc/terms/title\":[{\"value\":\"t\",\"type\":\"literal\"}]}}";
+		CreateEntryRequestBody body = new CreateEntryRequestBody(null, rdfJson, rdfJson, rdfJson);
+
+		Entry result = service.createLinkEntry(context, "e1", null,
+				URI.create("http://external.example.com/doc"), null, body);
+
+		assertSame(entry, result);
+		verify(localMetadata).setGraph(any());
+		verify(entry, never()).getCachedExternalMetadata();
+		verify(entry).setGraph(any());
+	}
 }
