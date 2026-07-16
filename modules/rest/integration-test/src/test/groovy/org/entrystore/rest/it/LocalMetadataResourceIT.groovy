@@ -769,12 +769,12 @@ class LocalMetadataResourceIT extends BaseSpec {
 
 		def etag = entryMetaConn.getHeaderField('ETag')
 		etag != null
-		etag ==~ /"\d+"/
+		// ENTRYSTORE-1087: representation-aware strong ETag — "{modifiedMillis}-{hash12}"
+		etag ==~ /"\d+-[0-9a-f]{12}"/
 	}
 
-	def "GET /{context-id}/metadata/{entryId} with recursive should include Last-Modified and ETag headers"() {
+	def "GET /{context-id}/metadata/{entryId} with recursive should carry no conditional headers"() {
 		given:
-		def beforeRequest = new Date()
 		def entryD1params = [entrytype: 'link', resource: resourceUrl + '/rec1']
 		def entryD1ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def entryD1body = createTitleMetadataBody(entryD1ResourceIri, 'Recursive depth 1')
@@ -796,18 +796,29 @@ class LocalMetadataResourceIT extends BaseSpec {
 
 		when:
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + "?recursive=dct")
+		def plainMetaConn = EntryStoreClient.getRequest(metadataUri)
 
 		then:
 		entryMetaConn.getResponseCode() == HTTP_OK
 
-		def lastModified = entryMetaConn.getHeaderField('Last-Modified')
-		lastModified != null
-		def httpDateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US)
-		httpDateFormat.parse(lastModified).time >= beforeRequest.time - 1000
+		// ENTRYSTORE-1087: recursive aggregates have a non-monotonic modification date (removing
+		// an aggregated child can revert it to an older value), and Spring auto-answers 304 for
+		// any ResponseEntity carrying an ETag — so the recursive shape must not emit conditional
+		// headers at all.
+		entryMetaConn.getHeaderField('ETag') == null
+		entryMetaConn.getHeaderField('Last-Modified') == null
 
-		def etag = entryMetaConn.getHeaderField('ETag')
-		etag != null
-		etag ==~ /"\d+"/
+		// the plain representation keeps its representation-aware strong ETag
+		def plainEtag = plainMetaConn.getHeaderField('ETag')
+		plainEtag != null
+		plainEtag ==~ /"\d+-[0-9a-f]{12}"/
+
+		when: 'revalidating the recursive shape with the plain representation\'s ETag'
+		def conditionalConn = EntryStoreClient.getRequest(metadataUri + "?recursive=dct", 'admin',
+				'application/json', ['If-None-Match': plainEtag])
+
+		then: 'a full 200 — recursive responses never confirm a cached representation'
+		conditionalConn.getResponseCode() == HTTP_OK
 	}
 
 	def "GET /{context-id}/metadata/{entryId} with format=text/html should return 406 Not Acceptable"() {
