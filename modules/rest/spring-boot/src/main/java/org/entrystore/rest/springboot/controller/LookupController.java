@@ -24,6 +24,7 @@ import org.entrystore.rest.springboot.model.api.LookupScope;
 import org.entrystore.rest.springboot.service.LookupService;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.HttpUtil;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,8 +32,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.WebRequest;
 
 import java.net.URI;
+import java.util.Date;
 
 @Slf4j
 @RestController
@@ -55,11 +58,12 @@ public class LookupController {
 			@RequestParam URI uri,
 			@RequestParam(required = false, defaultValue = "all") LookupScope scope,
 			@RequestParam(required = false) MediaType format,
-			@RequestHeader(value = "Accept", defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
+			@RequestHeader(value = "Accept", defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader,
+			WebRequest webRequest
 	) {
 		String mediaType = GraphUtil.resolveRdfMediaType(format, acceptHeader);
 		Entry entry = lookupService.lookupGlobal(uri);
-		return buildResponse(entry, scope, mediaType);
+		return buildResponse(entry, scope, mediaType, webRequest);
 	}
 
 	@Operation(summary = "Performs a context-scoped lookup by resource URI and returns metadata")
@@ -77,21 +81,41 @@ public class LookupController {
 			@RequestParam URI uri,
 			@RequestParam(required = false, defaultValue = "all") LookupScope scope,
 			@RequestParam(required = false) MediaType format,
-			@RequestHeader(value = "Accept", defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
+			@RequestHeader(value = "Accept", defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader,
+			WebRequest webRequest
 	) {
 		String mediaType = GraphUtil.resolveRdfMediaType(format, acceptHeader);
 		Entry entry = lookupService.lookupInContext(contextId, uri);
-		return buildResponse(entry, scope, mediaType);
+		return buildResponse(entry, scope, mediaType, webRequest);
 	}
 
-	private ResponseEntity<String> buildResponse(Entry entry, LookupScope scope, String mediaType) {
+	private ResponseEntity<String> buildResponse(Entry entry, LookupScope scope, String mediaType, WebRequest webRequest) {
+		// The lookup/serialization above enforces authorization, so the revalidation check runs
+		// post-load — only the response transfer is saved (ENTRYSTORE-1087).
 		String serializedMetadata = lookupService.getMetadataByScope(entry, scope, mediaType);
+
+		String representationKey = String.join("|", "lookup", scope.name(), mediaType);
+		Date modifiedDate = entry.getModifiedDate();
+		// JSONP responses (callback in the body, not in this key) must carry no conditional
+		// headers at all: Spring's HttpEntityMethodProcessor auto-answers 304 for any
+		// ResponseEntity with an ETag, so skipping checkNotModified alone would not prevent a
+		// stale 304 confirming a differently-wrapped body.
+		boolean conditionalApplicable = webRequest.getParameter("callback") == null;
+		if (modifiedDate != null && conditionalApplicable
+				&& webRequest.checkNotModified(
+						HttpUtil.createRepresentationETag(modifiedDate, representationKey),
+						modifiedDate.getTime())) {
+			return null;
+		}
 
 		ResponseEntity.BodyBuilder bodyBuilder = ResponseEntity
 				.ok()
 				.contentType(MediaType.parseMediaType(mediaType));
 
-		HttpUtil.updateResponseWithModificationDateAndETag(bodyBuilder, entry.getModifiedDate());
+		if (conditionalApplicable) {
+			bodyBuilder.headers(headers -> HttpUtil.setLastModifiedAndETag(headers, modifiedDate, representationKey));
+		}
+		bodyBuilder.header(HttpHeaders.VARY, HttpHeaders.ACCEPT);
 
 		return bodyBuilder.body(serializedMetadata);
 	}

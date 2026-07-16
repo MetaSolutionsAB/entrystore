@@ -38,6 +38,7 @@ import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphEntity;
 import org.entrystore.Metadata;
+import org.entrystore.PrincipalManager;
 import org.entrystore.Provenance;
 import org.entrystore.ProvenanceType;
 import org.entrystore.impl.RepositoryManagerImpl;
@@ -67,6 +68,17 @@ public class MetadataService {
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final TraversalProperties traversalProperties;
+
+	/**
+	 * ENTRYSTORE-1087: the conditional-GET fast path answers If-None-Match before loading the
+	 * graph, so it must enforce the same authorization the local-metadata load path does. The
+	 * thrown core AuthorizationException is mapped by AppExceptionHandler (404 for anonymous,
+	 * 403 for authenticated callers).
+	 */
+	public void checkReadMetadataAuthorization(Entry entry) {
+		repositoryManager.getPrincipalManager()
+				.checkAuthenticatedUserAuthorized(entry, PrincipalManager.AccessProperty.ReadMetadata);
+	}
 
 	public MetadataResult getMetadata(Entry entry, MetadataType metadataType, String format, String graphQuery, Integer depth, String recursive, String scope, String revision) {
 
