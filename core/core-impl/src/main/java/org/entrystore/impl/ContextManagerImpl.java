@@ -17,6 +17,7 @@
 package org.entrystore.impl;
 
 import org.apache.commons.io.FileUtils;
+import org.eclipse.rdf4j.common.transaction.IsolationLevels;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Statement;
@@ -33,6 +34,7 @@ import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.RepositoryResult;
+import org.eclipse.rdf4j.repository.sail.SailRepository;
 import org.eclipse.rdf4j.rio.RDFHandler;
 import org.eclipse.rdf4j.rio.RDFHandlerException;
 import org.eclipse.rdf4j.rio.RDFParseException;
@@ -110,6 +112,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 	/** C0/C1 controls, format characters such as bidi overrides, and the Unicode line separators. */
 	private static final Pattern CONTROL_CHARACTERS = Pattern.compile("[\\p{Cc}\\p{Cf}\\u2028\\u2029]");
+
+	/** E2 (ENTRYSTORE-1086): statements per commit while importing a context dump. */
+	private static final long IMPORT_COMMIT_CHUNK = 10_000;
 
 	public ContextManagerImpl(RepositoryManagerImpl rman, Repository repo) {
 		super(new EntryImpl(rman,repo), URISplit.createURI(rman.getRepositoryURL().toString(),
@@ -239,89 +244,118 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		String contextMetadataURI = contextEntry.getLocalMetadataURI().toString();
 		String contextRelationURI = contextEntry.getRelationURI().toString();
 
-		synchronized (this.entry.repository) {
-			RepositoryConnection rc = null;
-			BufferedOutputStream out = null;
-
-			try {
-				try {
-					out = new BufferedOutputStream(Files.newOutputStream(destFile.toPath()));
-				} catch (IOException e) {
-					log.error(e.getMessage());
-					throw new RepositoryException(e);
-				}
-
-				rc = entry.getRepository().getConnection();
-
-				RepositoryResult<org.eclipse.rdf4j.model.Resource> availableNGs = rc.getContextIDs();
-				List<org.eclipse.rdf4j.model.Resource> filteredNGs = new ArrayList<>();
-				while (availableNGs.hasNext()) {
-					org.eclipse.rdf4j.model.Resource ng = availableNGs.next();
-					String ngURI = ng.stringValue();
-					if (metadataOnly) {
-						if (ngURI.startsWith(contextResourceURI) &&	(ngURI.contains("/metadata/") || ngURI.contains("/cached-external-metadata/"))) {
-							filteredNGs.add(ng);
-						}
-					} else {
-						if (ngURI.startsWith(contextResourceURI) ||
-								ngURI.equals(contextEntryURI) ||
-								ngURI.equals(contextMetadataURI) ||
-								ngURI.equals(contextRelationURI)) {
-							filteredNGs.add(ng);
-						}
-					}
-				}
-				availableNGs.close();
-
-				RDFHandler rdfWriter = null;
-				try {
-					Constructor<? extends RDFWriter> constructor = writer.getConstructor(OutputStream.class);
-					rdfWriter = constructor.newInstance(out);
-				} catch (Exception e) {
-					log.error(e.getMessage());
-				}
-
-				if (rdfWriter == null) {
-					log.error("Unable to create an RDF writer, format not supported");
-					return;
-				}
-
-				rdfWriter.startRDF();
-				Map<String, String> namespaces = NS.getMap();
-				for (String nsName : namespaces.keySet()) {
-					rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
-				}
-
-				RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, filteredNGs.toArray(new org.eclipse.rdf4j.model.Resource[filteredNGs.size()]));
-				while (rr.hasNext()) {
-					Statement s = rr.next();
-					IRI p = s.getPredicate();
-					rdfWriter.handleStatement(s);
-					if (!metadataOnly) {
-						if (p.equals(RepositoryProperties.Creator) ||
-								p.equals(RepositoryProperties.Contributor) ||
-								p.equals(RepositoryProperties.Read) ||
-								p.equals(RepositoryProperties.Write) ||
-								p.equals(RepositoryProperties.DeletedBy)) {
-							users.add(URI.create(s.getObject().stringValue()));
-						}
-					}
-				}
-				rr.close();
-				rdfWriter.endRDF();
-			} catch (RepositoryException e) {
-				log.error("Error when exporting context", e);
-				throw e;
-			} catch (RDFHandlerException e) {
-				log.error(e.getMessage(), e);
-				throw new RepositoryException(e);
-			} finally {
-				rc.close();
-				try {
-					out.flush();
-					out.close();
-				} catch (IOException ignored) {}
+		// Sail stores read a consistent SNAPSHOT_READ view without the monitor, so writers are not stalled behind a
+		// long export; other store types (http, sparql) do not guarantee that isolation and keep the monitor.
+		if (entry.getRepository() instanceof SailRepository) {
+			writeContextExport(destFile, users, metadataOnly, writer, contextResourceURI, contextEntryURI, contextMetadataURI,
+					contextRelationURI, true);
+		} else {
+			synchronized (this.entry.repository) {
+				writeContextExport(destFile, users, metadataOnly, writer, contextResourceURI, contextEntryURI,
+						contextMetadataURI, contextRelationURI, false);
 			}
+		}
+	}
+
+	private void writeContextExport(File destFile, Set<URI> users, boolean metadataOnly, Class<? extends RDFWriter> writer,
+			String contextResourceURI, String contextEntryURI, String contextMetadataURI, String contextRelationURI,
+			boolean snapshot) throws RepositoryException {
+		RepositoryConnection rc = null;
+		BufferedOutputStream out = null;
+
+		try {
+			try {
+				out = new BufferedOutputStream(Files.newOutputStream(destFile.toPath()));
+			} catch (IOException e) {
+				log.error(e.getMessage());
+				throw new RepositoryException(e);
+			}
+
+			rc = entry.getRepository().getConnection();
+			if (snapshot) {
+				rc.begin(IsolationLevels.SNAPSHOT_READ);
+			}
+
+			RepositoryResult<org.eclipse.rdf4j.model.Resource> availableNGs = rc.getContextIDs();
+			List<org.eclipse.rdf4j.model.Resource> filteredNGs = new ArrayList<>();
+			while (availableNGs.hasNext()) {
+				org.eclipse.rdf4j.model.Resource ng = availableNGs.next();
+				String ngURI = ng.stringValue();
+				if (metadataOnly) {
+					if (ngURI.startsWith(contextResourceURI) &&	(ngURI.contains("/metadata/") || ngURI.contains("/cached-external-metadata/"))) {
+						filteredNGs.add(ng);
+					}
+				} else {
+					if (ngURI.startsWith(contextResourceURI) ||
+							ngURI.equals(contextEntryURI) ||
+							ngURI.equals(contextMetadataURI) ||
+							ngURI.equals(contextRelationURI)) {
+						filteredNGs.add(ng);
+					}
+				}
+			}
+			availableNGs.close();
+
+			RDFHandler rdfWriter = null;
+			try {
+				Constructor<? extends RDFWriter> constructor = writer.getConstructor(OutputStream.class);
+				rdfWriter = constructor.newInstance(out);
+			} catch (Exception e) {
+				log.error(e.getMessage());
+			}
+
+			if (rdfWriter == null) {
+				log.error("Unable to create an RDF writer, format not supported");
+				return;
+			}
+
+			rdfWriter.startRDF();
+			Map<String, String> namespaces = NS.getMap();
+			for (String nsName : namespaces.keySet()) {
+				rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
+			}
+
+			RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, filteredNGs.toArray(new org.eclipse.rdf4j.model.Resource[filteredNGs.size()]));
+			while (rr.hasNext()) {
+				Statement s = rr.next();
+				IRI p = s.getPredicate();
+				rdfWriter.handleStatement(s);
+				if (!metadataOnly) {
+					if (p.equals(RepositoryProperties.Creator) ||
+							p.equals(RepositoryProperties.Contributor) ||
+							p.equals(RepositoryProperties.Read) ||
+							p.equals(RepositoryProperties.Write) ||
+							p.equals(RepositoryProperties.DeletedBy)) {
+						users.add(URI.create(s.getObject().stringValue()));
+					}
+				}
+			}
+			rr.close();
+			rdfWriter.endRDF();
+			if (snapshot) {
+				rc.commit();
+			}
+		} catch (RepositoryException e) {
+			log.error("Error when exporting context", e);
+			throw e;
+		} catch (RDFHandlerException e) {
+			log.error(e.getMessage(), e);
+			throw new RepositoryException(e);
+		} finally {
+			if (rc != null) {
+				try {
+					if (rc.isActive()) {
+						rc.rollback();
+					}
+				} catch (RepositoryException rollbackEx) {
+					log.error("Failed to end export read transaction", rollbackEx);
+				}
+				rc.close();
+			}
+			try {
+				out.flush();
+				out.close();
+			} catch (IOException ignored) {}
 		}
 	}
 
@@ -391,7 +425,10 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 		// remove the old entries and add the parsed statements in one transaction, so a failure restores
 		// the previous content of the context (ENTRYSTORE-1064); disk side effects cannot be rolled back
-		// and therefore happen only after a successful commit
+		// and therefore happen only after a successful commit. For imports above IMPORT_COMMIT_CHUNK
+		// statements the transaction is committed in chunks (E2, ENTRYSTORE-1086), so full atomicity
+		// holds only up to the first chunk commit — beyond it a failure leaves a partial context,
+		// surfaced and reindexed in the catch block
 
 		long amountTriples = 0;
 		long importedTriples = 0;
@@ -541,14 +578,19 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 						}
 					}
 
-					// we check first whether such a stmnt already exists
-					Statement newStmnt = vf.createStatement(subject, predicate, object, context);
-					if (!rc.hasStatement(newStmnt, false, context)) {
-						importedTriples++;
-						log.info("Adding statement to repository: {}", newStmnt.toString());
-						rc.add(newStmnt, context);
-					} else {
-						log.warn("Statement already exists, skipping: {}", newStmnt.toString());
+					// E2 (ENTRYSTORE-1086): RDF4J statement storage has set semantics, so re-adding
+					// an existing statement is a no-op — the previous per-triple hasStatement probe
+					// (plus a per-triple INFO log) only fed the imported/skipped counters and
+					// dominated import time. Commits are chunked to bound transaction size: below
+					// IMPORT_COMMIT_CHUNK statements the import (removal included) stays atomic per
+					// ENTRYSTORE-1064; beyond it, a mid-import failure leaves a partial context,
+					// handled in the catch block below.
+					rc.add(vf.createStatement(subject, predicate, object, context), context);
+					importedTriples++;
+					if (importedTriples % IMPORT_COMMIT_CHUNK == 0) {
+						rc.commit();
+						rc.begin();
+						log.debug("Import committed {} statements so far", importedTriples);
 					}
 				}
 
@@ -574,7 +616,26 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 						}
 					}
 				}
-				cont.recoverFromFailedRemoval(removedEntries);
+				// E2: chunked commits mean earlier chunks — including the entry removal, which rides
+				// in the first chunk — are already durable once the first commit has happened. Before
+				// that point the rollback above restored the previous content (ENTRYSTORE-1064), so
+				// only the in-memory state of the removed entries needs recovering; after it, the
+				// context is partially populated and is reindexed so its index and id counter stay
+				// consistent with the committed statements (otherwise later entry creation can mint
+				// ids whose named graphs already hold orphaned imported statements).
+				long committed = importedTriples - (importedTriples % IMPORT_COMMIT_CHUNK);
+				if (committed > 0) {
+					log.error("Import failed after {} statements were already durably committed; "
+							+ "context {} is partially populated", committed, contextEntry.getEntryURI());
+					try {
+						cont.reIndex();
+					} catch (Exception reindexEx) {
+						log.error("Failed to reindex partially imported context {}",
+								contextEntry.getEntryURI(), reindexEx);
+					}
+				} else {
+					cont.recoverFromFailedRemoval(removedEntries);
+				}
 				throw new org.entrystore.repository.RepositoryException("Failed to import context data", e);
 			} finally {
 				if (rc != null) {
@@ -651,7 +712,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 		log.info("Import finished in {} ms", new Date().getTime() - before.getTime());
 		log.info("Imported {} triples", importedTriples);
-		log.info("Skipped {} triples", amountTriples - importedTriples);
+		log.info("Skipped {} triples without a named graph or resolvable principal", amountTriples - importedTriples);
 	}
 
 	/** FIXME: rewrite

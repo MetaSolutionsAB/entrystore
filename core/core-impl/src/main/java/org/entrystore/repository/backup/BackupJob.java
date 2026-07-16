@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,11 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -84,10 +88,10 @@ public class BackupJob implements Job, InterruptableJob {
 			try {
 				// temporarily make the current user to admin
 				rm.getPrincipalManager().setAuthenticatedUserURI(rm.getPrincipalManager().getAdminUser().getURI());
-				// we just allow the GET requests during the backup
-				rm.setModificationLockOut(true);
+				// The write lockout is managed inside runBackup, around the export and the data-folder copy.
 				runBackup(context);
 			} finally {
+				// Safety net in case runBackup failed between engaging and releasing the lockout.
 				rm.setModificationLockOut(false);
 				// sets the current user back to the actually logged-in user
 				rm.getPrincipalManager().setAuthenticatedUserURI(realURI);
@@ -178,53 +182,63 @@ public class BackupJob implements Job, InterruptableJob {
 					}
 				}
 
-				// Main repo
-				long beforeMainExport = System.currentTimeMillis();
-				log.info("Exporting main repository");
-				String mainRepoFile = "repository." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
+				// Writes are locked out (503) for the whole backup, so the RDF export and the data-folder copy are a
+				// consistent pair: no entry can gain or lose its file between the two.
+				rm.setModificationLockOut(true);
 				try {
-					rm.exportToFile(rm.getRepository(), new File(newBackupDirectory, mainRepoFile).toURI(), gzip, format);
-					log.info("Exporting main repository took {} ms", System.currentTimeMillis() - beforeMainExport);
-				} catch (SailException se) {
-					log.error("Unable to export main repository {}", se.getMessage());
-					errors.add(se.getMessage());
-				}
-
-				// Provenance repo
-				if (rm.getProvenanceRepository() != null) {
-					long beforeProvExport = System.currentTimeMillis();
-					log.info("Exporting provenance repository");
-					String provRepoFile = "repository_prov." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
+					// Main repo
+					long beforeMainExport = System.currentTimeMillis();
+					log.info("Exporting main repository");
+					String mainRepoFile = "repository." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
 					try {
-						rm.exportToFile(rm.getProvenanceRepository(), new File(newBackupDirectory, provRepoFile).toURI(), gzip, format);
-						log.info("Exporting provenance repository took {} ms", System.currentTimeMillis() - beforeProvExport);
+						rm.exportToFile(rm.getRepository(), new File(newBackupDirectory, mainRepoFile).toURI(), gzip, format);
+						log.info("Exporting main repository took {} ms", System.currentTimeMillis() - beforeMainExport);
 					} catch (SailException se) {
-						log.error("Unable to export provenance repository {}", se.getMessage());
-						errors.add(se.getMessage());
+						log.error("Unable to export main repository", se);
+						errors.add("Main repository export failed: " + se);
 					}
-				} else {
-					log.info("Provenance repository is not configured and is therefore not be included in the backup");
-				}
 
-				// Files/binary data
-				if (includeFiles) {
-					String dataPath = rm.getConfiguration().getString(Settings.DATA_FOLDER);
-					if (dataPath == null) {
-						log.error("Unknown data path, please check the following setting: {}", Settings.DATA_FOLDER);
-					} else {
-						long beforeFileExport = System.currentTimeMillis();
-						File dataPathFile = new File(dataPath);
-						log.info("Copying data folder from {} to {}", dataPathFile, newBackupDirectory);
+					// Provenance repo
+					if (rm.getProvenanceRepository() != null) {
+						long beforeProvExport = System.currentTimeMillis();
+						log.info("Exporting provenance repository");
+						String provRepoFile = "repository_prov." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
 						try {
-							FileOperations.copyPath(dataPathFile.toPath(), newBackupDirectory.toPath());
-							log.info("Copying data folder took {} ms", System.currentTimeMillis() - beforeFileExport);
-						} catch (IOException ioe) {
-							log.error("Unable to copy data folder from {} to {}", dataPathFile, newBackupDirectory);
-							errors.add(ioe.getMessage());
+							rm.exportToFile(rm.getProvenanceRepository(), new File(newBackupDirectory, provRepoFile).toURI(), gzip, format);
+							log.info("Exporting provenance repository took {} ms", System.currentTimeMillis() - beforeProvExport);
+						} catch (SailException se) {
+							log.error("Unable to export provenance repository", se);
+							errors.add("Provenance repository export failed: " + se);
 						}
+					} else {
+						log.info("Provenance repository is not configured and is therefore not be included in the backup");
 					}
-				} else {
-					log.warn("Files not included in backup due to configuration");
+
+					// Files/binary data
+					if (includeFiles) {
+						String dataPath = rm.getConfiguration().getString(Settings.DATA_FOLDER);
+						if (dataPath == null) {
+							log.error("Unknown data path, please check the following setting: {}", Settings.DATA_FOLDER);
+						} else {
+							long beforeFileExport = System.currentTimeMillis();
+							File dataPathFile = new File(dataPath);
+							log.info("Copying data folder from {} to {}", dataPathFile, newBackupDirectory);
+							try {
+								FileOperations.copyPath(dataPathFile.toPath(), newBackupDirectory.toPath());
+								log.info("Copying data folder took {} ms", System.currentTimeMillis() - beforeFileExport);
+								// The lockout stops REST writes only, and a request admitted just before it was set may
+								// still be writing, so a file can still change mid-copy; re-check size/mtime against it.
+								verifyCopiedFiles(dataPathFile.toPath(), newBackupDirectory.toPath(), errors);
+							} catch (IOException ioe) {
+								log.error("Unable to copy data folder from {} to {}", dataPathFile, newBackupDirectory);
+								errors.add(ioe.getMessage());
+							}
+						}
+					} else {
+						log.warn("Files not included in backup due to configuration");
+					}
+				} finally {
+					rm.setModificationLockOut(false);
 				}
 
 				// Clean-up with "delete-after"
@@ -262,6 +276,39 @@ public class BackupJob implements Job, InterruptableJob {
 		}
 
 		log.info("Backup job done with execution, took {} ms in total", System.currentTimeMillis() - beforeTotal);
+	}
+
+	/**
+	 * A file overwritten while the copy streams it is copied torn without any exception; the write lockout makes
+	 * that unlikely but cannot exclude it (see the call site). Re-checking size and mtime against the copy surfaces
+	 * exactly those files as backup errors. Files created after the copy pass (no copy exists) are benign extras;
+	 * files deleted mid-walk were already surfaced by the copy pass.
+	 */
+	private static void verifyCopiedFiles(Path src, Path dst, List<String> errors) {
+		try {
+			Files.walkFileTree(src, new SimpleFileVisitor<>() {
+				@Override
+				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+					Path copy = dst.resolve(src.relativize(file));
+					if (Files.exists(copy)
+							&& (Files.size(file) != Files.size(copy)
+									|| !Files.getLastModifiedTime(file).equals(Files.getLastModifiedTime(copy)))) {
+						String message = "File was modified while the backup copied it (copy may be torn): " + file;
+						log.warn(message);
+						errors.add(message);
+					}
+					return FileVisitResult.CONTINUE;
+				}
+
+				@Override
+				public FileVisitResult visitFileFailed(Path file, IOException exc) {
+					return FileVisitResult.CONTINUE;
+				}
+			});
+		} catch (IOException e) {
+			log.error("Backup copy verification failed", e);
+			errors.add("Backup copy verification failed: " + e);
+		}
 	}
 
 	synchronized public static void runBackupMaintenance(JobExecutionContext jobContext) {
