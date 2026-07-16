@@ -294,47 +294,71 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 					List<Statement> stmntsToAdd = new ArrayList<>();
 
+					// E4 (ENTRYSTORE-1086): the es:resource/es:externalMetadata statements of this
+					// context's entries all live in the entries' own named graphs
+					// ({contextResourceURI}/entry/{id}), so both scans below are restricted to those
+					// graphs instead of walking every matching statement of the whole repository.
+					// The empty-array guard matters: RDF4J treats an empty contexts vararg as
+					// "all graphs", which would silently undo the scoping.
+					String entryNGPrefix = this.resourceURI.stringValue() + "/entry/";
+					List<Resource> entryNGs = new ArrayList<>();
+					RepositoryResult<Resource> availableNGs = rc.getContextIDs();
+					while (availableNGs.hasNext()) {
+						Resource ng = availableNGs.next();
+						if (ng instanceof IRI && ng.stringValue().startsWith(entryNGPrefix)) {
+							entryNGs.add(ng);
+						}
+					}
+					availableNGs.close();
+					Resource[] entryNGArray = entryNGs.toArray(new Resource[0]);
+
 					// create a new index by finding all sesame contexts that belong to this context
 					int maxIndex = 0;
-					RepositoryResult<Statement> resources = rc.getStatements(null, RepositoryProperties.resource, null, false);
-					while (resources.hasNext()) {
-						Statement statement = resources.next();
-						Resource mmd = statement.getContext();
-						if (mmd instanceof IRI rI) {
-							if (!mmd.stringValue().startsWith(entry.getRepositoryManager().getRepositoryURL().toString())) {
-								log.warn("This Entry URI does not belong to this repository: {}", mmd.stringValue());
-								continue;
-							}
-
-							StringTokenizer tokenizer = Util.extractParameters(entry.repositoryManager, rI);
-							if (tokenizer.countTokens() == 3 && tokenizer.nextToken().equals(this.id)) { // Belongs to this context.
-								try {
-									tokenizer.nextToken(); //Ignoring the M
-									int index = Integer.parseInt(tokenizer.nextToken());
-									if (index > maxIndex) {
-										maxIndex = index;
-									}
-								} catch (NumberFormatException nfe) {
+					if (entryNGArray.length > 0) {
+						RepositoryResult<Statement> resources = rc.getStatements(null, RepositoryProperties.resource, null, false, entryNGArray);
+						while (resources.hasNext()) {
+							Statement statement = resources.next();
+							Resource mmd = statement.getContext();
+							if (mmd instanceof IRI rI) {
+								if (!mmd.stringValue().startsWith(entry.getRepositoryManager().getRepositoryURL().toString())) {
+									log.warn("This Entry URI does not belong to this repository: {}", mmd.stringValue());
+									continue;
 								}
-								// this does not work: addToIndex((org.openrdf.model.URI) statement.getSubject(),(org.openrdf.model.URI) statement.getObject(),(org.openrdf.model.URI) statement.getContext(), rc);
-								stmntsToAdd.add(vf.createStatement((Resource) statement.getObject(), RepositoryProperties.resHasEntry, statement.getContext(), this.resourceURI));
-							}
-						}
-					}
-					resources.close();
 
-					RepositoryResult<Statement> externalMD = rc.getStatements(null, RepositoryProperties.externalMetadata, null, false);
-					while (externalMD.hasNext()) {
-						Statement statement = externalMD.next();
-						Resource mmd = statement.getContext();
-						if (mmd instanceof IRI rI1) {
-							StringTokenizer stok = Util.extractParameters(entry.repositoryManager, rI1);
-							if (stok.countTokens() == 3 && stok.nextToken().equals(this.id)) { //Belongs to this context.
-								stmntsToAdd.add(vf.createStatement((Resource) statement.getObject(), RepositoryProperties.mdHasEntry, statement.getContext(), this.resourceURI));
+								StringTokenizer tokenizer = Util.extractParameters(entry.repositoryManager, rI);
+								if (tokenizer.countTokens() == 3 && tokenizer.nextToken().equals(this.id)) { // Belongs to this context.
+									try {
+										tokenizer.nextToken(); //Ignoring the M
+										int index = Integer.parseInt(tokenizer.nextToken());
+										if (index > maxIndex) {
+											maxIndex = index;
+										}
+									} catch (NumberFormatException nfe) {
+										// A silently skipped token would let reIndex write a too-low
+										// counter and later createResource calls mint colliding ids.
+										log.warn("Ignoring non-numeric entry id token in {} during reIndex of context {}",
+												rI, this.id);
+									}
+									// this does not work: addToIndex((org.openrdf.model.URI) statement.getSubject(),(org.openrdf.model.URI) statement.getObject(),(org.openrdf.model.URI) statement.getContext(), rc);
+									stmntsToAdd.add(vf.createStatement((Resource) statement.getObject(), RepositoryProperties.resHasEntry, statement.getContext(), this.resourceURI));
+								}
 							}
 						}
+						resources.close();
+
+						RepositoryResult<Statement> externalMD = rc.getStatements(null, RepositoryProperties.externalMetadata, null, false, entryNGArray);
+						while (externalMD.hasNext()) {
+							Statement statement = externalMD.next();
+							Resource mmd = statement.getContext();
+							if (mmd instanceof IRI rI1) {
+								StringTokenizer stok = Util.extractParameters(entry.repositoryManager, rI1);
+								if (stok.countTokens() == 3 && stok.nextToken().equals(this.id)) { //Belongs to this context.
+									stmntsToAdd.add(vf.createStatement((Resource) statement.getObject(), RepositoryProperties.mdHasEntry, statement.getContext(), this.resourceURI));
+								}
+							}
+						}
+						externalMD.close();
 					}
-					externalMD.close();
 
 					rc.add(stmntsToAdd, this.resourceURI);
 					rc.add(this.resourceURI, RepositoryProperties.counter, vf.createLiteral(maxIndex), this.resourceURI);
