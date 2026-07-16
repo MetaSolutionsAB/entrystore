@@ -324,6 +324,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			setCheckForAuthorization(true);
 		}
 
+		registerGroupCacheInvalidationListener();
+
 		trackDeletedEntries = configuration.getBoolean(Settings.REPOSITORY_TRACK_DELETED, false);
 		log.info("Tracking of deleted entries is {}", trackDeletedEntries ? "activated" : "deactivated");
 		boolean cleanupDeleted = configuration.getBoolean(Settings.REPOSITORY_TRACK_DELETED_CLEANUP, false);
@@ -391,6 +393,37 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	private void initialize() {
 		this.contextManager = new ContextManagerImpl(this, repository);
 		this.contextManager.initializeSystemEntries();
+	}
+
+	/**
+	 * ENTRYSTORE-1085: every mutation that can change what
+	 * {@link PrincipalManagerImpl#getGroupUris(URI)} would return must invalidate the
+	 * cross-request user→groups cache. Group-sourced events clear the whole cache — any user's
+	 * membership may have changed and the group's previous member set is not part of the event —
+	 * while a deleted user only evicts their own entry. Directory mutations are rare relative to
+	 * authorization decisions, so clear-all is the simple, obviously-correct choice.
+	 */
+	private void registerGroupCacheInvalidationListener() {
+		RepositoryListener invalidator = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				if (!(eventObject.getSource() instanceof Entry source)) {
+					return;
+				}
+				GraphType graphType = source.getGraphType();
+				if (GraphType.Group.equals(graphType)) {
+					((PrincipalManagerImpl) getPrincipalManager()).invalidateGroupCache();
+				} else if (GraphType.User.equals(graphType)
+						&& RepositoryEvent.EntryDeleted.equals(eventObject.getEvent())) {
+					((PrincipalManagerImpl) getPrincipalManager()).evictFromGroupCache(source.getResourceURI());
+				}
+			}
+		};
+		registerListener(invalidator, RepositoryEvent.EntryCreated);
+		registerListener(invalidator, RepositoryEvent.EntryUpdated);
+		registerListener(invalidator, RepositoryEvent.ResourceUpdated);
+		registerListener(invalidator, RepositoryEvent.RelationsUpdated);
+		registerListener(invalidator, RepositoryEvent.EntryDeleted);
 	}
 
 	/**
@@ -637,6 +670,14 @@ public class RepositoryManagerImpl implements RepositoryManager {
 						log.error("Batch connection close failed", closeEx);
 					}
 				}
+			}
+			if (committed && principalManager != null) {
+				// ENTRYSTORE-1085: group-affecting events may have fired before this commit
+				// (see the class comment above about pre-commit events), letting a racing
+				// decision repopulate the group cache from pre-commit state. Clear once more
+				// now that the batch is durable. Rollback needs no clear: readers only ever
+				// saw committed (= still valid) state.
+				((PrincipalManagerImpl) principalManager).invalidateGroupCache();
 			}
 		}
 	}

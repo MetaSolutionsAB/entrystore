@@ -31,6 +31,7 @@ import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.URISplit;
 
@@ -39,7 +40,10 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -63,6 +67,23 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	public Group userGroup = null;
 
 	private static final String ENV_ADMIN_PASSWORD = "ENTRYSTORE_ADMIN_PASSWORD";
+
+	/**
+	 * ENTRYSTORE-1085: cross-request user→groups cache. {@link #getGroupUris(URI)} scans the whole
+	 * principals context per miss; this map amortises that across authorization decisions.
+	 * Invalidation is listener-based (see RepositoryManagerImpl#registerGroupCacheInvalidationListener)
+	 * plus a clear after every committed batch. Package-private for tests.
+	 */
+	final Map<URI, Set<URI>> userGroupsCache = new ConcurrentHashMap<>();
+
+	/**
+	 * Bumped on every invalidation. A loader records the epoch before scanning and only publishes
+	 * its result while the epoch is unchanged (re-checking after the put), so a scan racing an
+	 * invalidation can never park pre-mutation state in the cache indefinitely.
+	 */
+	private final AtomicLong userGroupsCacheEpoch = new AtomicLong();
+
+	private volatile Boolean groupCacheEnabled;
 
 	/**
 	 * Creates a principal manager
@@ -268,6 +289,50 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		return groupUris;
 	}
 
+	/**
+	 * Cache-fronted {@link #getGroupUris(URI)} (ENTRYSTORE-1085). Returns the cached group set for
+	 * the user, scanning at most once per invalidation window. The returned set must not be
+	 * mutated — callers copy (see UserGroupsMemo).
+	 */
+	Set<URI> getGroupUrisCached(URI userURI) {
+		if (!isGroupCacheEnabled()) {
+			return getGroupUris(userURI);
+		}
+		Set<URI> cached = userGroupsCache.get(userURI);
+		if (cached != null) {
+			return cached;
+		}
+		long epochBefore = userGroupsCacheEpoch.get();
+		Set<URI> groups = Set.copyOf(getGroupUris(userURI));
+		if (userGroupsCacheEpoch.get() == epochBefore) {
+			userGroupsCache.putIfAbsent(userURI, groups);
+			if (userGroupsCacheEpoch.get() != epochBefore) {
+				// An invalidation raced the put — our snapshot may predate the mutation.
+				userGroupsCache.remove(userURI);
+			}
+		}
+		return groups;
+	}
+
+	void invalidateGroupCache() {
+		userGroupsCacheEpoch.incrementAndGet();
+		userGroupsCache.clear();
+	}
+
+	void evictFromGroupCache(URI userURI) {
+		userGroupsCacheEpoch.incrementAndGet();
+		userGroupsCache.remove(userURI);
+	}
+
+	private boolean isGroupCacheEnabled() {
+		Boolean enabled = groupCacheEnabled;
+		if (enabled == null) {
+			enabled = entry.getRepositoryManager().getConfiguration().getBoolean(Settings.AUTH_GROUP_CACHE, true);
+			groupCacheEnabled = enabled;
+		}
+		return enabled;
+	}
+
 	public List<URI> getGroupEntryUris() {
 		Iterator < URI > entryIterator = getEntries().iterator();
 		List<URI> groupUris = new ArrayList<>();
@@ -428,11 +493,11 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	}
 
 	/**
-	 * B1: per-authorization-decision lazy memo of a user's group URIs. {@link #getGroupUris(URI)}
-	 * scans the entire principals context, and one {@link #isUserAuthorized}/{@link #getRights}
-	 * decision can consult it up to a dozen times across repeated hasAccess calls. Scoping the memo
-	 * to a single decision collapses those to at most one scan, and because it never outlives the
-	 * decision it needs no cross-request invalidation (unlike a shared cache).
+	 * B1: per-authorization-decision lazy memo of a user's group URIs. One {@link #isUserAuthorized}
+	 * /{@link #getRights} decision can consult the groups up to a dozen times across repeated
+	 * hasAccess calls; the memo collapses those to at most one lookup. Since ENTRYSTORE-1085 the
+	 * lookup itself goes through {@link #getGroupUrisCached(URI)}, so the principals-context scan
+	 * is also amortised across decisions (with listener-based invalidation).
 	 */
 	private final class UserGroupsMemo {
 		private final URI userURI;
@@ -445,7 +510,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		/** Returns a fresh copy each call; callers mutate the result via retainAll. */
 		Set<URI> copy() {
 			if (groups == null) {
-				groups = getGroupUris(userURI);
+				groups = getGroupUrisCached(userURI);
 			}
 			return new HashSet<>(groups);
 		}
