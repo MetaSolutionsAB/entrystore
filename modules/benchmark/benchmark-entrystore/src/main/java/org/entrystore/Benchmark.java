@@ -240,6 +240,10 @@ public class Benchmark {
 						MultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo(), arguments.isWithInterContexts(), arguments.isWithAcl());
 					}
 
+					if (arguments.isMaintenance() && !arguments.isWithInterContexts()) {
+						MaintenancePhase.run(repositoryManager);
+					}
+
 					// reading
 					if (!arguments.isWithInterContexts()) {
 						Context context = repositoryManager.getContextManager().getContext(BenchmarkCommons.CONTEXT_ALIAS + "_1");
