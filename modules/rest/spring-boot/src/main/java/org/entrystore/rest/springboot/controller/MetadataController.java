@@ -43,6 +43,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.WebRequest;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -80,11 +81,40 @@ public class MetadataController {
 			@RequestParam(required = false) String scope,
 			@RequestParam(name = "rev", required = false) String revision,
 			@RequestParam(required = false) String download,
-			@RequestHeader(value = "Accept", required = false, defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
+			@RequestHeader(value = "Accept", required = false, defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader,
+			WebRequest webRequest
 	) {
 		String mediaType = GraphUtil.resolveRdfMediaType(format, acceptHeader);
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+
+		// ENTRYSTORE-1087: everything that changes the response body for the same metadata state
+		// must be part of the ETag, otherwise If-None-Match would confirm a representation the
+		// client does not hold.
+		String representationKey = String.join("|", metadataType.name(), mediaType,
+				String.valueOf(graphQuery), String.valueOf(depth), String.valueOf(recursive),
+				String.valueOf(scope), String.valueOf(revision));
+		// JSONP responses are wrapped by a filter (callback in the body, not in this key) and are
+		// contractually non-cacheable; recursive representations aggregate other entries whose
+		// modification dates are not monotonic for this ETag; revisions are addressed explicitly.
+		// These shapes carry no conditional headers at all: Spring's HttpEntityMethodProcessor
+		// auto-answers 304 for any ResponseEntity with an ETag, so skipping checkNotModified
+		// alone would not prevent a stale 304.
+		boolean conditionalApplicable = recursive == null && revision == null
+				&& webRequest.getParameter("callback") == null;
+
+		if (conditionalApplicable && metadataType == MetadataType.LOCAL_METADATA) {
+			// Fast path for the polling-heavy local-metadata GET: authorize with exactly the
+			// property the load path checks, then answer the revalidation before loading and
+			// serializing the graph.
+			metadataService.checkReadMetadataAuthorization(entry);
+			Date modificationDate = getModificationDate(entry, metadataType);
+			if (modificationDate != null && webRequest.checkNotModified(
+					HttpUtil.createRepresentationETag(modificationDate, representationKey),
+					modificationDate.getTime())) {
+				return null;
+			}
+		}
 
 		MetadataResult metadataResult = metadataService.getMetadata(entry, metadataType, mediaType, graphQuery, depth, recursive, scope, revision);
 
@@ -92,8 +122,21 @@ public class MetadataController {
 				? metadataResult.lastModified()
 				: getModificationDate(entry, metadataType);
 
+		if (conditionalApplicable && metadataType != MetadataType.LOCAL_METADATA
+				&& modificationDate != null && webRequest.checkNotModified(
+						HttpUtil.createRepresentationETag(modificationDate, representationKey),
+						modificationDate.getTime())) {
+			// Post-load revalidation for the non-local types: their authorization involves the
+			// referenced entry (LocalMetadataWrapper), so the load must happen — only the
+			// serialization transfer is saved.
+			return null;
+		}
+
 		HttpHeaders headers = buildResponseHeaders(entry, mediaType, download != null);
-		HttpUtil.setLastModifiedAndETag(headers, modificationDate);
+		if (conditionalApplicable) {
+			HttpUtil.setLastModifiedAndETag(headers, modificationDate, representationKey);
+		}
+		headers.add(HttpHeaders.VARY, HttpHeaders.ACCEPT);
 		return new ResponseEntity<>(metadataResult.serializedGraph(), headers, HttpStatus.OK);
 	}
 
