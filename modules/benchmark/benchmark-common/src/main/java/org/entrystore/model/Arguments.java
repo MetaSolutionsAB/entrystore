@@ -44,6 +44,8 @@ public class Arguments {
 	String solrUrl;
 	boolean readAsGroupUser = false;
 	int seededPrincipals = 0;
+	int writers = 1;
+	boolean reindex = false;
 	File storePath;
 	File solrPath;
 

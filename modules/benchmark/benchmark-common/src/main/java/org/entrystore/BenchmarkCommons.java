@@ -83,6 +83,8 @@ public class BenchmarkCommons {
 		Option solrUrlOption = createOption("S", "solr-url", "SOLR_URL", "External Solr URL used by benchmark-solr (embedded Solr is not supported). Example: 'http://localhost:8983/solr/entrystore-core'.", false);
 		Option readAsGroupUserOption = createOption("r", "read-as-user", "READ_AS_USER", "After the write phase, read every entry as a non-admin user whose access is granted only via a group (exercises group-based authorization): @boolean. Requires -a true.", false);
 		Option seededPrincipalsOption = createOption("P", "principals", "PRINCIPALS", "Seed this many extra users (plus 1 group per 10 users) into the principals context before the read-as-user pass, so group resolution scans a realistically sized directory: @int. Requires -r true.", false);
+		Option writersOption = createOption("w", "writers", "WRITERS", "Number of concurrent writer threads for the insert phase: @int >= 1 (default 1). Persons are split into contiguous chunks, one chunk per thread; with -B true each thread runs its chunk in its own batch. Incompatible with -i true; -m sampling is skipped when > 1.", false);
+		Option reindexOption = createOption("R", "reindex", "REINDEX", "After the write phase and Solr queue drain, run a timed synchronous full reindex incl. queue drain (benchmark-solr only): @boolean.", false);
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -100,6 +102,8 @@ public class BenchmarkCommons {
 		options.addOption(solrUrlOption);
 		options.addOption(readAsGroupUserOption);
 		options.addOption(seededPrincipalsOption);
+		options.addOption(writersOption);
+		options.addOption(reindexOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -235,6 +239,32 @@ public class BenchmarkCommons {
 			} else {
 				System.setProperty("log.seededPrincipals", "0");
 			}
+
+			if (commandLine.hasOption("w")) {
+				try {
+					int writers = Integer.parseInt(commandLine.getOptionValue(writersOption));
+					if (writers < 1) {
+						throw new NumberFormatException();
+					}
+					arguments.setWriters(writers);
+					System.setProperty("log.writers", writers + "");
+				} catch (NumberFormatException ex) {
+					System.err.println("Number of writers must be an @int >= 1.");
+					printHelp(options);
+					System.exit(1);
+				}
+				if (arguments.getWriters() > 1 && arguments.isWithInterContexts()) {
+					System.err.println("-w/--writers > 1 cannot be combined with -i/--intercontexts true.");
+					printHelp(options);
+					System.exit(1);
+				}
+			} else {
+				System.setProperty("log.writers", "1");
+			}
+
+			boolean reindex = commandLine.hasOption("R") && "true".equals(commandLine.getOptionValue(reindexOption));
+			arguments.setReindex(reindex);
+			System.setProperty("log.reindex", reindex ? "on" : "off");
 
 			// welcome message
 			LogUtils.logWelcome(storeType, arguments.isWithTransactions(), arguments.getSizeToGenerate());

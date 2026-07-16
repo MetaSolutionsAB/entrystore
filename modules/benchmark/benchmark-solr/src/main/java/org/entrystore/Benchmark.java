@@ -23,6 +23,7 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.model.Arguments;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.util.SolrSearchIndex;
 
 import java.io.IOException;
 import java.net.URI;
@@ -69,6 +70,32 @@ public class Benchmark {
 		return persons;
 	}
 
+	/**
+	 * Times a full synchronous reindex (purge + rebuild of every context) including the drain of
+	 * the Solr submission queue — reindexSync returns once all documents are queued, so the drain
+	 * is part of the observable reindex duration (ENTRYSTORE-1084).
+	 */
+	private static void runTimedReindex(RepositoryManagerImpl repositoryManager) {
+		SolrSearchIndex solrSearchIndex = (SolrSearchIndex) repositoryManager.getIndex();
+		PrincipalManager pm = repositoryManager.getPrincipalManager();
+		URI currentUser = pm.getAuthenticatedUserURI();
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		try {
+			LogUtils.logType(" REINDEX");
+			LocalDateTime start = LocalDateTime.now();
+			LogUtils.logDate("Starting reindex at", start);
+
+			solrSearchIndex.reindexSync(true);
+			solrSearchIndex.waitForQueueDrain();
+
+			LocalDateTime end = LocalDateTime.now();
+			LogUtils.logDate("Ended reindex at", end);
+			LogUtils.logTimeDifference("Reindexing took", start, end);
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
+		}
+	}
+
 	private static void readAllFromDatabase(Context context, int sizeToGenerate) {
 
 		LogUtils.logType(" READING");
@@ -112,7 +139,17 @@ public class Benchmark {
 
 			try {
 
-				MultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo(), arguments.isWithInterContexts(), arguments.isWithAcl());
+				// -B also routes through the concurrent runner: benchmark-solr has no batched
+				// single-writer path, and one chunk on one thread in one batch is exactly that.
+				if (arguments.getWriters() > 1 || arguments.isBatched()) {
+					ConcurrentMultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getWriters(), arguments.isBatched(), arguments.isWithAcl());
+				} else {
+					MultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo(), arguments.isWithInterContexts(), arguments.isWithAcl());
+				}
+
+				if (arguments.isReindex()) {
+					runTimedReindex(repositoryManager);
+				}
 
 				// reading
 				if (!arguments.isWithInterContexts()) {
