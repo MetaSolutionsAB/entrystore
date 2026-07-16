@@ -17,6 +17,7 @@
 package org.entrystore.impl;
 
 import org.apache.commons.io.FileUtils;
+import org.eclipse.rdf4j.common.transaction.IsolationLevels;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Statement;
@@ -98,6 +99,9 @@ import java.util.TimeZone;
 public class ContextManagerImpl extends EntryNamesContext implements ContextManager {
 
 	Logger log = LoggerFactory.getLogger(ContextManagerImpl.class);
+
+	/** E2 (ENTRYSTORE-1086): statements per commit while importing a context dump. */
+	private static final long IMPORT_COMMIT_CHUNK = 10_000;
 
 	public ContextManagerImpl(RepositoryManagerImpl rman, Repository repo) {
 		super(new EntryImpl(rman,repo), URISplit.createURI(rman.getRepositoryURL().toString(),
@@ -227,7 +231,10 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		String contextMetadataURI = contextEntry.getLocalMetadataURI().toString();
 		String contextRelationURI = contextEntry.getRelationURI().toString();
 
-		synchronized (this.entry.repository) {
+		// E1 (ENTRYSTORE-1086): no repository monitor here — the export reads a consistent
+		// SNAPSHOT_READ view for its whole duration, so concurrent writers proceed unblocked
+		// instead of stalling behind a potentially multi-minute export.
+		{
 			RepositoryConnection rc = null;
 			BufferedOutputStream out = null;
 
@@ -240,6 +247,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				}
 
 				rc = entry.getRepository().getConnection();
+				rc.begin(IsolationLevels.SNAPSHOT_READ);
 
 				RepositoryResult<org.eclipse.rdf4j.model.Resource> availableNGs = rc.getContextIDs();
 				List<org.eclipse.rdf4j.model.Resource> filteredNGs = new ArrayList<>();
@@ -297,6 +305,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				}
 				rr.close();
 				rdfWriter.endRDF();
+				rc.commit();
 			} catch (RepositoryException e) {
 				log.error("Error when exporting context", e);
 				throw e;
@@ -304,7 +313,16 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				log.error(e.getMessage(), e);
 				throw new RepositoryException(e);
 			} finally {
-				rc.close();
+				if (rc != null) {
+					try {
+						if (rc.isActive()) {
+							rc.rollback();
+						}
+					} catch (RepositoryException rollbackEx) {
+						log.error("Failed to end export read transaction", rollbackEx);
+					}
+					rc.close();
+				}
 				try {
 					out.flush();
 					out.close();
@@ -379,7 +397,10 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 		// remove the old entries and add the parsed statements in one transaction, so a failure restores
 		// the previous content of the context (ENTRYSTORE-1064); disk side effects cannot be rolled back
-		// and therefore happen only after a successful commit
+		// and therefore happen only after a successful commit. For imports above IMPORT_COMMIT_CHUNK
+		// statements the transaction is committed in chunks (E2, ENTRYSTORE-1086), so full atomicity
+		// holds only up to the first chunk commit — beyond it a failure leaves a partial context,
+		// surfaced and reindexed in the catch block
 
 		long amountTriples = 0;
 		long importedTriples = 0;
@@ -529,14 +550,19 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 						}
 					}
 
-					// we check first whether such a stmnt already exists
-					Statement newStmnt = vf.createStatement(subject, predicate, object, context);
-					if (!rc.hasStatement(newStmnt, false, context)) {
-						importedTriples++;
-						log.info("Adding statement to repository: {}", newStmnt.toString());
-						rc.add(newStmnt, context);
-					} else {
-						log.warn("Statement already exists, skipping: {}", newStmnt.toString());
+					// E2 (ENTRYSTORE-1086): RDF4J statement storage has set semantics, so re-adding
+					// an existing statement is a no-op — the previous per-triple hasStatement probe
+					// (plus a per-triple INFO log) only fed the imported/skipped counters and
+					// dominated import time. Commits are chunked to bound transaction size: below
+					// IMPORT_COMMIT_CHUNK statements the import (removal included) stays atomic per
+					// ENTRYSTORE-1064; beyond it, a mid-import failure leaves a partial context,
+					// handled in the catch block below.
+					rc.add(vf.createStatement(subject, predicate, object, context), context);
+					importedTriples++;
+					if (importedTriples % IMPORT_COMMIT_CHUNK == 0) {
+						rc.commit();
+						rc.begin();
+						log.debug("Import committed {} statements so far", importedTriples);
 					}
 				}
 
@@ -562,7 +588,26 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 						}
 					}
 				}
-				cont.recoverFromFailedRemoval(removedEntries);
+				// E2: chunked commits mean earlier chunks — including the entry removal, which rides
+				// in the first chunk — are already durable once the first commit has happened. Before
+				// that point the rollback above restored the previous content (ENTRYSTORE-1064), so
+				// only the in-memory state of the removed entries needs recovering; after it, the
+				// context is partially populated and is reindexed so its index and id counter stay
+				// consistent with the committed statements (otherwise later entry creation can mint
+				// ids whose named graphs already hold orphaned imported statements).
+				long committed = importedTriples - (importedTriples % IMPORT_COMMIT_CHUNK);
+				if (committed > 0) {
+					log.error("Import failed after {} statements were already durably committed; "
+							+ "context {} is partially populated", committed, contextEntry.getEntryURI());
+					try {
+						cont.reIndex();
+					} catch (Exception reindexEx) {
+						log.error("Failed to reindex partially imported context {}",
+								contextEntry.getEntryURI(), reindexEx);
+					}
+				} else {
+					cont.recoverFromFailedRemoval(removedEntries);
+				}
 				throw new org.entrystore.repository.RepositoryException("Failed to import context data", e);
 			} finally {
 				if (rc != null) {

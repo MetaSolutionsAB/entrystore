@@ -85,6 +85,7 @@ public class BenchmarkCommons {
 		Option seededPrincipalsOption = createOption("P", "principals", "PRINCIPALS", "Seed this many extra users (plus 1 group per 10 users) into the principals context before the read-as-user pass, so group resolution scans a realistically sized directory: @int. Requires -r true.", false);
 		Option writersOption = createOption("w", "writers", "WRITERS", "Number of concurrent writer threads for the insert phase: @int >= 1 (default 1). Persons are split into contiguous chunks, one chunk per thread; with -B true each thread runs its chunk in its own batch. Incompatible with -i true; -m sampling is skipped when > 1.", false);
 		Option reindexOption = createOption("R", "reindex", "REINDEX", "After the write phase and Solr queue drain, run a timed synchronous full reindex incl. queue drain (benchmark-solr only): @boolean.", false);
+		Option maintenanceOption = createOption("E", "maintenance", "MAINTENANCE", "After the write phase, run timed maintenance operations: export the benchmark context, import it into a fresh context, reindex it (benchmark-entrystore only): @boolean.", false);
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -104,6 +105,7 @@ public class BenchmarkCommons {
 		options.addOption(seededPrincipalsOption);
 		options.addOption(writersOption);
 		options.addOption(reindexOption);
+		options.addOption(maintenanceOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -265,6 +267,10 @@ public class BenchmarkCommons {
 			boolean reindex = commandLine.hasOption("R") && "true".equals(commandLine.getOptionValue(reindexOption));
 			arguments.setReindex(reindex);
 			System.setProperty("log.reindex", reindex ? "on" : "off");
+
+			boolean maintenance = commandLine.hasOption("E") && "true".equals(commandLine.getOptionValue(maintenanceOption));
+			arguments.setMaintenance(maintenance);
+			System.setProperty("log.maintenance", maintenance ? "on" : "off");
 
 			// welcome message
 			LogUtils.logWelcome(storeType, arguments.isWithTransactions(), arguments.getSizeToGenerate());
