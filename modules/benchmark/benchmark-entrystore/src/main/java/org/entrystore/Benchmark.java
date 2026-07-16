@@ -236,7 +236,9 @@ public class Benchmark {
 			try {
 
 				if (arguments.isWithTransactions()) {
-					if (arguments.isBatched()) {
+					if (arguments.getWriters() > 1) {
+						ConcurrentMultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getWriters(), arguments.isBatched(), arguments.isWithAcl());
+					} else if (arguments.isBatched()) {
 						MultipleTransactionsBatched.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo(), arguments.isWithInterContexts(), arguments.isWithAcl());
 					} else {
 						MultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo(), arguments.isWithInterContexts(), arguments.isWithAcl());
@@ -281,6 +283,9 @@ public class Benchmark {
 		} catch (IllegalArgumentException | ArrayIndexOutOfBoundsException | IOException ex) {
 			LogUtils.log.error("No or bad arguments provided.");
 			LogUtils.log.error(ex.getMessage());
+		} catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+			LogUtils.log.error("Benchmark interrupted.", ex);
 		}
 	}
 }
