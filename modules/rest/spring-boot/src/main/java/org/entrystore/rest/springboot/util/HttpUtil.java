@@ -30,7 +30,11 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Date;
+import java.util.HexFormat;
 import java.util.regex.Pattern;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -86,6 +90,28 @@ public class HttpUtil {
 	}
 
 	/**
+	 * Builds a strong, representation-aware ETag: {@code "{modifiedMillis}-{hash12}"} where the
+	 * hash covers everything that changes the response body for the same entity state (negotiated
+	 * media type plus representation-affecting query parameters). Conditional GET
+	 * (If-None-Match) is only safe against an ETag that changes when the representation changes
+	 * (ENTRYSTORE-1087) — a timestamp-only ETag would return 304 for a different representation
+	 * than the client holds.
+	 */
+	public static String createRepresentationETag(Date modifiedDate, String representationKey) {
+		return createStrongETag(modifiedDate.getTime() + "-" + sha256Hex12(representationKey));
+	}
+
+	private static String sha256Hex12(String input) {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+			return HexFormat.of().formatHex(hash, 0, 6);
+		} catch (NoSuchAlgorithmException e) {
+			throw new IllegalStateException("SHA-256 not available", e);
+		}
+	}
+
+	/**
 	 * Sets Last-Modified and ETag headers on the provided {@link HttpHeaders} instance.
 	 * If the modification date is null, a debug message is logged and the headers are not updated.
 	 *
@@ -107,6 +133,20 @@ public class HttpUtil {
 		} else {
 			headers.setLastModified(modifiedDate.getTime());
 			headers.setETag(createStrongETag(Long.toString(modifiedDate.getTime())));
+		}
+	}
+
+	/**
+	 * Representation-aware variant of {@link #setLastModifiedAndETag(HttpHeaders, Date)}
+	 * (ENTRYSTORE-1087): the ETag additionally hashes {@code representationKey}, so two
+	 * representations of the same entity never share an ETag.
+	 */
+	public static void setLastModifiedAndETag(HttpHeaders headers, Date modifiedDate, String representationKey) {
+		if (modifiedDate == null) {
+			log.warn("Last-Modified header could not be set because the modification date is null");
+		} else {
+			headers.setLastModified(modifiedDate.getTime());
+			headers.setETag(createRepresentationETag(modifiedDate, representationKey));
 		}
 	}
 
