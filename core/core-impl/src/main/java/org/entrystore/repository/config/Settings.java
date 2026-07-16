@@ -24,6 +24,12 @@ package org.entrystore.repository.config;
 public interface Settings {
 	String AUTH_ADMIN_SECRET = "entrystore.auth.adminpw";
 
+	/**
+	 * ENTRYSTORE-1085: cross-request user→groups authorization cache (default on).
+	 * Kill switch: set to "false" to fall back to a full principals scan per decision.
+	 */
+	String AUTH_GROUP_CACHE = "entrystore.auth.group-cache";
+
 	String AUTH_CAS_ENABLED = "entrystore.auth.cas.enabled";
 	String AUTH_CAS_VERSION = "entrystore.auth.cas.version";
 	String AUTH_CAS_SERVER_URL = "entrystore.auth.cas.server.url";
