@@ -86,6 +86,7 @@ public class BenchmarkCommons {
 		Option writersOption = createOption("w", "writers", "WRITERS", "Number of concurrent writer threads for the insert phase: @int >= 1 (default 1). Persons are split into contiguous chunks, one chunk per thread; with -B true each thread runs its chunk in its own batch. Incompatible with -i true; -m sampling is skipped when > 1.", false);
 		Option reindexOption = createOption("R", "reindex", "REINDEX", "After the write phase and Solr queue drain, run a timed synchronous full reindex incl. queue drain (benchmark-solr only): @boolean.", false);
 		Option maintenanceOption = createOption("E", "maintenance", "MAINTENANCE", "After the write phase, run timed maintenance operations: export the benchmark context, import it into a fresh context, reindex it (benchmark-entrystore only): @boolean.", false);
+		Option listBenchmarkOption = createOption("L", "list-benchmark", "LIST_BENCHMARK", "Run the list-mutation benchmark instead of the person write phase: fill a list with this many children, then time one-by-one removals from the end and from the front (benchmark-entrystore only): @int.", false);
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -106,6 +107,7 @@ public class BenchmarkCommons {
 		options.addOption(writersOption);
 		options.addOption(reindexOption);
 		options.addOption(maintenanceOption);
+		options.addOption(listBenchmarkOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -271,6 +273,23 @@ public class BenchmarkCommons {
 			boolean maintenance = commandLine.hasOption("E") && "true".equals(commandLine.getOptionValue(maintenanceOption));
 			arguments.setMaintenance(maintenance);
 			System.setProperty("log.maintenance", maintenance ? "on" : "off");
+
+			if (commandLine.hasOption("L")) {
+				try {
+					int listBenchmark = Integer.parseInt(commandLine.getOptionValue(listBenchmarkOption));
+					if (listBenchmark < 4) {
+						throw new NumberFormatException();
+					}
+					arguments.setListBenchmark(listBenchmark);
+					System.setProperty("log.listBenchmark", listBenchmark + "");
+				} catch (NumberFormatException ex) {
+					System.err.println("List benchmark size must be an @int >= 4.");
+					printHelp(options);
+					System.exit(1);
+				}
+			} else {
+				System.setProperty("log.listBenchmark", "0");
+			}
 
 			// welcome message
 			LogUtils.logWelcome(storeType, arguments.isWithTransactions(), arguments.getSizeToGenerate());
