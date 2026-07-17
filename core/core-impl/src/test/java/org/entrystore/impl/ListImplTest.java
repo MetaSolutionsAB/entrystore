@@ -64,6 +64,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
@@ -876,7 +877,7 @@ public class ListImplTest extends AbstractCoreTest {
 		((List) listEntry.getResource()).addChild(member.getEntryURI());
 		ListImpl spied = spy((ListImpl) listEntry.getResource());
 		doThrow(new IllegalStateException("simulated write failure"))
-			.when(spied).saveChildren(any(), any(RepositoryConnection.class));
+			.when(spied).removeChildStatement(any(), any(RepositoryConnection.class), anyInt());
 
 		assertFalse(spied.removeChild(member.getEntryURI()));
 
@@ -894,7 +895,7 @@ public class ListImplTest extends AbstractCoreTest {
 		((List) listEntry.getResource()).addChild(member.getEntryURI());
 		ListImpl spied = spy((ListImpl) listEntry.getResource());
 		doThrow(new StackOverflowError("simulated failure inside the transaction"))
-			.when(spied).saveChildren(any(), any(RepositoryConnection.class));
+			.when(spied).removeChildStatement(any(), any(RepositoryConnection.class), anyInt());
 
 		assertThrows(StackOverflowError.class, () -> spied.removeChild(member.getEntryURI()));
 

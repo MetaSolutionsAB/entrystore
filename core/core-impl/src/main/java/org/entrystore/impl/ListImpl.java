@@ -250,6 +250,43 @@ public class ListImpl extends RDFResource implements List {
 		}
 	}
 
+	/**
+	 * C2 (ENTRYSTORE-1089): removes one child statement and renumbers only the rdf:Seq tail
+	 * ({@code rdf:_(i+1)} becomes {@code rdf:_i} for every position after the removed one)
+	 * instead of clearing and rewriting the whole graph. Targeted per-position remove+add pairs
+	 * are ~3× the cost of a bulk-rewrite add (measured: front-of-list removals got 2× slower
+	 * with an unconditional renumber), so long tails fall back to the full
+	 * {@link #saveChildren(Vector, RepositoryConnection)} rewrite — the targeted path only runs when the
+	 * tail is short, which is the bulk-deletion sweet spot (removing from the end is ~O(1) per
+	 * removal instead of O(N)). {@code current} must already reflect the removal; the repository
+	 * still holds the old numbering when this runs.
+	 * <p>
+	 * Both paths leave the same graph for every graph this class writes, which holds only the
+	 * {@code rdf:Seq}: {@link #setGraph} keeps the members alone. A statement written into the list
+	 * graph some other way, e.g. by a raw import, survives the targeted path until the next full
+	 * rewrite clears it; finding it here would need the full-graph read this path exists to avoid.
+	 * Both register the modification, since emptying a list always takes the targeted path.
+	 * Package-private so a same-package test can fail the removal's member-list write.
+	 */
+	void removeChildStatement(Vector<URI> current, RepositoryConnection rc, int removedIndex) throws RepositoryException {
+		int tail = current.size() - removedIndex;
+		if (tail > current.size() / 3) {
+			saveChildren(current, rc);
+			return;
+		}
+		ValueFactory vf = entry.repository.getValueFactory();
+		rc.remove(this.resourceURI, vf.createIRI(RDF.NAMESPACE + "_" + (removedIndex + 1)), null, this.resourceURI);
+		for (int i = removedIndex; i < current.size(); i++) {
+			rc.remove(this.resourceURI, vf.createIRI(RDF.NAMESPACE + "_" + (i + 2)), null, this.resourceURI);
+			rc.add(this.resourceURI, vf.createIRI(RDF.NAMESPACE + "_" + (i + 1)),
+					vf.createIRI(current.get(i).toString()), this.resourceURI);
+		}
+		if (current.isEmpty()) {
+			rc.remove(this.resourceURI, RDF.TYPE, RDF.SEQ, this.resourceURI);
+		}
+		entry.registerEntryModified(rc, vf);
+	}
+
 	public void addChild(URI child) {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.WriteResource);
 		addChild(child, true, true);
@@ -910,7 +947,7 @@ public class ListImpl extends RDFResource implements List {
 					if (checkOrphaned && isOwnerOfContext) {
 						childEntry.setOriginalListSynchronized(null, rc, vf); //remains to do the same for list case.
 					}
-					saveChildren(pending, rc);
+					removeChildStatement(pending, rc, index);
 					childEntry.removeReferringList(this, rc);
 					rc.commit();
 					committed = true;
