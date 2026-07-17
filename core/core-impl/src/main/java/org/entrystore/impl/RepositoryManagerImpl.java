@@ -165,6 +165,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	private int batchMaxOperations = BATCH_MAX_OPERATIONS_DEFAULT;
 
+	private final ThreadLocal<Set<EntryImpl>> batchAclTouchedEntries = new ThreadLocal<>();
+
 	@Getter
 	private final Config configuration;
 
@@ -657,6 +659,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 		afterBatchRollbackActions.get().clear();
 		runPostCommitActions();
+		invalidateBatchAclCaches();
 		try {
 			rc.begin();
 		} catch (RepositoryException e) {
@@ -759,29 +762,59 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	/**
-	 * Runs {@code work} in one repository transaction at a time. Only entry creation
-	 * ({@link ContextImpl#createNewMinimalItem}) and metadata writes ({@link MetadataImpl#setGraph})
-	 * join it: they use the batch's connection and leave their commit to the next checkpoint or the
-	 * end of the batch. Every other write, e.g. to an ACL, a list or group, an entry name, or the
-	 * list membership and copied ACL of an entry created into a list, commits at once on its own
-	 * connection. Such a write does not see the batch's uncommitted entries in the store and is not
-	 * rolled back with them, so a caller must not make one about an entry the same batch created
-	 * unless it accepts triples that name a missing entry after a rollback.
+	 * Records an entry whose ACL statements were staged on the active batch connection. Staged
+	 * ACL state must never be served to readers, so {@link #inBatch(Runnable)} invalidates each
+	 * recorded entry's ACL cache when the batch ends — after a commit the cache still holds
+	 * pre-batch state (or state a racing reader re-cached mid-batch), after a rollback nothing
+	 * staged may survive.
+	 */
+	void registerBatchAclInvalidation(EntryImpl entry) {
+		Set<EntryImpl> touched = batchAclTouchedEntries.get();
+		if (touched == null) {
+			touched = new HashSet<>();
+			batchAclTouchedEntries.set(touched);
+		}
+		touched.add(entry);
+	}
+
+	private void invalidateBatchAclCaches() {
+		Set<EntryImpl> touched = batchAclTouchedEntries.get();
+		if (touched != null) {
+			batchAclTouchedEntries.remove();
+			touched.forEach(EntryImpl::invalidateAclCache);
+		}
+	}
+
+	/**
+	 * Runs {@code work} in one repository transaction at a time. Entry creation
+	 * ({@link ContextImpl#createNewMinimalItem}), metadata writes ({@link MetadataImpl#setGraph}) and
+	 * the entry-info and ACL setters of {@link EntryImpl} join it: they use the batch's connection and
+	 * leave their commit to the next checkpoint or the end of the batch. Every other write, e.g. to a
+	 * list or group, an entry name, or the list membership of an entry created into a list, commits at
+	 * once on its own connection. Such a write does not see the batch's uncommitted entries in the
+	 * store and is not rolled back with them, so a caller must not make one about an entry the same
+	 * batch created unless it accepts triples that name a missing entry after a rollback.
 	 * <p>
-	 * Trade-offs: a rollback discards the changes the two joining operations made since the last
-	 * checkpoint, and removes the
-	 * entries created in it from the {@code SoftCache}; a reference the caller kept to such an
-	 * entry is not invalidated. Repository events of the writes that
-	 * join the batch, and every event about an entry the batch created, are held back like work
-	 * registered via {@link #runAfterBatchCommit}: they reach listeners once the commit lands, in the
-	 * order they were raised, and are dropped on rollback. Any other event is about a write that has
-	 * committed on its own connection and is dispatched at once.
+	 * Trade-offs: a rollback discards the changes the joining operations made since the last
+	 * checkpoint, and removes the entries created in it from the {@code SoftCache}; a reference the
+	 * caller kept to such an entry is not invalidated. ACL updates staged in the batch are never
+	 * published: the ACL cache of every entry they touched is invalidated when the transaction ends,
+	 * either way. Repository events of the writes that join the batch, and every event about an entry
+	 * the batch created, are held back like work registered via {@link #runAfterBatchCommit}: they
+	 * reach listeners once the commit lands, in the order they were raised, and are dropped on
+	 * rollback. Any other event is about a write that has committed on its own connection and is
+	 * dispatched at once.
 	 * <p>
 	 * The transaction is bounded, not the call: after {@link Settings#REPOSITORY_BATCH_MAX_OPERATIONS}
 	 * batch-aware operations (default 10 000) it commits and begins again, so a rollback discards
 	 * only the work since the last such checkpoint, and an entry id handed out before it stays used.
 	 * The repository monitor is held for the whole call regardless, so a caller with a large
 	 * workload should run several batches rather than one.
+	 * <p>
+	 * The batch is bound to the calling thread ({@code work} must not fan repository
+	 * mutations out to other threads and wait for them: the batch thread holds the
+	 * repository monitor, so the workers block in every setter while the batch waits on
+	 * them — a permanent deadlock; run one batch per worker thread instead).
 	 *
 	 * @throws RuntimeException any throwable from {@code work}; the work since the last checkpoint
 	 *                          is rolled back and the throwable is rethrown unchanged.
@@ -832,6 +865,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					} catch (RepositoryException closeEx) {
 						log.error("Batch connection close failed", closeEx);
 					}
+					invalidateBatchAclCaches();
 				}
 				if (rollbackActions != null) {
 					runRollbackActions(rollbackActions);

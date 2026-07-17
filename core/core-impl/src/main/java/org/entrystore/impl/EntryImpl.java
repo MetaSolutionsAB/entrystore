@@ -1117,10 +1117,11 @@ public class EntryImpl implements Entry {
 	}
 
 	/**
-	 * Runs the ACL changes in one transaction under the repository monitor. If they changed the store, publishes
-	 * them as {@link #setGraph} does: {@link RepositoryEvent#EntryUpdated}, plus
+	 * Runs the ACL changes in one transaction under the repository monitor, or on the connection of an active
+	 * {@link RepositoryManagerImpl#inBatch}, whose commit or rollback then decides the outcome. If they changed the
+	 * store, publishes them as {@link #setGraph} does: {@link RepositoryEvent#EntryUpdated}, plus
 	 * {@link RepositoryEvent#EntryAclGuestUpdated} when a guest grant of a context entry changed. The events fire
-	 * after the ACL cache is updated, since the Solr listener builds the document from it synchronously.
+	 * after the ACL cache is updated, since listeners read the ACL from it; in a batch both wait for its commit.
 	 *
 	 * @param cacheAfter what {@link #getAllowedPrincipalsFor} may answer per property once the changes are
 	 * committed; a property it lacks reloads from the store.
@@ -1135,46 +1136,83 @@ public class EntryImpl implements Entry {
 		IRI guest = GraphType.Context.equals(getGraphType())
 				? iri(getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString())
 				: null;
-		boolean changed = false;
-		boolean guestChanged = false;
+		AclChange change;
+		boolean staged = false;
 		try {
 			synchronized (this.repository) {
-				try (RepositoryConnection rc = this.repository.getConnection()) {
-					rc.begin();
+				RepositoryConnection batchRc = this.repositoryManager.getActiveBatchConnection();
+				if (batchRc != null) {
+					staged = true;
+					// staged sets must never be published, as authorization reads the cache directly; the batch end
+					// invalidates this entry's ACL cache whether it commits or rolls back
+					this.repositoryManager.registerBatchAclInvalidation(this);
 					try {
-						for (Map.Entry<AccessProperty, AclUpdate> update : updates.entrySet()) {
-							IRI subject = getAccessSubject(update.getKey());
-							IRI predicate = getAccessPredicate(update.getKey());
-							boolean guestBefore = guest != null
-									&& rc.hasStatement(subject, predicate, guest, false, entryURI);
-							changed |= update.getValue().apply(rc, subject, predicate);
-							guestChanged |= guest != null
-									&& guestBefore != rc.hasStatement(subject, predicate, guest, false, entryURI);
-						}
-						rc.commit();
+						change = applyAclUpdates(batchRc, updates, guest);
 					} catch (Exception e) {
-						rollbackQuietly(rc, e);
+						this.repositoryManager.markBatchRollbackOnly(e);
 						throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
 					}
-					// after the commit, so a reader loading between invalidation and commit cannot pin the old
-					// answer; one that loaded before the commit and stores after this line still can, and the
-					// stale answer then survives until the next ACL write on this entry
-					this.hasExplicitAcl = null;
-					updates.keySet().forEach(prop -> setCachedAllowedPrincipalsFor(prop, cached.get(prop)));
+					if (change.changed()) {
+						// ahead of the events below, which wait for the commit of the batch as well
+						this.repositoryManager.runAfterBatchCommit(this::invalidateAclCache);
+					}
+				} else {
+					try (RepositoryConnection rc = this.repository.getConnection()) {
+						rc.begin();
+						try {
+							change = applyAclUpdates(rc, updates, guest);
+							rc.commit();
+						} catch (Exception e) {
+							rollbackQuietly(rc, e);
+							throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+						}
+						// after the commit, so a reader loading between invalidation and commit cannot pin the old
+						// answer; one that loaded before the commit and stores after this line still can, and the
+						// stale answer then survives until the next ACL write on this entry
+						this.hasExplicitAcl = null;
+						updates.keySet().forEach(prop -> setCachedAllowedPrincipalsFor(prop, cached.get(prop)));
+					}
 				}
 			}
 		} catch (RepositoryException e) {
 			log.error(e.getMessage(), e);
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
-		if (changed) {
-			RepositoryManager rm = getRepositoryManager();
-			rm.fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
-			if (guestChanged) {
-				rm.fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryAclGuestUpdated));
+		if (change.changed()) {
+			fireAfterWrite(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated), staged);
+			if (change.guestChanged()) {
+				fireAfterWrite(new RepositoryEventObject(this, RepositoryEvent.EntryAclGuestUpdated), staged);
 			}
 		}
-		return changed;
+		return change.changed();
+	}
+
+	/** Fires the event of a write: at once if it is committed, with the commit of the batch if it is only staged. */
+	private void fireAfterWrite(RepositoryEventObject event, boolean staged) {
+		if (staged) {
+			this.repositoryManager.fireRepositoryEventAfterBatchCommit(event);
+		} else {
+			this.repositoryManager.fireRepositoryEvent(event);
+		}
+	}
+
+	/** Whether ACL updates changed the store, and whether they changed a guest grant of a context entry. */
+	private record AclChange(boolean changed, boolean guestChanged) {
+	}
+
+	private AclChange applyAclUpdates(RepositoryConnection rc, Map<AccessProperty, AclUpdate> updates, IRI guest)
+			throws RepositoryException {
+		boolean changed = false;
+		boolean guestChanged = false;
+		for (Map.Entry<AccessProperty, AclUpdate> update : updates.entrySet()) {
+			IRI subject = getAccessSubject(update.getKey());
+			IRI predicate = getAccessPredicate(update.getKey());
+			boolean guestBefore = guest != null && rc.hasStatement(subject, predicate, guest, false, entryURI);
+			changed |= update.getValue().apply(rc, subject, predicate);
+			guestChanged |= guest != null
+					&& guestBefore != rc.hasStatement(subject, predicate, guest, false, entryURI);
+		}
+		return new AclChange(changed, guestChanged);
 	}
 
 	/** A copy of the entry's whole ACL, one principal set per property. */
@@ -1184,6 +1222,18 @@ public class EntryImpl implements Entry {
 			acl.put(prop, Set.copyOf(entry.getAllowedPrincipalsFor(prop)));
 		}
 		return acl;
+	}
+
+	/**
+	 * Drops every cached ACL view so the next read reloads committed repository state. Used by
+	 * {@link RepositoryManagerImpl#inBatch} for entries whose ACL statements were staged on a
+	 * batch connection.
+	 */
+	void invalidateAclCache() {
+		for (AccessProperty prop : AccessProperty.values()) {
+			setCachedAllowedPrincipalsFor(prop, null);
+		}
+		this.hasExplicitAcl = null;
 	}
 
 	public boolean hasAllowedPrincipals() {
@@ -2090,6 +2140,20 @@ public class EntryImpl implements Entry {
 
 	private boolean replaceStatement(IRI subject, IRI predicate, Value object) {
 		synchronized (this.repository) {
+			// C12 (ENTRYSTORE-1089): inside a batch the setter joins the batch transaction —
+			// commit/rollback belong to inBatch, and the event waits for the commit.
+			RepositoryConnection batchRc = this.repositoryManager.getActiveBatchConnection();
+			if (batchRc != null) {
+				try {
+					boolean result = replaceStatementSynchronized(subject, predicate, object, batchRc,
+							this.repository.getValueFactory());
+					fireAfterWrite(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated), true);
+					return result;
+				} catch (RepositoryException e) {
+					this.repositoryManager.markBatchRollbackOnly(e);
+					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+				}
+			}
 			return this.replaceStatementSynchronized(subject, predicate, object);
 		}
 	}
