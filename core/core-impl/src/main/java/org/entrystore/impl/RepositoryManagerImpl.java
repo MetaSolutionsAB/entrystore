@@ -146,6 +146,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	private int batchMaxOperations = BATCH_MAX_OPERATIONS_DEFAULT;
 
+	private final ThreadLocal<Set<EntryImpl>> batchAclTouchedEntries = new ThreadLocal<>();
+
 	@Getter
 	private final Config configuration;
 
@@ -580,6 +582,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		if (rc != null && ++batchOperations.get()[0] > batchMaxOperations) {
 			rc.commit();
 			runPostCommitActions();
+			invalidateBatchAclCaches();
 			rc.begin();
 			batchOperations.get()[0] = 1;
 		}
@@ -627,6 +630,30 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	/**
+	 * Records an entry whose ACL statements were staged on the active batch connection. Staged
+	 * ACL state must never be served to readers, so {@link #inBatch(Runnable)} invalidates each
+	 * recorded entry's ACL cache when the batch ends — after a commit the cache still holds
+	 * pre-batch state (or state a racing reader re-cached mid-batch), after a rollback nothing
+	 * staged may survive.
+	 */
+	void registerBatchAclInvalidation(EntryImpl entry) {
+		Set<EntryImpl> touched = batchAclTouchedEntries.get();
+		if (touched == null) {
+			touched = new HashSet<>();
+			batchAclTouchedEntries.set(touched);
+		}
+		touched.add(entry);
+	}
+
+	private void invalidateBatchAclCaches() {
+		Set<EntryImpl> touched = batchAclTouchedEntries.get();
+		if (touched != null) {
+			batchAclTouchedEntries.remove();
+			touched.forEach(EntryImpl::invalidateAclCache);
+		}
+	}
+
+	/**
 	 * Runs {@code work} inside a single repository transaction. All entry- and
 	 * metadata-mutation operations that normally open their own connection and commit
 	 * individually will reuse this transaction's connection and defer their commit to
@@ -634,15 +661,23 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * <p>
 	 * Trade-offs: a rollback discards every change made inside the batch, but does not
 	 * undo {@code SoftCache} updates that already happened — callers should treat the
-	 * cache as potentially stale after a failed batch. Repository events raised inside the batch are
-	 * held back like work registered via {@link #runAfterBatchCommit}: they reach listeners once the
-	 * commit lands, in the order they were raised, and are dropped entirely on rollback.
+	 * cache as potentially stale after a failed batch. Entry ACL caches are the exception:
+	 * batch-staged ACL updates are never published, and every touched entry's ACL cache is
+	 * invalidated when the batch ends (either outcome), so authorization only ever sees
+	 * committed state. Repository events raised inside the batch are held back like work
+	 * registered via {@link #runAfterBatchCommit}: they reach listeners once the commit lands,
+	 * in the order they were raised, and are dropped entirely on rollback.
 	 * <p>
 	 * The transaction is bounded, not the call: after {@link Settings#REPOSITORY_BATCH_MAX_OPERATIONS}
 	 * batch-aware operations (default 10 000) it commits and begins again, so a rollback discards
 	 * only the work since the last such checkpoint, and an entry id handed out before it stays used.
 	 * The repository monitor is held for the whole call regardless, so a caller with a large
 	 * workload should run several batches rather than one.
+	 * <p>
+	 * The batch is bound to the calling thread ({@code work} must not fan repository
+	 * mutations out to other threads and wait for them: the batch thread holds the
+	 * repository monitor, so the workers block in every setter while the batch waits on
+	 * them — a permanent deadlock; run one batch per worker thread instead).
 	 *
 	 * @throws RuntimeException any throwable from {@code work}; the batch is rolled back
 	 *                          and the throwable is rethrown unchanged.
@@ -683,6 +718,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					} catch (RepositoryException closeEx) {
 						log.error("Batch connection close failed", closeEx);
 					}
+					invalidateBatchAclCaches();
 				}
 			}
 		}
