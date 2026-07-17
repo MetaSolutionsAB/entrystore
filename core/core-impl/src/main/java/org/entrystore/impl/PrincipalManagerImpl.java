@@ -292,9 +292,10 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	/**
 	 * Cache-fronted {@link #getGroupUris(URI)} (ENTRYSTORE-1085). Returns the cached group set for
 	 * the user, scanning at most once per invalidation window. The returned set must not be
-	 * mutated — callers copy (see UserGroupsMemo).
+	 * mutated — callers copy (see UserGroupsMemo). Public for the Solr ACL pre-filter
+	 * (ENTRYSTORE-1088), which resolves the caller's principals per search request.
 	 */
-	Set<URI> getGroupUrisCached(URI userURI) {
+	public Set<URI> getGroupUrisCached(URI userURI) {
 		if (!isGroupCacheEnabled()) {
 			return getGroupUris(userURI);
 		}

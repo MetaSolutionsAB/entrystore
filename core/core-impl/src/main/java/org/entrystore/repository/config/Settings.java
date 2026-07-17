@@ -30,6 +30,13 @@ public interface Settings {
 	 */
 	String AUTH_GROUP_CACHE = "entrystore.auth.group-cache";
 
+	/**
+	 * ENTRYSTORE-1088 (A4): principal-based Solr filter query that pre-excludes search hits the
+	 * caller provably cannot read before the per-hit application-level ACL check runs (default
+	 * on). The application check always remains as the deciding backstop. Kill switch: "false".
+	 */
+	String SOLR_ACL_PREFILTER = "entrystore.solr.acl-prefilter";
+
 	String AUTH_CAS_ENABLED = "entrystore.auth.cas.enabled";
 	String AUTH_CAS_VERSION = "entrystore.auth.cas.version";
 	String AUTH_CAS_SERVER_URL = "entrystore.auth.cas.server.url";
