@@ -65,42 +65,40 @@ public class GroupService {
 		ContextManager cm = repositoryManager.getContextManager();
 
 		URI requestingUserUri = principalManager.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			// guests are prohibited from using this resource
-			if (requestingUserUri == null || principalManager.getGuestUser().getURI().equals(requestingUserUri)) {
-				throw new UnauthorizedException("Not allowed for not-logged in or a guest user to create a group");
+
+		// guests are prohibited from using this resource
+		if (requestingUserUri == null || principalManager.getGuestUser().getURI().equals(requestingUserUri)) {
+			throw new UnauthorizedException("Not allowed for not-logged in or a guest user to create a group");
+		}
+
+		if (!repositoryManager.getConfiguration().getBoolean(Settings.NONADMIN_GROUPCONTEXT_CREATION, false)) {
+			if (!userService.isAdmin(principalManager.getUser(requestingUserUri))) {
+				throw new UnauthorizedException("Not allowed for not-admin user to create a group");
 			}
+		}
 
-			if (!repositoryManager.getConfiguration().getBoolean(Settings.NONADMIN_GROUPCONTEXT_CREATION, false)) {
-				if (!userService.isAdmin(principalManager.getUser(requestingUserUri))) {
-					throw new UnauthorizedException("Not allowed for not-admin user to create a group");
-				}
-			}
+		// normalize inputs to null when blank
+		String groupName = StringUtils.trimToNull(name);
+		String groupContextId = StringUtils.trimToNull(contextId);
 
-			// normalize inputs to null when blank
-			name = StringUtils.trimToNull(name);
-			contextId = StringUtils.trimToNull(contextId);
+		// validate inputs BEFORE escalating to admin so a rejected request never runs with admin rights
+		if (groupName != null) {
+			validateIdentifier(groupName, "name", VALID_NAME, "letters, digits, spaces, dots, hyphens, and underscores");
+		}
+		if (groupContextId != null) {
+			validateIdentifier(groupContextId, "contextId", VALID_CONTEXT_ID, "letters, digits, hyphens, and underscores");
+		}
 
-			// validate inputs BEFORE escalating to admin so a rejected request never runs with admin rights
-			if (name != null) {
-				validateIdentifier(name, "name", VALID_NAME, "letters, digits, spaces, dots, hyphens, and underscores");
-			}
-			if (contextId != null) {
-				validateIdentifier(contextId, "contextId", VALID_CONTEXT_ID, "letters, digits, hyphens, and underscores");
-			}
-
-			// we need admin-rights to create groups and contexts
-			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
-
+		// we need admin-rights to create groups and contexts
+		return PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			// check whether context or group with desired name already exists
 			// and abort execution of request if necessary
-			if (name != null && (principalManager.getPrincipalEntry(name) != null || cm.getContextURI(name) != null)) {
-				throw new DataConflictException("Requested value of the name parameter: '" + name + "' is already used");
+			if (groupName != null && (principalManager.getPrincipalEntry(groupName) != null || cm.getContextURI(groupName) != null)) {
+				throw new DataConflictException("Requested value of the name parameter: '" + groupName + "' is already used");
 			}
 
-			if (contextId != null && cm.getContext(contextId) != null) {
-				throw new DataConflictException("Requested value of the contextId parameter: '" + contextId + "' is already used");
+			if (groupContextId != null && cm.getContext(groupContextId) != null) {
+				throw new DataConflictException("Requested value of the contextId parameter: '" + groupContextId + "' is already used");
 			}
 
 			// create entry for new group
@@ -114,13 +112,13 @@ public class GroupService {
 			// make requesting user a group member
 			newGroup.addMember(principalManager.getUser(requestingUserUri));
 
-			if (name != null) {
+			if (groupName != null) {
 				// set name of the group
-				newGroup.setName(name);
+				newGroup.setName(groupName);
 			}
 
 			// create entry for new context
-			Entry newContextEntry = cm.getContext("_contexts").createResource(contextId, GraphType.Context, null, null);
+			Entry newContextEntry = cm.getContext("_contexts").createResource(groupContextId, GraphType.Context, null, null);
 			// make the requesting user admin for context
 			newContextEntry.setAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, Sets.newHashSet(requestingUserUri));
 			// new group gets write access for context
@@ -130,21 +128,16 @@ public class GroupService {
 
 			Context newContext = (Context) newContextEntry.getResource();
 
-			if (name != null) {
+			if (groupName != null) {
 				// set name of the new context
-				cm.setName(newContextEntry.getEntryURI(), name);
+				cm.setName(newContextEntry.getEntryURI(), groupName);
 			}
 
 			// set the group's home context to the newly created context
 			newGroup.setHomeContext(newContext);
 
 			return newGroupEntry;
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, requestingUserUri, primary);
-		}
+		});
 	}
 
 	private void validateIdentifier(String value, String fieldName, Pattern allowed, String allowedDescription) {

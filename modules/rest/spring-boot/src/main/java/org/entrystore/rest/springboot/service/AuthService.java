@@ -73,6 +73,7 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.security.SecureRandom;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -160,10 +161,10 @@ public class AuthService {
 	private static final Object mutex = new Object();
 	private static Set<String> domainWhitelist = null;
 
-	// Shared SecureRandom — token generation runs from the executor's worker threads and these never
-	// construct one per call. Reseeding a fresh SecureRandom every request is an unnecessary entropy
-	// hit and was also a residual timing discriminator before token generation moved off the request
-	// thread (see dispatchPasswordResetEmail).
+	// Shared SecureRandom (thread-safe) — used for all token generation, both from the executor's
+	// worker threads and from the request-thread signup path. Reseeding a fresh SecureRandom every
+	// request is an unnecessary entropy hit and was also a residual timing discriminator before
+	// password-reset token generation moved off the request thread (see dispatchPasswordResetEmail).
 	private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
 	// Pool size is intentionally small: pwReset throughput is bounded by PasswordResetRateLimiter,
@@ -316,11 +317,7 @@ public class AuthService {
 	}
 
 	private String applyPasswordReset(SignupInfo ci, String title) {
-		URI authUser = principalManager.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
-
+		PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(ci.getEmail());
 			User u;
 			if (userEntry != null) {
@@ -331,11 +328,8 @@ public class AuthService {
 				u = principalManager.getUserByExternalID(ci.getEmail());
 			}
 			if (u == null) {
-				if (ci.getUrlFailure() != null) {
-					handleUrlRedirect(ci.getUrlFailure());
-				} else {
-					throw new PwResetEntityNotFoundHtmlException(USER_NOT_FOUND_MESSAGE, title);
-				}
+				throw failWithRedirectOr(ci.getUrlFailure(),
+						() -> new PwResetEntityNotFoundHtmlException(USER_NOT_FOUND_MESSAGE, title));
 			} else {
 				// Reset password
 				if (u.setSaltedHashedSecret(ci.getSaltedHashedPassword())) {
@@ -354,22 +348,14 @@ public class AuthService {
 					log.info("Reset password for user {}", u.getURI());
 				} else {
 					log.error("Error when resetting password for user {}", u.getURI());
-					if (ci.getUrlFailure() != null) {
-						handleUrlRedirect(ci.getUrlFailure());
-					} else {
-						throw new InternalServerErrorException(INTERNAL_ERROR_MESSAGE);
-					}
+					throw failWithRedirectOr(ci.getUrlFailure(),
+							() -> new InternalServerErrorException(INTERNAL_ERROR_MESSAGE));
 				}
 			}
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser, primary);
-		}
+		});
 
 		if (ci.getUrlSuccess() != null) {
-			handleUrlRedirect(ci.getUrlSuccess());
+			throw handleUrlRedirect(ci.getUrlSuccess());
 		}
 
 		return CONFIRM_PASSWORD_RESET_SUCCESS_MESSAGE;
@@ -423,13 +409,7 @@ public class AuthService {
 			}
 		}
 
-		URI authUser = principalManager.getAuthenticatedUserURI();
-		boolean shouldSend = false;
-		Throwable primary = null;
-
-		try {
-			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
-
+		boolean shouldSend = PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(ci.getEmail());
 			User u;
 			if (userEntry != null) {
@@ -444,18 +424,14 @@ public class AuthService {
 			// endpoint does not leak which usernames exist or are active; the actual outcome is only logged.
 			if (u == null) {
 				log.info("Ignoring password reset attempt for non-existing user {}", HttpUtil.sanitizeForLog(ci.getEmail()));
+				return false;
 			} else if (u.isDisabled()) {
 				log.info("Ignoring password reset attempt for disabled user {}", HttpUtil.sanitizeForLog(ci.getEmail()));
-			} else {
-				shouldSend = true;
-				log.info("Resolved active user for password reset attempt {}", HttpUtil.sanitizeForLog(ci.getEmail()));
+				return false;
 			}
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser, primary);
-		}
+			log.info("Resolved active user for password reset attempt {}", HttpUtil.sanitizeForLog(ci.getEmail()));
+			return true;
+		});
 
 		// The expensive work (token generation + bcrypt + SMTP send) runs on a background thread so
 		// all three branches (nonexistent / disabled / active) return to the client without the
@@ -562,33 +538,21 @@ public class AuthService {
 	}
 
 	private String createUserFromSignup(SignupInfo signupInfo, String title) {
-		URI authUser = principalManager.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
-
+		PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(signupInfo.getEmail());
 
 			if ((userEntry != null && GraphType.User.equals(userEntry.getGraphType())) ||
 					principalManager.getUserByExternalID(signupInfo.getEmail()) != null) {
-				if (signupInfo.getUrlFailure() != null) {
-					handleUrlRedirect(signupInfo.getUrlFailure());
-					return null;
-				} else {
-					throw new DataConflictHtmlException(USER_ALREADY_EXISTS_MESSAGE, title);
-				}
+				throw failWithRedirectOr(signupInfo.getUrlFailure(),
+						() -> new DataConflictHtmlException(USER_ALREADY_EXISTS_MESSAGE, title));
 			}
 
 			// Create user
 			Entry entry = principalManager.createResource(null, GraphType.User, null, null);
 			if (entry == null) {
 				log.error("Error when creating new user during sign-up ");
-				if (signupInfo.getUrlFailure() != null) {
-					handleUrlRedirect(signupInfo.getUrlFailure());
-					return null;
-				} else {
-					throw new InternalServerErrorException(UNABLE_TO_CREATE_USER_MESSAGE);
-				}
+				throw failWithRedirectOr(signupInfo.getUrlFailure(),
+						() -> new InternalServerErrorException(UNABLE_TO_CREATE_USER_MESSAGE));
 			} else {
 				// Set alias, metadata and password
 				principalManager.setPrincipalName(entry.getResourceURI(), signupInfo.getEmail());
@@ -612,16 +576,10 @@ public class AuthService {
 					log.info("Set home context of user {} to {}", u.getURI(), homeContext.getResourceURI());
 				}
 			}
-
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser, primary);
-		}
+		});
 
 		if (signupInfo.getUrlSuccess() != null) {
-			handleUrlRedirect(signupInfo.getUrlSuccess());
+			throw handleUrlRedirect(signupInfo.getUrlSuccess());
 		}
 
 		return CONFIRM_SIGNUP_SUCCESS_MESSAGE;
@@ -781,7 +739,7 @@ public class AuthService {
 			}
 		}
 
-		String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
+		String token = RandomStringUtils.random(16, 0, 0, true, true, null, SECURE_RANDOM);
 		String confirmationLink = repositoryManager.getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
 		log.info("Generated sign-up token for {}", ci.getEmail());
 
@@ -819,7 +777,27 @@ public class AuthService {
 		}
 	}
 
-	private void handleUrlRedirect(String url) {
+	/**
+	 * Terminates a failure branch. When {@code urlFailure} is provided, delegates to
+	 * {@link #handleUrlRedirect(String)}, which always throws — a {@link RedirectTemporaryException}
+	 * for permitted URLs, or an {@link InternalServerErrorException} for non-permitted ones (no
+	 * redirect happens then). Otherwise throws {@code fallback}. Never returns normally — the
+	 * {@link RuntimeException} return type only lets call sites write
+	 * {@code throw failWithRedirectOr(...)} so the compiler sees the branch end.
+	 */
+	private RuntimeException failWithRedirectOr(String urlFailure, Supplier<RuntimeException> fallback) {
+		if (urlFailure != null) {
+			throw handleUrlRedirect(urlFailure);
+		}
+		throw fallback.get();
+	}
+
+	/**
+	 * Always throws: {@link RedirectTemporaryException} for a permitted URL, otherwise
+	 * {@link InternalServerErrorException}. The {@link RuntimeException} return type lets call
+	 * sites write {@code throw handleUrlRedirect(...)} so the compiler sees the branch end.
+	 */
+	private RuntimeException handleUrlRedirect(String url) {
 		if (!redirectUrlValidator.isPermitted(url)) {
 			throw new InternalServerErrorException("Redirect to non-permitted URL blocked: " + url);
 		}

@@ -179,6 +179,10 @@ public class ContextService {
 		String contextId = context.getEntry().getId();
 		ContextManager contextManager = repositoryManager.getContextManager();
 		String tmpPrefix = "entrystore_context_" + contextId + "_export_";
+		File tmpExport = null;
+		File tmpTriples = null;
+		File tmpProperties = null;
+		boolean success = false;
 		try {
 			Set<URI> users = new HashSet<>();
 
@@ -186,11 +190,11 @@ public class ContextService {
 			//  in-memory to disk, then disk to endpoint
 
 			// create temp files
-			File tmpExport = File.createTempFile(tmpPrefix, ".zip");
+			tmpExport = File.createTempFile(tmpPrefix, ".zip");
 			tmpExport.deleteOnExit();
-			File tmpTriples = File.createTempFile(tmpPrefix + "triples_", ".rdf");
+			tmpTriples = File.createTempFile(tmpPrefix + "triples_", ".rdf");
 			tmpTriples.deleteOnExit();
-			File tmpProperties = File.createTempFile(tmpPrefix + "info_", ".properties");
+			tmpProperties = File.createTempFile(tmpPrefix + "info_", ".properties");
 			tmpProperties.deleteOnExit();
 
 			// write context's triples to a rdf file
@@ -224,78 +228,64 @@ public class ContextService {
 				userList.deleteCharAt(userList.length() - 1);
 				exportProps.put("containedUsers", userList.toString());
 			}
-			OutputStream fos = Files.newOutputStream(tmpProperties.toPath());
-			exportProps.store(fos, "EntryStore export information");
-			fos.close();
+			try (OutputStream fos = Files.newOutputStream(tmpProperties.toPath())) {
+				exportProps.store(fos, "EntryStore export information");
+			}
 
 			// create zip stream
-			ZipOutputStream zipOS = new ZipOutputStream(new BufferedOutputStream(Files.newOutputStream(tmpExport.toPath())));
+			try (ZipOutputStream zipOS = new ZipOutputStream(new BufferedOutputStream(Files.newOutputStream(tmpExport.toPath())))) {
+				addZipEntry(zipOS, "triples.rdf", tmpTriples);
+				addZipEntry(zipOS, "export.properties", tmpProperties);
 
-			// add triples to zip file
-			ZipEntry zeTriples = new ZipEntry("triples.rdf");
-			zeTriples.setSize(tmpTriples.length());
-			zeTriples.setTime(tmpTriples.lastModified());
-			zeTriples.setMethod(ZipEntry.DEFLATED);
-			zipOS.putNextEntry(zeTriples);
-
-			int bytesRead;
-			byte[] buffer = new byte[8192];
-
-			InputStream is = new BufferedInputStream(Files.newInputStream(tmpTriples.toPath()), 8192);
-			while ((bytesRead = is.read(buffer)) != -1) {
-				zipOS.write(buffer, 0, bytesRead);
-			}
-			is.close();
-
-			// add properties to zip file
-			ZipEntry zeProperties = new ZipEntry("export.properties");
-			zeProperties.setSize(tmpProperties.length());
-			zeProperties.setTime(tmpProperties.lastModified());
-			zeProperties.setMethod(ZipEntry.DEFLATED);
-			zipOS.putNextEntry(zeProperties);
-
-			is = Files.newInputStream(tmpProperties.toPath());
-			while ((bytesRead = is.read(buffer)) != -1) {
-				zipOS.write(buffer, 0, bytesRead);
-			}
-			is.close();
-
-			// add resource files to zip file
-			String contextPath = esConfig.getString(Settings.DATA_FOLDER);
-			if (contextPath != null) {
-				File contextPathFile = new File(contextPath);
-				File contextFolder = new File(contextPathFile, contextId);
-				File[] contextFiles = contextFolder.listFiles();
-				if (contextFiles != null) {
-					for (File contextFile : contextFiles) {
-						ZipEntry zeResource = new ZipEntry("resources/" + contextFile.getName());
-						zeResource.setMethod(ZipEntry.DEFLATED);
-						zeResource.setSize(contextFile.length());
-						zeResource.setTime(contextFile.lastModified());
-						zipOS.putNextEntry(zeResource);
-						is = new BufferedInputStream(Files.newInputStream(contextFile.toPath()), 8192);
-						while ((bytesRead = is.read(buffer)) != -1) {
-							zipOS.write(buffer, 0, bytesRead);
+				// add resource files to zip file
+				String contextPath = esConfig.getString(Settings.DATA_FOLDER);
+				if (contextPath != null) {
+					File contextPathFile = new File(contextPath);
+					File contextFolder = new File(contextPathFile, contextId);
+					File[] contextFiles = contextFolder.listFiles();
+					if (contextFiles != null) {
+						for (File contextFile : contextFiles) {
+							addZipEntry(zipOS, "resources/" + contextFile.getName(), contextFile);
 						}
+					} else {
+						log.warn("The data path of context {} is not a folder: {}", contextId, contextFolder);
 					}
 				} else {
-					log.warn("The data path of context {} is not a folder: {}", contextId, contextFolder);
+					log.error("No EntryStore data folder configured");
 				}
-			} else {
-				log.error("No EntryStore data folder configured");
 			}
 
-			// some cleanup
-			zipOS.flush();
-			zipOS.close();
-			tmpTriples.delete();
-			tmpProperties.delete();
-
 			// return the zip file
+			success = true;
 			return tmpExport;
 
 		} catch (IOException | RepositoryException ex) {
 			throw new InternalServerErrorException("Exception generating context export for contextId '" + contextId + "'", ex);
+		} finally {
+			if (tmpTriples != null) {
+				tmpTriples.delete();
+			}
+			if (tmpProperties != null) {
+				tmpProperties.delete();
+			}
+			if (!success && tmpExport != null) {
+				tmpExport.delete();
+			}
+		}
+	}
+
+	/**
+	 * Writes {@code source} into the zip stream as a DEFLATED entry named {@code name}, carrying the
+	 * file's modification time. Sizes and CRC are computed by the stream and written in the entry's
+	 * data descriptor.
+	 */
+	static void addZipEntry(ZipOutputStream zipOS, String name, File source) throws IOException {
+		ZipEntry zipEntry = new ZipEntry(name);
+		zipEntry.setTime(source.lastModified());
+		zipEntry.setMethod(ZipEntry.DEFLATED);
+		zipOS.putNextEntry(zipEntry);
+		try (InputStream is = new BufferedInputStream(Files.newInputStream(source.toPath()), 8192)) {
+			is.transferTo(zipOS);
 		}
 	}
 

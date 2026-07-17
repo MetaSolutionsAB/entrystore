@@ -42,7 +42,6 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.env.PropertySource;
 import org.springframework.web.client.RestClient;
 
-import java.net.URI;
 import java.time.Duration;
 
 @Slf4j
@@ -115,21 +114,13 @@ public class EntryStoreConfiguration {
 	public BackupScheduler backupScheduler(RepositoryManagerImpl repositoryManager) {
 		log.info("Starting backup scheduler");
 		PrincipalManager pm = repositoryManager.getPrincipalManager();
-		URI currentUser = pm.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		return PrincipalManagerUtil.runAsAdmin(pm, () -> {
 			BackupScheduler bs = BackupScheduler.createInstance(repositoryManager);
 			if (bs != null) {
 				bs.run();
 			}
 			return bs;
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
-		}
+		});
 	}
 
 	/**
