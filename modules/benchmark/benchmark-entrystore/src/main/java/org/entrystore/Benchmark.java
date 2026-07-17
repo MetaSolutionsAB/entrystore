@@ -227,6 +227,16 @@ public class Benchmark {
 				repositoryManager.getPrincipalManager().setAuthenticatedUserURI(repositoryManager.getPrincipalManager().getAdminUser().getURI());
 			}
 
+			if (arguments.getListBenchmark() > 0) {
+				try {
+					ListBenchmark.run(repositoryManager, arguments.getListBenchmark());
+				} finally {
+					repositoryManager.shutdown();
+				}
+				LogUtils.logGoodbye();
+				return;
+			}
+
 			List<Object> persons = generateData(arguments.getSizeToGenerate(), arguments.isComplex());
 
 			try {
