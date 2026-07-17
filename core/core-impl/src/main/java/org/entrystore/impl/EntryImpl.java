@@ -63,6 +63,7 @@ import java.util.GregorianCalendar;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.eclipse.rdf4j.model.util.Values.iri;
@@ -1001,36 +1002,29 @@ public class EntryImpl implements Entry {
 	}
 
 	public boolean updateAllowedPrincipalsFor(AccessProperty prop, Set<URI> principals, boolean replace, boolean append) {
+		return updateAllowedPrincipals(Map.of(prop, principals), replace, append);
+	}
+
+	/**
+	 * C3/C12 (ENTRYSTORE-1089): applies ACL sets for several access properties in one
+	 * transaction — the create-in-list ACL copy previously paid five — and reuses an active
+	 * batch connection so {@code inBatch} callers get a single commit for everything.
+	 * Per-property semantics match {@link #updateAllowedPrincipalsFor}: {@code replace}
+	 * overwrites the property's principals, {@code append} adds the given ones, neither
+	 * removes them.
+	 */
+	public boolean updateAllowedPrincipals(Map<AccessProperty, Set<URI>> aclPerProperty, boolean replace, boolean append) {
 		this.readOrWrite = null;
 		try {
 			synchronized (this.repository) {
+				RepositoryConnection batchRc = this.repositoryManager.getActiveBatchConnection();
+				if (batchRc != null) {
+					doUpdateAllowedPrincipals(batchRc, aclPerProperty, replace, append, false);
+					return false;
+				}
 				RepositoryConnection rc = this.repository.getConnection();
-				rc.begin();
 				try {
-					IRI subject = getAccessSubject(prop);
-					IRI predicate = getAccessPredicate(prop);
-
-					if (replace) {
-						rc.remove(subject, predicate, null, entryURI);
-					}
-
-					for (URI principal : principals) {
-						IRI principalURI = this.repository.getValueFactory().createIRI(principal.toString());
-						if (replace || append) {
-							rc.add(subject, predicate, principalURI, entryURI);
-						} else {
-							rc.remove(subject, predicate, principalURI, entryURI);
-						}
-					}
-					rc.commit();
-					if (replace) {
-						setCachedAllowedPrincipalsFor(prop, principals);
-					} else {
-						setCachedAllowedPrincipalsFor(prop, null);
-					}
-				} catch (Exception e) {
-					rc.rollback();
-					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+					doUpdateAllowedPrincipals(rc, aclPerProperty, replace, append, true);
 				} finally {
 					rc.close();
 				}
@@ -1040,6 +1034,60 @@ public class EntryImpl implements Entry {
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 		return false;
+	}
+
+	private void doUpdateAllowedPrincipals(RepositoryConnection rc, Map<AccessProperty, Set<URI>> aclPerProperty,
+			boolean replace, boolean append, boolean manageTx) {
+		if (manageTx) {
+			rc.begin();
+		}
+		try {
+			for (Map.Entry<AccessProperty, Set<URI>> acl : aclPerProperty.entrySet()) {
+				IRI subject = getAccessSubject(acl.getKey());
+				IRI predicate = getAccessPredicate(acl.getKey());
+
+				if (replace) {
+					rc.remove(subject, predicate, null, entryURI);
+				}
+
+				for (URI principal : acl.getValue()) {
+					IRI principalURI = this.repository.getValueFactory().createIRI(principal.toString());
+					if (replace || append) {
+						rc.add(subject, predicate, principalURI, entryURI);
+					} else {
+						rc.remove(subject, predicate, principalURI, entryURI);
+					}
+				}
+			}
+			if (manageTx) {
+				rc.commit();
+				for (Map.Entry<AccessProperty, Set<URI>> acl : aclPerProperty.entrySet()) {
+					setCachedAllowedPrincipalsFor(acl.getKey(), replace ? acl.getValue() : null);
+				}
+			} else {
+				// Batch path: the outcome is unknown until inBatch commits or rolls back, so
+				// staged sets must never be published — authorization reads the cache directly.
+				// The batch end invalidates this entry's ACL cache for either outcome.
+				repositoryManager.registerBatchAclInvalidation(this);
+			}
+		} catch (Exception e) {
+			if (manageTx) {
+				rc.rollback();
+			}
+			throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+		}
+	}
+
+	/**
+	 * Drops every cached ACL view so the next read reloads committed repository state. Used by
+	 * {@link RepositoryManagerImpl#inBatch} for entries whose ACL statements were staged on a
+	 * batch connection.
+	 */
+	void invalidateAclCache() {
+		for (AccessProperty prop : AccessProperty.values()) {
+			setCachedAllowedPrincipalsFor(prop, null);
+		}
+		this.readOrWrite = null;
 	}
 
 	public boolean hasAllowedPrincipals() {
@@ -1871,6 +1919,19 @@ public class EntryImpl implements Entry {
 
 	private boolean replaceStatement(IRI subject, IRI predicate, Value object) {
 		synchronized (this.repository) {
+			// C12 (ENTRYSTORE-1089): inside a batch the setter joins the batch transaction —
+			// commit/rollback belong to inBatch; the event fires immediately like doSetGraph does.
+			RepositoryConnection batchRc = this.repositoryManager.getActiveBatchConnection();
+			if (batchRc != null) {
+				try {
+					boolean result = replaceStatementSynchronized(subject, predicate, object, batchRc,
+							this.repository.getValueFactory());
+					getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
+					return result;
+				} catch (RepositoryException e) {
+					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+				}
+			}
 			return this.replaceStatementSynchronized(subject, predicate, object);
 		}
 	}
