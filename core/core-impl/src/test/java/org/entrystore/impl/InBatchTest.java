@@ -265,14 +265,14 @@ public class InBatchTest extends AbstractCoreTest {
 	}
 
 	@Test
-	public void anAclChangeInABatchThatFailsStillReachesListeners() {
+	public void anAclChangeOfARolledBackBatchIsDiscardedWithItsEvent() {
 		Entry existing = duck.createLink(null, URI.create("http://example.com/existing"), null);
 		List<RepositoryEventObject> updates = new ArrayList<>();
 		RepositoryListener recording = recording(updates);
 		rm.registerListener(recording, RepositoryEvent.EntryUpdated);
 		try {
 			assertThrows(IllegalStateException.class, () -> rm.inBatch(() -> {
-				// committed on its own connection, so the rollback below does not undo it
+				// staged on the batch connection, so the rollback below undoes it
 				existing.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 				throw new IllegalStateException("boom");
 			}));
@@ -280,9 +280,9 @@ public class InBatchTest extends AbstractCoreTest {
 			rm.unregisterListener(recording, RepositoryEvent.EntryUpdated);
 		}
 
-		assertTrue(existing.getAllowedPrincipalsFor(AccessProperty.ReadMetadata).contains(pm.getGuestUser().getURI()));
-		assertTrue(updates.stream().anyMatch(event -> event.getSource() == existing),
-				"the Solr ACL fields follow this event, and the ACL change is stored");
+		assertFalse(existing.getAllowedPrincipalsFor(AccessProperty.ReadMetadata).contains(pm.getGuestUser().getURI()));
+		assertEquals(0, eventsAbout(existing, updates),
+				"a listener must not hear of an ACL change that was rolled back");
 	}
 
 	@Test

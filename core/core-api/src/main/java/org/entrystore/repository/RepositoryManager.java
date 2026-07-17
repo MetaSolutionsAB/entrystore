@@ -109,4 +109,30 @@ public interface RepositoryManager {
 
 	ValueFactory getValueFactory();
 
+	/**
+	 * Runs {@code work} inside a single repository transaction. Batch-aware operations reuse
+	 * this transaction's connection and defer their commit to the end of the batch: entry
+	 * creation, metadata {@code setGraph}, and the entry-info/ACL setters. List and resource
+	 * mutations such as {@code List.addChild}/{@code removeChild}/{@code setChildren} and the
+	 * {@code User} setters still open their own connection and commit individually — on a
+	 * rollback their changes remain committed.
+	 * <p>
+	 * The repository events of the batch-aware operations, and every event about an entry the
+	 * batch created, reach listeners once it commits, and not at all if it rolls back; the event
+	 * of a write that commits individually is dispatched at once. The transaction commits and
+	 * begins again every {@code entrystore.repository.batch.max-operations} batch-aware operations
+	 * (default 10 000), so a rollback discards only the work since the last such checkpoint.
+	 * <p>
+	 * The batch must stay on one thread: {@code work} must not fan repository mutations out to
+	 * worker threads and wait for them (the batch thread holds the repository monitor, so the
+	 * workers block in every setter while the batch waits on them — a permanent deadlock; to
+	 * combine batching with concurrency, run one batch per worker thread).
+	 * <p>
+	 * On any throwable from {@code work} the batch is rolled back and the throwable is rethrown
+	 * unchanged. A batch-aware operation that fails makes the batch rollback-only: it is rolled
+	 * back, and this method throws, even if {@code work} caught the failure (ENTRYSTORE-1089
+	 * exposes this on the interface so bulk imports do not need to cast to the implementation).
+	 */
+	void inBatch(Runnable work);
+
 }

@@ -51,6 +51,7 @@ public class Arguments {
 	int writers = 1;
 	boolean reindex = false;
 	boolean maintenance = false;
+	int listBenchmark = 0;
 	File storePath;
 	File solrPath;
 	File dataPath;
