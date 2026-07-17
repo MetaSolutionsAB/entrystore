@@ -195,6 +195,12 @@ entrystore.data.folder=/srv/entrystore/files/
 # scan per authorization decision.
 # entrystore.auth.group-cache=true
 
+# Principal-based Solr filter query that pre-excludes search hits the caller
+# provably cannot read, before the per-hit application-level ACL check runs
+# (default: true). The application-level check always remains as the deciding
+# backstop for every returned hit. Set to false to post-filter all hits.
+# entrystore.solr.acl-prefilter=true
+
 ## User-initiated sign-up (default: off)
 # entrystore.auth.signup=off
 # entrystore.auth.signup.email.subject=User sign-up request
