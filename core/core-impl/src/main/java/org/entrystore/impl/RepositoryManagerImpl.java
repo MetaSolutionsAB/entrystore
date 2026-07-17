@@ -137,6 +137,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 */
 	private final ThreadLocal<List<Runnable>> afterBatchCommitActions = new ThreadLocal<>();
 
+	private final ThreadLocal<Set<EntryImpl>> batchAclTouchedEntries = new ThreadLocal<>();
+
 	@Getter
 	private final Config configuration;
 
@@ -617,6 +619,30 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	/**
+	 * Records an entry whose ACL statements were staged on the active batch connection. Staged
+	 * ACL state must never be served to readers, so {@link #inBatch(Runnable)} invalidates each
+	 * recorded entry's ACL cache when the batch ends — after a commit the cache still holds
+	 * pre-batch state (or state a racing reader re-cached mid-batch), after a rollback nothing
+	 * staged may survive.
+	 */
+	void registerBatchAclInvalidation(EntryImpl entry) {
+		Set<EntryImpl> touched = batchAclTouchedEntries.get();
+		if (touched == null) {
+			touched = new HashSet<>();
+			batchAclTouchedEntries.set(touched);
+		}
+		touched.add(entry);
+	}
+
+	private void invalidateBatchAclCaches() {
+		Set<EntryImpl> touched = batchAclTouchedEntries.get();
+		if (touched != null) {
+			batchAclTouchedEntries.remove();
+			touched.forEach(EntryImpl::invalidateAclCache);
+		}
+	}
+
+	/**
 	 * Runs {@code work} inside a single repository transaction. All entry- and
 	 * metadata-mutation operations that normally open their own connection and commit
 	 * individually will reuse this transaction's connection and defer their commit to
@@ -624,10 +650,18 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * <p>
 	 * Trade-offs: a rollback discards every change made inside the batch, but does not
 	 * undo {@code SoftCache} updates that already happened — callers should treat the
-	 * cache as potentially stale after a failed batch. Repository events fire as the
-	 * inner operations run, so listeners may observe events for changes that the batch
-	 * later rolls back. Work registered via {@link #runAfterBatchCommit} is the exception:
-	 * it is held back until the commit lands and dropped entirely on rollback.
+	 * cache as potentially stale after a failed batch. Entry ACL caches are the exception:
+	 * batch-staged ACL updates are never published, and every touched entry's ACL cache is
+	 * invalidated when the batch ends (either outcome), so authorization only ever sees
+	 * committed state. Repository events fire as the inner operations run, so listeners
+	 * may observe events for changes that the batch later rolls back. Work registered via
+	 * {@link #runAfterBatchCommit} is likewise held back until the commit lands, and dropped
+	 * entirely on rollback.
+	 * <p>
+	 * The batch is bound to the calling thread ({@code work} must not fan repository
+	 * mutations out to other threads and wait for them: the batch thread holds the
+	 * repository monitor, so the workers block in every setter while the batch waits on
+	 * them — a permanent deadlock; run one batch per worker thread instead).
 	 *
 	 * @throws RuntimeException any throwable from {@code work}; the batch is rolled back
 	 *                          and the throwable is rethrown unchanged.
@@ -669,6 +703,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					} catch (RepositoryException closeEx) {
 						log.error("Batch connection close failed", closeEx);
 					}
+					invalidateBatchAclCaches();
 				}
 			}
 			if (committed && principalManager != null) {

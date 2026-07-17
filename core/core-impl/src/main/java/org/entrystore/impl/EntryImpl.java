@@ -60,10 +60,12 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.EnumMap;
 import java.util.GregorianCalendar;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -940,33 +942,50 @@ public class EntryImpl implements Entry {
 	}
 
 	public void setAllowedPrincipalsFor(AccessProperty prop, Set<URI> principals) {
+		setAllowedPrincipals(Map.of(prop, principals));
+	}
+
+	/**
+	 * Replaces the principals of every given access property in one transaction; properties not in the map keep
+	 * theirs. Inside {@link RepositoryManagerImpl#inBatch} the change joins the batch transaction.
+	 */
+	void setAllowedPrincipals(Map<AccessProperty, Set<URI>> aclPerProperty) {
 		checkAdministerRights();
-		Set<IRI> principalIRIs = toIRIs(principals);
-		updateAcl(prop, principals, (rc, subject, predicate) -> {
-			rc.remove(subject, predicate, null, entryURI);
-			addPrincipals(rc, subject, predicate, principalIRIs);
+		Map<AccessProperty, Set<IRI>> principalIRIs = toIRIs(aclPerProperty);
+		Map<AccessProperty, Set<URI>> cacheAfter = new EnumMap<>(AccessProperty.class);
+		aclPerProperty.forEach((prop, principals) -> cacheAfter.put(prop, Set.copyOf(principals)));
+		updateAcl(aclPerProperty.keySet(), cacheAfter, rc -> {
+			for (Map.Entry<AccessProperty, Set<IRI>> acl : principalIRIs.entrySet()) {
+				IRI subject = getAccessSubject(acl.getKey());
+				IRI predicate = getAccessPredicate(acl.getKey());
+				rc.remove(subject, predicate, null, entryURI);
+				addPrincipals(rc, subject, predicate, acl.getValue());
+			}
 			return null;
 		});
 	}
 
 	public void addAllowedPrincipalsFor(AccessProperty prop, URI principal) {
 		checkAdministerRights();
-		appendAllowedPrincipals(prop, Set.of(principal));
+		appendAllowedPrincipals(Map.of(prop, Set.of(principal)));
 	}
 
 	/**
-	 * Adds principals without an Administer check of its own. {@link #addAllowedPrincipalsFor} checks
-	 * before delegating here; {@link ContextImpl#copyACL} cannot, since during creation the entry has
-	 * no ACL yet and the check would fall back to the context ACL, denying the list-only writer that
-	 * copyACL exists to admit.
+	 * Adds principals to every given access property in one transaction, without an Administer check of its own.
+	 * {@link #addAllowedPrincipalsFor} checks before delegating here; {@link ContextImpl#copyACL} cannot, since
+	 * during creation the entry has no ACL yet and the check would fall back to the context ACL, denying the
+	 * list-only writer that copyACL exists to admit.
 	 */
-	void appendAllowedPrincipals(AccessProperty prop, Set<URI> principals) {
-		if (principals.isEmpty()) {
+	void appendAllowedPrincipals(Map<AccessProperty, Set<URI>> aclPerProperty) {
+		Map<AccessProperty, Set<IRI>> principalIRIs = toIRIs(aclPerProperty);
+		principalIRIs.values().removeIf(Set::isEmpty);
+		if (principalIRIs.isEmpty()) {
 			return;
 		}
-		Set<IRI> principalIRIs = toIRIs(principals);
-		updateAcl(prop, null, (rc, subject, predicate) -> {
-			addPrincipals(rc, subject, predicate, principalIRIs);
+		updateAcl(principalIRIs.keySet(), Map.of(), rc -> {
+			for (Map.Entry<AccessProperty, Set<IRI>> acl : principalIRIs.entrySet()) {
+				addPrincipals(rc, getAccessSubject(acl.getKey()), getAccessPredicate(acl.getKey()), acl.getValue());
+			}
 			return null;
 		});
 	}
@@ -974,7 +993,9 @@ public class EntryImpl implements Entry {
 	public boolean removeAllowedPrincipalsFor(AccessProperty prop, URI principal) {
 		checkAdministerRights();
 		IRI principalIRI = this.repository.getValueFactory().createIRI(principal.toString());
-		return updateAcl(prop, null, (rc, subject, predicate) -> {
+		return updateAcl(Set.of(prop), Map.of(), rc -> {
+			IRI subject = getAccessSubject(prop);
+			IRI predicate = getAccessPredicate(prop);
 			boolean listed = rc.hasStatement(subject, predicate, principalIRI, false, entryURI);
 			rc.remove(subject, predicate, principalIRI, entryURI);
 			return listed;
@@ -982,9 +1003,12 @@ public class EntryImpl implements Entry {
 	}
 
 	/** Converted before the transaction, so a malformed principal fails as bad input rather than as a store error. */
-	private Set<IRI> toIRIs(Set<URI> principals) {
+	private Map<AccessProperty, Set<IRI>> toIRIs(Map<AccessProperty, Set<URI>> aclPerProperty) {
 		ValueFactory vf = this.repository.getValueFactory();
-		return principals.stream().map(principal -> vf.createIRI(principal.toString())).collect(Collectors.toSet());
+		Map<AccessProperty, Set<IRI>> result = new EnumMap<>(AccessProperty.class);
+		aclPerProperty.forEach((prop, principals) -> result.put(prop,
+				principals.stream().map(principal -> vf.createIRI(principal.toString())).collect(Collectors.toSet())));
+		return result;
 	}
 
 	private void addPrincipals(RepositoryConnection rc, IRI subject, IRI predicate, Set<IRI> principals) throws RepositoryException {
@@ -996,24 +1020,36 @@ public class EntryImpl implements Entry {
 	/** One ACL change against a connection already in a transaction that {@link #updateAcl} commits or rolls back. */
 	@FunctionalInterface
 	private interface AclUpdate<T> {
-		T apply(RepositoryConnection rc, IRI subject, IRI predicate) throws RepositoryException;
+		T apply(RepositoryConnection rc) throws RepositoryException;
 	}
 
 	/**
-	 * Runs one ACL change in a transaction under the repository monitor.
+	 * Runs one ACL change in a transaction under the repository monitor, or on the connection of an active
+	 * {@link RepositoryManagerImpl#inBatch}, whose commit or rollback then decides the outcome.
 	 *
-	 * @param cacheAfter what {@link #getAllowedPrincipalsFor} may answer once the change is committed,
-	 * or null to make it reload from the store.
+	 * @param touched the access properties the change writes
+	 * @param cacheAfter what {@link #getAllowedPrincipalsFor} may answer once the change is committed, per touched
+	 * property; a touched property without a value reloads from the store
 	 */
-	private <T> T updateAcl(AccessProperty prop, Set<URI> cacheAfter, AclUpdate<T> update) {
-		Set<URI> cached = cacheAfter == null ? null : Set.copyOf(cacheAfter);
+	private <T> T updateAcl(Set<AccessProperty> touched, Map<AccessProperty, Set<URI>> cacheAfter, AclUpdate<T> update) {
 		try {
 			synchronized (this.repository) {
+				RepositoryConnection batchRc = this.repositoryManager.getActiveBatchConnection();
+				if (batchRc != null) {
+					// staged sets must never be published, as authorization reads the cache directly; the batch end
+					// invalidates this entry's ACL cache whether it commits or rolls back
+					this.repositoryManager.registerBatchAclInvalidation(this);
+					try {
+						return update.apply(batchRc);
+					} catch (Exception e) {
+						throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+					}
+				}
 				try (RepositoryConnection rc = this.repository.getConnection()) {
 					rc.begin();
 					T result;
 					try {
-						result = update.apply(rc, getAccessSubject(prop), getAccessPredicate(prop));
+						result = update.apply(rc);
 						rc.commit();
 					} catch (Exception e) {
 						rollbackQuietly(rc, e);
@@ -1023,7 +1059,9 @@ public class EntryImpl implements Entry {
 					// answer; one that loaded before the commit and stores after this line still can, and the
 					// stale answer then survives until the next ACL write on this entry
 					this.hasExplicitAcl = null;
-					setCachedAllowedPrincipalsFor(prop, cached);
+					for (AccessProperty prop : touched) {
+						setCachedAllowedPrincipalsFor(prop, cacheAfter.get(prop));
+					}
 					return result;
 				}
 			}
@@ -1031,6 +1069,18 @@ public class EntryImpl implements Entry {
 			log.error(e.getMessage(), e);
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
+	}
+
+	/**
+	 * Drops every cached ACL view so the next read reloads committed repository state. Used by
+	 * {@link RepositoryManagerImpl#inBatch} for entries whose ACL statements were staged on a
+	 * batch connection.
+	 */
+	void invalidateAclCache() {
+		for (AccessProperty prop : AccessProperty.values()) {
+			setCachedAllowedPrincipalsFor(prop, null);
+		}
+		this.hasExplicitAcl = null;
 	}
 
 	public boolean hasAllowedPrincipals() {
@@ -1862,6 +1912,19 @@ public class EntryImpl implements Entry {
 
 	private boolean replaceStatement(IRI subject, IRI predicate, Value object) {
 		synchronized (this.repository) {
+			// C12 (ENTRYSTORE-1089): inside a batch the setter joins the batch transaction —
+			// commit/rollback belong to inBatch; the event fires immediately like doSetGraph does.
+			RepositoryConnection batchRc = this.repositoryManager.getActiveBatchConnection();
+			if (batchRc != null) {
+				try {
+					boolean result = replaceStatementSynchronized(subject, predicate, object, batchRc,
+							this.repository.getValueFactory());
+					getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
+					return result;
+				} catch (RepositoryException e) {
+					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+				}
+			}
 			return this.replaceStatementSynchronized(subject, predicate, object);
 		}
 	}

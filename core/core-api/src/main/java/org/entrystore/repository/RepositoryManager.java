@@ -109,4 +109,23 @@ public interface RepositoryManager {
 
 	ValueFactory getValueFactory();
 
+	/**
+	 * Runs {@code work} inside a single repository transaction. Batch-aware operations reuse
+	 * this transaction's connection and defer their commit to the end of the batch: entry
+	 * creation, metadata {@code setGraph}, and the entry-info/ACL setters. List and resource
+	 * mutations such as {@code List.addChild}/{@code removeChild}/{@code setChildren} and the
+	 * {@code User} setters still open their own connection and commit individually — on a
+	 * rollback their changes remain committed.
+	 * <p>
+	 * The batch must stay on one thread: {@code work} must not fan repository mutations out to
+	 * worker threads and wait for them (the batch thread holds the repository monitor, so the
+	 * workers block in every setter while the batch waits on them — a permanent deadlock; to
+	 * combine batching with concurrency, run one batch per worker thread).
+	 * <p>
+	 * On any throwable from {@code work} the batch is rolled back and the throwable is rethrown
+	 * unchanged (ENTRYSTORE-1089 exposes this on the interface so bulk imports do not need to
+	 * cast to the implementation).
+	 */
+	void inBatch(Runnable work);
+
 }
