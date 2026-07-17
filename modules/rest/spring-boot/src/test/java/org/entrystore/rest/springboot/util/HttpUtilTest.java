@@ -107,6 +107,14 @@ class HttpUtilTest {
 	}
 
 	@Test
+	void determineMediaType_formatWithParameters_preservedVerbatim() {
+		// Pins the Javadoc contract: the format branch keeps media-type parameters, unlike the
+		// content-type branch which strips them.
+		assertEquals("text/turtle;charset=UTF-8", HttpUtil.determineMediaType(
+				MediaType.parseMediaType("text/turtle;charset=UTF-8"), "application/json"));
+	}
+
+	@Test
 	void determineMediaType_nullFormat_fallsBackToNormalizedContentType() {
 		assertEquals("application/json", HttpUtil.determineMediaType(null, "application/json; charset=UTF-8"));
 	}

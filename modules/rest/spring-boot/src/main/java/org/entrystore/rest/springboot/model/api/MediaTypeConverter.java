@@ -25,8 +25,9 @@ import org.springframework.stereotype.Component;
 /**
  * Binds media-type request parameters (e.g. {@code format}, {@code rdfFormat}) to {@link MediaType}.
  * Media types should be sent properly encoded — i.e. '+' as %2B — but the non-encoded form is also
- * supported: the servlet layer decodes an unencoded '+' to a space, which is restored here. Note that
- * every space is rewritten, so a media type containing a properly %20-encoded space is altered too.
+ * supported: the servlet layer decodes an unencoded '+' to a space, which is restored on a retry when
+ * the value does not parse as-is. Parse-first keeps properly encoded values (e.g. a %20-encoded space
+ * before a parameter) intact.
  *
  * <p>Blank input converts to {@code null} (parameter treated as absent), matching the convention of
  * Spring's built-in String converters. Unparseable input throws {@link InvalidMediaTypeException} and
@@ -43,6 +44,12 @@ public class MediaTypeConverter implements Converter<String, MediaType> {
 		if (input.isBlank()) {
 			return null;
 		}
-		return MediaType.parseMediaType(input.trim().replace(' ', '+'));
+		String trimmed = input.trim();
+		try {
+			return MediaType.parseMediaType(trimmed);
+		} catch (InvalidMediaTypeException e) {
+			// an unencoded '+' arrives as a space after servlet decoding; retry with it restored
+			return MediaType.parseMediaType(trimmed.replace(' ', '+'));
+		}
 	}
 }

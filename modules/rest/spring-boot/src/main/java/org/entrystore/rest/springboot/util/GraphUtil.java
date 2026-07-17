@@ -324,6 +324,9 @@ public class GraphUtil {
 	 * Resolves the effective RDF media type for a request: an explicit format parameter wins (validated
 	 * and normalized — lowercased, legacy {@code text/rdf+n3} mapped to {@code text/n3}), otherwise
 	 * content negotiation over the Accept header with the RDF default.
+	 *
+	 * @throws CustomResponseException with status 406 (Not Acceptable) if the format parameter is not a
+	 *         supported RDF media type, or if the Accept header is malformed or matches no supported type
 	 */
 	public static String resolveRdfMediaType(MediaType format, String acceptHeader) {
 		if (format != null) {

@@ -50,6 +50,13 @@ class MediaTypeConverterTest {
 	}
 
 	@Test
+	void convert_parameterizedMediaTypeWithSpace_notCorrupted() {
+		// Parse-first: a properly %20-encoded space before a parameter must not be rewritten to '+'.
+		assertEquals(MediaType.parseMediaType("text/turtle;charset=UTF-8"),
+				converter.convert("text/turtle; charset=UTF-8"));
+	}
+
+	@Test
 	void convert_blank_returnsNullSoParamIsTreatedAsAbsent() {
 		// Matches the convention of Spring's built-in String converters: an empty format= param binds
 		// to null and the endpoint falls back to Accept-header negotiation instead of failing.
