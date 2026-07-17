@@ -16,6 +16,8 @@
 
 package org.entrystore.repository.util;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
 import org.apache.solr.client.solrj.RemoteSolrException;
 import org.apache.solr.client.solrj.SolrClient;
@@ -48,6 +50,7 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.SearchIndex;
 import org.entrystore.User;
 import org.entrystore.impl.LocalMetadataWrapper;
+import org.entrystore.impl.PrincipalManagerImpl;
 import org.entrystore.impl.RegularContext;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryManager;
@@ -60,6 +63,7 @@ import javax.xml.datatype.XMLGregorianCalendar;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -84,6 +88,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 import static java.lang.Thread.interrupted;
 
@@ -159,6 +164,22 @@ public class SolrSearchIndex implements SearchIndex {
 	private final int commitWithin;
 
 	private final int commitWithinMax;
+
+	/** A4 (ENTRYSTORE-1088): principal-based fq pre-filter for search ACLs, see sendQuery. */
+	private final boolean aclPreFilter;
+
+	/**
+	 * A4 (ENTRYSTORE-1088): resolving the caller's administered contexts scans every context's
+	 * ACL — O(contexts) repository work per search request. ACL updates fire no repository
+	 * events (there is nothing to hook a listener on), so a short TTL bounds the staleness
+	 * instead — the same staleness class as the Solr index lag the pre-filter already accepts.
+	 * A newly granted context admin may miss results from that context for up to the TTL; the
+	 * app-level backstop in sendQuery is unaffected.
+	 */
+	private final Cache<URI, List<String>> administeredContextsCache = Caffeine.newBuilder()
+			.expireAfterWrite(Duration.ofSeconds(30))
+			.maximumSize(1000)
+			.build();
 
 	// A1 startup gate: building documents loads entries via the ContextManager, and doing that
 	// while RepositoryManagerImpl is still initializing races against init state that is not
@@ -513,6 +534,7 @@ public class SolrSearchIndex implements SearchIndex {
 		defaultSortLang = rm.getConfiguration().getString(Settings.SOLR_DEFAULT_SORTING_LANG);
 		commitWithin = rm.getConfiguration().getInt(Settings.SOLR_COMMIT_WITHIN, SOLR_COMMIT_WITHIN_DEFAULT);
 		commitWithinMax = rm.getConfiguration().getInt(Settings.SOLR_COMMIT_WITHIN_MAX, SOLR_COMMIT_WITHIN_MAX_DEFAULT);
+		aclPreFilter = rm.getConfiguration().getBoolean(Settings.SOLR_ACL_PREFILTER, true);
 		projectTypePredicate = valueFactory.createIRI("http://entryscape.com/terms/projectType");
 		if (related) {
 			List<String> relPropsSetting = rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<>());
@@ -1526,6 +1548,135 @@ public class SolrSearchIndex implements SearchIndex {
 		return hits;
 	}
 
+	/**
+	 * A4 (ENTRYSTORE-1088): resolves the caller's principal set and administered contexts and
+	 * builds the ACL pre-filter query for them. Runs under a temporary admin switch — principal
+	 * and context-ACL resolution must not be hindered by the caller's own rights (same pattern
+	 * as PrincipalManagerImpl.isUserAuthorized). Returns null when no filtering applies
+	 * (authorization off, admin caller, admin-group member).
+	 */
+	private String buildAclPreFilterQueryForCaller() {
+		if (!rm.isCheckForAuthorization()) {
+			return null;
+		}
+		PrincipalManager pm = rm.getPrincipalManager();
+		URI currentUserURI = pm.getAuthenticatedUserURI();
+		if (currentUserURI == null) {
+			currentUserURI = pm.getGuestUser().getURI();
+		}
+		if (currentUserURI.equals(pm.getAdminUser().getURI())) {
+			return null;
+		}
+
+		URI savedUserURI = pm.getAuthenticatedUserURI();
+		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+
+			User user = pm.getUser(currentUserURI);
+			if (user != null && pm.getAdminGroup().isMember(user)) {
+				return null;
+			}
+
+			// The caller's principals, mirroring PrincipalManagerImpl.hasAccess: a guest grant
+			// admits everyone, the users group admits every non-guest, plus the caller itself
+			// and its resolved groups.
+			Set<URI> principals = new LinkedHashSet<>();
+			principals.add(currentUserURI);
+			principals.add(pm.getGuestUser().getURI());
+			if (!currentUserURI.equals(pm.getGuestUser().getURI())) {
+				principals.add(pm.getUserGroup().getURI());
+			}
+			principals.addAll(((PrincipalManagerImpl) pm).getGroupUrisCached(currentUserURI));
+
+			// Contexts the caller administers: a context admin reads every entry of the context
+			// regardless of entry-level ACLs (the owner bypass in isUserAuthorized), so those
+			// contexts must never be pre-filtered away. Cached per caller — see
+			// administeredContextsCache for the staleness contract.
+			List<String> administeredContexts = administeredContextsCache.get(currentUserURI,
+					uri -> resolveAdministeredContexts(principals));
+
+			return buildAclPreFilterQuery(currentUserURI, principals, administeredContexts);
+		} finally {
+			pm.setAuthenticatedUserURI(savedUserURI);
+		}
+	}
+
+	private List<String> resolveAdministeredContexts(Set<URI> principals) {
+		List<String> administeredContexts = new ArrayList<>();
+		ContextManager cm = rm.getContextManager();
+		for (URI contextEntryURI : cm.getEntries()) {
+			Entry contextEntry = cm.getByEntryURI(contextEntryURI);
+			if (contextEntry == null) {
+				continue;
+			}
+			Set<URI> contextAdmins = contextEntry.getAllowedPrincipalsFor(AccessProperty.Administer);
+			if (!Collections.disjoint(contextAdmins, principals)) {
+				administeredContexts.add(contextEntry.getResourceURI().toString());
+			}
+		}
+		return administeredContexts;
+	}
+
+	/**
+	 * Above this many boolean clauses the fq risks Solr's {@code maxBooleanClauses} limit
+	 * (default 1024) and the request-line limit for GET-dispatched queries — callers in
+	 * hundreds of groups or administering hundreds of contexts would see their searches
+	 * hard-fail. The pre-filter is skipped for them instead; the backstop still decides.
+	 */
+	static final int MAX_PREFILTER_CLAUSES = 512;
+
+	/**
+	 * A4 (ENTRYSTORE-1088): the pre-filter keeps every document the application-level check
+	 * could possibly grant and excludes only the provable deny case — entries carrying explicit
+	 * read-relevant entry ACLs the caller does not hold. It may over-include (the per-hit check
+	 * in sendQuery stays the decider for every returned hit) and, modulo the caveat below, must
+	 * not under-include:
+	 * <ul>
+	 * <li>{@code public:true} — guest-readable incl. context inheritance, computed at index time;</li>
+	 * <li>the caller's principals against {@code acl.metadata.r/rw} and {@code acl.admin}
+	 * (WriteMetadata implies ReadMetadata; resource ACLs are irrelevant to ReadMetadata);</li>
+	 * <li>every entry of a context the caller administers;</li>
+	 * <li>the caller's own entry — {@code resource:callerUri} mirrors the self-access grant in
+	 * PrincipalManagerImpl.isUserAuthorized (a user reads its own user entry regardless of
+	 * entry ACLs);</li>
+	 * <li>entries with no read-relevant entry-level ACL — their access is decided by context
+	 * fallbacks that are not indexed per entry.</li>
+	 * </ul>
+	 * Staleness caveat: the fq evaluates ACL fields as last indexed, so a grant on an
+	 * already-indexed entry is invisible to search until the asynchronous Solr update commits
+	 * (commitWithin-bounded), and the administered-contexts input is TTL-cached — both windows
+	 * are recall-only; nothing unauthorized is ever returned.
+	 * <p>
+	 * References/LinkReferences need no special clause: the backstop requires ReadMetadata on the
+	 * referring entry itself first (ContextManagerImpl.getEntry checks it before the wrapper
+	 * branch ever consults the referenced target), which is exactly what the clauses above model.
+	 *
+	 * @return the fq, or {@code null} when the clause count exceeds {@link #MAX_PREFILTER_CLAUSES}
+	 * (pre-filter skipped, app-level backstop remains the sole decider)
+	 */
+	static String buildAclPreFilterQuery(URI callerUri, Set<URI> principals, Collection<String> administeredContexts) {
+		int clauses = principals.size() * 3 + administeredContexts.size() + 5;
+		if (clauses > MAX_PREFILTER_CLAUSES) {
+			return null;
+		}
+		String principalsClause = principals.stream()
+				.map(p -> ClientUtils.escapeQueryChars(p.toString()))
+				.collect(Collectors.joining(" "));
+		StringBuilder fq = new StringBuilder();
+		fq.append("public:true");
+		fq.append(" OR acl.metadata.r:(").append(principalsClause).append(')');
+		fq.append(" OR acl.metadata.rw:(").append(principalsClause).append(')');
+		fq.append(" OR acl.admin:(").append(principalsClause).append(')');
+		if (!administeredContexts.isEmpty()) {
+			fq.append(" OR context:(").append(administeredContexts.stream()
+					.map(ClientUtils::escapeQueryChars)
+					.collect(Collectors.joining(" "))).append(')');
+		}
+		fq.append(" OR resource:").append(ClientUtils.escapeQueryChars(callerUri.toString()));
+		fq.append(" OR (*:* -acl.admin:[* TO *] -acl.metadata.r:[* TO *] -acl.metadata.rw:[* TO *])");
+		return fq.toString();
+	}
+
 	public QueryResult sendQuery(SolrQuery query) throws SolrException {
 		Set<Entry> result = new LinkedHashSet<>();
 		long hits = -1;
@@ -1534,6 +1685,12 @@ public class SolrSearchIndex implements SearchIndex {
 		int offset = query.getStart();
 		List<FacetField> facetFields = new ArrayList<>();
 		query.setIncludeScore(true);
+		if (aclPreFilter) {
+			String aclFilterQuery = buildAclPreFilterQueryForCaller();
+			if (aclFilterQuery != null) {
+				query.addFilterQuery(aclFilterQuery);
+			}
+		}
 		int resultFillIteration = 0;
 		do {
 			if (resultFillIteration > 0) {
