@@ -57,6 +57,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -391,7 +392,7 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 		doAnswer(invocation -> {
 			invocation.getArgument(1, RepositoryConnection.class).close();
 			throw new org.eclipse.rdf4j.repository.RepositoryException("simulated write failure");
-		}).when(spied).saveChildren(any(), any(RepositoryConnection.class));
+		}).when(spied).removeChildStatement(any(), any(RepositoryConnection.class), anyInt());
 		RecordingListener recorder = RecordingListener.register((RepositoryManagerImpl) rm);
 		try {
 			assertFalse(spied.removeChild(userEntry.getEntryURI()), "the failed removal must be reported");
