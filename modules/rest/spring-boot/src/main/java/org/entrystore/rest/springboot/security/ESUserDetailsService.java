@@ -16,22 +16,33 @@
 
 package org.entrystore.rest.springboot.security;
 
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
+import org.entrystore.repository.RepositoryListener;
+import org.entrystore.repository.RepositoryManager;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.springboot.service.UserService;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+
 import java.net.URI;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * ESUserDetailsService is a Spring Security {@link UserDetailsService} implementation
@@ -63,9 +74,88 @@ public class ESUserDetailsService implements UserDetailsService {
 
 	private final PrincipalManager pm;
 	private final UserService userService;
+	private final RepositoryManager repositoryManager;
+
+	/**
+	 * B4 (ENTRYSTORE-1090): ReloadUserPropertiesFilter re-resolves the user on every
+	 * authenticated request; this short-TTL cache amortises the RDF4J lookups. The cached value
+	 * is the immutable identity payload only — a fresh {@link ESUserSessionDetails} wrapper is
+	 * minted per call because callers mutate its session info. Any repository event on a User
+	 * or Group entry (disable, password change, delete, group-membership change — they all fire
+	 * events; Group events matter because {@code ROLE_ADMIN} derives from admin-group
+	 * membership) clears the cache, so the TTL is a safety net, not the staleness bound.
+	 */
+	private record CachedUserDetails(UserDetails userDetails, User user) {
+	}
+
+	/**
+	 * Caffeine bounds the cache (an unbounded map would pin a core {@link User} per principal
+	 * that ever authenticated) and expires entries after the TTL without waiting for a same-key
+	 * lookup. Built in {@link #init()} because the TTL is injected.
+	 */
+	private Cache<String, CachedUserDetails> userDetailsCache;
+
+	/**
+	 * Guards the load→put race the same way {@code PrincipalManagerImpl.getGroupUrisCached}
+	 * does: every invalidation bumps the epoch, and a load only publishes its result if no
+	 * invalidation happened while it read the repository — otherwise a disable or password
+	 * change firing mid-load would be re-parked for up to the TTL.
+	 */
+	private final AtomicLong cacheEpoch = new AtomicLong();
+
+	@Value("${entrystore.auth.userdetails-cache.ttl-seconds:5}")
+	private long cacheTtlSeconds;
+
+	@PostConstruct
+	void init() {
+		userDetailsCache = Caffeine.newBuilder()
+				.expireAfterWrite(Duration.ofSeconds(Math.max(cacheTtlSeconds, 1)))
+				.maximumSize(10_000)
+				.build();
+		RepositoryListener invalidator = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				if (eventObject.getSource() instanceof Entry source
+						&& (GraphType.User.equals(source.getGraphType())
+								|| GraphType.Group.equals(source.getGraphType()))) {
+					cacheEpoch.incrementAndGet();
+					userDetailsCache.invalidateAll();
+				}
+			}
+		};
+		repositoryManager.registerListener(invalidator, RepositoryEvent.EntryUpdated);
+		repositoryManager.registerListener(invalidator, RepositoryEvent.ResourceUpdated);
+		// setChildren (the REST group-membership replace) fires RelationsUpdated on the member
+		// User entries and ResourceUpdated on the Group — cover both so admin de-elevation
+		// evicts immediately instead of riding out the TTL.
+		repositoryManager.registerListener(invalidator, RepositoryEvent.RelationsUpdated);
+		repositoryManager.registerListener(invalidator, RepositoryEvent.EntryDeleted);
+	}
+
+	/**
+	 * Evicts a principal's cached identity snapshot. Called on logout so a subsequent login
+	 * re-reads the repository even within the TTL window. Accepts either key form (principal
+	 * name or resource URI) — the two forms are cached under separate keys.
+	 */
+	public void evictCachedUserDetails(String username) {
+		if (username != null) {
+			cacheEpoch.incrementAndGet();
+			userDetailsCache.invalidate(username.toLowerCase());
+		}
+	}
 
 	@Override
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+		String cacheKey = username.toLowerCase();
+		if (cacheTtlSeconds > 0) {
+			CachedUserDetails cached = userDetailsCache.getIfPresent(cacheKey);
+			if (cached != null) {
+				return new ESUserSessionDetails(cached.userDetails(), cached.user(),
+						SessionInfo.builder().userName(cacheKey).build());
+			}
+		}
+		log.debug("Loading user details from repository for '{}'", username);
+		final long epochBeforeLoad = cacheEpoch.get();
 
 		return PrincipalManagerUtil.runAsAdmin(pm, () -> {
 			Entry userEntry;
@@ -79,7 +169,14 @@ public class ESUserDetailsService implements UserDetailsService {
 				if (user.getSaltedHashedSecret() != null) {
 					SessionInfo.SessionInfoBuilder sessionInfo = SessionInfo.builder()
 							.userName(username.toLowerCase());
-					return mapESUserToUserSessionDetails(user, sessionInfo.build());
+					UserDetails identity = buildIdentity(user);
+					if (cacheTtlSeconds > 0 && cacheEpoch.get() == epochBeforeLoad) {
+						// Only publish if no invalidation raced the repository read — a stale
+						// identity put after a concurrent disable/password change would
+						// otherwise survive until the TTL.
+						userDetailsCache.put(cacheKey, new CachedUserDetails(identity, user));
+					}
+					return new ESUserSessionDetails(identity, user, sessionInfo.build());
 				} else {
 					log.error("No secret found for user: '{}'", username);
 				}
@@ -154,15 +251,16 @@ public class ESUserDetailsService implements UserDetailsService {
 		}
 	}
 
-	private UserDetails mapESUserToUserSessionDetails(User user, SessionInfo sessionInfo) {
-
-		UserDetails userDetails = org.springframework.security.core.userdetails.User
+	/**
+	 * Builds the immutable Spring Security identity snapshot for a user. This is the value the
+	 * TTL cache stores; the mutable {@link ESUserSessionDetails} wrapper is minted per call.
+	 */
+	private UserDetails buildIdentity(User user) {
+		return org.springframework.security.core.userdetails.User
 				.withUsername(user.getEntry().getResourceURI().toString())
 				.password(user.getSaltedHashedSecret())
 				.disabled(user.isDisabled())
 				.roles(userService.isAdmin(user) ? UserAuthRole.ADMIN.name() : UserAuthRole.USER.name())
 				.build();
-
-		return new ESUserSessionDetails(userDetails, user, sessionInfo);
 	}
 }

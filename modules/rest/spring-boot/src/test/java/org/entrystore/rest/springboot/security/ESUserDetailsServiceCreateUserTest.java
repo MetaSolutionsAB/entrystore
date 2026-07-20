@@ -20,6 +20,7 @@ import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.repository.RepositoryManager;
 import org.entrystore.rest.springboot.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,9 @@ class ESUserDetailsServiceCreateUserTest {
 	private UserService userService;
 
 	@Mock
+	private RepositoryManager repositoryManager;
+
+	@Mock
 	private User adminUser;
 
 	@Mock
@@ -63,7 +67,7 @@ class ESUserDetailsServiceCreateUserTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new ESUserDetailsService(pm, userService);
+		service = new ESUserDetailsService(pm, userService, repositoryManager);
 		when(pm.getAuthenticatedUserURI()).thenReturn(CURRENT_USER_URI);
 		when(pm.getAdminUser()).thenReturn(adminUser);
 		when(adminUser.getURI()).thenReturn(ADMIN_URI);
