@@ -27,6 +27,15 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class EntryStoreApplicationSpringBoot {
 
+	static {
+		// Without this, HttpURLConnection silently drops the Host header override that
+		// SsrfValidator.openPinnedConnection relies on for virtual hosting (connections are pinned
+		// to the resolved IP, so upstreams would receive the raw IP as Host). Must be set before
+		// the HttpURLConnection class is initialized. The integration tests only mask the gap
+		// because BaseSpec sets the same property in the shared test JVM.
+		System.setProperty("sun.net.http.allowRestrictedHeaders", "true");
+	}
+
 	static void main(String[] args) {
 		SpringApplication.run(EntryStoreApplicationSpringBoot.class, args);
 	}

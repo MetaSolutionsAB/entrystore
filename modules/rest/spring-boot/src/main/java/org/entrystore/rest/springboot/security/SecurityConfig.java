@@ -84,6 +84,7 @@ import java.util.Optional;
 public class SecurityConfig {
 
 	private final CheckUsernamePasswordFilter checkUsernamePasswordFilter;
+	private final ESUserDetailsService userDetailsService;
 	private final IgnoreAuthFilter ignoreAuthFilter;
 	private final SetUserURIAfterAuthenticationFilter setUserURIAfterAuthenticationFilter;
 	private final ReloadUserPropertiesFilter reloadUserPropertiesFilter;
@@ -207,9 +208,18 @@ public class SecurityConfig {
 						// CsrfRequestMatcher then requires a valid X-XSRF-TOKEN on the POST.
 						.logoutRequestMatcher(PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/auth/logout"))
 						.deleteCookies("auth_token")
-						.logoutSuccessHandler((_, response, _) ->
-								response.setStatus(HttpStatus.NO_CONTENT.value())
-						)
+						.logoutSuccessHandler((_, response, authentication) -> {
+							// A logged-out identity must not be served from the UserDetails cache
+							// to a follow-up login within the TTL window (ENTRYSTORE-1090 B4).
+							if (authentication != null
+									&& authentication.getPrincipal() instanceof ESUserSessionDetails esUser) {
+								userDetailsService.evictCachedUserDetails(esUser.getUsername());
+								if (esUser.getSessionInfo() != null) {
+									userDetailsService.evictCachedUserDetails(esUser.getSessionInfo().userName());
+								}
+							}
+							response.setStatus(HttpStatus.NO_CONTENT.value());
+						})
 						.permitAll())
 				.addFilterBefore(checkUsernamePasswordFilter, UsernamePasswordAuthenticationFilter.class)
 				.addFilterAfter(setUserURIAfterAuthenticationFilter, AnonymousAuthenticationFilter.class)

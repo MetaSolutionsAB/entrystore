@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.springboot.security;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.repository.config.Settings;
@@ -25,9 +27,7 @@ import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SNIHostName;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
@@ -61,6 +61,13 @@ public class SsrfValidator {
 	private Origin rowstoreOrigin;
 
 	private static final Set<String> ALLOWED_SCHEMES = Set.of("http", "https");
+
+	// One factory instance per upstream host: the JDK keys pooled HTTPS connections on
+	// (destination, SSLSocketFactory instance), so a factory created per connection would
+	// prevent HTTPS proxy connections from ever being reused (ENTRYSTORE-1090 D6).
+	// Bounded because host names are caller-controlled.
+	private final Cache<String, SSLSocketFactory> sniFactoryPerHost =
+			Caffeine.newBuilder().maximumSize(1024).build();
 
 	private static final List<Pattern> BLACKLIST_REGEX = List.of(
 			Pattern.compile("^localhost$"),                                   // localhost
@@ -349,12 +356,17 @@ public class SsrfValidator {
 	}
 
 	private void configureSsl(HttpsURLConnection httpsConn, String originalHost) {
-		SSLSocketFactory defaultFactory = httpsConn.getSSLSocketFactory();
-		httpsConn.setSSLSocketFactory(new SniSSLSocketFactory(defaultFactory, originalHost));
+		httpsConn.setSSLSocketFactory(sniFactoryPerHost.get(originalHost,
+				host -> new SniSSLSocketFactory(httpsConn.getSSLSocketFactory(), host)));
 
-		HostnameVerifier defaultVerifier = httpsConn.getHostnameVerifier();
+		// The TLS handshake already verified the certificate against the original hostname
+		// (endpoint identification set in SniSSLSocketFactory). This verifier fires only because
+		// the URL host is the pinned IP, which never matches the certificate — so re-check the
+		// peer-host binding and fail closed for any socket that did not handshake as the original
+		// host. Delegating to the default HttpsURLConnection verifier here would reject
+		// everything: it performs no certificate matching of its own.
 		httpsConn.setHostnameVerifier((hostname, session) ->
-				defaultVerifier.verify(originalHost, session));
+				originalHost.equalsIgnoreCase(session.getPeerHost()));
 	}
 
 	void setProxyHostWhitelist(Set<String> proxyHostWhitelist) {
@@ -367,14 +379,6 @@ public class SsrfValidator {
 
 	void setRowstoreOrigin(Origin rowstoreOrigin) {
 		this.rowstoreOrigin = rowstoreOrigin;
-	}
-
-	private static void setSniHostname(Socket socket, String hostname) {
-		if (socket instanceof SSLSocket sslSocket) {
-			SSLParameters params = sslSocket.getSSLParameters();
-			params.setServerNames(List.of(new SNIHostName(hostname)));
-			sslSocket.setSSLParameters(params);
-		}
 	}
 
 	private static class SniSSLSocketFactory extends SSLSocketFactory {
@@ -397,46 +401,48 @@ public class SsrfValidator {
 			return delegate.getSupportedCipherSuites();
 		}
 
+		/**
+		 * All creation paths funnel here. The SSL layer is created with the ORIGINAL hostname as
+		 * peer host — driving SNI, TLS session caching and certificate identity — while the
+		 * underlying TCP socket stays connected to the pinned IP. Endpoint identification makes
+		 * the handshake itself verify the certificate against the original hostname (RFC 6125);
+		 * the {@code host} parameter (the pinned IP) is deliberately ignored.
+		 */
 		@Override
 		public Socket createSocket(Socket s, String host, int port, boolean autoClose) throws IOException {
-			// Pass original hostname (not the pinned IP in `host`) so the JDK sets
-			// SNI and uses the correct hostname for TLS session caching/verification.
-			return delegate.createSocket(s, hostname, port, autoClose);
+			SSLSocket ssl = (SSLSocket) delegate.createSocket(s, hostname, port, autoClose);
+			SSLParameters params = ssl.getSSLParameters();
+			params.setEndpointIdentificationAlgorithm("HTTPS");
+			ssl.setSSLParameters(params);
+			return ssl;
+		}
+
+		@Override
+		public Socket createSocket() {
+			// Plain unconnected socket: the JDK connects it to the pinned IP and then layers TLS
+			// through the four-argument overload above. Returning an SSL socket here would let
+			// the handshake run with the IP as peer host, bypassing hostname verification.
+			return new Socket();
 		}
 
 		@Override
 		public Socket createSocket(String host, int port) throws IOException {
-			Socket socket = delegate.createSocket(host, port);
-			setSniHostname(socket, hostname);
-			return socket;
+			return createSocket(new Socket(host, port), host, port, true);
 		}
 
 		@Override
 		public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
-			Socket socket = delegate.createSocket(host, port, localHost, localPort);
-			setSniHostname(socket, hostname);
-			return socket;
+			return createSocket(new Socket(host, port, localHost, localPort), host, port, true);
 		}
 
 		@Override
 		public Socket createSocket(InetAddress host, int port) throws IOException {
-			Socket socket = delegate.createSocket(host, port);
-			setSniHostname(socket, hostname);
-			return socket;
+			return createSocket(new Socket(host, port), host.getHostAddress(), port, true);
 		}
 
 		@Override
 		public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
-			Socket socket = delegate.createSocket(address, port, localAddress, localPort);
-			setSniHostname(socket, hostname);
-			return socket;
-		}
-
-		@Override
-		public Socket createSocket() throws IOException {
-			Socket socket = delegate.createSocket();
-			setSniHostname(socket, hostname);
-			return socket;
+			return createSocket(new Socket(address, port, localAddress, localPort), address.getHostAddress(), port, true);
 		}
 	}
 }

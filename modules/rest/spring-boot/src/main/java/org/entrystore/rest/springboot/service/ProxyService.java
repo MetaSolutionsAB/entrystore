@@ -80,6 +80,8 @@ public class ProxyService {
 
 	public ProxyResponse fetchUrl(SsrfValidator.ValidatedTarget target, String acceptHeader, boolean enforceAnonWhitelist) {
 		Map<String, String> requestHeaders = acceptHeader != null ? Map.of("Accept", acceptHeader) : Map.of();
+		// D6 (ENTRYSTORE-1090): the handler below reads the body to EOF and closes the stream, which
+		// returns the connection to the JDK keep-alive pool — so the client must not disconnect() it.
 		return ssrfSafeHttpClient.execute(target, "GET", requestHeaders,
 				location -> validateRedirectTarget(location, enforceAnonWhitelist),
 				(status, conn) -> {
@@ -89,7 +91,8 @@ public class ProxyService {
 						body = (is != null) ? readWithLimit(is) : new byte[0];
 					}
 					return new ProxyResponse(status, contentType, body);
-				});
+				},
+				true);
 	}
 
 	/**

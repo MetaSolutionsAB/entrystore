@@ -24,6 +24,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
@@ -34,20 +35,27 @@ import java.util.function.Function;
 /**
  * Executes outbound HTTP requests against SSRF-validated targets, following redirects safely:
  * every hop's {@code Location} is resolved against the current URI and passed through the
- * caller-supplied validator before a new pinned connection is opened, and each connection is
- * disconnected before the next hop.
+ * caller-supplied validator before a new pinned connection is opened.
+ * <p>
+ * Redirect hops are drained (bounded by {@link #MAX_REDIRECT_DRAIN_BYTES}) rather than
+ * disconnected, so the underlying socket returns to the JDK keep-alive pool and is reused for the
+ * following hop — measured at -28% on the proxy redirect path (ENTRYSTORE-1090, D6).
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class SsrfSafeHttpClient {
 
+	private static final int MAX_REDIRECT_DRAIN_BYTES = 64 * 1024;
+
 	private final SsrfValidator ssrfValidator;
 	private final ProxyProperties proxyProperties;
 
 	/**
-	 * Handles the final (non-3xx) response of {@link #execute}. The connection is disconnected
-	 * after the handler returns, so any response body must be consumed inside the handler.
+	 * Handles the final (non-3xx) response of {@link #execute}. Any response body must be consumed
+	 * inside the handler; see the {@code handlerConsumesBody} parameter of
+	 * {@link #execute(SsrfValidator.ValidatedTarget, String, Map, Function, ResponseHandler, boolean)}
+	 * for how that affects the connection's lifecycle.
 	 */
 	@FunctionalInterface
 	public interface ResponseHandler<T> {
@@ -73,12 +81,33 @@ public class SsrfSafeHttpClient {
 						 Map<String, String> requestHeaders,
 						 Function<String, SsrfValidator.ValidatedTarget> redirectValidator,
 						 ResponseHandler<T> responseHandler) {
+		return execute(initialTarget, httpMethod, requestHeaders, redirectValidator, responseHandler, false);
+	}
+
+	/**
+	 * As {@link #execute(SsrfValidator.ValidatedTarget, String, Map, Function, ResponseHandler)},
+	 * with explicit control over the final connection's lifecycle.
+	 *
+	 * @param handlerConsumesBody whether {@code responseHandler} reads the response body to EOF and
+	 *                            closes the stream. When true, the connection is left alone so the
+	 *                            JDK can pool it for reuse — calling {@code disconnect()} on a
+	 *                            fully-consumed response would evict it from the keep-alive pool
+	 *                            instead. When false, the connection is disconnected after the
+	 *                            handler returns, because an unconsumed response is never pooled and
+	 *                            would otherwise linger.
+	 */
+	public <T> T execute(SsrfValidator.ValidatedTarget initialTarget, String httpMethod,
+						 Map<String, String> requestHeaders,
+						 Function<String, SsrfValidator.ValidatedTarget> redirectValidator,
+						 ResponseHandler<T> responseHandler,
+						 boolean handlerConsumesBody) {
 
 		SsrfValidator.ValidatedTarget target = initialTarget;
 		int maxRedirects = proxyProperties.maxRedirects();
 		// Inclusive bound, preserved deliberately: a cap of N allows the initial request plus N hops.
 		for (int redirectCount = 0; redirectCount <= maxRedirects; redirectCount++) {
 			HttpURLConnection conn = null;
+			boolean pooled = false;
 			try {
 				conn = ssrfValidator.openPinnedConnection(target.uri(), target.resolved());
 				conn.setRequestMethod(httpMethod);
@@ -95,11 +124,17 @@ public class SsrfSafeHttpClient {
 						throw new CustomResponseException("Upstream returned redirect without Location header", HttpStatus.BAD_GATEWAY);
 					}
 					String resolvedLocation = target.uri().resolve(location).toString();
-					target = redirectValidator.apply(resolvedLocation);
+					// Resolve and re-validate before draining: an invalid hop should fail without
+					// spending time reading a body we are about to abandon.
+					SsrfValidator.ValidatedTarget next = redirectValidator.apply(resolvedLocation);
+					pooled = drainForReuse(conn);
+					target = next;
 					continue;
 				}
 
-				return responseHandler.handle(status, conn);
+				T result = responseHandler.handle(status, conn);
+				pooled = handlerConsumesBody;
+				return result;
 
 			} catch (SocketTimeoutException | ConnectException e) {
 				log.debug("Request to {} timed out", target.uri());
@@ -109,7 +144,9 @@ public class SsrfSafeHttpClient {
 				log.debug("Request to {} failed: {}", target.uri(), e.getMessage());
 				throw new CustomResponseException("Proxy request failed", HttpStatus.BAD_GATEWAY);
 			} finally {
-				if (conn != null) {
+				// Sever the connection only when it cannot be pooled (error path, unconsumed body, or
+				// a hop whose body could not be drained); pooled connections are reused by the JDK.
+				if (conn != null && !pooled) {
 					conn.disconnect();
 				}
 			}
@@ -122,5 +159,33 @@ public class SsrfSafeHttpClient {
 		log.warn("Upstream exceeded the configured redirect cap of {} (entrystore.proxy.max-redirects), aborting",
 				maxRedirects);
 		throw new CustomResponseException("Too many redirects", HttpStatus.BAD_GATEWAY);
+	}
+
+	/**
+	 * Consumes a redirect hop's response body so the underlying connection returns to the JDK
+	 * keep-alive pool for the following hop instead of being torn down. Bounded: a hop body larger
+	 * than {@link #MAX_REDIRECT_DRAIN_BYTES} is not worth salvaging, and a drain failure leaves the
+	 * connection in an unknown state — in both cases the caller severs it instead.
+	 *
+	 * @return true if the body was fully drained and the connection may be pooled
+	 */
+	private boolean drainForReuse(HttpURLConnection conn) {
+		try (InputStream is = conn.getInputStream()) {
+			byte[] buf = new byte[8192];
+			int total = 0;
+			int bytesRead;
+			while ((bytesRead = is.read(buf)) != -1) {
+				total += bytesRead;
+				if (total > MAX_REDIRECT_DRAIN_BYTES) {
+					log.debug("Redirect hop body exceeded {} bytes; severing connection instead of pooling it",
+							MAX_REDIRECT_DRAIN_BYTES);
+					return false;
+				}
+			}
+			return true;
+		} catch (IOException e) {
+			log.debug("Failed to drain redirect hop body, severing connection: {}", e.getMessage());
+			return false;
+		}
 	}
 }

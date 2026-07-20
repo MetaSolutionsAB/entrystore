@@ -35,6 +35,12 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.backup.maintenance.lower-limit=minimum amount of stored backups
 # entrystore.backup.maintenance.expires-after-days=maximum days a backup is kept
 
+# Virtual threads for request handling (default: false, deliberately). Load-tested at 60
+# concurrent clients (findings doc 28): no latency or throughput win, and uploads currently
+# buffer fully in memory, so the platform-thread pool doubles as backpressure that caps
+# concurrent upload buffers. Reconsider only for deployments with very high connection counts.
+# spring.threads.virtual.enabled=false
+
 ## Cross-origin resource sharing (CORS)
 # entrystore.cors=on|off (default: off)
 # entrystore.cors.origins=*.domain1.com,domain2.*
@@ -195,10 +201,21 @@ entrystore.data.folder=/srv/entrystore/files/
 # scan per authorization decision.
 # entrystore.auth.group-cache=true
 
+# TTL in seconds for the per-request UserDetails cache (default: 5, 0 = off).
+# Evicted immediately on password change, user disable/modify, user delete, logout
+# and group-membership changes (the admin role derives from admin-group membership)
+# — the TTL is only a safety net, not the staleness bound.
+# entrystore.auth.userdetails-cache.ttl-seconds=5
+
 # Principal-based Solr filter query that pre-excludes search hits the caller
 # provably cannot read, before the per-hit application-level ACL check runs
 # (default: true). The application-level check always remains as the deciding
-# backstop for every returned hit. Set to false to post-filter all hits.
+# backstop for every returned hit. Recall staleness: the filter evaluates ACLs
+# as last indexed, so a fresh grant on an existing entry reaches search only
+# after the asynchronous Solr update (commitWithin-bounded) and the cached
+# administered-contexts resolution (30 s TTL) catch up — never affects what a
+# caller is allowed to see, only how soon newly granted entries appear.
+# Set to false to post-filter all hits.
 # entrystore.solr.acl-prefilter=true
 
 ## User-initiated sign-up (default: off)
