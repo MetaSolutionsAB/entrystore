@@ -16,9 +16,19 @@
 
 package org.entrystore.rest.springboot.service;
 
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.rest.springboot.model.dto.QueryResultsDto;
+import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -26,9 +36,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
 
 import java.net.URL;
+import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -91,5 +106,89 @@ class SearchServiceTest {
 		String uri = service.buildRequestUri(request);
 
 		assertEquals("https://example.test/store/search?%63onfirm=***", uri);
+	}
+
+	@Test
+	void generateJson_authorizationOnMetadata_flagsNoAccessToMetadata() {
+		Entry entry = mockSearchHit("e1");
+		when(entry.getLocalMetadata()).thenThrow(new AuthorizationException(null, null, null));
+		var service = new SearchService(repositoryManager, principalManager, esConfig);
+
+		JSONObject child = firstChild(service.generateJson(0, 10, new QueryResultsDto(List.of(entry)), null));
+
+		assertTrue(child.getBoolean("noAccessToMetadata"));
+		assertTrue(child.has("info"));
+	}
+
+	@Test
+	void generateJson_authorizationOnEntryInfo_flagsNoAccessToEntryInfo() {
+		Entry entry = mockSearchHit("e1");
+		when(entry.getGraph()).thenThrow(new AuthorizationException(null, null, null));
+		var service = new SearchService(repositoryManager, principalManager, esConfig);
+
+		JSONObject child = firstChild(service.generateJson(0, 10, new QueryResultsDto(List.of(entry)), null));
+
+		assertTrue(child.getBoolean("noAccessToEntryInfo"));
+	}
+
+	@Test
+	void generateJson_authorizationOnRelations_flagsNoAccessToRelations() {
+		Entry entry = mockSearchHit("e1");
+		when(entry.getRelations()).thenThrow(new AuthorizationException(null, null, null));
+		var service = new SearchService(repositoryManager, principalManager, esConfig);
+
+		JSONObject child = firstChild(service.generateJson(0, 10, new QueryResultsDto(List.of(entry)), null));
+
+		assertTrue(child.getBoolean("noAccessToRelations"));
+	}
+
+	@Test
+	void generateJson_noRights_omitsRightsKey() {
+		// Search children only get a "rights" key when at least one right exists (JSONObject.append
+		// creates the key lazily) — unlike list serialization, which always emits the key.
+		Entry entry = mockSearchHit("e1");
+		when(principalManager.getRights(entry)).thenReturn(Set.of());
+		var service = new SearchService(repositoryManager, principalManager, esConfig);
+
+		JSONObject child = firstChild(service.generateJson(0, 10, new QueryResultsDto(List.of(entry)), null));
+
+		assertFalse(child.has("rights"));
+	}
+
+	@Test
+	void generateJson_withRights_emitsRightsArray() {
+		Entry entry = mockSearchHit("e1");
+		when(principalManager.getRights(entry)).thenReturn(Set.of(AccessProperty.ReadMetadata));
+		var service = new SearchService(repositoryManager, principalManager, esConfig);
+
+		JSONObject child = firstChild(service.generateJson(0, 10, new QueryResultsDto(List.of(entry)), null));
+
+		assertEquals("readmetadata", child.getJSONArray("rights").getString(0));
+	}
+
+	private Entry mockSearchHit(String id) {
+		Entry entry = mock(Entry.class);
+		lenient().when(entry.getId()).thenReturn(id);
+		Entry contextEntry = mock(Entry.class);
+		lenient().when(contextEntry.getId()).thenReturn("c1");
+		Context context = mock(Context.class);
+		lenient().when(context.getEntry()).thenReturn(contextEntry);
+		lenient().when(entry.getContext()).thenReturn(context);
+		lenient().when(entry.getGraphType()).thenReturn(GraphType.None);
+		lenient().when(entry.getEntryType()).thenReturn(EntryType.Local);
+		Metadata localMetadata = mock(Metadata.class);
+		lenient().when(localMetadata.getGraph()).thenReturn(new LinkedHashModel());
+		lenient().when(entry.getLocalMetadata()).thenReturn(localMetadata);
+		lenient().when(entry.getGraph()).thenReturn(new LinkedHashModel());
+		lenient().when(entry.getRelations()).thenReturn(null);
+		lenient().when(principalManager.getRights(entry)).thenReturn(Set.of());
+		return entry;
+	}
+
+	private static JSONObject firstChild(String generatedJson) {
+		return new JSONObject(generatedJson)
+				.getJSONObject("resource")
+				.getJSONArray("children")
+				.getJSONObject(0);
 	}
 }
