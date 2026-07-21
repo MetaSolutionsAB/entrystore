@@ -53,6 +53,7 @@ import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
+import org.entrystore.rest.springboot.security.SsrfSafeHttpClient;
 import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.entrystore.rest.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.springboot.util.Email;
@@ -76,9 +77,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StringWriter;
-import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -101,13 +100,12 @@ public class ResourceService {
 
 	private static final String EMPTY_REPRESENTATION = "";
 
-	private static final int MAX_DELETE_REDIRECTS = 10;
-
 	private final RepositoryManagerImpl repositoryManager;
 	private final ResourceJsonSerializer resourceSerializer;
 	private final PrincipalManager principalManager;
 
 	private final SsrfValidator ssrfValidator;
+	private final SsrfSafeHttpClient ssrfSafeHttpClient;
 
 	private final AuthService authService;
 
@@ -541,60 +539,27 @@ public class ResourceService {
 		if ((entryType == EntryType.Link || entryType == EntryType.Reference || entryType == EntryType.LinkReference)
 				&& "true".equalsIgnoreCase(proxy)) {
 
-			deleteRemoteResource(entry.getResourceURI().toString(), entry.getEntryURI().toString(), 0);
+			deleteRemoteResource(entry.getResourceURI().toString());
 		} else {
 			deleteLocalResource(entry, isRecursive);
 		}
 	}
 
-	private void deleteRemoteResource(String url, String entryUri, int redirectCount) {
-
-		if (redirectCount > MAX_DELETE_REDIRECTS) {
-			log.warn("More than {} redirect loops detected for entry {}, aborting", MAX_DELETE_REDIRECTS, entryUri);
-			throw new CustomResponseException("Too many redirects for entry " + entryUri, HttpStatus.BAD_GATEWAY);
-		}
-
+	private void deleteRemoteResource(String url) {
 		SsrfValidator.ValidatedTarget target = ssrfValidator.validateForDelete(url);
-
-		// Capture the next URL while the current connection is open, then disconnect before
-		// recursing so a redirect chain doesn't hold N concurrent connections on the call stack.
-		String nextUrl;
-		HttpURLConnection conn = null;
-		try {
-			conn = ssrfValidator.openPinnedConnection(target.uri(), target.resolved());
-			conn.setRequestMethod("DELETE");
-
-			int status = conn.getResponseCode();
-
-			if (status >= 200 && status < 300) {
-				return;
-			}
-
-			if (status >= 300 && status < 400) {
-				String location = conn.getHeaderField("Location");
-				if (location == null) {
-					throw new InternalServerErrorException("Redirect response received without a Location header.");
-				}
-				URI resolvedLocation = target.uri().resolve(location);
-				log.info("DELETE request redirected to {}", resolvedLocation);
-				nextUrl = resolvedLocation.toString();
-			} else {
-				// Suppress upstream body — may leak internal details.
-				throw new InternalServerErrorException("Delete request received an error response (status " + status + ")");
-			}
-
-		} catch (IOException | URISyntaxException | IllegalArgumentException e) {
-			// IllegalArgumentException: URI.resolve(location) on a malformed upstream Location header.
-			throw new InternalServerErrorException("Delete request failed for " + entryUri, e);
-		} finally {
-			if (conn != null) {
-				conn.disconnect();
-			}
-		}
-
-		if (nextUrl != null) {
-			deleteRemoteResource(nextUrl, entryUri, redirectCount + 1);
-		}
+		ssrfSafeHttpClient.execute(target, "DELETE", Map.of(),
+				location -> {
+					log.info("DELETE request redirected to {}", location);
+					return ssrfValidator.validateForDelete(location);
+				},
+				(status, conn) -> {
+					if (status >= 200 && status < 300) {
+						return null;
+					}
+					// Suppress upstream body — may leak internal details.
+					throw new CustomResponseException("Delete request received an error response (status " + status + ")",
+							HttpStatus.BAD_GATEWAY);
+				});
 	}
 
 	/**

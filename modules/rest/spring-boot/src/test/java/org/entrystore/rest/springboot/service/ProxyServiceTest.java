@@ -19,22 +19,18 @@ package org.entrystore.rest.springboot.service;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.dto.ProxyResponse;
-import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
+import org.entrystore.rest.springboot.security.SsrfSafeHttpClient;
 import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
-import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
@@ -43,7 +39,6 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -66,7 +61,9 @@ class ProxyServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new ProxyService(principalManager, contextService, ssrfValidator);
+		// A real SsrfSafeHttpClient over the mocked validator keeps the fetchUrl tests exercising
+		// the actual redirect-following and error-mapping logic.
+		service = new ProxyService(principalManager, contextService, ssrfValidator, new SsrfSafeHttpClient(ssrfValidator));
 		service.setWhitelistAnon(Set.of());
 	}
 
@@ -105,7 +102,6 @@ class ProxyServiceTest {
 
 	@Test
 	void validateRedirectTarget_guest_globalProxy_redirectHostNotWhitelisted_throwsForbidden() throws Exception {
-		URI base = URI.create("http://whitelisted-upstream.example.com/start");
 		String location = "http://evil-public.example.com/landing";
 		SsrfValidator.ValidatedTarget redirectTarget = new SsrfValidator.ValidatedTarget(
 				URI.create(location), "evil-public.example.com", InetAddress.getByName("192.0.2.1"));
@@ -118,12 +114,11 @@ class ProxyServiceTest {
 		service.setWhitelistAnon(Set.of("whitelisted-upstream.example.com"));
 
 		assertThrows(ForbiddenException.class,
-				() -> service.validateRedirectTarget(base, location, true));
+				() -> service.validateRedirectTarget(location, true));
 	}
 
 	@Test
 	void validateRedirectTarget_guest_globalProxy_redirectHostWhitelisted_returnsTarget() throws Exception {
-		URI base = URI.create("http://whitelisted-upstream.example.com/start");
 		String location = "http://cdn.example.com/asset";
 		SsrfValidator.ValidatedTarget redirectTarget = new SsrfValidator.ValidatedTarget(
 				URI.create(location), "cdn.example.com", InetAddress.getByName("192.0.2.2"));
@@ -134,14 +129,13 @@ class ProxyServiceTest {
 		when(principalManager.getAuthenticatedUserURI()).thenReturn(guestUri);
 		service.setWhitelistAnon(Set.of("whitelisted-upstream.example.com", "cdn.example.com"));
 
-		SsrfValidator.ValidatedTarget result = service.validateRedirectTarget(base, location, true);
+		SsrfValidator.ValidatedTarget result = service.validateRedirectTarget(location, true);
 
 		assertEquals("cdn.example.com", result.host());
 	}
 
 	@Test
 	void validateRedirectTarget_guest_contextProxy_redirectHostNotWhitelisted_noException() throws Exception {
-		URI base = URI.create("http://some-context-upstream.example.com/start");
 		String location = "http://another-public.example.com/landing";
 		SsrfValidator.ValidatedTarget redirectTarget = new SsrfValidator.ValidatedTarget(
 				URI.create(location), "another-public.example.com", InetAddress.getByName("192.0.2.3"));
@@ -150,14 +144,13 @@ class ProxyServiceTest {
 		// so validateGlobalAccess (and thus principalManager) is never consulted on this path.
 		service.setWhitelistAnon(Set.of());
 
-		SsrfValidator.ValidatedTarget result = service.validateRedirectTarget(base, location, false);
+		SsrfValidator.ValidatedTarget result = service.validateRedirectTarget(location, false);
 
 		assertEquals("another-public.example.com", result.host());
 	}
 
 	@Test
 	void validateRedirectTarget_authenticatedUser_globalProxy_redirectHostNotWhitelisted_noException() throws Exception {
-		URI base = URI.create("http://whitelisted-upstream.example.com/start");
 		String location = "http://public.example.com/landing";
 		SsrfValidator.ValidatedTarget redirectTarget = new SsrfValidator.ValidatedTarget(
 				URI.create(location), "public.example.com", InetAddress.getByName("192.0.2.4"));
@@ -170,7 +163,7 @@ class ProxyServiceTest {
 		// Empty anon whitelist would block a guest, but an authenticated user is exempt from the anon-whitelist check.
 		service.setWhitelistAnon(Set.of());
 
-		SsrfValidator.ValidatedTarget result = service.validateRedirectTarget(base, location, true);
+		SsrfValidator.ValidatedTarget result = service.validateRedirectTarget(location, true);
 
 		assertEquals("public.example.com", result.host());
 	}
@@ -218,77 +211,9 @@ class ProxyServiceTest {
 		assertEquals(200, response.statusCode());
 	}
 
-	@Test
-	void fetchUrl_redirectWithoutLocation_throwsBadGateway() throws Exception {
-		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
-		HttpURLConnection conn = mock(HttpURLConnection.class);
-		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
-		when(conn.getResponseCode()).thenReturn(302);
-		when(conn.getHeaderField("Location")).thenReturn(null);
-
-		CustomResponseException ex = assertThrows(CustomResponseException.class,
-				() -> service.fetchUrl(target, null, false));
-
-		assertEquals(HttpStatus.BAD_GATEWAY, ex.getStatus());
-		verify(conn).disconnect();
-	}
-
-	@Test
-	void fetchUrl_tooManyRedirects_throwsBadGatewayAfter16Hops() throws Exception {
-		// MAX_REDIRECTS is 15: hops 0-15 all open a connection, the 16th redirect is rejected.
-		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
-		HttpURLConnection conn = mock(HttpURLConnection.class);
-		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
-		when(conn.getResponseCode()).thenReturn(302);
-		when(conn.getHeaderField("Location")).thenReturn("http://upstream.example.com/a");
-		when(ssrfValidator.validateForProxy("http://upstream.example.com/a")).thenReturn(target);
-
-		CustomResponseException ex = assertThrows(CustomResponseException.class,
-				() -> service.fetchUrl(target, null, false));
-
-		assertEquals(HttpStatus.BAD_GATEWAY, ex.getStatus());
-		assertEquals("Too many redirects", ex.getMessage());
-		verify(ssrfValidator, times(16)).openPinnedConnection(target.uri(), target.resolved());
-	}
-
-	@Test
-	void fetchUrl_socketTimeout_throwsGatewayTimeout() throws Exception {
-		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
-		HttpURLConnection conn = mock(HttpURLConnection.class);
-		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
-		when(conn.getResponseCode()).thenThrow(new SocketTimeoutException("read timed out"));
-
-		CustomResponseException ex = assertThrows(CustomResponseException.class,
-				() -> service.fetchUrl(target, null, false));
-
-		assertEquals(HttpStatus.GATEWAY_TIMEOUT, ex.getStatus());
-	}
-
-	@Test
-	void fetchUrl_connectException_throwsGatewayTimeout() throws Exception {
-		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
-		HttpURLConnection conn = mock(HttpURLConnection.class);
-		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
-		when(conn.getResponseCode()).thenThrow(new ConnectException("connection refused"));
-
-		CustomResponseException ex = assertThrows(CustomResponseException.class,
-				() -> service.fetchUrl(target, null, false));
-
-		assertEquals(HttpStatus.GATEWAY_TIMEOUT, ex.getStatus());
-	}
-
-	@Test
-	void fetchUrl_ioException_throwsBadGateway() throws Exception {
-		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
-		HttpURLConnection conn = mock(HttpURLConnection.class);
-		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
-		when(conn.getResponseCode()).thenThrow(new IOException("boom"));
-
-		CustomResponseException ex = assertThrows(CustomResponseException.class,
-				() -> service.fetchUrl(target, null, false));
-
-		assertEquals(HttpStatus.BAD_GATEWAY, ex.getStatus());
-	}
+	// The redirect-loop cap, missing-Location, timeout, and IO error mappings are pinned in
+	// SsrfSafeHttpClientTest; the fetchUrl tests here cover only ProxyService's own wiring
+	// (per-hop validateForProxy revalidation and response-body handling).
 
 	private static SsrfValidator.ValidatedTarget validatedTarget(String url, String ip) throws Exception {
 		URI uri = URI.create(url);
