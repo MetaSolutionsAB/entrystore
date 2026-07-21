@@ -35,6 +35,7 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.util.GraphUtil;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedInputStream;
@@ -139,6 +140,10 @@ public class ContextService {
 
 		Class<? extends RDFWriter> writer = GraphUtil.getRDFWriterClassForMediaType(rdfFormat);
 		if (writer == null) {
+			if (rdfFormat != null) {
+				log.warn("No RDF writer for requested export format '{}', falling back to TriG",
+						HttpUtil.sanitizeForLog(rdfFormat));
+			}
 			writer = TriGWriter.class;
 		}
 

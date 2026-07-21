@@ -36,6 +36,7 @@ import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException;
 import org.entrystore.rest.springboot.model.exception.TextareaHtmlResponseException;
 import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -101,15 +102,24 @@ public class AppExceptionHandler {
 	}
 
 	// Separate BadRequest handler for HttpMessageNotReadableException and MethodArgumentTypeMismatchException since those leak Spring/Jackson internals
-	// Those now respond with a generic "Bad Request" error
+	// Those now respond with a generic "Bad Request" error. For MethodArgumentTypeMismatchException a
+	// parameter-specific message is crafted here from the parameter name and the (sanitized) offending
+	// value — both client-known, nothing internal. It cannot be crafted anywhere earlier: an exception
+	// thrown by a Converter never survives binding, since TypeConverterDelegate swallows it and falls
+	// back to a by-convention PropertyEditor (spring-web's MediaTypeEditor for MediaType params).
 	@ExceptionHandler({MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class, MissingServletRequestParameterException.class})
 	public ResponseEntity<ErrorResponse> handleSpringBadRequestException(Exception ex,
 																		 HttpServletRequest request) {
 		log.debug("BadRequestException of type '{}': {}", ex.getClass().getName(), ex.getMessage());
+		String error = HttpStatus.BAD_REQUEST.getReasonPhrase();
+		if (ex instanceof MethodArgumentTypeMismatchException typeMismatch) {
+			error = "Invalid value '%s' for parameter '%s'".formatted(
+					HttpUtil.sanitizeForLog(String.valueOf(typeMismatch.getValue())), typeMismatch.getName());
+		}
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.BAD_REQUEST.value())
 				.path(request.getRequestURI())
-				.error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+				.error(error)
 				.build();
 		return jsonResponse(responseBody);
 	}
@@ -275,7 +285,7 @@ public class AppExceptionHandler {
 			log.debug("EntityTooLargeException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
 		}
 		ErrorResponse responseBody = ErrorResponse.builder()
-				.status(HttpStatus.PAYLOAD_TOO_LARGE.value())
+				.status(HttpStatus.CONTENT_TOO_LARGE.value())
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();

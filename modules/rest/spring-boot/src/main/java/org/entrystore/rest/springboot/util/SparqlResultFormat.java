@@ -126,10 +126,11 @@ public enum SparqlResultFormat {
 	}
 
 	private static SparqlResultFormat fromFormatParam(String formatParam) {
-		String normalized = HttpUtil.determineMediaType(formatParam, null);
-		if (normalized == null || normalized.isBlank()) {
+		if (formatParam == null || formatParam.isBlank()) {
 			return null;
 		}
+		// clients may send an unencoded '+', which servlet decoding turns into a space
+		String normalized = formatParam.trim().replace(' ', '+');
 		SparqlResultFormat mapped = ALIAS_TO_FORMAT.get(normalized.toLowerCase(Locale.ROOT));
 		if (mapped == null) {
 			throw new BadRequestException("Unsupported SPARQL format: " + truncate(formatParam));

@@ -56,20 +56,17 @@ public class HttpUtil {
 	/**
 	 * Determines the media type based on the provided format parameter or content type header.
 	 *
-	 * @param format The format parameter from the request, which might have '+' replaced with spaces by Spring Boot.
+	 * @param format The format parameter from the request, bound via {@code MediaTypeConverter}.
 	 * @param contentType The raw content-type header string from the request.
-	 * @return The determined and normalized media type string, or null if neither can be determined.
+	 * @return The format parameter's string form if present (parameters preserved), otherwise the
+	 *         normalized content type (type/subtype only), or null if neither can be determined.
 	 */
-	public static String determineMediaType(String format, String contentType) {
-		// for 'format' param data should be sent properly - i.e. html encoded '+' as %2B
-		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
-		// (+ is replaced with a space) we need to replace the space back to '+'
+	public static String determineMediaType(MediaType format, String contentType) {
 		if (format != null) {
-			return format.trim().replace(' ', '+');
-		} else {
-			// content-type header often includes other data like character encoding, e.g.: 'application/json; charset=UTF-8'
-			return normalizeMediaType(contentType);
+			return format.toString();
 		}
+		// content-type header often includes other data like character encoding, e.g.: 'application/json; charset=UTF-8'
+		return normalizeMediaType(contentType);
 	}
 
 	/**
