@@ -18,6 +18,8 @@ package org.entrystore.rest.springboot.service;
 
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.rest.springboot.model.dto.ProxyResponse;
+import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,14 +27,24 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.net.ConnectException;
+import java.net.HttpURLConnection;
 import java.net.InetAddress;
+import java.net.SocketTimeoutException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -161,5 +173,125 @@ class ProxyServiceTest {
 		SsrfValidator.ValidatedTarget result = service.validateRedirectTarget(base, location, true);
 
 		assertEquals("public.example.com", result.host());
+	}
+
+	@Test
+	void fetchUrl_redirect_followsAndRevalidatesEveryHop() throws Exception {
+		SsrfValidator.ValidatedTarget first = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
+		SsrfValidator.ValidatedTarget second = validatedTarget("http://next.example.com/b", "192.0.2.11");
+		HttpURLConnection firstConn = mock(HttpURLConnection.class);
+		HttpURLConnection secondConn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(first.uri(), first.resolved())).thenReturn(firstConn);
+		when(ssrfValidator.openPinnedConnection(second.uri(), second.resolved())).thenReturn(secondConn);
+		when(firstConn.getResponseCode()).thenReturn(302);
+		when(firstConn.getHeaderField("Location")).thenReturn("http://next.example.com/b");
+		when(ssrfValidator.validateForProxy("http://next.example.com/b")).thenReturn(second);
+		when(secondConn.getResponseCode()).thenReturn(200);
+		when(secondConn.getContentType()).thenReturn("text/plain");
+		when(secondConn.getInputStream())
+				.thenReturn(new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8)));
+
+		ProxyResponse response = service.fetchUrl(first, null, false);
+
+		assertEquals(200, response.statusCode());
+		assertEquals("hello", new String(response.body(), StandardCharsets.UTF_8));
+		verify(firstConn).disconnect();
+		verify(secondConn).disconnect();
+	}
+
+	@Test
+	void fetchUrl_relativeLocation_resolvedAgainstCurrentUri() throws Exception {
+		SsrfValidator.ValidatedTarget first = validatedTarget("http://upstream.example.com/a/b", "192.0.2.10");
+		SsrfValidator.ValidatedTarget second = validatedTarget("http://upstream.example.com/moved", "192.0.2.10");
+		HttpURLConnection firstConn = mock(HttpURLConnection.class);
+		HttpURLConnection secondConn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(first.uri(), first.resolved())).thenReturn(firstConn);
+		when(ssrfValidator.openPinnedConnection(second.uri(), second.resolved())).thenReturn(secondConn);
+		when(firstConn.getResponseCode()).thenReturn(301);
+		when(firstConn.getHeaderField("Location")).thenReturn("/moved");
+		when(ssrfValidator.validateForProxy("http://upstream.example.com/moved")).thenReturn(second);
+		when(secondConn.getResponseCode()).thenReturn(200);
+		when(secondConn.getInputStream()).thenReturn(new ByteArrayInputStream(new byte[0]));
+
+		ProxyResponse response = service.fetchUrl(first, null, false);
+
+		assertEquals(200, response.statusCode());
+	}
+
+	@Test
+	void fetchUrl_redirectWithoutLocation_throwsBadGateway() throws Exception {
+		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
+		HttpURLConnection conn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
+		when(conn.getResponseCode()).thenReturn(302);
+		when(conn.getHeaderField("Location")).thenReturn(null);
+
+		CustomResponseException ex = assertThrows(CustomResponseException.class,
+				() -> service.fetchUrl(target, null, false));
+
+		assertEquals(HttpStatus.BAD_GATEWAY, ex.getStatus());
+		verify(conn).disconnect();
+	}
+
+	@Test
+	void fetchUrl_tooManyRedirects_throwsBadGatewayAfter16Hops() throws Exception {
+		// MAX_REDIRECTS is 15: hops 0-15 all open a connection, the 16th redirect is rejected.
+		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
+		HttpURLConnection conn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
+		when(conn.getResponseCode()).thenReturn(302);
+		when(conn.getHeaderField("Location")).thenReturn("http://upstream.example.com/a");
+		when(ssrfValidator.validateForProxy("http://upstream.example.com/a")).thenReturn(target);
+
+		CustomResponseException ex = assertThrows(CustomResponseException.class,
+				() -> service.fetchUrl(target, null, false));
+
+		assertEquals(HttpStatus.BAD_GATEWAY, ex.getStatus());
+		assertEquals("Too many redirects", ex.getMessage());
+		verify(ssrfValidator, times(16)).openPinnedConnection(target.uri(), target.resolved());
+	}
+
+	@Test
+	void fetchUrl_socketTimeout_throwsGatewayTimeout() throws Exception {
+		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
+		HttpURLConnection conn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
+		when(conn.getResponseCode()).thenThrow(new SocketTimeoutException("read timed out"));
+
+		CustomResponseException ex = assertThrows(CustomResponseException.class,
+				() -> service.fetchUrl(target, null, false));
+
+		assertEquals(HttpStatus.GATEWAY_TIMEOUT, ex.getStatus());
+	}
+
+	@Test
+	void fetchUrl_connectException_throwsGatewayTimeout() throws Exception {
+		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
+		HttpURLConnection conn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
+		when(conn.getResponseCode()).thenThrow(new ConnectException("connection refused"));
+
+		CustomResponseException ex = assertThrows(CustomResponseException.class,
+				() -> service.fetchUrl(target, null, false));
+
+		assertEquals(HttpStatus.GATEWAY_TIMEOUT, ex.getStatus());
+	}
+
+	@Test
+	void fetchUrl_ioException_throwsBadGateway() throws Exception {
+		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
+		HttpURLConnection conn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
+		when(conn.getResponseCode()).thenThrow(new IOException("boom"));
+
+		CustomResponseException ex = assertThrows(CustomResponseException.class,
+				() -> service.fetchUrl(target, null, false));
+
+		assertEquals(HttpStatus.BAD_GATEWAY, ex.getStatus());
+	}
+
+	private static SsrfValidator.ValidatedTarget validatedTarget(String url, String ip) throws Exception {
+		URI uri = URI.create(url);
+		return new SsrfValidator.ValidatedTarget(uri, uri.getHost(), InetAddress.getByName(ip));
 	}
 }
