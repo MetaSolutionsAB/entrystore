@@ -17,8 +17,6 @@
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
-import org.springframework.boot.SpringApplication
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
@@ -44,13 +42,10 @@ class ZzzMultipartSizeLimitIT extends BaseSpec {
 		// closes the connection before the client can read the response code). max-file-size
 		// and max-request-size are deliberately *different* so a regression that wires only
 		// one of the two properties fails the cap it leaves unbound.
-		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+		startOwnedApp([
 			'--spring.servlet.multipart.max-file-size=2KB',
 			'--spring.servlet.multipart.max-request-size=4KB'
-		] as String[]
-		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
-		appStarted = true
+		])
 	}
 
 	// Intentionally no cleanupSpec — matches the canonical pattern of ZzzCasLoginIT and

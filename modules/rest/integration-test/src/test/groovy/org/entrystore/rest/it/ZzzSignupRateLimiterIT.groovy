@@ -19,8 +19,6 @@ package org.entrystore.rest.it
 import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
-import org.springframework.boot.SpringApplication
 import spock.lang.Stepwise
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
@@ -43,15 +41,12 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 		stopPreexistingAppIfRunning()
 		greenMail.start()
 
-		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+		startOwnedApp([
 			'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
 			'--entrystore.auth.signup.rate.limit.max=2',
 			'--entrystore.auth.signup.rate.limit.window=1h',
 			'--entrystore.trust.x-forwarded-for=true'
-		] as String[]
-		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
-		appStarted = true
+		])
 	}
 
 	def cleanupSpec() {

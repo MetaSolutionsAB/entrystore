@@ -17,8 +17,6 @@
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
-import org.springframework.boot.SpringApplication
 import spock.lang.Stepwise
 
 import static java.net.HttpURLConnection.HTTP_OK
@@ -33,15 +31,12 @@ class ZzzSearchRateLimitIT extends BaseSpec {
 	def setupSpec() {
 		stopPreexistingAppIfRunning()
 
-		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+		startOwnedApp([
 			'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
 			'--entrystore.solr.search.rate.limit.max=3',
 			'--entrystore.solr.search.rate.limit.window=10m',
 			'--entrystore.trust.x-forwarded-for=true'
-		] as String[]
-		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
-		appStarted = true
+		])
 	}
 
 	// Intentionally no cleanupSpec — matches the canonical pattern of ZzzCasLoginIT,

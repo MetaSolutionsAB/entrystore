@@ -20,8 +20,6 @@ import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
-import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
-import org.springframework.boot.SpringApplication
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -46,8 +44,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		stopPreexistingAppIfRunning()
 		greenMail.start()
 
-		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+		startOwnedApp([
 			'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
 			'--entrystore.auth.confirmation.legacy=false',
 			'--entrystore.auth.confirmation.max-attempts=3',
@@ -55,9 +52,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 			// throttling, is what the assertions observe.
 			'--entrystore.auth.signup.rate.limit.max=100',
 			'--entrystore.auth.password-reset.rate.limit.max=100'
-		] as String[]
-		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
-		appStarted = true
+		])
 	}
 
 	def cleanupSpec() {

@@ -17,8 +17,6 @@
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
-import org.springframework.boot.SpringApplication
 
 import static java.net.HttpURLConnection.HTTP_OK
 
@@ -30,13 +28,10 @@ class ZzzServerHeaderFullIT extends BaseSpec {
 	def setupSpec() {
 		stopPreexistingAppIfRunning()
 
-		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+		startOwnedApp([
 			'--entrystore.http.header.server=',
 			'--entrystore.http.header.server.version-precision=full'
-		] as String[]
-		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
-		appStarted = true
+		])
 	}
 
 	def "with blank explicit override and version-precision=full, Server header preserves the runtime version verbatim"() {

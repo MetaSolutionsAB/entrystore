@@ -66,8 +66,8 @@ abstract class BaseSpec extends Specification {
 	// with non-default args, e.g. ZzzSamlLoginIT, ZzzCasLoginIT):
 	//   1. Their class name MUST sort alphabetically AFTER all shared-app ITs (Zzz* prefix today),
 	//      enforced by Failsafe runOrder=alphabetical in the integration-test pom.
-	//   2. They MUST set appStarted=true in setupSpec after starting their own app, and MUST NOT
-	//      reset it to false anywhere. If appStarted leaks back to false, the guard below re-runs
+	//   2. They MUST set appStarted=true in setupSpec after starting their own app (startOwnedApp
+	//      does this), and MUST NOT reset it to false anywhere. If appStarted leaks back to false, the guard below re-runs
 	//      the full init block (Solr + a shared app) between lifecycle-owning ITs, adding an
 	//      extra Spring Boot start per CI run. The asserts in setupSpec catch the two invalid
 	//      (appStarted, appInstance) state pairs.
@@ -391,6 +391,19 @@ abstract class BaseSpec extends Specification {
 			.atMost(30, TimeUnit.SECONDS)
 			// separate supplier and predicate for better await logging
 			.until({ getSolrStatus() }, SOLR_IDLE)
+	}
+
+	/**
+	 * Starts a lifecycle-owned EntryStore app for specs that need non-default args, prepending the
+	 * shared Solr URL and upholding invariant #2 (sets appStarted=true, see the comment on it).
+	 * Callers stop the shared app via stopPreexistingAppIfRunning() first; per-spec infrastructure
+	 * (GreenMail, Keycloak) stays in the callers.
+	 */
+	protected static void startOwnedApp(List<String> extraArgs) {
+		def args = (['--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core']
+			+ extraArgs) as String[]
+		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
+		appStarted = true
 	}
 
 	protected static void stopPreexistingAppIfRunning() {

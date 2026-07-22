@@ -18,8 +18,6 @@ package org.entrystore.rest.it
 
 import org.apache.commons.text.StringEscapeUtils
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
-import org.springframework.boot.SpringApplication
 import spock.lang.Shared
 import spock.lang.Stepwise
 
@@ -51,8 +49,7 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		keycloakCasUrl = getKeycloakCasRealmUrl()
 
 		log.info('Starting EntryStoreApp with CAS')
-		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+		startOwnedApp([
 			'--entrystore.auth.cas.enabled=true',
 			'--entrystore.auth.cas.version=cas2',
 			'--entrystore.auth.cas.server.url=' + keycloakCasUrl,
@@ -62,9 +59,7 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 			// Override the IT default (httponly=off) so the auth_token HttpOnly assertion is meaningful
 			// for CAS sessions. Production default is HttpOnly=on.
 			'--entrystore.auth.cookie.httponly=on'
-		] as String[]
-		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
-		appStarted = true
+		])
 	}
 
 	def '1. GET /auth/cas should redirect to Keycloak CAS login page'() {
