@@ -16,14 +16,18 @@
 
 package org.entrystore.rest.springboot.service;
 
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.json.JSONArray;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
@@ -43,6 +47,10 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
@@ -54,6 +62,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -200,6 +210,113 @@ class ResourceServiceTest {
 		assertInstanceOf(ZipException.class, ex.getCause());
 
 		assertIsolatedTmpDirIsEmpty("exception path from ZipFile constructor");
+	}
+
+	@Test
+	void serializeResourceAsJson_listWithSort_returnsSortedIdArray() {
+		Context context = mockListEntry(List.of("a", "b", "c"));
+		mockResolvableChild(context, "a", new Date(3000));
+		mockResolvableChild(context, "b", new Date(1000));
+		mockResolvableChild(context, "c", new Date(2000));
+		var filter = new ListFilter("modified", null, null, null, null, null, null);
+
+		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+
+		assertEquals(List.of("b", "c", "a"), jsonArrayToList(result));
+	}
+
+	@Test
+	void serializeResourceAsJson_listSortDescending_returnsReversedIdArray() {
+		// Pins the !"desc".equalsIgnoreCase(order) mapping in ListParams.withoutPagination.
+		Context context = mockListEntry(List.of("a", "b", "c"));
+		mockResolvableChild(context, "a", new Date(3000));
+		mockResolvableChild(context, "b", new Date(1000));
+		mockResolvableChild(context, "c", new Date(2000));
+		var filter = new ListFilter("modified", null, null, null, "desc", null, null);
+
+		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+
+		assertEquals(List.of("a", "c", "b"), jsonArrayToList(result));
+	}
+
+	@Test
+	void serializeResourceAsJson_listOver500Children_returnsUnsortedIds() {
+		// Above 500 children the sort branch is skipped entirely: the raw (HashSet-ordered,
+		// nondeterministic) ID set is returned and no child entry is resolved.
+		List<String> ids = new ArrayList<>();
+		for (int i = 0; i < 501; i++) {
+			ids.add("id" + i);
+		}
+		mockListEntry(ids);
+		var filter = new ListFilter("modified", null, null, null, null, null, null);
+
+		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+
+		List<String> returned = jsonArrayToList(result);
+		assertEquals(501, returned.size());
+		assertEquals(new HashSet<>(ids), new HashSet<>(returned));
+	}
+
+	@Test
+	void serializeResourceAsJson_listSortedBranch_missingChildSkipped() {
+		// "b" is referenced by the list but does not resolve in the context — it is logged
+		// and dropped from the sorted output (unlike the unsorted branch, which keeps raw IDs).
+		Context context = mockListEntry(List.of("a", "b", "c"));
+		mockResolvableChild(context, "a", new Date(1000));
+		when(context.get("b")).thenReturn(null);
+		mockResolvableChild(context, "c", new Date(2000));
+		var filter = new ListFilter("modified", null, null, null, null, null, null);
+
+		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+
+		assertEquals(List.of("a", "c"), jsonArrayToList(result));
+	}
+
+	@Test
+	void serializeResourceAsJson_listWithSort_ignoresNonNumericOffsetAndLimit() {
+		// The sorting path ignores offset/limit, so malformed values must not fail the request
+		// (ListParams.withoutPagination skips the Integer.parseInt done by ListParams(ListFilter)).
+		Context context = mockListEntry(List.of("a", "b"));
+		mockResolvableChild(context, "a", new Date(2000));
+		mockResolvableChild(context, "b", new Date(1000));
+		var filter = new ListFilter("modified", null, null, null, null, "abc", "xyz");
+
+		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+
+		assertEquals(List.of("b", "a"), jsonArrayToList(result));
+	}
+
+	/** Stubs {@code entry} as a List-type entry whose list resource references the given child IDs. */
+	private Context mockListEntry(List<String> childIds) {
+		Context context = mock(Context.class);
+		org.entrystore.List list = mock(org.entrystore.List.class);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.List);
+		when(entry.getResource()).thenReturn(list);
+		when(list.getGraph()).thenReturn(new LinkedHashModel());
+		lenient().when(entry.getContext()).thenReturn(context);
+		List<URI> childUris = new ArrayList<>();
+		for (String id : childIds) {
+			childUris.add(URI.create("http://example.com/ctx/entry/" + id));
+		}
+		when(list.getChildren()).thenReturn(childUris);
+		return context;
+	}
+
+	private void mockResolvableChild(Context context, String id, Date modified) {
+		Entry child = mock(Entry.class);
+		lenient().when(child.getEntryURI()).thenReturn(URI.create("http://example.com/ctx/entry/" + id));
+		lenient().when(child.getModifiedDate()).thenReturn(modified);
+		lenient().when(context.get(id)).thenReturn(child);
+	}
+
+	private static List<String> jsonArrayToList(String json) {
+		JSONArray array = new JSONArray(json);
+		List<String> values = new ArrayList<>();
+		for (int i = 0; i < array.length(); i++) {
+			values.add(array.getString(i));
+		}
+		return values;
 	}
 
 	private void assertIsolatedTmpDirIsEmpty(String pathDescription) throws IOException {

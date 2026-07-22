@@ -41,7 +41,6 @@ import org.entrystore.impl.StringResource;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
-import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
@@ -86,7 +85,6 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -677,25 +675,7 @@ public class ResourceService {
 				}
 			}
 
-			Date before = new Date();
-			boolean asc = !"desc".equalsIgnoreCase(listFilter.order());
-			GraphType prioritizedResourceType = null;
-			if (listFilter.prio() != null) {
-				prioritizedResourceType = GraphType.valueOf(listFilter.prio());
-			}
-			String sortType = listFilter.sort();
-			if ("title".equalsIgnoreCase(sortType)) {
-				String lang = listFilter.lang();
-				EntryUtil.sortAfterTitle(childrenEntries, lang, asc, prioritizedResourceType);
-			} else if ("modified".equalsIgnoreCase(sortType)) {
-				EntryUtil.sortAfterModificationDate(childrenEntries, asc, prioritizedResourceType);
-			} else if ("created".equalsIgnoreCase(sortType)) {
-				EntryUtil.sortAfterCreationDate(childrenEntries, asc, prioritizedResourceType);
-			} else if ("size".equalsIgnoreCase(sortType)) {
-				EntryUtil.sortAfterFileSize(childrenEntries, asc, prioritizedResourceType);
-			}
-			long sortDuration = new Date().getTime() - before.getTime();
-			log.debug("List entry sorting took {} ms", sortDuration);
+			ResourceJsonSerializer.sortChildrenEntries(childrenEntries, ResourceJsonSerializer.ListParams.withoutPagination(listFilter));
 
 			for (Entry childEntry : childrenEntries) {
 				URI childURI = childEntry.getEntryURI();
