@@ -173,12 +173,8 @@ class CsrfIT extends BaseSpec {
 	def "POST /auth/logout as cookie-authenticated user without CSRF token should be rejected"() {
 		given:
 		// Use an isolated session so we don't invalidate the shared admin cookie.
-		def loginConn = EntryStoreClient.postRequest('/auth/cookie',
-				createFormBody([auth_username: 'admin', auth_password: 'adminpass']), '', 'application/x-www-form-urlencoded')
-		assert loginConn.getResponseCode() == HTTP_OK
-		def isolatedAuth = EntryStoreClient.findSetCookie(loginConn, 'auth_token')
-		def isolatedCsrf = EntryStoreClient.findCookieValue(loginConn, 'XSRF-TOKEN')
-		def cookieHeader = isolatedAuth + '; XSRF-TOKEN=' + isolatedCsrf
+		def login = EntryStoreClient.loginIsolated('admin')
+		def cookieHeader = login.authCookie + '; XSRF-TOKEN=' + login.csrf
 
 		when:
 		def conn = EntryStoreClient.postRequest('/auth/logout', '', '', 'application/json',
@@ -190,16 +186,11 @@ class CsrfIT extends BaseSpec {
 
 	def "POST /auth/logout as cookie-authenticated user with valid CSRF token should succeed"() {
 		given:
-		def loginConn = EntryStoreClient.postRequest('/auth/cookie',
-				createFormBody([auth_username: 'admin', auth_password: 'adminpass']), '', 'application/x-www-form-urlencoded')
-		assert loginConn.getResponseCode() == HTTP_OK
-		def isolatedAuth = EntryStoreClient.findSetCookie(loginConn, 'auth_token')
-		def isolatedCsrf = EntryStoreClient.findCookieValue(loginConn, 'XSRF-TOKEN')
-		assert isolatedCsrf != null: 'login response must carry XSRF-TOKEN cookie'
+		def login = EntryStoreClient.loginIsolated('admin')
 
 		when:
 		def conn = EntryStoreClient.postRequest('/auth/logout', '', '', 'application/json',
-				EntryStoreClient.csrfHeaders(isolatedAuth, isolatedCsrf))
+				EntryStoreClient.csrfHeaders(login.authCookie, login.csrf))
 
 		then:
 		conn.getResponseCode() == HTTP_NO_CONTENT

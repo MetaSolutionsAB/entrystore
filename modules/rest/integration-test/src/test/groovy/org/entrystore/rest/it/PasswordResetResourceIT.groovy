@@ -106,7 +106,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		message.getSubject() == 'Password reset request'
 		message.getAllRecipients().contains(new InternetAddress(username))
 		def token = extractConfirmationToken(greenMail)
-		token.length() == 16
+		token ==~ /[a-zA-Z0-9]{16}/
 	}
 
 	def "POST /auth/pwreset should send an email with generated token to an existing user when posted as an html form"() {
@@ -132,7 +132,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		message.getSubject() == 'Password reset request'
 		message.getAllRecipients().contains(new InternetAddress(username.toLowerCase()))
 		def token = extractConfirmationToken(greenMail)
-		token.length() == 16
+		token ==~ /[a-zA-Z0-9]{16}/
 	}
 
 	def "POST /auth/pwreset should not send an email to a non-existing user"() {

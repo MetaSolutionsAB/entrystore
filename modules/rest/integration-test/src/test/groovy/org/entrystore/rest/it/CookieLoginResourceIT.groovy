@@ -18,13 +18,12 @@ import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 class CookieLoginResourceIT extends BaseSpec {
 
 	static def password = 'newPass12345'
-	static def genericCredsClone = [:]
 
 	static GreenMail greenMail = new GreenMail(SMTP)
 
 	def setupSpec() {
 		greenMail.start()
-		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.snapshotCreds()
 		EntryStoreClient.creds.put('userForLogin@test.com', password)
 		EntryStoreClient.creds.put('userForLoginExpired@test.com', password)
 		EntryStoreClient.creds.put('userForLoginWithCookie@test.com', password)
@@ -44,8 +43,8 @@ class CookieLoginResourceIT extends BaseSpec {
 	}
 
 	def cleanupSpec() {
+		EntryStoreClient.restoreCreds()
 		greenMail.stop()
-		EntryStoreClient.creds = genericCredsClone
 	}
 
 	def "GET /auth/user without login (no cookie), should return guest user"() {

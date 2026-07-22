@@ -20,10 +20,9 @@ class TokenResourceIT extends BaseSpec {
 		.appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
 		.toFormatter()
 	static def password = 'newPass12345'
-	static def genericCredsClone = [:]
 
 	def setupSpec() {
-		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.snapshotCreds()
 		EntryStoreClient.creds.put('userForTokenManagement@test.com', password)
 		EntryStoreClient.creds.put('userForTokenManagementDelete@test.com', password)
 		EntryStoreClient.creds.put('userForTokenManagementDeleteCurrent@test.com', password)
@@ -31,7 +30,7 @@ class TokenResourceIT extends BaseSpec {
 	}
 
 	def cleanupSpec() {
-		EntryStoreClient.creds = genericCredsClone
+		EntryStoreClient.restoreCreds()
 	}
 
 	def "GET /auth/tokens should get unauthorized for a non-authenticated user"() {

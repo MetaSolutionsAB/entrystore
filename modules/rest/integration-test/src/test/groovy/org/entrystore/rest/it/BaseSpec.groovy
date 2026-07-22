@@ -420,6 +420,7 @@ abstract class BaseSpec extends Specification {
 	 * (GreenMail, Keycloak) stays in the callers.
 	 */
 	protected static void startOwnedApp(List<String> extraArgs) {
+		assert appInstance == null: 'call stopPreexistingAppIfRunning() before startOwnedApp'
 		def args = (['--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core']
 			+ extraArgs) as String[]
 		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)

@@ -30,11 +30,10 @@ class ResourceIT extends BaseSpec {
 	def static contextId = '80'
 	static def password = 'newPass1234'
 
-	static def genericCredsClone = [:]
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
-		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.snapshotCreds()
 		EntryStoreClient.creds.put('userChangePassword@test.com', password)
 		EntryStoreClient.creds.put('userChangePasswordBadCurrentPassword@test.com', password)
 		EntryStoreClient.creds.put('userChangePasswordNoCurrentPassword@test.com', password)
@@ -46,7 +45,7 @@ class ResourceIT extends BaseSpec {
 	}
 
 	def cleanupSpec() {
-		EntryStoreClient.creds = genericCredsClone
+		EntryStoreClient.restoreCreds()
 	}
 
 	def "GET /{context-id}/resource/{entry-id} as guest on String graph should respond with Not Found 404 to avoid entry-existence disclosure"() {

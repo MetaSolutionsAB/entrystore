@@ -43,10 +43,9 @@ class SignupResourceIT extends BaseSpec {
 	static def lastName = 'Last'
 
 	static GreenMail greenMail = new GreenMail(SMTP)
-	static def genericCredsClone = [:]
 
 	def setupSpec() {
-		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.snapshotCreds()
 		EntryStoreClient.creds.put('userSignupNoConfirm@test.com', newPassword)
 		EntryStoreClient.creds.put('userSignupCustomPropsConfirm@test.com', newPassword)
 		EntryStoreClient.creds.put('userSignupCustomPropsFormConfirm@test.com', newPassword)
@@ -58,7 +57,7 @@ class SignupResourceIT extends BaseSpec {
 	}
 
 	def cleanupSpec() {
-		EntryStoreClient.creds = genericCredsClone
+		EntryStoreClient.restoreCreds()
 		greenMail.stop()
 	}
 
@@ -119,7 +118,7 @@ class SignupResourceIT extends BaseSpec {
 		message.getSubject() == 'User sign-up request'
 		message.getAllRecipients().contains(new InternetAddress(username.toLowerCase()))
 		def token = extractConfirmationToken(greenMail)
-		token.length() == 16
+		token ==~ /[a-zA-Z0-9]{16}/
 	}
 
 	def "POST /auth/signup should send an email with generated token to a new user when posted as an html form"() {
@@ -141,7 +140,7 @@ class SignupResourceIT extends BaseSpec {
 		message.getSubject() == 'User sign-up request'
 		message.getAllRecipients().contains(new InternetAddress(username))
 		def token = extractConfirmationToken(greenMail)
-		token.length() == 16
+		token ==~ /[a-zA-Z0-9]{16}/
 	}
 
 	def "POST /auth/signup should not send an email when the password does not meet requirements"() {

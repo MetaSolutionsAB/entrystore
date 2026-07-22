@@ -15,10 +15,9 @@ class MessageIT extends BaseSpec {
 
 	static def newPassword = 'newPass12345'
 	static def greenMail = new GreenMail(SMTP)
-	static def genericCredsClone = [:]
 
 	def setupSpec() {
-		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.snapshotCreds()
 		EntryStoreClient.creds.put('sender@test.com', newPassword)
 		EntryStoreClient.creds.put('msgReplyTo@test.com', newPassword)
 		EntryStoreClient.creds.put('rateLimitSender@test.com', newPassword)
@@ -30,7 +29,7 @@ class MessageIT extends BaseSpec {
 	}
 
 	def cleanupSpec() {
-		EntryStoreClient.creds = genericCredsClone
+		EntryStoreClient.restoreCreds()
 		greenMail.stop()
 	}
 
@@ -134,11 +133,6 @@ class MessageIT extends BaseSpec {
 		def recipientUsername = 'msgReplyTo@test.com'
 		UserUtil.createUser(recipientUsername)
 
-		// Authorize the sender
-		def authConn = EntryStoreClient.postRequest('/auth/cookie',
-			createFormBody([auth_username: senderUsername, auth_password: newPassword]), '', 'application/x-www-form-urlencoded')
-		assert authConn.getResponseCode() == HTTP_OK
-
 		def requestBody = JsonOutput.toJson([
 			transport: 'email',
 			subject  : 'Reply-To Test',
@@ -192,10 +186,6 @@ class MessageIT extends BaseSpec {
 		UserUtil.setUserPassword(sender['resourceUri'].toString(), newPassword)
 		def recipientUsername = 'rateLimitRecipient@test.com'
 		UserUtil.createUser(recipientUsername)
-
-		def authConn = EntryStoreClient.postRequest('/auth/cookie',
-			createFormBody([auth_username: senderUsername, auth_password: newPassword]), '', 'application/x-www-form-urlencoded')
-		assert authConn.getResponseCode() == HTTP_OK
 
 		// Send messages up to the configured limit (3 in IT config)
 		for (int i = 0; i < 3; i++) {
