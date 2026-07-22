@@ -125,7 +125,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		conn.inputStream.text.contains('Sign-up successful.')
 
 		and: "the user can now log in"
-		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
+		def loginBody = createFormBody([auth_username: username, auth_password: newPassword])
 		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
 		loginConn.getResponseCode() == HTTP_OK
 	}
@@ -142,7 +142,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
 		conn.errorStream.text.contains('2 attempt(s) remaining')
-		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
+		def loginBody = createFormBody([auth_username: username, auth_password: newPassword])
 		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
 		loginConn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
@@ -168,7 +168,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		third.getResponseCode() == HTTP_BAD_REQUEST
 		third.errorStream.text.contains('invalidated')
 		fourth.getResponseCode() == HTTP_BAD_REQUEST
-		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
+		def loginBody = createFormBody([auth_username: username, auth_password: newPassword])
 		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
 		loginConn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
@@ -237,7 +237,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def retryBody = 'confirm=' + token + '&email=' + username + '&password=' + newPassword
 		def retryConn = EntryStoreClient.postRequest('/auth/signup/confirm', retryBody, null, formUrlEncoded)
 		retryConn.getResponseCode() == HTTP_CREATED
-		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
+		def loginBody = createFormBody([auth_username: username, auth_password: newPassword])
 		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
 		loginConn.getResponseCode() == HTTP_OK
 	}
@@ -321,7 +321,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		conn.inputStream.text.contains('Password reset was successful.')
 
 		and: "the password chosen on the confirmation form works"
-		def loginBody = 'auth_username=' + username + '&auth_password=' + chosenNewPassword
+		def loginBody = createFormBody([auth_username: username, auth_password: chosenNewPassword])
 		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
 		loginConn.getResponseCode() == HTTP_OK
 	}

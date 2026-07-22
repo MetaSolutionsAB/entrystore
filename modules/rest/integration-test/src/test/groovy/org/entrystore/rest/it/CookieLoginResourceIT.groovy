@@ -71,7 +71,7 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie should fail if the data sent to server is larger then 32KB or unknown"() {
 		given:
 		def username = RandomStringUtils.secure().nextAlphabetic(32769)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 
 		when:
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
@@ -120,7 +120,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		given:
 		def username = 'anyone@test.com'
 		def password = RandomStringUtils.secure().nextAlphabetic(2049)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 
 		when:
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
@@ -135,7 +135,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 
 		when:
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
@@ -153,7 +153,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
 		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
@@ -176,7 +176,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
 		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
@@ -210,7 +210,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=1'
+		def bodyParams = createFormBody([auth_username: username, auth_password: password, auth_maxage: '1'])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
 		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
@@ -240,7 +240,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=2'
+		def bodyParams = createFormBody([auth_username: username, auth_password: password, auth_maxage: '2'])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
 		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
@@ -269,7 +269,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
 		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
@@ -292,7 +292,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
 		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
@@ -328,7 +328,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
 		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
@@ -357,7 +357,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, null, 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
 		def cookie1 = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
@@ -393,7 +393,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 
 		when:
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
@@ -410,7 +410,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def extraHeaders = [Accept: 'application/json']
 
 		when:
@@ -428,7 +428,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def extraHeaders = [Accept: 'text/html']
 
 		when:
@@ -446,7 +446,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def requestBody = JsonOutput.toJson([
 			disabled: true
 		])
@@ -467,14 +467,14 @@ class CookieLoginResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
-		bodyParams = 'auth_username=' + username + '&auth_password=badPass123'
+		bodyParams = createFormBody([auth_username: username, auth_password: 'badPass123'])
 		// 3 attempts with bad password
 		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
 		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
 		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
-		bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		bodyParams = createFormBody([auth_username: username, auth_password: password])
 
 		when:
 		// 4th login attempt does the lockout
@@ -500,7 +500,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		// Username that is never created — verifies that lockout tracking is not limited to known users,
 		// which would otherwise leak account existence via the absence of 429 responses.
 		def username = 'unknownUserForLockout@test.com'
-		def bodyParams = 'auth_username=' + username + '&auth_password=anyBadPass'
+		def bodyParams = createFormBody([auth_username: username, auth_password: 'anyBadPass'])
 		// 3 attempts before the lockout threshold
 		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
 		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
@@ -522,7 +522,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		// applies to blacklisted usernames too. Otherwise an attacker could count 401s without
 		// ever seeing a 429 and conclude the username is blacklisted (enumeration oracle).
 		def username = 'userForLoginBlacklistLockout@test.com'
-		def bodyParams = 'auth_username=' + username + '&auth_password=anyBadPass'
+		def bodyParams = createFormBody([auth_username: username, auth_password: 'anyBadPass'])
 		// 3 attempts before the lockout threshold — each should return 401 from the blacklist branch
 		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
 		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
@@ -552,8 +552,8 @@ class CookieLoginResourceIT extends BaseSpec {
 		UserUtil.setUserPassword(disabledUri, password)
 		assert EntryStoreClient.putRequest(disabledUri, JsonOutput.toJson([disabled: true])).getResponseCode() == HTTP_NO_CONTENT
 
-		def wrongPasswordBody = 'auth_username=' + enabledUsername + '&auth_password=wrongPass123'
-		def disabledLoginBody = 'auth_username=' + disabledUsername + '&auth_password=' + password
+		def wrongPasswordBody = createFormBody([auth_username: enabledUsername, auth_password: 'wrongPass123'])
+		def disabledLoginBody = createFormBody([auth_username: disabledUsername, auth_password: password])
 
 		when:
 		def wrongPasswordConn = EntryStoreClient.postRequest('/auth/cookie', wrongPasswordBody, '', 'application/x-www-form-urlencoded')
@@ -584,7 +584,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		assert !beforeResourceJson.containsKey('disabledUntil')
 
 		// trigger temporary lockout: 3 bad attempts (matches entrystore.auth.temp.lockout.max.attempts=3)
-		def badBody = 'auth_username=' + username + '&auth_password=badPass123'
+		def badBody = createFormBody([auth_username: username, auth_password: 'badPass123'])
 		3.times {
 			def badConn = EntryStoreClient.postRequest('/auth/cookie', badBody, '', 'application/x-www-form-urlencoded')
 			try {
@@ -628,7 +628,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		and:
 		// confirm the lockout itself cleared, not just its JSON projection: a regression that
 		// drops disabledUntil from the response while leaving the lockout active would otherwise pass
-		def goodBody = 'auth_username=' + username + '&auth_password=' + password
+		def goodBody = createFormBody([auth_username: username, auth_password: password])
 		def postLockoutLogin = EntryStoreClient.postRequest('/auth/cookie', goodBody, '', 'application/x-www-form-urlencoded')
 		try {
 			assert postLockoutLogin.getResponseCode() == HTTP_OK

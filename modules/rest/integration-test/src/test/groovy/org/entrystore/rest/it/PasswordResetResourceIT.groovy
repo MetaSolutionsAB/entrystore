@@ -115,7 +115,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def username = 'userForm@test.com'
 		UserUtil.createUser(username)
-		def bodyParams = 'email=' + username + '&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
+		def bodyParams = createFormBody([email: username, password: newPassword, 'g-recaptcha-response': grecaptcharesponse])
 
 		when:
 		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', bodyParams, null, 'application/x-www-form-urlencoded')

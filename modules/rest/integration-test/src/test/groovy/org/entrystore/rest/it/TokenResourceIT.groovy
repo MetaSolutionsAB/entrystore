@@ -48,7 +48,7 @@ class TokenResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams1 = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=100'
+		def bodyParams1 = createFormBody([auth_username: username, auth_password: password, auth_maxage: '100'])
 		def loginConnection1 = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
 		assert loginConnection1.getResponseCode() == HTTP_OK
 		def cookie1 = EntryStoreClient.findSetCookie(loginConnection1, 'auth_token')
@@ -56,7 +56,7 @@ class TokenResourceIT extends BaseSpec {
 		if (tokenPart1.contains(';')) {
 			tokenPart1 = tokenPart1.substring(0, tokenPart1.indexOf(';'))
 		}
-		def bodyParams2 = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=50'
+		def bodyParams2 = createFormBody([auth_username: username, auth_password: password, auth_maxage: '50'])
 		def loginConnection2 = EntryStoreClient.postRequest('/auth/cookie', bodyParams2, '', 'application/x-www-form-urlencoded')
 		assert loginConnection2.getResponseCode() == HTTP_OK
 		def cookie2 = EntryStoreClient.findSetCookie(loginConnection2, 'auth_token')
@@ -91,7 +91,7 @@ class TokenResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams1 = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams1 = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection1 = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
 		assert loginConnection1.getResponseCode() == HTTP_OK
 		def cookie = EntryStoreClient.findSetCookie(loginConnection1, 'auth_token')
@@ -133,7 +133,7 @@ class TokenResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams1 = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams1 = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection1 = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
 		assert loginConnection1.getResponseCode() == HTTP_OK
 		def cookie1 = EntryStoreClient.findSetCookie(loginConnection1, 'auth_token')
@@ -142,7 +142,7 @@ class TokenResourceIT extends BaseSpec {
 		if (tokenPart1.contains(';')) {
 			tokenPart1 = tokenPart1.substring(0, tokenPart1.indexOf(';'))
 		}
-		def bodyParams2 = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams2 = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection2 = EntryStoreClient.postRequest('/auth/cookie', bodyParams2, '', 'application/x-www-form-urlencoded')
 		assert loginConnection2.getResponseCode() == HTTP_OK
 		def cookie2 = EntryStoreClient.findSetCookie(loginConnection2, 'auth_token')
@@ -172,7 +172,7 @@ class TokenResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams1 = 'auth_username=' + username + '&auth_password=' + password
+		def bodyParams1 = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
 		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')

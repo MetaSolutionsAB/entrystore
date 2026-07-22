@@ -139,7 +139,7 @@ class MessageIT extends BaseSpec {
 
 		// Authorize the sender
 		def authConn = EntryStoreClient.postRequest('/auth/cookie',
-			'auth_username=' + senderUsername + '&auth_password=' + newPassword, '', 'application/x-www-form-urlencoded')
+			createFormBody([auth_username: senderUsername, auth_password: newPassword]), '', 'application/x-www-form-urlencoded')
 		assert authConn.getResponseCode() == HTTP_OK
 
 		def requestBody = JsonOutput.toJson([
@@ -197,7 +197,7 @@ class MessageIT extends BaseSpec {
 		UserUtil.createUser(recipientUsername)
 
 		def authConn = EntryStoreClient.postRequest('/auth/cookie',
-			'auth_username=' + senderUsername + '&auth_password=' + newPassword, '', 'application/x-www-form-urlencoded')
+			createFormBody([auth_username: senderUsername, auth_password: newPassword]), '', 'application/x-www-form-urlencoded')
 		assert authConn.getResponseCode() == HTTP_OK
 
 		// Send messages up to the configured limit (3 in IT config)

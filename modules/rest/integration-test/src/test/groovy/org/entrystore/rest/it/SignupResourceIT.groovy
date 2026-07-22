@@ -127,7 +127,7 @@ class SignupResourceIT extends BaseSpec {
 	def "POST /auth/signup should send an email with generated token to a new user when posted as an html form"() {
 		given:
 		def username = 'userSignupForm@test.com'
-		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&email=' + username + '&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
+		def bodyParams = createFormBody([firstname: firstName, lastname: lastName, email: username, password: newPassword, 'g-recaptcha-response': grecaptcharesponse])
 
 		when:
 		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
@@ -743,7 +743,7 @@ class SignupResourceIT extends BaseSpec {
 	def "POST /auth/signup should confirm creating new user with custom properties after signing up with a valid token posted as an html form"() {
 		given:
 		def username = 'userSignupCustomPropsFormConfirm@test.com'
-		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&email=' + username + '&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse + '&custom_foo=foo&custom_boo=boo'
+		def bodyParams = createFormBody([firstname: firstName, lastname: lastName, email: username, password: newPassword, 'g-recaptcha-response': grecaptcharesponse, custom_foo: 'foo', custom_boo: 'boo'])
 
 		when:
 		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
@@ -771,13 +771,13 @@ class SignupResourceIT extends BaseSpec {
 	def "POST /auth/signup should not allow to login for the user before confirming the signup"() {
 		given:
 		def username = 'userSignupNoConfirm@test.com'
-		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&email=' + username + '&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
+		def bodyParams = createFormBody([firstname: firstName, lastname: lastName, email: username, password: newPassword, 'g-recaptcha-response': grecaptcharesponse])
 
 		when: "User signs up"
 		EntryStoreClient.postRequest('/auth/signup', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
 
 		then: "User should not be able to login before signup is confirmed"
-		def loginBodyParams = 'auth_username=' + username + '&auth_password=' + newPassword
+		def loginBodyParams = createFormBody([auth_username: username, auth_password: newPassword])
 		EntryStoreClient.postRequest('/auth/cookie', loginBodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
 
 		when: "signup is confirmed"

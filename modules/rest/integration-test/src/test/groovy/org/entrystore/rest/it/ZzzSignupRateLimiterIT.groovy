@@ -73,7 +73,8 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 	}
 
 	def signupFormBody(String email) {
-		"firstname=${firstName}&lastname=${lastName}&email=${email}&password=${newPassword}&g-recaptcha-response=${grecaptcharesponse}"
+		createFormBody([firstname: firstName, lastname: lastName, email: email,
+						password : newPassword, 'g-recaptcha-response': grecaptcharesponse])
 	}
 
 	def "POST /auth/signup — first request from IP is allowed"() {

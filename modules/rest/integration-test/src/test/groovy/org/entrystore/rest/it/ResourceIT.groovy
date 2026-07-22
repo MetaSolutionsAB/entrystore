@@ -1104,13 +1104,8 @@ class ResourceIT extends BaseSpec {
 		then:
 		editResourceConn.getResponseCode() == HTTP_NO_CONTENT
 
-		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
-		def loginConnection = EntryStoreClient.createConnection('/auth/cookie')
-		loginConnection.setRequestMethod('POST')
-		loginConnection.setRequestProperty('Content-Type', 'application/x-www-form-urlencoded')
-		loginConnection.setDoOutput(true)
-		loginConnection.getOutputStream().write(loginBody.getBytes())
-		loginConnection.connect()
+		def loginBody = createFormBody([auth_username: username, auth_password: newPassword])
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', 'application/x-www-form-urlencoded')
 		loginConnection.getResponseCode() == HTTP_OK
 		def info = EntryStoreClient.getRequest('/auth/user', username)
 		info.getResponseCode() == HTTP_OK

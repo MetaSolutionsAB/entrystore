@@ -90,7 +90,7 @@ class CsrfIT extends BaseSpec {
 
 	def "POST /auth/cookie (login) without CSRF token should succeed - login is exempt"() {
 		given:
-		def bodyParams = 'auth_username=admin&auth_password=adminpass'
+		def bodyParams = createFormBody([auth_username: 'admin', auth_password: 'adminpass'])
 
 		when:
 		def conn = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
@@ -174,7 +174,7 @@ class CsrfIT extends BaseSpec {
 		given:
 		// Use an isolated session so we don't invalidate the shared admin cookie.
 		def loginConn = EntryStoreClient.postRequest('/auth/cookie',
-				'auth_username=admin&auth_password=adminpass', '', 'application/x-www-form-urlencoded')
+				createFormBody([auth_username: 'admin', auth_password: 'adminpass']), '', 'application/x-www-form-urlencoded')
 		assert loginConn.getResponseCode() == HTTP_OK
 		def isolatedAuth = EntryStoreClient.findSetCookie(loginConn, 'auth_token')
 		def isolatedCsrf = EntryStoreClient.findCookieValue(loginConn, 'XSRF-TOKEN')
@@ -191,7 +191,7 @@ class CsrfIT extends BaseSpec {
 	def "POST /auth/logout as cookie-authenticated user with valid CSRF token should succeed"() {
 		given:
 		def loginConn = EntryStoreClient.postRequest('/auth/cookie',
-				'auth_username=admin&auth_password=adminpass', '', 'application/x-www-form-urlencoded')
+				createFormBody([auth_username: 'admin', auth_password: 'adminpass']), '', 'application/x-www-form-urlencoded')
 		assert loginConn.getResponseCode() == HTTP_OK
 		def isolatedAuth = EntryStoreClient.findSetCookie(loginConn, 'auth_token')
 		def isolatedCsrf = EntryStoreClient.findCookieValue(loginConn, 'XSRF-TOKEN')
@@ -219,7 +219,7 @@ class CsrfIT extends BaseSpec {
 	def "Login response should carry XSRF-TOKEN cookie so SPAs can read it"() {
 		when:
 		def conn = EntryStoreClient.postRequest('/auth/cookie',
-				'auth_username=admin&auth_password=adminpass', '', 'application/x-www-form-urlencoded')
+				createFormBody([auth_username: 'admin', auth_password: 'adminpass']), '', 'application/x-www-form-urlencoded')
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -235,7 +235,7 @@ class CsrfIT extends BaseSpec {
 		// browser would silently reject the cookie and every cookie-auth mutation would fail.
 		when:
 		def conn = EntryStoreClient.postRequest('/auth/cookie',
-				'auth_username=admin&auth_password=adminpass', '', 'application/x-www-form-urlencoded')
+				createFormBody([auth_username: 'admin', auth_password: 'adminpass']), '', 'application/x-www-form-urlencoded')
 
 		then:
 		conn.getResponseCode() == HTTP_OK
