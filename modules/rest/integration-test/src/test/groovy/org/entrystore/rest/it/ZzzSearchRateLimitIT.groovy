@@ -25,7 +25,6 @@ import static java.net.HttpURLConnection.HTTP_OK
 @Stepwise
 class ZzzSearchRateLimitIT extends BaseSpec {
 
-	static final int HTTP_TOO_MANY_REQUESTS = 429
 	static final String QUERY = '/search?type=solr&query=description.pl:opissearch'
 
 	def setupSpec() {

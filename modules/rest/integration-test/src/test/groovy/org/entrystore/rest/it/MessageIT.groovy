@@ -11,11 +11,8 @@ import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
-// 429 is not in HttpURLConnection constants
-
 class MessageIT extends BaseSpec {
 
-	static final int HTTP_TOO_MANY_REQUESTS = 429
 	static def newPassword = 'newPass12345'
 	static def greenMail = new GreenMail(SMTP)
 	static def genericCredsClone = [:]

@@ -105,9 +105,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		message.getFrom().contains(new InternetAddress('info@meta.se'))
 		message.getSubject() == 'Password reset request'
 		message.getAllRecipients().contains(new InternetAddress(username))
-		def messageContent = message.getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 		token.length() == 16
 	}
 
@@ -133,9 +131,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		message.getFrom().contains(new InternetAddress('info@meta.se'))
 		message.getSubject() == 'Password reset request'
 		message.getAllRecipients().contains(new InternetAddress(username.toLowerCase()))
-		def messageContent = message.getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 		token.length() == 16
 	}
 
@@ -347,9 +343,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 
 		when:
 		def confirmConn = EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token)
@@ -404,9 +398,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 
 		assert EntryStoreClient.deleteRequest('/_principals/entry/' + entryId).getResponseCode() == HTTP_NO_CONTENT
 		assert EntryStoreClient.getRequest('/_principals/entry/' + entryId).getResponseCode() == HTTP_NOT_FOUND
@@ -431,9 +423,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 		assert EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token).getResponseCode() == HTTP_OK
 
 		when:
@@ -456,14 +446,10 @@ class PasswordResetResourceIT extends BaseSpec {
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def oldMessageContent = greenMail.getReceivedMessages()[0].getContent()
-		def oldStartIndex = oldMessageContent.toString().indexOf('?confirm') + 9
-		def oldToken = oldMessageContent.toString().substring(oldStartIndex, oldStartIndex + 16)
+		def oldToken = extractConfirmationToken(greenMail)
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 2)
-		def newMessageContent = greenMail.getReceivedMessages()[1].getContent()
-		def newStartIndex = newMessageContent.toString().indexOf('?confirm') + 9
-		def newToken = newMessageContent.toString().substring(newStartIndex, newStartIndex + 16)
+		def newToken = extractConfirmationToken(greenMail, 1)
 		assert EntryStoreClient.getRequest('/auth/pwreset?confirm=' + newToken).getResponseCode() == HTTP_OK
 
 		when:
@@ -495,14 +481,10 @@ class PasswordResetResourceIT extends BaseSpec {
 
 		assert EntryStoreClient.postRequest('/auth/pwreset', request1Body).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def user1MessageContent = greenMail.getReceivedMessages()[0].getContent()
-		def user1StartIndex = user1MessageContent.toString().indexOf('?confirm') + 9
-		def user1Token = user1MessageContent.toString().substring(user1StartIndex, user1StartIndex + 16)
+		def user1Token = extractConfirmationToken(greenMail)
 		assert EntryStoreClient.postRequest('/auth/pwreset', request2Body).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 2)
-		def user2MessageContent = greenMail.getReceivedMessages()[1].getContent()
-		def user2StartIndex = user2MessageContent.toString().indexOf('?confirm') + 9
-		def user2Token = user2MessageContent.toString().substring(user2StartIndex, user2StartIndex + 16)
+		def user2Token = extractConfirmationToken(greenMail, 1)
 		assert EntryStoreClient.getRequest('/auth/pwreset?confirm=' + user1Token).getResponseCode() == HTTP_OK
 
 		when:
@@ -527,9 +509,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 
 		when:
 		def confirmConn = EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token)
@@ -551,9 +531,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 
 		when:
 		def confirmConn = EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token)
@@ -577,9 +555,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 
 		assert EntryStoreClient.deleteRequest('/_principals/entry/' + entryId).getResponseCode() == HTTP_NO_CONTENT
 		assert EntryStoreClient.getRequest('/_principals/entry/' + entryId).getResponseCode() == HTTP_NOT_FOUND

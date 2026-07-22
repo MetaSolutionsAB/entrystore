@@ -119,9 +119,7 @@ class UserResourceIT extends BaseSpec {
 			grecaptcharesponse: 'anything'
 		])
 		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf("?confirm") + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 		assert EntryStoreClient.getRequest('/auth/signup?confirm=' + token).getResponseCode() == HTTP_CREATED
 
 		when:

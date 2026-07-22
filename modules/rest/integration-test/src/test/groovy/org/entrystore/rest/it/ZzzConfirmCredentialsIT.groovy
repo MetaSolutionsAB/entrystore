@@ -65,12 +65,6 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		greenMail.purgeEmailFromAllMailboxes()
 	}
 
-	private static String extractToken(int index = 0) {
-		def content = greenMail.getReceivedMessages()[index].getContent().toString()
-		def start = content.indexOf('?confirm') + 9
-		return content.substring(start, start + 16)
-	}
-
 	// Setup helper: performs the sign-up request that mints a confirmation token and returns it.
 	// Convention-consistent with the sibling ITs' given:-block setup (see CLAUDE.md testing guidelines).
 	private static String startSignup(String email) {
@@ -82,7 +76,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/signup', body).getResponseCode() == HTTP_OK
-		return extractToken()
+		return extractConfirmationToken(greenMail)
 	}
 
 	// Setup helper: starts a password-reset flow for an existing user and returns the token.
@@ -90,7 +84,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def body = JsonOutput.toJson([email: email, grecaptcharesponse: grecaptcharesponse])
 		assert EntryStoreClient.postRequest('/auth/pwreset', body).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		return extractToken()
+		return extractConfirmationToken(greenMail)
 	}
 
 	// ---------- sign-up ----------

@@ -28,8 +28,6 @@ import static java.net.HttpURLConnection.HTTP_OK
 @Stepwise
 class ZzzSignupRateLimiterIT extends BaseSpec {
 
-	static final int HTTP_TOO_MANY_REQUESTS = 429
-
 	static def newPassword = 'newPass12345'
 	static def firstName = 'First'
 	static def lastName = 'Last'

@@ -18,6 +18,7 @@ package org.entrystore.rest.it
 
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.stubbing.StubMapping
+import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import groovy.transform.PackageScope
@@ -61,6 +62,9 @@ abstract class BaseSpec extends Specification {
 
 	static def log = LoggerFactory.getLogger(this.class)
 	static def JSON_PARSER = new JsonSlurper()
+
+	// Not in java.net.HttpURLConnection's HTTP_* constants (RFC 6585)
+	static final int HTTP_TOO_MANY_REQUESTS = 429
 
 	// Invariant for lifecycle-owning ITs (those that close this shared app and start their own
 	// with non-default args, e.g. ZzzSamlLoginIT, ZzzCasLoginIT):
@@ -326,6 +330,22 @@ abstract class BaseSpec extends Specification {
 		return params
 			.collect { k, v -> k + '=' + URLEncoder.encode(v, UTF_8) }
 			.join('&')
+	}
+
+	/**
+	 * Extracts the 16-character confirmation token following the '?confirm=' marker in a received
+	 * email (sign-up and password-reset confirmation mails share this link format).
+	 *
+	 * @param mail the GreenMail instance holding the message
+	 * @param index index into the received-messages array (defaults to the first message)
+	 */
+	protected static String extractConfirmationToken(GreenMail mail, int index = 0) {
+		def content = mail.getReceivedMessages()[index].getContent().toString()
+		def marker = '?confirm='
+		def markerIndex = content.indexOf(marker)
+		assert markerIndex != -1: 'confirmation mail carries no ?confirm= link'
+		def start = markerIndex + marker.length()
+		return content.substring(start, start + 16)
 	}
 
 	/**

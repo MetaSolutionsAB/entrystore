@@ -310,9 +310,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		// pwReset dispatches SMTP send + bcrypt asynchronously to avoid leaking account existence via
 		// response timing; wait for the email to arrive before extracting the confirmation token.
 		assert greenMail.waitForIncomingEmail(5000, 2)
-		def messageContent = greenMail.getReceivedMessages()[1].getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail, 1)
 		assert EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token).getResponseCode() == HTTP_OK
 
 		when:
