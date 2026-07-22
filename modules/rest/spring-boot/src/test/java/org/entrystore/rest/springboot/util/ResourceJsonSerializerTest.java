@@ -28,6 +28,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -293,12 +294,13 @@ class ResourceJsonSerializerTest {
 	}
 
 	@Test
-	void sortChildrenEntries_invalidPrio_throwsIllegalArgument() {
+	void sortChildrenEntries_invalidPrio_throwsBadRequest() {
 		List<Entry> children = new ArrayList<>();
 		var params = new ResourceJsonSerializer.ListParams("modified", null, "NotAGraphType", null, true, 0, 0);
 
-		assertThrows(IllegalArgumentException.class,
+		var ex = assertThrows(BadRequestException.class,
 				() -> ResourceJsonSerializer.sortChildrenEntries(children, params));
+		assertEquals("Invalid value for parameter 'prio': NotAGraphType", ex.getMessage());
 	}
 
 	/**

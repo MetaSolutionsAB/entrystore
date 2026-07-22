@@ -26,6 +26,7 @@ import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -72,6 +73,21 @@ class SyndicationTest {
 
 		assertEquals("Error serializing the syndication feed with title: Broken feed", ex.getMessage());
 		assertInstanceOf(FeedException.class, ex.getCause());
+	}
+
+	@Test
+	void convertSyndFeedToXml_unsupportedFeedType_throwsBadRequest() {
+		// Rome throws IllegalArgumentException for feed types it has no generator for;
+		// the util maps it to a 400 for both the /search and resource syndication routes
+		SyndFeed feed = new SyndFeedImpl();
+		feed.setFeedType("bogus_9.9");
+		feed.setTitle("Test feed");
+		feed.setDescription("Test description");
+		feed.setLink("https://example.com/feed");
+
+		var ex = assertThrows(BadRequestException.class, () -> Syndication.convertSyndFeedToXml(feed));
+
+		assertEquals("Invalid syndication feed type: 'bogus_9.9'", ex.getMessage());
 	}
 
 	@Test

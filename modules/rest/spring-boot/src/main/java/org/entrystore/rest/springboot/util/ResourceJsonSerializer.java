@@ -37,6 +37,7 @@ import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.springboot.model.api.ListFilter;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -337,7 +338,11 @@ public class ResourceJsonSerializer {
 		Date before = new Date();
 		GraphType prioritizedGraphType = null;
 		if (params.prio() != null) {
-			prioritizedGraphType = GraphType.valueOf(params.prio());
+			try {
+				prioritizedGraphType = GraphType.valueOf(params.prio());
+			} catch (IllegalArgumentException e) {
+				throw new BadRequestException("Invalid value for parameter 'prio': " + params.prio());
+			}
 		}
 		String sortType = params.sort();
 		if ("title".equalsIgnoreCase(sortType)) {

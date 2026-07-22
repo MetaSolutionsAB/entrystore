@@ -179,11 +179,7 @@ public class SearchService {
 		feed.setLink(buildRequestUri(request));
 		feed.setFeedType(feedType);
 
-		try {
-			return Syndication.convertSyndFeedToXml(feed);
-		} catch (IllegalArgumentException e) {
-			throw new BadRequestException("Invalid syndication feed type: '" + feedType + "'");
-		}
+		return Syndication.convertSyndFeedToXml(feed);
 	}
 
 	public String generateJson(int offset, int limit, QueryResultsDto queryResults, String rdfFormat) {

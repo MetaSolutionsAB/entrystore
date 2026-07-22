@@ -22,6 +22,7 @@ import org.entrystore.rest.it.util.NameSpaceConst
 
 import java.time.Year
 
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_OK
 
 class ResourceSyndicationIT extends BaseSpec {
@@ -533,5 +534,16 @@ class ResourceSyndicationIT extends BaseSpec {
 		itemDateNode.attributes().size() == 0
 		itemDateNode.value().size() == 1
 		(itemDateNode.value()[0] as String).contains(Year.now().toString())
+	}
+
+	def "GET /{context-id}/resource/{entry-id}?syndication=random-string should return BAD-REQUEST 400 due to invalid syndication format"() {
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + contextId + '?syndication=random-string')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_BAD_REQUEST
+		resourceConn.getContentType().contains('application/json')
+		def resp = JSON_PARSER.parseText(resourceConn.errorStream.text)
+		resp['error'] == 'Invalid syndication feed type: \'random-string\''
 	}
 }

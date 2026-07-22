@@ -226,6 +226,20 @@ class ResourceServiceTest {
 	}
 
 	@Test
+	void serializeResourceAsJson_listSortDescending_returnsReversedIdArray() {
+		// Pins the !"desc".equalsIgnoreCase(order) mapping in ListParams.withoutPagination.
+		Context context = mockListEntry(List.of("a", "b", "c"));
+		mockResolvableChild(context, "a", new Date(3000));
+		mockResolvableChild(context, "b", new Date(1000));
+		mockResolvableChild(context, "c", new Date(2000));
+		var filter = new ListFilter("modified", null, null, null, "desc", null, null);
+
+		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+
+		assertEquals(List.of("a", "c", "b"), jsonArrayToList(result));
+	}
+
+	@Test
 	void serializeResourceAsJson_listOver500Children_returnsUnsortedIds() {
 		// Above 500 children the sort branch is skipped entirely: the raw (HashSet-ordered,
 		// nondeterministic) ID set is returned and no child entry is resolved.

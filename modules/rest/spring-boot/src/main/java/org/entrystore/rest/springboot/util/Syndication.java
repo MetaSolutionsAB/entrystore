@@ -32,6 +32,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.springframework.http.MediaType;
 
@@ -56,10 +57,14 @@ public class Syndication {
 
 	private static final String VAR_RESOURCEURI = "\\{resourceuri}";
 
+	// SyndFeedOutput is stateless (WireFeedOutput holds no instance state; generators are statically cached)
+	private static final SyndFeedOutput SYND_FEED_OUTPUT = new SyndFeedOutput();
+
 	public static String convertSyndFeedToXml(SyndFeed feed) {
 		try {
-			// TODO: SyndFeedOutput seems thread-safe, hence should be fine to instantiate it only once?
-			return new SyndFeedOutput().outputString(feed, true);
+			return SYND_FEED_OUTPUT.outputString(feed, true);
+		} catch (IllegalArgumentException e) {
+			throw new BadRequestException("Invalid syndication feed type: '" + feed.getFeedType() + "'");
 		} catch (FeedException fe) {
 			throw new InternalServerErrorException("Error serializing the syndication feed with title: " + feed.getTitle(), fe);
 		}
