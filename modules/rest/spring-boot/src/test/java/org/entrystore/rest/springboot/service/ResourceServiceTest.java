@@ -31,6 +31,7 @@ import org.json.JSONArray;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
+import org.entrystore.rest.springboot.security.SsrfSafeHttpClient;
 import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,7 +40,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.core.session.SessionRegistry;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -88,7 +88,7 @@ class ResourceServiceTest {
 	private SsrfValidator ssrfValidator;
 
 	@Mock
-	private SessionRegistry sessionRegistry;
+	private AuthService authService;
 
 	@Mock
 	private Entry entry;
@@ -97,7 +97,8 @@ class ResourceServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, ssrfValidator, sessionRegistry);
+		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, ssrfValidator,
+				new SsrfSafeHttpClient(ssrfValidator), authService);
 		// Point importTmpDir at the JUnit-managed isolated directory so the
 		// temp-file cleanup assertions are scoped to this test and cannot be
 		// polluted by other processes or orphan files in the shared system temp.
@@ -160,7 +161,6 @@ class ResourceServiceTest {
 	void deleteResource_proxyTrue_blacklistedOrigin_throwsForbidden() throws Exception {
 		when(entry.getEntryType()).thenReturn(EntryType.Link);
 		when(entry.getResourceURI()).thenReturn(URI.create("http://127.0.0.1:1/x"));
-		when(entry.getEntryURI()).thenReturn(URI.create("http://example.com/1/entry/2"));
 		doThrow(new ForbiddenException("Access denied: host is blacklisted"))
 				.when(ssrfValidator).validateForDelete(anyString());
 
@@ -174,7 +174,6 @@ class ResourceServiceTest {
 	void deleteResource_proxyTrue_badScheme_throwsBadRequest() throws Exception {
 		when(entry.getEntryType()).thenReturn(EntryType.Reference);
 		when(entry.getResourceURI()).thenReturn(URI.create("ftp://example.org/x"));
-		when(entry.getEntryURI()).thenReturn(URI.create("http://example.com/1/entry/2"));
 		doThrow(new BadRequestException("Only http and https URLs are supported"))
 				.when(ssrfValidator).validateForDelete(anyString());
 
@@ -188,7 +187,6 @@ class ResourceServiceTest {
 	void deleteResource_proxyTrue_userinfoInUrl_throwsBadRequest() throws Exception {
 		when(entry.getEntryType()).thenReturn(EntryType.LinkReference);
 		when(entry.getResourceURI()).thenReturn(URI.create("http://user:pass@example.org/x"));
-		when(entry.getEntryURI()).thenReturn(URI.create("http://example.com/1/entry/2"));
 		doThrow(new BadRequestException("URLs with embedded credentials are not allowed"))
 				.when(ssrfValidator).validateForDelete(anyString());
 

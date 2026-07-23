@@ -19,7 +19,6 @@ import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CONFLICT
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
-import static java.net.HttpURLConnection.HTTP_INTERNAL_ERROR
 import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NOT_IMPLEMENTED
@@ -1551,7 +1550,7 @@ class ResourceIT extends BaseSpec {
 	}
 
 	def "DELETE /{context-id}/resource/{entry-id}?proxy=true handles redirect without Location header"() {
-		// 3xx without Location is a malformed upstream response — surface as 500, do not retry.
+		// 3xx without Location is a malformed upstream response — surface as 502, do not retry.
 		given:
 		def stubPath = '/it/proxy-delete-redirect-no-location'
 		wireMockServer.stubFor(delete(urlPathEqualTo(stubPath))
@@ -1563,12 +1562,12 @@ class ResourceIT extends BaseSpec {
 		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true')
 
 		then:
-		deleteResourceConn.getResponseCode() == HTTP_INTERNAL_ERROR
+		deleteResourceConn.getResponseCode() == HTTP_BAD_GATEWAY
 		wireMockServer.verify(1, deleteRequestedFor(urlPathEqualTo(stubPath)))
 	}
 
-	def "DELETE /{context-id}/resource/{entry-id}?proxy=true surfaces upstream 5xx as 500"() {
-		// Upstream returns a non-redirect error (500) — EntryStore must surface this as 500 to the
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true surfaces upstream 5xx as 502"() {
+		// Upstream returns a non-redirect error (500) — EntryStore must surface this as 502 to the
 		// client without relaying the upstream body (which may leak internal details).
 		given:
 		def stubPath = '/it/proxy-delete-upstream-500'
@@ -1581,15 +1580,15 @@ class ResourceIT extends BaseSpec {
 		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true')
 
 		then:
-		deleteResourceConn.getResponseCode() == HTTP_INTERNAL_ERROR
+		deleteResourceConn.getResponseCode() == HTTP_BAD_GATEWAY
 		wireMockServer.verify(1, deleteRequestedFor(urlPathEqualTo(stubPath)))
 	}
 
-	def "DELETE /{context-id}/resource/{entry-id}?proxy=true aborts after MAX_DELETE_REDIRECTS hops with 502"() {
-		// Chain of MAX_DELETE_REDIRECTS+1 stubs: the 12th hop must trip the cap before any
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true aborts after MAX_REDIRECTS hops with 502"() {
+		// Chain of MAX_REDIRECTS+1 stubs: the 17th hop must trip the cap before any
 		// further outbound connection.
 		given:
-		def chainLength = 11
+		def chainLength = 16
 		(0..<chainLength).each { i ->
 			wireMockServer.stubFor(delete(urlPathEqualTo('/it/proxy-delete-redir-loop-' + i))
 				.willReturn(aResponse().withStatus(302).withHeader('Location',
