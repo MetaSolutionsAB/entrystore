@@ -24,6 +24,7 @@ import groovy.json.JsonSlurper
 import groovy.transform.PackageScope
 import org.awaitility.core.ConditionEvaluationLogger
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.entrystore.rest.it.util.NameSpaceConst
 import org.entrystore.rest.it.util.UserUtil
 import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
 import org.slf4j.LoggerFactory
@@ -276,9 +277,7 @@ abstract class BaseSpec extends Specification {
 				if (username != 'admin') {
 					def isAdmin = EntryStoreClient.isAnAdmin(username)
 					log.info('Creating ES user: {} (Admin: {})', username, isAdmin)
-					def user = UserUtil.createUser(username, null, isAdmin)
-					UserUtil.setUserPassword(user['resourceUri'].toString(), password)
-					EntryStoreClient.createdEsUsers[username] = user
+					EntryStoreClient.createdEsUsers[username] = UserUtil.createUserWithPassword(username, password, null, isAdmin)
 				}
 			}
 		}
@@ -332,6 +331,11 @@ abstract class BaseSpec extends Specification {
 			.join('&')
 	}
 
+	/** Builds the request-body map for an entry whose local metadata is a single dcterms:title literal. */
+	def static createTitleMetadataBody(String resourceIri, String title) {
+		return [metadata: [(resourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: title]]]]]
+	}
+
 	/**
 	 * Extracts the 16-character confirmation token following the '?confirm=' marker in a received
 	 * email (sign-up and password-reset confirmation mails share this link format).
@@ -363,9 +367,9 @@ abstract class BaseSpec extends Specification {
 		assert entryId.toString().length() > 0
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		if (entryConn.getResponseCode() == HTTP_OK) {
-			entryConn.getContentType().contains('application/json')
+			assert entryConn.getContentType().contains('application/json')
 			def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
-			entryRespJson['entryId'] != null
+			assert entryRespJson['entryId'] != null
 			return entryRespJson['entryId'].toString()
 		} else if (entryConn.getResponseCode() == HTTP_NOT_FOUND) {
 			return createEntry(contextId, params, body)
@@ -390,6 +394,14 @@ abstract class BaseSpec extends Specification {
 		assert responseJson['entryId'] != null
 		assert responseJson['entryId'].toString().length() > 0
 		return responseJson['entryId'].toString()
+	}
+
+	/** Creates a self-deleting temp file with the given binary content. */
+	protected static File createTempBinaryFile(String prefix, String suffix, byte[] content) {
+		def file = File.createTempFile(prefix, suffix)
+		file.deleteOnExit()
+		file.withOutputStream { it.write(content) }
+		return file
 	}
 
 	Map getSolrStatus() {

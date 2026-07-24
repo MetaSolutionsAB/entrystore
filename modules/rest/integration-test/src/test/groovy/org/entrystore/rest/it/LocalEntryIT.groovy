@@ -63,11 +63,6 @@ class LocalEntryIT extends BaseSpec {
 		entryRespJson['info'][entryUri] != null
 
 		// Entry type not being set automatically from graphType=String, however it is set under /resource/
-//		entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE] != null
-//		def entryTypes = entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE].collect()
-//		entryTypes.size() == 1
-//		entryTypes[0]['type'] == 'uri'
-//		entryTypes[0]['value'] == NameSpaceConst.TERM_STRING
 
 		entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
 		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
@@ -88,7 +83,7 @@ class LocalEntryIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(createdResourceUri)
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('text/plain')
-		// Response says content-type is JSON, but it returns a non-json String value, same string as was given in the request to create the entry
+		// The body is the raw string as submitted, not JSON-quoted/escaped.
 		def resourceRespText = resourceConn.inputStream.text
 		resourceRespText == someText
 	}

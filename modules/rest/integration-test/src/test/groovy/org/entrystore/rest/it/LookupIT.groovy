@@ -19,9 +19,12 @@ package org.entrystore.rest.it
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
+import java.util.concurrent.TimeUnit
+
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
+import static org.awaitility.Awaitility.await
 
 class LookupIT extends BaseSpec {
 
@@ -37,19 +40,19 @@ class LookupIT extends BaseSpec {
 		def newMetadataIri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/_newId'
 
 		def params = [entrytype: 'link', resource: resourceUrl]
-		def body = [
-				metadata: [(newResourceIri): [
-						(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: 'Lookup Test Entry']],
-				]],
-				// Grant guest ReadMetadata so entry is indexed with public:true in Solr
-				info: [(newMetadataIri): [
-						(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]
-				]]
-		]
+		def body = createTitleMetadataBody(newResourceIri, 'Lookup Test Entry')
+		// Grant guest ReadMetadata so entry is indexed with public:true in Solr
+		body.info = [(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]]
 		entryId = createEntry(contextId, params, body)
 		waitForSolrProcessing()
-		// Solr needs even more time to finish processing (commitWithin=1000ms)
-		Thread.sleep(1100)
+		// Solr commits asynchronously (commitWithin=1000ms) — poll the *global* lookup until the entry
+		// is visible: only the global endpoint is Solr-backed (context-scoped lookup resolves directly
+		// against the repository and would pass before the commit).
+		def lookupPath = '/lookup' + convertMapToQueryParams([uri: resourceUrl])
+		await()
+			.pollInterval(100, TimeUnit.MILLISECONDS)
+			.atMost(10, TimeUnit.SECONDS)
+			.until { EntryStoreClient.getRequest(lookupPath, 'admin', 'application/json').getResponseCode() == HTTP_OK }
 	}
 
 	// --- Context-scoped lookup: happy path ---

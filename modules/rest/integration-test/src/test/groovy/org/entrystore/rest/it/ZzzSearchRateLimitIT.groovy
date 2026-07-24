@@ -42,7 +42,7 @@ class ZzzSearchRateLimitIT extends BaseSpec {
 	// ZzzSamlLoginIT, ZzzMultipartSizeLimitIT, and ZzzServerHeader*IT. The next
 	// lifecycle-owning IT's stopPreexistingAppIfRunning() closes our appInstance;
 	// resetting appInstance=null or appStarted=false here would violate BaseSpec
-	// invariant #2 (see BaseSpec.groovy:64-72) and force an unnecessary re-init of
+	// invariant #2 (see the invariant comment above appStarted in BaseSpec) and force an unnecessary re-init of
 	// the shared application, whose Jetty rebind to port 8181 is racy with the OS
 	// socket-release timer (the cause of ZzzPasswordResetRateLimiterIT flakiness
 	// before this fix).

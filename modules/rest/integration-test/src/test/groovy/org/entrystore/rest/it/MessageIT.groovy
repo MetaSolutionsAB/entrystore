@@ -16,6 +16,9 @@ class MessageIT extends BaseSpec {
 	static def newPassword = 'newPass12345'
 	static def greenMail = new GreenMail(SMTP)
 
+	// The shared app caps /message at entrystore.message.rate.limit.max=3 per sender per hour.
+	// Admin-sent messages in this spec share one budget — send from a dedicated user when adding tests.
+
 	def setupSpec() {
 		EntryStoreClient.snapshotCreds()
 		EntryStoreClient.creds.put('sender@test.com', newPassword)
@@ -127,8 +130,7 @@ class MessageIT extends BaseSpec {
 	def "POST /message should set Reply-To when sender has email-format username"() {
 		given:
 		def senderUsername = 'sender@test.com'
-		def sender = UserUtil.createUser(senderUsername)
-		UserUtil.setUserPassword(sender['resourceUri'].toString(), newPassword)
+		def sender = UserUtil.createUserWithPassword(senderUsername, newPassword)
 		greenMail.purgeEmailFromAllMailboxes()
 		def recipientUsername = 'msgReplyTo@test.com'
 		UserUtil.createUser(recipientUsername)
@@ -182,8 +184,7 @@ class MessageIT extends BaseSpec {
 	def "POST /message should return 429 when rate limit is exceeded"() {
 		given:
 		def senderUsername = 'rateLimitSender@test.com'
-		def sender = UserUtil.createUser(senderUsername)
-		UserUtil.setUserPassword(sender['resourceUri'].toString(), newPassword)
+		def sender = UserUtil.createUserWithPassword(senderUsername, newPassword)
 		def recipientUsername = 'rateLimitRecipient@test.com'
 		UserUtil.createUser(recipientUsername)
 

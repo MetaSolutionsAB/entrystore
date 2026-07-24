@@ -21,9 +21,11 @@ import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
 import java.time.Year
+import java.util.concurrent.TimeUnit
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_OK
+import static org.awaitility.Awaitility.await
 
 class ResourceSyndicationIT extends BaseSpec {
 
@@ -74,10 +76,16 @@ class ResourceSyndicationIT extends BaseSpec {
 
 		entryId = getOrCreateEntry(contextId, params, body)
 		assert entryId.length() > 0
-		Thread.sleep(1000)
 		waitForSolrProcessing()
-		// Solr needs even more time to finish processing
-		Thread.sleep(1500)
+		// waitForSolrProcessing only proves the Solr post queue drained; commitWithin(1s) means the
+		// searcher can lag behind it. Poll the feed until the commit makes the entry visible.
+		await()
+			.pollInterval(200, TimeUnit.MILLISECONDS)
+			.atMost(15, TimeUnit.SECONDS)
+			.until {
+				def probe = EntryStoreClient.getRequest('/_contexts/resource/' + contextId + '?syndication=rss_2.0')
+				probe.getResponseCode() == HTTP_OK && probe.inputStream.text.contains('local metadata title')
+			}
 	}
 
 	def "GET /{context-id}/resource/{entry-id}?syndication=rss_2.0 as guest should return empty feed"() {

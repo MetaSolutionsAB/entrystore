@@ -296,7 +296,7 @@ class NameResourceIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_NO_CONTENT
 
-		// Name should stay unchanged, why?
+		// Name should stay unchanged
 		def getConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId + '/name')
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getContentType().contains('application/json')

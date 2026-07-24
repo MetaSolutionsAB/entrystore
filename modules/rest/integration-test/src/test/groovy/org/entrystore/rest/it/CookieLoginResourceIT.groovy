@@ -89,7 +89,6 @@ class CookieLoginResourceIT extends BaseSpec {
 		then:
 		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
 		// TODO: fix should be Bad Request
-		//loginConnection.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
 	def "POST /auth/cookie should fail when required parameters are missing - username"() {
@@ -131,9 +130,7 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie should log in the user"() {
 		given:
 		def username = 'userForLogin@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
+		UserUtil.createUserWithPassword(username, password)
 		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 
 		when:
@@ -149,9 +146,7 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie should log in the user with cookie and then do 2 requests with the same cookie"() {
 		given:
 		def username = 'userForLoginWithCookie@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
+		UserUtil.createUserWithPassword(username, password)
 		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
@@ -172,9 +167,7 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie should log in the user with cookie"() {
 		given:
 		def username = 'userForLoginWithCookieRepeated@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
+		UserUtil.createUserWithPassword(username, password)
 		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
@@ -206,9 +199,8 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie with maxAge set, should de-authenticate user after maxAge time"() {
 		given:
 		def username = 'userForLoginExpired@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
+		UserUtil.createUserWithPassword(username, password)
+		// 3s maxage leaves a comfortable pre-expiry window for the first request even on slow CI
 		def bodyParams = createFormBody([auth_username: username, auth_password: password, auth_maxage: '1'])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
@@ -236,9 +228,8 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie should log in the user after an admin has changed that user's username"() {
 		given:
 		def username = 'userForLoginWithCookieChangedUsername@test.com'
-		def user = UserUtil.createUser(username)
+		def user = UserUtil.createUserWithPassword(username, password)
 		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
 		def bodyParams = createFormBody([auth_username: username, auth_password: password, auth_maxage: '2'])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
@@ -265,9 +256,8 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie should not log in the user with existing cookie after an admin has changed that user's password"() {
 		given:
 		def username = 'userForLoginWithCookieChangedPassword@test.com'
-		def user = UserUtil.createUser(username)
+		def user = UserUtil.createUserWithPassword(username, password)
 		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
 		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
@@ -288,9 +278,7 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie should not log in the user with existing cookie after that user has changed the password through email token"() {
 		given:
 		def username = 'userForLoginWithCookieChangedOwnPassword@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
+		UserUtil.createUserWithPassword(username, password)
 		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
@@ -322,9 +310,8 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie should log in the user only with 1 existing cookie after that user has changed the password through API with that specific cookie"() {
 		given:
 		def username = 'userForLoginWithCookieChangedOwnPasswordSameCookie@test.com'
-		def user = UserUtil.createUser(username)
+		def user = UserUtil.createUserWithPassword(username, password)
 		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
 		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
@@ -351,9 +338,8 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie should not log in the user with existing cookie1 after that user has changed the password through API with existing cookie2"() {
 		given:
 		def username = 'userForLoginWithCookieChangedOwnPasswordOldCookie@test.com'
-		def user = UserUtil.createUser(username)
+		def user = UserUtil.createUserWithPassword(username, password)
 		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
 		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, null, 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
@@ -387,9 +373,7 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie without Accept header should not log in the blacklisted user and respond with json"() {
 		given:
 		def username = 'userForLoginBlacklist@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
+		UserUtil.createUserWithPassword(username, password)
 		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 
 		when:
@@ -404,9 +388,7 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie with Accept json header should not log in the blacklisted user and respond with json"() {
 		given:
 		def username = 'userForLoginBlacklistNoHtml@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
+		UserUtil.createUserWithPassword(username, password)
 		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def extraHeaders = [Accept: 'application/json']
 
@@ -422,9 +404,7 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie with Accept html header should not log in the blacklisted user and respond with json"() {
 		given:
 		def username = 'userForLoginBlacklistHtml@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
+		UserUtil.createUserWithPassword(username, password)
 		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def extraHeaders = [Accept: 'text/html']
 
@@ -440,9 +420,8 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie should not log in the disabled user and respond with the same 401 as wrong credentials"() {
 		given:
 		def username = 'userForLoginDisabled@test.com'
-		def user = UserUtil.createUser(username)
+		def user = UserUtil.createUserWithPassword(username, password)
 		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
 		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		def requestBody = JsonOutput.toJson([
 			disabled: true
@@ -461,9 +440,7 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "POST /auth/cookie should temporarily lockout user who entered wrong password too many times"() {
 		given:
 		def username = 'userForLoginTemporaryLockout@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
+		UserUtil.createUserWithPassword(username, password)
 		def bodyParams = createFormBody([auth_username: username, auth_password: password])
 		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
 		bodyParams = createFormBody([auth_username: username, auth_password: 'badPass123'])
@@ -540,13 +517,11 @@ class CookieLoginResourceIT extends BaseSpec {
 		// Pins the normalization invariant against future regressions that might reintroduce
 		// a disabled-account discriminator (different status, body, or content type).
 		def enabledUsername = 'userForLoginEquality@test.com'
-		def enabledUser = UserUtil.createUser(enabledUsername)
-		UserUtil.setUserPassword(enabledUser['resourceUri'].toString(), password)
+		UserUtil.createUserWithPassword(enabledUsername, password)
 
 		def disabledUsername = 'userForLoginEqualityDisabled@test.com'
-		def disabledUser = UserUtil.createUser(disabledUsername)
+		def disabledUser = UserUtil.createUserWithPassword(disabledUsername, password)
 		def disabledUri = disabledUser['resourceUri'].toString()
-		UserUtil.setUserPassword(disabledUri, password)
 		assert EntryStoreClient.putRequest(disabledUri, JsonOutput.toJson([disabled: true])).getResponseCode() == HTTP_NO_CONTENT
 
 		def wrongPasswordBody = createFormBody([auth_username: enabledUsername, auth_password: 'wrongPass123'])
@@ -568,10 +543,9 @@ class CookieLoginResourceIT extends BaseSpec {
 	def "GET /_principals/entry/{id}?includeAll should expose disabledUntil while user is locked out"() {
 		given:
 		def username = 'userForDisabledUntilOnEntry@test.com'
-		def user = UserUtil.createUser(username)
+		def user = UserUtil.createUserWithPassword(username, password)
 		def entryId = user['entryId'].toString()
 		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
 		def entryPath = '/_principals/entry/' + entryId + '?includeAll'
 
 		// sanity: no lockout yet -> field absent on both endpoints
@@ -581,6 +555,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		assert !beforeResourceJson.containsKey('disabledUntil')
 
 		// trigger temporary lockout: 3 bad attempts (matches entrystore.auth.temp.lockout.max.attempts=3)
+		def beforeAttempts = Instant.now()
 		def badBody = createFormBody([auth_username: username, auth_password: 'badPass123'])
 		3.times {
 			def badConn = EntryStoreClient.postRequest('/auth/cookie', badBody, '', 'application/x-www-form-urlencoded')
@@ -600,8 +575,8 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		lockedEntryContentType.contains('application/json')
-		// active lockout must end in the future; 1s configured duration + small skew tolerance
-		disabledUntilFromEntry.isAfter(Instant.now())
+		// active lockout must end after the attempts began; 1s configured duration + small skew tolerance
+		disabledUntilFromEntry.isAfter(beforeAttempts)
 		disabledUntilFromEntry.isBefore(Instant.now().plusSeconds(2))
 
 		when:
