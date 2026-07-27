@@ -35,6 +35,10 @@ class TokenResourceIT extends BaseSpec {
 
 	/** Token value from an auth_token Set-Cookie line, up to but excluding the '.node' suffix. */
 	private static String tokenPart(String authCookieLine) {
+		// Without both markers the split below silently returns the whole remainder — token plus the
+		// cookie attributes — so fail here instead of querying /auth/tokens with a bogus key.
+		assert authCookieLine.startsWith('auth_token='): 'not an auth_token Set-Cookie line: ' + authCookieLine
+		assert authCookieLine.contains('.node'): 'auth_token cookie carries no .node suffix: ' + authCookieLine
 		authCookieLine.substring('auth_token='.length()).split(/\.node/)[0]
 	}
 
@@ -96,8 +100,8 @@ class TokenResourceIT extends BaseSpec {
 		def oldLoginTime = tokensRespJson[token]['loginTime']
 
 		when:
-		// timestamps have millisecond precision; make sure the second request lands in a strictly
-		// later millisecond so the > 0 assertions below stay meaningful
+		// the assertions below truncate to whole milliseconds (ChronoUnit.MILLIS.between(...) > 0),
+		// so the second request has to land in a strictly later millisecond to be observable
 		Thread.sleep(5)
 		def tokensNewConnection = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: login.authCookie])
 

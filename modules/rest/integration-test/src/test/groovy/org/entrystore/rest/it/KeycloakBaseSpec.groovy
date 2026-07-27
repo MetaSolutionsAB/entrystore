@@ -67,6 +67,10 @@ abstract class KeycloakBaseSpec extends BaseSpec {
 		def formActionMatcher = loginPageHtml =~ /action="([^"]+)"/
 		String formActionUrl = formActionMatcher ? formActionMatcher[0][1] : null
 		assert formActionUrl: 'Form action URL not found in login page'
+		// The regex takes the first form on the page, so pin it to the credential form — any
+		// interstitial Keycloak renders ahead of it (locale switcher, required action, terms) would
+		// otherwise be returned as the login endpoint.
+		assert formActionUrl.contains('login-actions/authenticate'): 'not a credential-form action URL: ' + formActionUrl
 		return StringEscapeUtils.unescapeHtml4(formActionUrl)
 	}
 

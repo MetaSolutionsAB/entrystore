@@ -1335,8 +1335,8 @@ class EntryIT extends BaseSpec {
 		getOrCreateEntry(contextId, params, body)
 
 		when:
-		// TODO: Verify - GET with rdfFormat=application/ld+json and no Accept header ignores the param and returns the RDF+XML default.
-
+		// TODO: no coverage for rdfFormat without an explicit Accept header — getRequest(path, user, null)
+		// still sends HttpURLConnection's default Accept, so add a case pinning which of the two wins.
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'application/rdf+xml')
 
 		then:

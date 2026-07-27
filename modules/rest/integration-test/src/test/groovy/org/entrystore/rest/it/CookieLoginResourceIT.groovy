@@ -200,7 +200,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		given:
 		def username = 'userForLoginExpired@test.com'
 		UserUtil.createUserWithPassword(username, password)
-		// 3s maxage leaves a comfortable pre-expiry window for the first request even on slow CI
+		// 1s maxage: the first request below must land inside that window, the second after it
 		def bodyParams = createFormBody([auth_username: username, auth_password: password, auth_maxage: '1'])
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
@@ -555,7 +555,6 @@ class CookieLoginResourceIT extends BaseSpec {
 		assert !beforeResourceJson.containsKey('disabledUntil')
 
 		// trigger temporary lockout: 3 bad attempts (matches entrystore.auth.temp.lockout.max.attempts=3)
-		def beforeAttempts = Instant.now()
 		def badBody = createFormBody([auth_username: username, auth_password: 'badPass123'])
 		3.times {
 			def badConn = EntryStoreClient.postRequest('/auth/cookie', badBody, '', 'application/x-www-form-urlencoded')
@@ -565,6 +564,7 @@ class CookieLoginResourceIT extends BaseSpec {
 				badConn.disconnect()
 			}
 		}
+		def afterAttempts = Instant.now()
 
 		when:
 		def lockedEntryConn = EntryStoreClient.getRequest(entryPath)
@@ -575,9 +575,12 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		lockedEntryContentType.contains('application/json')
-		// active lockout must end after the attempts began; 1s configured duration + small skew tolerance
-		disabledUntilFromEntry.isAfter(beforeAttempts)
-		disabledUntilFromEntry.isBefore(Instant.now().plusSeconds(2))
+		// disabledUntil = last failed attempt + the configured 1s duration
+		// (entrystore.auth.temp.lockout.duration), so the lockout must still be active as of the
+		// instant the attempts finished — a zero-length lockout fails here. Anchoring both bounds to
+		// a fixed instant instead of re-reading the clock keeps a slow GET from failing spuriously.
+		disabledUntilFromEntry.isAfter(afterAttempts)
+		disabledUntilFromEntry.isBefore(afterAttempts.plusSeconds(2))
 
 		when:
 		def lockedResourceJson = fetchJsonOkAsMap(EntryStoreClient.getRequest(resourceUri))

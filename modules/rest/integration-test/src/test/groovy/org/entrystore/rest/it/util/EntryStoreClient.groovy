@@ -150,7 +150,7 @@ class EntryStoreClient {
 
 	def static deleteRequest(String path, String body = emptyJsonBody, String asUser = 'admin',
 							 String contentType = 'application/json', Map<String, String> extraHeaders = [:]) {
-		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes(UTF_8))
+		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes())
 		return sendRequestAsStream(HttpMethod.DELETE, path, contentStream, asUser, contentType, extraHeaders)
 	}
 
@@ -313,6 +313,7 @@ class EntryStoreClient {
 	 * cookie attributes (Path, HttpOnly, ...) each line carries.
 	 */
 	static String toCookieHeader(List<String> setCookieLines) {
+		assert setCookieLines: 'response carries no Set-Cookie header'
 		return setCookieLines.collect { it.split(';')[0] }.join('; ')
 	}
 
