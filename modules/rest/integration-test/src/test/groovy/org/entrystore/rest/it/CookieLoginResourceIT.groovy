@@ -577,8 +577,9 @@ class CookieLoginResourceIT extends BaseSpec {
 		lockedEntryContentType.contains('application/json')
 		// disabledUntil = last failed attempt + the configured 1s duration
 		// (entrystore.auth.temp.lockout.duration), so the lockout must still be active as of the
-		// instant the attempts finished — a zero-length lockout fails here. Anchoring both bounds to
-		// a fixed instant instead of re-reading the clock keeps a slow GET from failing spuriously.
+		// instant the attempts finished — a zero-length lockout fails here. Both bounds are anchored
+		// to that fixed instant so they describe the lockout window itself rather than drifting with
+		// however long the GET above took.
 		disabledUntilFromEntry.isAfter(afterAttempts)
 		disabledUntilFromEntry.isBefore(afterAttempts.plusSeconds(2))
 

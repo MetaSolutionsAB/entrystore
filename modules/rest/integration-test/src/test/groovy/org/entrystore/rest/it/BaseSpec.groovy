@@ -349,11 +349,11 @@ abstract class BaseSpec extends Specification {
 		def markerIndex = content.indexOf(marker)
 		assert markerIndex != -1: 'confirmation mail carries no ?confirm= link'
 		def start = markerIndex + marker.length()
-		def token = content.substring(start, start + 16)
-		// Pin the shape the fixed-length slice above assumes (AuthService generates the token via
-		// RandomStringUtils.random(16, 0, 0, true, true, ...)); without this a format change would
-		// surface as an opaque 400 from the confirmation endpoint rather than here.
-		assert token ==~ /[A-Za-z0-9]{16}/: 'unexpected confirmation-token shape: ' + token
+		// Match the whole alphanumeric run rather than a fixed-length slice, so a token that grew
+		// or shrank fails here instead of as an opaque 400 from the confirmation endpoint
+		// (AuthService generates it via RandomStringUtils.random(16, 0, 0, true, true, ...)).
+		def token = content.substring(start).find(/[A-Za-z0-9]+/)
+		assert token?.length() == 16: 'unexpected confirmation-token shape: ' + token
 		return token
 	}
 

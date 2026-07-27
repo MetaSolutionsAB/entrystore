@@ -1248,6 +1248,8 @@ class EntryIT extends BaseSpec {
 		getOrCreateEntry(contextId, params, body)
 
 		when:
+		// TODO: no coverage for rdfFormat without an explicit Accept header — getRequest(path, user, null)
+		// still sends HttpURLConnection's default Accept, so add a case pinning which of the two wins.
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?rdfFormat=application/ld+json&includeAll')
 
 		then:
@@ -1335,8 +1337,6 @@ class EntryIT extends BaseSpec {
 		getOrCreateEntry(contextId, params, body)
 
 		when:
-		// TODO: no coverage for rdfFormat without an explicit Accept header — getRequest(path, user, null)
-		// still sends HttpURLConnection's default Accept, so add a case pinning which of the two wins.
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'application/rdf+xml')
 
 		then:

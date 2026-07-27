@@ -36,10 +36,12 @@ class TokenResourceIT extends BaseSpec {
 	/** Token value from an auth_token Set-Cookie line, up to but excluding the '.node' suffix. */
 	private static String tokenPart(String authCookieLine) {
 		// Without both markers the split below silently returns the whole remainder — token plus the
-		// cookie attributes — so fail here instead of querying /auth/tokens with a bogus key.
+		// cookie attributes — so fail here instead of querying /auth/tokens with a bogus key. The
+		// '.node' check must look at the cookie value alone, not at attributes that could carry it.
 		assert authCookieLine.startsWith('auth_token='): 'not an auth_token Set-Cookie line: ' + authCookieLine
-		assert authCookieLine.contains('.node'): 'auth_token cookie carries no .node suffix: ' + authCookieLine
-		authCookieLine.substring('auth_token='.length()).split(/\.node/)[0]
+		def value = authCookieLine.substring('auth_token='.length()).split(';')[0]
+		assert value.contains('.node'): 'auth_token cookie carries no .node suffix: ' + authCookieLine
+		return value.split(/\.node/)[0]
 	}
 
 	def "GET /auth/tokens should get unauthorized for a non-authenticated user"() {
