@@ -1,0 +1,116 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.entrystore.rest.springboot.configuration;
+
+import jakarta.servlet.http.HttpServletRequest;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.web.cors.CorsConfiguration;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+/**
+ * Pins the origin-matching contract that moved from a hand-rolled prefix/suffix matcher onto
+ * Spring's {@code allowedOriginPatterns}. The origin set mirrors {@code entrystore-it.properties}
+ * so these cases and {@code CorsIT} stay in step.
+ */
+class EntryStoreCorsConfigurationSourceTest {
+
+	private static final String ORIGINS = "http://example.com,http://other.com,*.test.example.com,http://prefix.*";
+	private static final String CREDENTIAL_ORIGINS = "http://localhost:3000";
+
+	@ParameterizedTest(name = "{0} -> allowed={1}, credentials={2}")
+	@CsvSource({
+			"http://example.com,          true,  false", // exact match on the plain list
+			"http://other.com,            true,  false", // second exact match
+			"http://app.test.example.com, true,  false", // *.suffix pattern
+			"http://prefix.anything.com,  true,  false", // prefix.* pattern
+			"http://localhost:3000,       true,  true",  // credentials list wins over the plain list
+			"http://disallowed.org,       false, false", // on neither list — no CORS handling at all
+			"http://example.com.evil.net, false, false", // suffix pattern must not match a longer host
+	})
+	void getCorsConfiguration_matchesConfiguredOrigins(String origin, boolean allowed, boolean credentials) {
+		CorsConfiguration config = resolve(properties(ORIGINS, CREDENTIAL_ORIGINS), origin);
+
+		if (!allowed) {
+			assertNull(config, "disallowed origin must yield no configuration, so the request passes through untouched");
+			return;
+		}
+		assertNotNull(config);
+		assertEquals(origin, config.checkOrigin(origin), "the request origin must be echoed back, never '*'");
+		assertEquals(credentials, Boolean.TRUE.equals(config.getAllowCredentials()));
+	}
+
+	@Test
+	void getCorsConfiguration_bareWildcardOrigin_echoesRequestOrigin() {
+		// A literal '*' in allowedOrigins would make checkOrigin throw once credentials are allowed;
+		// as a pattern it matches and still echoes the concrete origin.
+		CorsConfiguration config = resolve(properties("*", CREDENTIAL_ORIGINS), "http://anything.example");
+
+		assertNotNull(config);
+		assertEquals("http://anything.example", config.checkOrigin("http://anything.example"));
+	}
+
+	@Test
+	void getCorsConfiguration_noOriginHeader_returnsNull() {
+		assertNull(resolve(properties(ORIGINS, CREDENTIAL_ORIGINS), null));
+	}
+
+	@Test
+	void getCorsConfiguration_corsDisabled_returnsNullForOtherwiseAllowedOrigin() {
+		CorsProperties disabled = new CorsProperties("off", ORIGINS, CREDENTIAL_ORIGINS, "X-Custom-Header", 7200);
+
+		assertNull(resolve(disabled, "http://example.com"));
+	}
+
+	@Test
+	void getCorsConfiguration_headersAndMaxAge_appliedToBothAllowedAndExposed() {
+		CorsConfiguration config = resolve(properties(ORIGINS, CREDENTIAL_ORIGINS), "http://example.com");
+
+		assertNotNull(config);
+		assertEquals(List.of("X-Custom-Header"), config.getAllowedHeaders());
+		assertEquals(List.of("X-Custom-Header"), config.getExposedHeaders());
+		assertEquals(Long.valueOf(7200L), config.getMaxAge());
+		assertTrue(config.getAllowedMethods().containsAll(List.of("GET", "PUT", "POST", "DELETE", "OPTIONS", "HEAD")));
+	}
+
+	@Test
+	void getCorsConfiguration_noCredentialOriginsConfigured_neverAllowsCredentials() {
+		CorsConfiguration config = resolve(properties(ORIGINS, ""), "http://example.com");
+
+		assertNotNull(config);
+		assertEquals(Boolean.FALSE, config.getAllowCredentials());
+	}
+
+	private static CorsProperties properties(String origins, String credentialOrigins) {
+		return new CorsProperties("on", origins, credentialOrigins, "X-Custom-Header", 7200);
+	}
+
+	private static CorsConfiguration resolve(CorsProperties properties, String origin) {
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		when(request.getHeader("Origin")).thenReturn(origin);
+		return new EntryStoreCorsConfigurationSource(properties).getCorsConfiguration(request);
+	}
+}

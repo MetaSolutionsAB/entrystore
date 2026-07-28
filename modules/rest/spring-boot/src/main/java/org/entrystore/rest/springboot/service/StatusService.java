@@ -25,7 +25,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.configuration.AppStartedListener;
-import org.entrystore.rest.springboot.configuration.CorsConfig;
+import org.entrystore.rest.springboot.configuration.CorsProperties;
 import org.entrystore.rest.springboot.configuration.InfoAppPropertiesConfiguration;
 import org.entrystore.rest.springboot.model.api.StatusExtendedIncludeEnum;
 import org.entrystore.rest.springboot.model.api.StatusExtendedResponse;
@@ -52,7 +52,7 @@ public class StatusService {
 
 	private final InfoAppPropertiesConfiguration appConfig;
 	private final Config esConfig;
-	private final CorsConfig corsConfig;
+	private final CorsProperties corsProperties;
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final AppStartedListener appStartedListener;
@@ -110,7 +110,7 @@ public class StatusService {
 
 	private Map<String, Object> buildCorsInfo() {
 		return Map.of(
-			"enabled", corsConfig.isCorsEnabled(),
+			"enabled", corsProperties.enabled(),
 			"headers", esConfig.getString(Settings.CORS_HEADERS, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
 			"maxAge", esConfig.getString(Settings.CORS_MAX_AGE, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
 			"origins", esConfig.getString(Settings.CORS_ORIGINS, DEFAULT_VALUE_FOR_NOT_CONFIGURED),

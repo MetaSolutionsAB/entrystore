@@ -25,7 +25,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
-import org.entrystore.rest.springboot.configuration.CorsConfig;
+import org.entrystore.rest.springboot.configuration.CorsProperties;
 import org.entrystore.rest.springboot.configuration.HttpBasicAuthConfiguration;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
@@ -91,7 +91,7 @@ public class SecurityConfig {
 	private final FormLoginAuthenticationFailureHandler formLoginAuthenticationFailureHandler;
 	private final FormLoginAuthenticationSuccessHandler formLoginAuthenticationSuccessHandler;
 
-	private final CorsConfig corsConfig;
+	private final CorsProperties corsProperties;
 
 	private final CsrfRequestMatcher csrfRequestMatcher;
 	private final CsrfCookieFilter csrfCookieFilter;
@@ -129,7 +129,7 @@ public class SecurityConfig {
 												   AuthenticationEntryPoint customEntryPoint,
 												   AccessDeniedHandler customAccessDeniedHandler) throws Exception {
 
-		if (corsConfig.isCorsEnabled()) {
+		if (corsProperties.enabled()) {
 			http.cors(Customizer.withDefaults());
 		} else {
 			http.cors(AbstractHttpConfigurer::disable);
