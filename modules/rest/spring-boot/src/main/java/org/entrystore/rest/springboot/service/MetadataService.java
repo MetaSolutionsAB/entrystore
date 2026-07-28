@@ -107,12 +107,8 @@ public class MetadataService {
 			throw new EntityNotFoundException("Metadata graph not found");
 		}
 
-		if (graphQuery != null) {
-			Model graphQueryResult = applyGraphQuery(graphQuery, metadataGraph);
-			return new MetadataResult(serializeGraph(graphQueryResult, format), null);
-		} else {
-			return new MetadataResult(serializeGraph(metadataGraph, format), null);
-		}
+		Model graphToSerialize = graphQuery != null ? applyGraphQuery(graphQuery, metadataGraph) : metadataGraph;
+		return new MetadataResult(GraphUtil.serializeGraph(graphToSerialize, format), null);
 	}
 
 	/**
@@ -193,12 +189,10 @@ public class MetadataService {
 
 		EntryUtil.TraversalResult travResult = traverse(entry, predicatesToFollow, blacklist, repositoryScope, depth, limit);
 		Date latestModified = travResult.getLatestModified();
-		if (graphQuery != null) {
-			Model graphQueryResult = applyGraphQuery(graphQuery, travResult.getGraph());
-			return new MetadataResult(serializeGraph(graphQueryResult, format), latestModified);
-		} else {
-			return new MetadataResult(serializeGraph(travResult.getGraph(), format), latestModified);
-		}
+		Model graphToSerialize = graphQuery != null
+				? applyGraphQuery(graphQuery, travResult.getGraph())
+				: travResult.getGraph();
+		return new MetadataResult(GraphUtil.serializeGraph(graphToSerialize, format), latestModified);
 	}
 
 	private String getFirstProfile(String predCSV) {
@@ -208,20 +202,6 @@ public class MetadataService {
 			}
 		}
 		return null;
-	}
-
-	/**
-	 * @return Metadata in the requested format.
-	 */
-	private String serializeGraph(Model graph, String mediaType) {
-		if (graph != null) {
-			String serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
-			if (serializedGraph != null) {
-				return serializedGraph;
-			}
-		}
-
-		throw new BadRequestException("Unable to serialize graph");
 	}
 
 	/**

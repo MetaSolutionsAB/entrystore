@@ -6,6 +6,8 @@
 
 [ENTRYSTORE-1029](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1029) Index xsd:decimal/float/double literals via new metadata.predicate.decimal.* Solr field
 
+[ENTRYSTORE-1091](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1091) Fail RDF serialization loudly instead of serving truncated graphs. Behaviour note: a mid-stream RDF writer failure now returns 500 instead of 200 with a partial document, and endpoints that previously answered 400 or 406 for the same server-side failure \(entry, metadata, lookup and resource retrieval\) now also return 500
+
 [ENTRYSTORE-529](https://metasolutions.atlassian.net/browse/ENTRYSTORE-529) Require credential confirmation for sign-up and password reset \(behind entrystore.auth.confirmation.legacy, default true\). Config note: entrystore.auth.signup.whitelist now accepts only the indexed form \(.1, .2, ...\) and the previously-undocumented bare "whitelist=domain" form is no longer bound; entrystore.trust.x-forwarded-for is now parsed with strict boolean semantics \(true/on/yes/1 enable, false/off/no/0 disable\) and other values fail fast at startup instead of being silently treated as false
 
 ## Version 5.7.1 (2025-06-17)

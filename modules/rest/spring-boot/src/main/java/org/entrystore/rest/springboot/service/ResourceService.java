@@ -59,7 +59,6 @@ import org.entrystore.rest.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.springboot.util.Email;
 import org.entrystore.rest.springboot.util.FileUtil;
 import org.entrystore.rest.springboot.util.GraphUtil;
-import org.entrystore.rest.springboot.util.RDFJSON;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -69,7 +68,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.server.NotAcceptableStatusException;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -140,21 +138,11 @@ public class ResourceService {
 			}
 
 			if (graph != null) {
-				String serializedGraph;
-				if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType)) {
-					if (isList) {
-						return serializeJsonRepresentationResourceList(entry, listFilter);
-					}
-					serializedGraph = RDFJSON.graphToRdfJson(graph);
-				} else {
-					serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
+				if (isList && MediaType.APPLICATION_JSON_VALUE.equals(mediaType)) {
+					return serializeJsonRepresentationResourceList(entry, listFilter);
 				}
-
-				if (serializedGraph != null) {
-					return serializedGraph;
-				} else {
-					throw new NotAcceptableStatusException("Unknown requested format");
-				}
+				// serializeGraph routes application/json and application/rdf+json through RDFJSON itself
+				return GraphUtil.serializeGraph(graph, mediaType);
 			}
 		}
 

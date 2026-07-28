@@ -16,7 +16,10 @@
 
 package org.entrystore.rest.springboot.service;
 
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -24,6 +27,7 @@ import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
@@ -33,6 +37,7 @@ import org.entrystore.rest.springboot.model.exception.InternalServerErrorExcepti
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.security.SsrfSafeHttpClient;
 import org.entrystore.rest.springboot.security.SsrfValidator;
+import org.entrystore.rest.springboot.util.RDFJSON;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -208,6 +213,26 @@ class ResourceServiceTest {
 		assertInstanceOf(ZipException.class, ex.getCause());
 
 		assertIsolatedTmpDirIsEmpty("exception path from ZipFile constructor");
+	}
+
+	// The isList && application/json short-circuit must not swallow a non-list Graph resource: that case goes
+	// to GraphUtil.serializeGraph, which routes application/json through RDFJSON. Before ENTRYSTORE-1091 the
+	// service called RDFJSON.graphToRdfJson directly here, so nothing pinned the rerouted arm.
+	@Test
+	void serializeResourceAsJson_graphResourceAsJson_returnsRdfJsonNotIdArray() {
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		Model graph = new LinkedHashModel();
+		graph.add(vf.createIRI("http://example.com/s"), vf.createIRI("http://purl.org/dc/terms/title"),
+				vf.createLiteral("Sample"));
+		RDFResource resource = mock(RDFResource.class);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.Graph);
+		when(entry.getResource()).thenReturn(resource);
+		when(resource.getGraph()).thenReturn(graph);
+
+		String result = service.serializeResourceAsJson(entry, "application/json", new ListFilter(null, null, null, null, null, null, null));
+
+		assertEquals(RDFJSON.graphToRdfJson(graph), result);
 	}
 
 	@Test
