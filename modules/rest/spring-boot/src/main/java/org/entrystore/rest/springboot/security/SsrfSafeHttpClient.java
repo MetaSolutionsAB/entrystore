@@ -46,7 +46,8 @@ import java.util.function.Function;
 @RequiredArgsConstructor
 public class SsrfSafeHttpClient {
 
-	private static final int MAX_REDIRECT_DRAIN_BYTES = 64 * 1024;
+	// Package-private: SsrfSafeHttpClientTest builds a body one byte past the cap.
+	static final int MAX_REDIRECT_DRAIN_BYTES = 64 * 1024;
 
 	private final SsrfValidator ssrfValidator;
 	private final ProxyProperties proxyProperties;

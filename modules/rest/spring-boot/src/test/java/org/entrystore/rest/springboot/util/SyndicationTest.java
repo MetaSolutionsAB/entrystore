@@ -41,6 +41,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SyndicationTest {
@@ -107,16 +109,20 @@ class SyndicationTest {
 	}
 
 	@Test
-	void createFeedFromEntries_producesLimitPlusOneEntries() {
-		// Pins the off-by-one of the post-increment limit check (`limitedCount++ >= limit`):
-		// a limit of 2 yields 3 feed entries. Kept as-is for backwards compatibility.
+	void createFeedFromEntries_emitsExactlyLimitEntriesAndLoadsNoMetadataBeyondTheCut() {
+		// D5 (ENTRYSTORE-1080): the feed-size cut is applied before any metadata is extracted and
+		// counts emitted entries, so a limit of 2 yields exactly 2 — which is what the feed's own
+		// "containing max %d items" description promises. The previous post-increment check
+		// (`limitedCount++ >= limit`) emitted limit+1 and paid the metadata cost for the extra entry.
 		PrincipalManager pm = mock(PrincipalManager.class);
-		List<Entry> entries = List.of(mockFeedEntry("e1"), mockFeedEntry("e2"), mockFeedEntry("e3"),
+		Entry beyondCut = mockFeedEntry("e3");
+		List<Entry> entries = List.of(mockFeedEntry("e1"), mockFeedEntry("e2"), beyondCut,
 				mockFeedEntry("e4"), mockFeedEntry("e5"));
 
 		SyndFeed feed = Syndication.createFeedFromEntries(pm, null, entries, null, 2);
 
-		assertEquals(3, feed.getEntries().size());
+		assertEquals(2, feed.getEntries().size());
+		verify(beyondCut, never()).getMetadataGraph();
 	}
 
 	@Test
