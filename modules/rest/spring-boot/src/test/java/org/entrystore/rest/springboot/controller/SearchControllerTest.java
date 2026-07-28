@@ -16,35 +16,35 @@
 
 package org.entrystore.rest.springboot.controller;
 
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class SearchControllerTest {
 
+	private SearchController searchController;
+
 	@BeforeEach
-	void bindMaxLimitFromConfig() {
-		Config config = mock(Config.class);
-		when(config.getInt(Settings.SOLR_MAX_LIMIT, 100)).thenReturn(100);
-		when(config.getInt(Settings.SOLR_FACET_MAX_LIMIT, 1000)).thenReturn(1000);
-		new SearchController(null, null, null, config).init();
+	void bindLimits() {
+		searchController = new SearchController(null, null, null);
+		// @Value-injected fields — set via reflection since we're not using a Spring context here.
+		// The values mirror the property defaults declared on the fields.
+		ReflectionTestUtils.setField(searchController, "solrMaxLimit", 100);
+		ReflectionTestUtils.setField(searchController, "solrMaxFacetLimit", 1000);
 	}
 
 	@ParameterizedTest(name = "limit {0} clamps to {1}")
 	@CsvSource({
-			"150, 100", // above the configured maximum — capped at MAX_LIMIT
+			"150, 100", // above the configured maximum — capped at solrMaxLimit
 			"100, 100", // exactly the maximum — unchanged
 			"42, 42",   // in range — unchanged
 			"0, 0",     // 0 is allowed on purpose: enables count-only requests
 			"-1, 50",   // negative — falls back to the default page size
 	})
 	void clampLimit_clampsToConfiguredBounds(int requested, int expected) {
-		assertEquals(expected, SearchController.clampLimit(requested));
+		assertEquals(expected, searchController.clampLimit(requested));
 	}
 }

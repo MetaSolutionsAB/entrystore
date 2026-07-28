@@ -20,6 +20,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.entrystore.Entry;
 import org.entrystore.User;
+import org.entrystore.rest.springboot.configuration.SignupWhitelistProperties;
 import org.entrystore.rest.springboot.model.auth.SignupInfo;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,14 +28,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.URI;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
+import java.util.Map;
 import java.util.concurrent.RejectedExecutionException;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -51,26 +52,19 @@ import static org.mockito.Mockito.when;
 class AuthServiceTest {
 
 	@Mock
-	private ExecutorService executor;
+	private AsyncTaskExecutor executor;
 
 	private MeterRegistry meterRegistry;
 	private AuthService authService;
 
 	@BeforeEach
 	void setUp() {
-		// Only meterRegistry is touched by submitPasswordResetDispatch, so the other
-		// @RequiredArgsConstructor collaborators stay null — except the stateless EmailValidator,
-		// which is cheap to pass for real. The real executor created by init() is replaced below
-		// with a Mockito mock so we can program the rejection path. signupWhitelistProperties is
-		// null too: this test only drives the password-reset dispatch-rejection path.
+		// Only meterRegistry and the executor are touched by submitPasswordResetDispatch, so the other
+		// collaborators stay null — except the stateless EmailValidator, which is cheap to pass for
+		// real, and the whitelist properties, which the constructor reads. An empty whitelist is
+		// correct here: this test only drives the password-reset dispatch-rejection path.
 		meterRegistry = new SimpleMeterRegistry();
-		authService = new AuthService(null, null, null, null, null, null, new EmailValidator(),
-				null, null, null, null, meterRegistry, null);
-		// Register the Micrometer counter without standing up the real ThreadPoolExecutor — we'll
-		// inject a mocked ExecutorService explicitly per test.
-		ReflectionTestUtils.setField(authService, "passwordResetRejectedCounter",
-				meterRegistry.counter("auth.pwreset.rejected"));
-		ReflectionTestUtils.setField(authService, "passwordResetExecutor", executor);
+		authService = authServiceWithSessionRegistry(null);
 	}
 
 	@Test
@@ -152,7 +146,8 @@ class AuthServiceTest {
 
 	private AuthService authServiceWithSessionRegistry(SessionRegistry sessionRegistry) {
 		return new AuthService(null, null, null, null, null, null, new EmailValidator(),
-				null, sessionRegistry, null, null, meterRegistry, null);
+				null, sessionRegistry, null, null, meterRegistry,
+				new SignupWhitelistProperties(Map.of()), executor);
 	}
 
 	private static UserDetails principalFor(String username) {
