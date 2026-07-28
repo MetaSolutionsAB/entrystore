@@ -25,7 +25,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
@@ -36,6 +38,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -77,6 +80,7 @@ class SsrfSafeHttpClientTest {
 		when(ssrfValidator.openPinnedConnection(second.uri(), second.resolved())).thenReturn(secondConn);
 		when(firstConn.getResponseCode()).thenReturn(302);
 		when(firstConn.getHeaderField("Location")).thenReturn("http://next.example.com/b");
+		when(firstConn.getInputStream()).thenReturn(emptyBody());
 		when(secondConn.getResponseCode()).thenReturn(200);
 
 		client.execute(first, "GET", Map.of("Accept", "text/plain"), location -> second, (status, c) -> status);
@@ -86,7 +90,7 @@ class SsrfSafeHttpClientTest {
 	}
 
 	@Test
-	void execute_redirect_revalidatesResolvedLocationAndDisconnectsEachHop() throws Exception {
+	void execute_redirect_revalidatesResolvedLocationAndPoolsDrainedHop() throws Exception {
 		SsrfValidator.ValidatedTarget first = validatedTarget("http://upstream.example.com/a/b", "192.0.2.10");
 		SsrfValidator.ValidatedTarget second = validatedTarget("http://upstream.example.com/moved", "192.0.2.10");
 		HttpURLConnection firstConn = mock(HttpURLConnection.class);
@@ -96,6 +100,7 @@ class SsrfSafeHttpClientTest {
 		when(firstConn.getResponseCode()).thenReturn(301);
 		// relative Location must be resolved against the current URI before revalidation
 		when(firstConn.getHeaderField("Location")).thenReturn("/moved");
+		when(firstConn.getInputStream()).thenReturn(emptyBody());
 		when(secondConn.getResponseCode()).thenReturn(200);
 
 		String validatedLocation = client.execute(first, "GET", Map.of(),
@@ -106,8 +111,53 @@ class SsrfSafeHttpClientTest {
 				(status, c) -> "http://upstream.example.com/moved");
 
 		assertEquals("http://upstream.example.com/moved", validatedLocation);
-		verify(firstConn).disconnect();
+		// The drained redirect hop goes back to the JDK keep-alive pool, so it must not be severed;
+		// the final hop's body was left unconsumed by the handler, so it must be.
+		verify(firstConn, never()).disconnect();
 		verify(secondConn).disconnect();
+	}
+
+	@Test
+	void execute_redirectHopBodyExceedsDrainLimit_seversConnectionAndStillFollows() throws Exception {
+		SsrfValidator.ValidatedTarget first = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
+		SsrfValidator.ValidatedTarget second = validatedTarget("http://next.example.com/b", "192.0.2.11");
+		HttpURLConnection firstConn = mock(HttpURLConnection.class);
+		HttpURLConnection secondConn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(first.uri(), first.resolved())).thenReturn(firstConn);
+		when(ssrfValidator.openPinnedConnection(second.uri(), second.resolved())).thenReturn(secondConn);
+		when(firstConn.getResponseCode()).thenReturn(302);
+		when(firstConn.getHeaderField("Location")).thenReturn("http://next.example.com/b");
+		when(firstConn.getInputStream()).thenReturn(
+				new ByteArrayInputStream(new byte[SsrfSafeHttpClient.MAX_REDIRECT_DRAIN_BYTES + 1]));
+		when(secondConn.getResponseCode()).thenReturn(200);
+
+		Integer result = client.execute(first, "GET", Map.of(), location -> second, (status, c) -> status);
+
+		assertEquals(200, result);
+		// An oversized hop body is not worth salvaging: the hop is severed rather than pooled, but
+		// the redirect chain still proceeds.
+		verify(firstConn).disconnect();
+	}
+
+	@Test
+	void execute_redirectHopDrainFails_seversConnectionAndStillFollows() throws Exception {
+		SsrfValidator.ValidatedTarget first = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
+		SsrfValidator.ValidatedTarget second = validatedTarget("http://next.example.com/b", "192.0.2.11");
+		HttpURLConnection firstConn = mock(HttpURLConnection.class);
+		HttpURLConnection secondConn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(first.uri(), first.resolved())).thenReturn(firstConn);
+		when(ssrfValidator.openPinnedConnection(second.uri(), second.resolved())).thenReturn(secondConn);
+		when(firstConn.getResponseCode()).thenReturn(302);
+		when(firstConn.getHeaderField("Location")).thenReturn("http://next.example.com/b");
+		when(firstConn.getInputStream()).thenThrow(new IOException("hop body unreadable"));
+		when(secondConn.getResponseCode()).thenReturn(200);
+
+		Integer result = client.execute(first, "GET", Map.of(), location -> second, (status, c) -> status);
+
+		// A hop whose body cannot be drained leaves the connection in an unknown state, so it is
+		// severed instead of pooled — but the failure must not abort the redirect chain.
+		assertEquals(200, result);
+		verify(firstConn).disconnect();
 	}
 
 	@Test
@@ -134,6 +184,8 @@ class SsrfSafeHttpClientTest {
 		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
 		when(conn.getResponseCode()).thenReturn(302);
 		when(conn.getHeaderField("Location")).thenReturn("http://upstream.example.com/a");
+		// A fresh stream per hop: drainForReuse closes each one it consumes.
+		when(conn.getInputStream()).thenAnswer(invocation -> emptyBody());
 
 		CustomResponseException ex = assertThrows(CustomResponseException.class,
 				() -> client.execute(target, "GET", Map.of(), location -> target, (status, c) -> status));
@@ -141,7 +193,8 @@ class SsrfSafeHttpClientTest {
 		assertEquals(HttpStatus.BAD_GATEWAY, ex.getStatus());
 		assertEquals("Too many redirects", ex.getMessage());
 		verify(ssrfValidator, times(16)).openPinnedConnection(target.uri(), target.resolved());
-		verify(conn, times(16)).disconnect();
+		// Every hop drained successfully, so each one was pooled for reuse rather than severed.
+		verify(conn, never()).disconnect();
 	}
 
 	@Test
@@ -241,5 +294,14 @@ class SsrfSafeHttpClientTest {
 	private static SsrfValidator.ValidatedTarget validatedTarget(String url, String ip) throws Exception {
 		URI uri = URI.create(url);
 		return new SsrfValidator.ValidatedTarget(uri, uri.getHost(), InetAddress.getByName(ip));
+	}
+
+	/**
+	 * A redirect response's body, which the client drains to return the connection to the keep-alive
+	 * pool. Real {@link HttpURLConnection#getInputStream()} never yields null on a 3xx, so every
+	 * redirect-hop mock must stub it.
+	 */
+	private static InputStream emptyBody() {
+		return new ByteArrayInputStream(new byte[0]);
 	}
 }

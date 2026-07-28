@@ -310,6 +310,7 @@ class ProxyServiceTest {
 		when(ssrfValidator.openPinnedConnection(second.uri(), second.resolved())).thenReturn(secondConn);
 		when(firstConn.getResponseCode()).thenReturn(302);
 		when(firstConn.getHeaderField("Location")).thenReturn("http://next.example.com/b");
+		when(firstConn.getInputStream()).thenReturn(new ByteArrayInputStream(new byte[0]));
 		when(ssrfValidator.validateForProxy("http://next.example.com/b")).thenReturn(second);
 		when(secondConn.getResponseCode()).thenReturn(200);
 		when(secondConn.getContentType()).thenReturn("text/plain");
@@ -320,8 +321,10 @@ class ProxyServiceTest {
 
 		assertEquals(200, response.statusCode());
 		assertEquals("hello", new String(response.body(), StandardCharsets.UTF_8));
-		verify(firstConn).disconnect();
-		verify(secondConn).disconnect();
+		// D6 (ENTRYSTORE-1090): the redirect hop is drained and the final body is read to EOF, so both
+		// connections return to the JDK keep-alive pool — disconnecting either would evict it instead.
+		verify(firstConn, never()).disconnect();
+		verify(secondConn, never()).disconnect();
 	}
 
 	@Test
@@ -334,6 +337,7 @@ class ProxyServiceTest {
 		when(ssrfValidator.openPinnedConnection(second.uri(), second.resolved())).thenReturn(secondConn);
 		when(firstConn.getResponseCode()).thenReturn(301);
 		when(firstConn.getHeaderField("Location")).thenReturn("/moved");
+		when(firstConn.getInputStream()).thenReturn(new ByteArrayInputStream(new byte[0]));
 		when(ssrfValidator.validateForProxy("http://upstream.example.com/moved")).thenReturn(second);
 		when(secondConn.getResponseCode()).thenReturn(200);
 		when(secondConn.getInputStream()).thenReturn(new ByteArrayInputStream(new byte[0]));
