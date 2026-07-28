@@ -19,6 +19,7 @@ package org.entrystore.rest.springboot.security;
 import jakarta.servlet.http.HttpServletRequest;
 import org.entrystore.PrincipalManager;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.springframework.security.cas.authentication.CasAuthenticationToken;
 
 public class CasLoginSuccessHandler extends AbstractSsoLoginSuccessHandler<CasAuthenticationToken, Void> {
@@ -26,8 +27,8 @@ public class CasLoginSuccessHandler extends AbstractSsoLoginSuccessHandler<CasAu
 	private final CasCustomConfiguration casConfiguration;
 
 	public CasLoginSuccessHandler(ESUserDetailsService userService, PrincipalManager principalManager,
-								  CasCustomConfiguration casConfiguration) {
-		super(userService, principalManager);
+								  ErrorResponseWriter errorResponseWriter, CasCustomConfiguration casConfiguration) {
+		super(userService, principalManager, errorResponseWriter);
 		this.casConfiguration = casConfiguration;
 	}
 

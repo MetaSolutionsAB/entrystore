@@ -535,7 +535,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		wrongPasswordConn.getResponseCode() == disabledConn.getResponseCode()
 		wrongPasswordConn.getContentType() == disabledConn.getContentType()
 		// The unified 401 envelope is byte-identical across branches: timestamp is nulled in
-		// HttpUtil.writeUnauthorizedAsJson so it cannot leak the bcrypt/no-bcrypt latency
+		// ErrorResponseWriter.writeUnauthorizedAsJson so it cannot leak the bcrypt/no-bcrypt latency
 		// difference between branches, and the request URI (path) is the same for both calls.
 		wrongPasswordConn.getErrorStream().text == disabledConn.getErrorStream().text
 	}

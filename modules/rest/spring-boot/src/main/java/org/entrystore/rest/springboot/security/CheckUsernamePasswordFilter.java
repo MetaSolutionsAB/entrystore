@@ -26,6 +26,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.http.HttpStatus;
@@ -44,12 +45,15 @@ import java.util.Objects;
 public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 
 	private final LoginAttemptService loginAttemptService;
+	private final ErrorResponseWriter errorResponseWriter;
 	private final boolean whitelistMode;
 	private final List<String> passwordLoginWhitelist;
 	private final List<String> passwordLoginBlacklist;
 
-	public CheckUsernamePasswordFilter(Config config, LoginAttemptService loginAttemptService) {
+	public CheckUsernamePasswordFilter(Config config, LoginAttemptService loginAttemptService,
+									   ErrorResponseWriter errorResponseWriter) {
 		this.loginAttemptService = loginAttemptService;
+		this.errorResponseWriter = errorResponseWriter;
 		this.whitelistMode = "whitelist".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD));
 		this.passwordLoginWhitelist = whitelistMode
 				? normalize(config.getStringList(Settings.AUTH_PASSWORD_WHITELIST))
@@ -75,7 +79,7 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 
 			if (request.getContentLength() > 0 && HttpUtil.isLargerThan(request, 32768)) {
 				log.warn("The size of the request is larger than 32KB, request blocked");
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.PAYLOAD_TOO_LARGE.value())
 						.path(request.getRequestURI())
 						.error("The size of the request is larger than 32KB")
@@ -84,7 +88,7 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 			}
 
 			if (password == null || password.isEmpty()) {
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.BAD_REQUEST.value())
 						.path(request.getRequestURI())
 						.error("Password is missing")
@@ -96,7 +100,7 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 				Password.check(password, Password.getSaltedHash(password));
 			} catch (IllegalArgumentException ex) {
 				log.warn("Password validation failed: {}", ex.getMessage(), ex);
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.BAD_REQUEST.value())
 						.path(request.getRequestURI())
 						.error("Invalid credentials format")
@@ -105,7 +109,7 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 			}
 
 			if (username == null || username.isEmpty()) {
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.BAD_REQUEST.value())
 						.path(request.getRequestURI())
 						.error("Username is missing")
@@ -119,7 +123,7 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 			// usernames take the normal auth path.
 			if (loginAttemptService.isLockedOut(username)) {
 				log.warn("User {} is temporarily locked out due to too many failed login attempts", HttpUtil.sanitizeForLog(username));
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.TOO_MANY_REQUESTS.value())
 						.path(request.getRequestURI())
 						.error("Too many login attempts. Please try again later.")
@@ -152,7 +156,7 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 				Password.getSaltedHash(password);
 				// Body must remain identical to the generic 401 used for all other authentication
 				// failures so account state cannot be enumerated.
-				HttpUtil.writeUnauthorizedAsJson(response, request);
+				errorResponseWriter.writeUnauthorizedAsJson(response, request.getRequestURI());
 				return;
 			}
 		}

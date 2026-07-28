@@ -27,6 +27,7 @@ import org.apereo.cas.client.validation.TicketValidator;
 import org.entrystore.PrincipalManager;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -65,6 +66,7 @@ public class CasConfig {
 	private final ESUserDetailsService userDetailsService;
 	private final PrincipalManager principalManager;
 	private final RepositoryManagerImpl repositoryManager;
+	private final ErrorResponseWriter errorResponseWriter;
 
 	@Value("${entrystore.https.disable-verification:false}")
 	private boolean disableSslVerification;
@@ -146,6 +148,6 @@ public class CasConfig {
 
 	@Bean
 	public CasLoginSuccessHandler casLoginSuccessHandler() {
-		return new CasLoginSuccessHandler(userDetailsService, principalManager, casConfiguration);
+		return new CasLoginSuccessHandler(userDetailsService, principalManager, errorResponseWriter, casConfiguration);
 	}
 }

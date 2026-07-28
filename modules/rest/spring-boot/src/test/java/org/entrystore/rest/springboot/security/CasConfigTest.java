@@ -56,7 +56,9 @@ class CasConfigTest {
 	private CasConfig configWithVersion(CasVersion version) {
 		var server = new CasCustomConfiguration.Server("https://cas.example.org/cas", null);
 		var casConfig = new CasCustomConfiguration(true, version, server, false, null, null);
-		CasConfig config = new CasConfig(casConfig, userDetailsService, principalManager, repositoryManager);
+		// errorResponseWriter is null: these tests only drive casTicketValidator(), which never reaches
+		// the success handler that consumes it.
+		CasConfig config = new CasConfig(casConfig, userDetailsService, principalManager, repositoryManager, null);
 		// @Value-injected field — set via reflection since we're not using Spring context in this unit test.
 		ReflectionTestUtils.setField(config, "disableSslVerification", false);
 		return config;
