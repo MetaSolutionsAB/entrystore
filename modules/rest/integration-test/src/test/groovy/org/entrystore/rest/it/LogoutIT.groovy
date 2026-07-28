@@ -32,7 +32,7 @@ class LogoutIT extends BaseSpec {
 
 	def 'POST /auth/logout as non-admin user in JSON format should logout the user'() {
 		given:
-		def userCookies = isolatedCookies('user')
+		def userCookies = EntryStoreClient.isolatedCsrfHeaders('user')
 
 		when: 'we query /auth/user'
 		def userConn = EntryStoreClient.getRequest('/auth/user', '', 'application/json', userCookies)
@@ -66,7 +66,7 @@ class LogoutIT extends BaseSpec {
 		given:
 		// Intentional difference from Restlet: Restlet returned 200 OK with an HTML body for Accept: text/html,
 		// but the Spring Boot version always returns 204 No-Content regardless of the Accept header.
-		def userCookies = isolatedCookies('user')
+		def userCookies = EntryStoreClient.isolatedCsrfHeaders('user')
 
 		when: 'we query /auth/user'
 		def userConn = EntryStoreClient.getRequest('/auth/user', '', 'application/json', userCookies)
@@ -124,7 +124,7 @@ class LogoutIT extends BaseSpec {
 
 	def 'POST /auth/logout as admin in JSON format should logout the user'() {
 		given:
-		def userCookies = isolatedCookies('admin')
+		def userCookies = EntryStoreClient.isolatedCsrfHeaders('admin')
 
 		when: 'we query /auth/user'
 		def userConn = EntryStoreClient.getRequest('/auth/user', '', 'application/json', userCookies)
@@ -156,7 +156,7 @@ class LogoutIT extends BaseSpec {
 
 	def 'GET /auth/logout must not log the user out (CSRF safety - logout is POST-only)'() {
 		given: 'an isolated user session so a stray logout would not invalidate the shared cookie'
-		def userCookies = isolatedCookies('user')
+		def userCookies = EntryStoreClient.isolatedCsrfHeaders('user')
 
 		when: 'attacker-controlled GET to /auth/logout (e.g. <a href> or <img src>)'
 		def connection = EntryStoreClient.getRequest('/auth/logout', '', 'application/json', userCookies)
@@ -175,13 +175,4 @@ class LogoutIT extends BaseSpec {
 		jsonUserConn['user'] == 'user'
 	}
 
-	private static Map<String, String> isolatedCookies(String user) {
-		// Use an isolated session — calling authorize() directly leaves the shared cookies[user]
-		// entry untouched, so logging it out does not invalidate the shared session other ITs reuse.
-		// Note that authorize() does overwrite csrfTokens[user], which is acceptable because the
-		// CSRF token is regenerated on each login.
-		def authCookie = EntryStoreClient.authorize(user).toString()
-		def csrf = EntryStoreClient.csrfTokens[user]
-		return EntryStoreClient.csrfHeaders(authCookie, csrf.toString())
-	}
 }

@@ -16,10 +16,7 @@
 
 package org.entrystore.rest.it
 
-import org.apache.commons.text.StringEscapeUtils
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
-import org.springframework.boot.SpringApplication
 import spock.lang.Shared
 import spock.lang.Stepwise
 
@@ -34,7 +31,7 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 
 	static def testUsername = 'testcasuser'
 	static def testUserPassword = 'caspassword'
-	static def successLoginUrl = 'http://localhost:8181/GREAT-SUCCESS-2/'
+	static def successLoginUrl = EntryStoreClient.origin + '/GREAT-SUCCESS-2/'
 
 	static def keycloakCasUrl = ''
 
@@ -51,20 +48,17 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		keycloakCasUrl = getKeycloakCasRealmUrl()
 
 		log.info('Starting EntryStoreApp with CAS')
-		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+		startOwnedApp([
 			'--entrystore.auth.cas.enabled=true',
 			'--entrystore.auth.cas.version=cas2',
 			'--entrystore.auth.cas.server.url=' + keycloakCasUrl,
 			'--entrystore.auth.cas.user-auto-provisioning=true',
 			'--entrystore.auth.cas.redirect-success.url=' + successLoginUrl,
-			'--entrystore.auth.cas.redirect-failure.url=http://localhost:8181/auth/login',
+			'--entrystore.auth.cas.redirect-failure.url=' + EntryStoreClient.origin + '/auth/login',
 			// Override the IT default (httponly=off) so the auth_token HttpOnly assertion is meaningful
 			// for CAS sessions. Production default is HttpOnly=on.
 			'--entrystore.auth.cookie.httponly=on'
-		] as String[]
-		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
-		appStarted = true
+		])
 	}
 
 	def '1. GET /auth/cas should redirect to Keycloak CAS login page'() {
@@ -92,7 +86,7 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		def idpCookies = casLoginConn.getHeaderFields()['Set-Cookie']
 		idpCookies != null
 		idpCookies.any { it.contains('AUTH_SESSION_ID=') }
-		def cookieHeader = idpCookies.collect { it.split(';')[0] }.join('; ')
+		def cookieHeader = EntryStoreClient.toCookieHeader(idpCookies)
 
 		cleanup: 'store data for next step'
 		this.loginPageHtmlSaved = loginPageHtml
@@ -104,10 +98,7 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		assert this.loginPageHtmlSaved: 'Login page HTML not available from previous step'
 		assert this.idpCookieHeaderSaved: 'IDP cookies not available from previous step'
 
-		def formActionMatcher = this.loginPageHtmlSaved =~ /action="([^"]+)"/
-		String formActionUrl = formActionMatcher ? formActionMatcher[0][1] : null
-		assert formActionUrl: 'Form action URL not found in login page'
-		formActionUrl = StringEscapeUtils.unescapeHtml4(formActionUrl)
+		def formActionUrl = extractFormActionUrl(this.loginPageHtmlSaved)
 
 		def loginFormData = createFormBody([username: testUsername, password: testUserPassword])
 
@@ -151,7 +142,7 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 
 		when: 'Query EntryStore using the new cookie'
 		def currentlyLoggedInUserConn = EntryStoreClient.getRequest('/auth/user',
-			'', null, [Cookie: spCookies.collect { it.split(';')[0] }.join('; ')])
+			'', null, [Cookie: EntryStoreClient.toCookieHeader(spCookies)])
 
 		then: 'Should return info about the CAS-authenticated user'
 		currentlyLoggedInUserConn.getResponseCode() == HTTP_OK
@@ -175,10 +166,9 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		when: 'Follow the redirect chain to Keycloak login'
 		def casLoginConn = EntryStoreClient.getRequest(connection.getHeaderField('Location'), '', '')
 		def adminIdpCookies = casLoginConn.getHeaderFields()['Set-Cookie']
-		def adminCookieHeader = adminIdpCookies.collect { it.split(';')[0] }.join('; ')
+		def adminCookieHeader = EntryStoreClient.toCookieHeader(adminIdpCookies)
 		def adminLoginPageHtml = casLoginConn.inputStream.text
-		def adminFormActionMatcher = adminLoginPageHtml =~ /action="([^"]+)"/
-		def adminFormActionUrl = StringEscapeUtils.unescapeHtml4(adminFormActionMatcher[0][1])
+		def adminFormActionUrl = extractFormActionUrl(adminLoginPageHtml)
 
 		and: 'Submit admin credentials'
 		def adminLoginFormData = createFormBody([username: 'admin', password: 'adminpassword'])
@@ -206,7 +196,7 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		def userConn
 		if (leakedCookies != null && !leakedCookies.isEmpty()) {
 			userConn = EntryStoreClient.getRequest('/auth/user', '', null,
-				[Cookie: leakedCookies.collect { it.split(';')[0] }.join('; ')])
+				[Cookie: EntryStoreClient.toCookieHeader(leakedCookies)])
 		} else {
 			userConn = EntryStoreClient.getRequest('/auth/user', '')
 		}

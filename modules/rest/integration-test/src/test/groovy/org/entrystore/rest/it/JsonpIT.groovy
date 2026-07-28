@@ -17,7 +17,6 @@
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.it.util.NameSpaceConst
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_OK
@@ -33,7 +32,7 @@ class JsonpIT extends BaseSpec {
 		getOrCreateContext([contextId: CONTEXT_ID])
 		def resourceIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/resource/_newId'
 		def params = [entrytype: 'link', resource: 'https://example.org/jsonp']
-		def body = [metadata: [(resourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: 'JSONP entry']]]]]
+		def body = createTitleMetadataBody(resourceIri, 'JSONP entry')
 		def entryId = createEntry(CONTEXT_ID, params, body)
 		entryUrl = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/entry/' + entryId
 	}

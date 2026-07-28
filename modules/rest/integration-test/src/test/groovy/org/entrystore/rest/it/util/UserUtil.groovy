@@ -25,6 +25,13 @@ class UserUtil {
 		return user
 	}
 
+	/** Creates the user entry and sets its password in one step; returns the createUser map. */
+	static def createUserWithPassword(String username, String password, String homecontext = null, boolean isAdmin = false) {
+		def user = createUser(username, homecontext, isAdmin)
+		setUserPassword(user['resourceUri'].toString(), password)
+		return user
+	}
+
 	static def createUserEntry(String username, String homecontext = null, String groupURI = null) {
 		def params = [graphtype: 'user']
 		def body = [resource: [name: username]]

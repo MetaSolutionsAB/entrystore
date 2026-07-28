@@ -30,11 +30,10 @@ class ResourceIT extends BaseSpec {
 	def static contextId = '80'
 	static def password = 'newPass1234'
 
-	static def genericCredsClone = [:]
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
-		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.snapshotCreds()
 		EntryStoreClient.creds.put('userChangePassword@test.com', password)
 		EntryStoreClient.creds.put('userChangePasswordBadCurrentPassword@test.com', password)
 		EntryStoreClient.creds.put('userChangePasswordNoCurrentPassword@test.com', password)
@@ -46,7 +45,7 @@ class ResourceIT extends BaseSpec {
 	}
 
 	def cleanupSpec() {
-		EntryStoreClient.creds = genericCredsClone
+		EntryStoreClient.restoreCreds()
 	}
 
 	def "GET /{context-id}/resource/{entry-id} as guest on String graph should respond with Not Found 404 to avoid entry-existence disclosure"() {
@@ -109,9 +108,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('text/plain')
-		// Response says content-type is JSON, but it returns a non-json raw String value, same string as was given in the request to create the entry
-		// Shouldn't the String in the response body be in quotes with escaped chars? instead of a raw String?
-		// In Restlet it does return a raw String as well
+		// The body is the raw string as submitted, not JSON-quoted/escaped — matches legacy Restlet behavior.
 		def resourceRespText = resourceConn.inputStream.text
 		resourceRespText == someText
 	}
@@ -334,18 +331,10 @@ class ResourceIT extends BaseSpec {
 		assert entryId.length() > 0
 
 		// create a test binary file with some data
-		def testBinFile = File.createTempFile('test', '.bin')
-		testBinFile.withOutputStream { out ->
-			out.write([0xDE, 0xAD, 0xBE, 0xEF] as byte[])
-			out.write("Hello".bytes)
-		}
+		def testBinFile = createTempBinaryFile('test', '.bin', ([0xDE, 0xAD, 0xBE, 0xEF] + "Hello".bytes.toList()) as byte[])
 		def sendFileConn = EntryStoreClient.putRequestFile('/' + contextId + '/resource/' + entryId, testBinFile,
 			'admin', 'application/octet-stream')
 		assert sendFileConn.getResponseCode() == HTTP_CREATED
-		// ResourceResource class defines a json response with 'success' field, but later in the code it is replaced with Empty response
-//		def sendFileJsonResponse = JSON_PARSER.parseText(sendFileConn.inputStream.text)
-//		assert sendFileJsonResponse['success'] == 'The file was uploaded'
-//		assert sendFileJsonResponse['format'] == 'application/octet-stream'
 
 		when:
 		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId, '')
@@ -362,18 +351,10 @@ class ResourceIT extends BaseSpec {
 		assert entryId.length() > 0
 
 		// create a test binary file with some data
-		def testBinFile = File.createTempFile('test', '.bin')
-		testBinFile.withOutputStream { out ->
-			out.write([0xDE, 0xAD, 0xBE, 0xEF] as byte[])
-			out.write("Hello".bytes)
-		}
+		def testBinFile = createTempBinaryFile('test', '.bin', ([0xDE, 0xAD, 0xBE, 0xEF] + "Hello".bytes.toList()) as byte[])
 		def sendFileConn = EntryStoreClient.putRequestFile('/' + contextId + '/resource/' + entryId, testBinFile,
 			'admin', 'application/octet-stream')
 		assert sendFileConn.getResponseCode() == HTTP_CREATED
-		// ResourceResource class defines a json response with 'success' field, but later in the code it is replaced with Empty response
-//		def sendFileJsonResponse = JSON_PARSER.parseText(sendFileConn.inputStream.text)
-//		assert sendFileJsonResponse['success'] == 'The file was uploaded'
-//		assert sendFileJsonResponse['format'] == 'application/octet-stream'
 
 		when:
 		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
@@ -392,11 +373,7 @@ class ResourceIT extends BaseSpec {
 		assert entryId.length() > 0
 
 		// create a test binary file with some data
-		def testBinFile = File.createTempFile('test', '.bin')
-		testBinFile.withOutputStream { out ->
-			out.write([0xDE, 0xAD, 0xBE, 0xEF] as byte[])
-			out.write("Hello-again".bytes)
-		}
+		def testBinFile = createTempBinaryFile('test', '.bin', ([0xDE, 0xAD, 0xBE, 0xEF] + "Hello-again".bytes.toList()) as byte[])
 		def sendFileConn = EntryStoreClient.putRequestMultiPart('/' + contextId + '/resource/' + entryId, testBinFile)
 		assert sendFileConn.getResponseCode() == HTTP_CREATED
 
@@ -416,11 +393,9 @@ class ResourceIT extends BaseSpec {
 		def entryId = getOrCreateEntry(contextId, [id: 'largeFileId'], body)
 		assert entryId.length() > 0
 
-		def largeBinFile = File.createTempFile('large', '.bin')
-		largeBinFile.deleteOnExit()
 		def payload = new byte[13 * 1024 * 1024]
 		new Random(42).nextBytes(payload)
-		largeBinFile.bytes = payload
+		def largeBinFile = createTempBinaryFile('large', '.bin', payload)
 
 		when:
 		def sendFileConn = EntryStoreClient.putRequestMultiPart('/' + contextId + '/resource/' + entryId, largeBinFile)
@@ -698,7 +673,7 @@ class ResourceIT extends BaseSpec {
 		def userResourceJson = JSON_PARSER.parseText(userResourceConn.inputStream.text)
 		assert userResourceJson['relations'] instanceof Map
 		def relations = userResourceJson['relations']
-		def userGroupRelation = relations[groupResourceUri] // Normally, a LazyMap should be populated now
+		def userGroupRelation = relations[groupResourceUri]
 		assert userGroupRelation != null
 	}
 
@@ -1104,13 +1079,8 @@ class ResourceIT extends BaseSpec {
 		then:
 		editResourceConn.getResponseCode() == HTTP_NO_CONTENT
 
-		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
-		def loginConnection = EntryStoreClient.createConnection('/auth/cookie')
-		loginConnection.setRequestMethod('POST')
-		loginConnection.setRequestProperty('Content-Type', 'application/x-www-form-urlencoded')
-		loginConnection.setDoOutput(true)
-		loginConnection.getOutputStream().write(loginBody.getBytes())
-		loginConnection.connect()
+		def loginBody = createFormBody([auth_username: username, auth_password: newPassword])
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', 'application/x-www-form-urlencoded')
 		loginConnection.getResponseCode() == HTTP_OK
 		def info = EntryStoreClient.getRequest('/auth/user', username)
 		info.getResponseCode() == HTTP_OK
@@ -1321,11 +1291,7 @@ class ResourceIT extends BaseSpec {
 		assert entryId.length() > 0
 
 		// create a test binary file with some data
-		def testBinFile = File.createTempFile('test', '.bin')
-		testBinFile.withOutputStream { out ->
-			out.write([0xDE, 0xAD, 0xBE, 0xEF] as byte[])
-			out.write("Hello".bytes)
-		}
+		def testBinFile = createTempBinaryFile('test', '.bin', ([0xDE, 0xAD, 0xBE, 0xEF] + "Hello".bytes.toList()) as byte[])
 		def sendFileConn = EntryStoreClient.putRequestFile('/' + contextId + '/resource/' + entryId, testBinFile,
 			'admin', 'application/octet-stream')
 		assert sendFileConn.getResponseCode() == HTTP_CREATED
@@ -1347,9 +1313,7 @@ class ResourceIT extends BaseSpec {
 		// create None-graph entry as admin and PUT a small binary file into it
 		def fileEntryId = createEntry(contextId, [:], [resource: [name: 'Guest delete target']])
 		def expectedBytes = [0xDE, 0xAD, 0xBE, 0xEF] as byte[]
-		def testBinFile = File.createTempFile('test-guest-delete', '.bin')
-		testBinFile.deleteOnExit()
-		testBinFile.withOutputStream { out -> out.write(expectedBytes) }
+		def testBinFile = createTempBinaryFile('test-guest-delete', '.bin', expectedBytes)
 		def resourcePath = '/' + contextId + '/resource/' + fileEntryId
 		def sendFileConn = EntryStoreClient.putRequestFile(resourcePath, testBinFile,
 			'admin', 'application/octet-stream')
@@ -1373,9 +1337,7 @@ class ResourceIT extends BaseSpec {
 		// create None-graph entry as admin and PUT a small binary file into it
 		def fileEntryId = createEntry(contextId, [:], [resource: [name: 'Non-owner delete target']])
 		def expectedBytes = [0xDE, 0xAD, 0xBE, 0xEF] as byte[]
-		def testBinFile = File.createTempFile('test-nonowner-delete', '.bin')
-		testBinFile.deleteOnExit()
-		testBinFile.withOutputStream { out -> out.write(expectedBytes) }
+		def testBinFile = createTempBinaryFile('test-nonowner-delete', '.bin', expectedBytes)
 		def resourcePath = '/' + contextId + '/resource/' + fileEntryId
 		def sendFileConn = EntryStoreClient.putRequestFile(resourcePath, testBinFile,
 			'admin', 'application/octet-stream')
@@ -1660,8 +1622,8 @@ class ResourceIT extends BaseSpec {
 		editResourceRespText == ''
 		// fetch resource details again
 		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
-		// TODO: Should return 404 or empty body, however currently ResourceResource class has implemented delete only for List entry type,
-		// hence calling delete in this test, did not modify anything, even tho the delete call response is a non-error
+		// DELETE is a silent no-op for String resources: ResourceService.deleteLocalResource only
+		// handles GraphType.List and GraphType.None, so the resource stays readable after a 204.
 		resourceConn2.getResponseCode() == HTTP_OK
 		resourceConn2.getContentType().contains('text/plain')
 		resourceConn2.inputStream.text == someText

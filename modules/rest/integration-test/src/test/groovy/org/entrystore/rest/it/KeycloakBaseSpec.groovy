@@ -17,7 +17,7 @@
 package org.entrystore.rest.it
 
 import dasniko.testcontainers.keycloak.KeycloakContainer
-import org.entrystore.rest.it.util.EntryStoreClient
+import org.apache.commons.text.StringEscapeUtils
 import org.testcontainers.containers.output.Slf4jLogConsumer
 import org.testcontainers.utility.MountableFile
 import spock.lang.Shared
@@ -60,6 +60,18 @@ abstract class KeycloakBaseSpec extends BaseSpec {
 
 	static String getKeycloakCasRealmUrl() {
 		return keycloakContainer.getAuthServerUrl() + '/realms/test/protocol/cas'
+	}
+
+	/** Extracts the (HTML-unescaped) form action URL from a Keycloak login page. */
+	protected static String extractFormActionUrl(String loginPageHtml) {
+		def formActionMatcher = loginPageHtml =~ /action="([^"]+)"/
+		String formActionUrl = formActionMatcher ? formActionMatcher[0][1] : null
+		assert formActionUrl: 'Form action URL not found in login page'
+		// The regex takes the first form on the page, so pin it to the credential form — any
+		// interstitial Keycloak renders ahead of it (locale switcher, required action, terms) would
+		// otherwise be returned as the login endpoint.
+		assert formActionUrl.contains('login-actions/authenticate'): 'not a credential-form action URL: ' + formActionUrl
+		return StringEscapeUtils.unescapeHtml4(formActionUrl)
 	}
 
 }

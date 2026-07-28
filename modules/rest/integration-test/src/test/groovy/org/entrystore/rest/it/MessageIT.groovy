@@ -11,17 +11,16 @@ import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
-// 429 is not in HttpURLConnection constants
-
 class MessageIT extends BaseSpec {
 
-	static final int HTTP_TOO_MANY_REQUESTS = 429
 	static def newPassword = 'newPass12345'
 	static def greenMail = new GreenMail(SMTP)
-	static def genericCredsClone = [:]
+
+	// The shared app caps /message at entrystore.message.rate.limit.max=3 per sender per hour.
+	// Admin-sent messages in this spec share one budget — send from a dedicated user when adding tests.
 
 	def setupSpec() {
-		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.snapshotCreds()
 		EntryStoreClient.creds.put('sender@test.com', newPassword)
 		EntryStoreClient.creds.put('msgReplyTo@test.com', newPassword)
 		EntryStoreClient.creds.put('rateLimitSender@test.com', newPassword)
@@ -33,7 +32,7 @@ class MessageIT extends BaseSpec {
 	}
 
 	def cleanupSpec() {
-		EntryStoreClient.creds = genericCredsClone
+		EntryStoreClient.restoreCreds()
 		greenMail.stop()
 	}
 
@@ -131,16 +130,10 @@ class MessageIT extends BaseSpec {
 	def "POST /message should set Reply-To when sender has email-format username"() {
 		given:
 		def senderUsername = 'sender@test.com'
-		def sender = UserUtil.createUser(senderUsername)
-		UserUtil.setUserPassword(sender['resourceUri'].toString(), newPassword)
+		def sender = UserUtil.createUserWithPassword(senderUsername, newPassword)
 		greenMail.purgeEmailFromAllMailboxes()
 		def recipientUsername = 'msgReplyTo@test.com'
 		UserUtil.createUser(recipientUsername)
-
-		// Authorize the sender
-		def authConn = EntryStoreClient.postRequest('/auth/cookie',
-			'auth_username=' + senderUsername + '&auth_password=' + newPassword, '', 'application/x-www-form-urlencoded')
-		assert authConn.getResponseCode() == HTTP_OK
 
 		def requestBody = JsonOutput.toJson([
 			transport: 'email',
@@ -191,14 +184,9 @@ class MessageIT extends BaseSpec {
 	def "POST /message should return 429 when rate limit is exceeded"() {
 		given:
 		def senderUsername = 'rateLimitSender@test.com'
-		def sender = UserUtil.createUser(senderUsername)
-		UserUtil.setUserPassword(sender['resourceUri'].toString(), newPassword)
+		def sender = UserUtil.createUserWithPassword(senderUsername, newPassword)
 		def recipientUsername = 'rateLimitRecipient@test.com'
 		UserUtil.createUser(recipientUsername)
-
-		def authConn = EntryStoreClient.postRequest('/auth/cookie',
-			'auth_username=' + senderUsername + '&auth_password=' + newPassword, '', 'application/x-www-form-urlencoded')
-		assert authConn.getResponseCode() == HTTP_OK
 
 		// Send messages up to the configured limit (3 in IT config)
 		for (int i = 0; i < 3; i++) {

@@ -24,10 +24,12 @@ import org.entrystore.rest.it.util.NameSpaceConst
 import spock.lang.Unroll
 
 import java.time.Year
+import java.util.concurrent.TimeUnit
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
+import static org.awaitility.Awaitility.await
 
 class SearchIT extends BaseSpec {
 
@@ -158,10 +160,18 @@ class SearchIT extends BaseSpec {
 		malformedDecimalEntryId = getOrCreateEntry(contextId, malformedParams, malformedBody)
 		assert malformedDecimalEntryId.length() > 0
 
-		Thread.sleep(100)
 		waitForSolrProcessing()
-		// Solr needs even more time to finish processing
-		Thread.sleep(1500)
+		// waitForSolrProcessing only proves the Solr post queue drained; commitWithin(1s) means the
+		// searcher can lag behind it. Poll for the last-queued entry until the commit makes it
+		// visible — a commit is index-wide, so the earlier entries become searchable with it.
+		await()
+			.pollInterval(200, TimeUnit.MILLISECONDS)
+			.atMost(15, TimeUnit.SECONDS)
+			.until {
+				def probe = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+					[type: 'solr', query: MALFORMED_MARKER_FIELD + ':' + MALFORMED_MARKER_VALUE]))
+				probe.getResponseCode() == HTTP_OK && JSON_PARSER.parseText(probe.inputStream.text)['results'] >= 1
+			}
 	}
 
 	// TODO: Fix inconsistency - guest users get empty results for Solr searches but an authorization error for SPARQL searches
@@ -199,7 +209,7 @@ class SearchIT extends BaseSpec {
 
 	def "GET /search?type=solr with complex Solr query as admin should return search results"() {
 		when:
-		def conn = EntryStoreClient.getRequest('/search?type=solr&query=id:randomNonExistingId+OR+description.pl:opissearch') //title.pl:tytuł
+		def conn = EntryStoreClient.getRequest('/search?type=solr&query=id:randomNonExistingId+OR+description.pl:opissearch')
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -230,7 +240,7 @@ class SearchIT extends BaseSpec {
 		def query = DECIMAL_FIELD + ':[10 TO 100]'
 
 		when:
-		def conn = EntryStoreClient.getRequest('/search?type=solr&query=' + URLEncoder.encode(query, 'UTF-8'))
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams([type: 'solr', query: query]))
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -249,7 +259,7 @@ class SearchIT extends BaseSpec {
 		def query = DECIMAL_FIELD + ':[42.4 TO 42.6]'
 
 		when:
-		def conn = EntryStoreClient.getRequest('/search?type=solr&query=' + URLEncoder.encode(query, 'UTF-8'))
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams([type: 'solr', query: query]))
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -264,7 +274,7 @@ class SearchIT extends BaseSpec {
 		def query = DECIMAL_FIELD + ':[100 TO 200]'
 
 		when:
-		def conn = EntryStoreClient.getRequest('/search?type=solr&query=' + URLEncoder.encode(query, 'UTF-8'))
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams([type: 'solr', query: query]))
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -282,7 +292,7 @@ class SearchIT extends BaseSpec {
 		def query = MALFORMED_MARKER_FIELD + ':' + MALFORMED_MARKER_VALUE
 
 		when:
-		def conn = EntryStoreClient.getRequest('/search?type=solr&query=' + URLEncoder.encode(query, 'UTF-8'))
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams([type: 'solr', query: query]))
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -961,7 +971,7 @@ class SearchIT extends BaseSpec {
 
 		when:
 		def conn = EntryStoreClient.getRequest(
-			'/search?type=solr&query=description.pl:opissearch&filterQuery=' + URLEncoder.encode(fqs, 'UTF-8'), '')
+			'/search' + convertMapToQueryParams([type: 'solr', query: 'description.pl:opissearch', filterQuery: fqs]), '')
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
@@ -975,7 +985,7 @@ class SearchIT extends BaseSpec {
 
 		when:
 		def conn = EntryStoreClient.getRequest(
-			'/search?type=solr&query=description.pl:opissearch&filterQuery=' + URLEncoder.encode(oversize, 'UTF-8'), '')
+			'/search' + convertMapToQueryParams([type: 'solr', query: 'description.pl:opissearch', filterQuery: oversize]), '')
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
@@ -1008,8 +1018,8 @@ class SearchIT extends BaseSpec {
 	def "GET /search?type=solr with regex-shaped facetMatches '#matches' should reply with Bad Request 400"() {
 		when:
 		def conn = EntryStoreClient.getRequest(
-			'/search?type=solr&query=description.pl:opissearch&facetFields=rdfType&facetMatches='
-			+ URLEncoder.encode(matches, 'UTF-8'), '')
+			'/search' + convertMapToQueryParams([type: 'solr', query: 'description.pl:opissearch',
+											   facetFields: 'rdfType', facetMatches: matches]), '')
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST

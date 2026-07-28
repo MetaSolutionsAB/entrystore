@@ -51,8 +51,6 @@ class ContextIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_CREATED
 		connection.getHeaderField('Location') != null
 		connection.getHeaderField('Location').contains('/_principals/entry/')
-		// shouldn't it return the created instance data?
-		//connection.getContentType().contains('application/json')
 		connection.inputStream.text == ''
 		def groupId = connection.getHeaderField('Location').find(/\/_principals\/entry\/([0-9A-Za-z]+)$/) { match, id -> id }
 		groupId.length() > 0

@@ -17,8 +17,6 @@
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
-import org.springframework.boot.SpringApplication
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
@@ -44,27 +42,23 @@ class ZzzMultipartSizeLimitIT extends BaseSpec {
 		// closes the connection before the client can read the response code). max-file-size
 		// and max-request-size are deliberately *different* so a regression that wires only
 		// one of the two properties fails the cap it leaves unbound.
-		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+		startOwnedApp([
 			'--spring.servlet.multipart.max-file-size=2KB',
 			'--spring.servlet.multipart.max-request-size=4KB'
-		] as String[]
-		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
-		appStarted = true
+		])
 	}
 
 	// Intentionally no cleanupSpec — matches the canonical pattern of ZzzCasLoginIT and
 	// ZzzSamlLoginIT. The next lifecycle-owning IT's stopPreexistingAppIfRunning() closes
 	// our appInstance; resetting appInstance=null or appStarted=false here would violate
-	// BaseSpec invariant #2 (see BaseSpec.groovy:58-66).
+	// BaseSpec invariant #2 (see the invariant comment above appStarted in BaseSpec).
 
 	// Jetty 12 enforces spring.servlet.multipart.max-file-size / max-request-size at the
 	// container layer and rejects oversize requests with BadMessageException ("400: bad
 	// multipart") *before* Spring's DispatcherServlet sees them, so AppExceptionHandler cannot
 	// remap to a more semantically-correct 413. Tests below assert the current Jetty contract
 	// (status 400 + body containing the "bad multipart" marker) — that pins the rejection to
-	// the cap path rather than the raw status code, addressing the "any 4xx makes this pass"
-	// concern raised in PR #264 review.
+	// the cap path rather than the raw status code.
 	private static String readErrorBody(HttpURLConnection conn) {
 		// Force the response to be read before grabbing the error stream — without first
 		// calling getResponseCode(), HttpURLConnection may return null for getErrorStream()
@@ -82,10 +76,9 @@ class ZzzMultipartSizeLimitIT extends BaseSpec {
 
 		// 3 KB file: exceeds max-file-size (2 KB) but the full multipart body stays under
 		// max-request-size (4 KB), so the rejection is pinned to the file-size cap specifically.
-		def overCapFile = File.createTempFile('over-file-cap', '.bin')
 		def payload = new byte[3 * 1024]
 		new Random(42).nextBytes(payload)
-		overCapFile.bytes = payload
+		def overCapFile = createTempBinaryFile('over-file-cap', '.bin', payload)
 
 		when:
 		def conn = EntryStoreClient.putRequestMultiPart('/' + contextId + '/resource/' + entryId, overCapFile)
@@ -111,10 +104,9 @@ class ZzzMultipartSizeLimitIT extends BaseSpec {
 		// 512 B file is under max-file-size (2 KB); 4 KB of form-field padding pushes the
 		// total multipart body well over max-request-size (4 KB) but still under the 8000-byte
 		// chunked-streaming threshold, so only max-request-size can produce the rejection.
-		def smallFile = File.createTempFile('under-file-cap', '.bin')
 		def payload = new byte[512]
 		new Random(7).nextBytes(payload)
-		smallFile.bytes = payload
+		def smallFile = createTempBinaryFile('under-file-cap', '.bin', payload)
 		def formData = [padding: 'x' * (4 * 1024)]
 
 		when:
@@ -139,10 +131,9 @@ class ZzzMultipartSizeLimitIT extends BaseSpec {
 		def entryId = getOrCreateEntry(contextId, [id: 'underCapFileId'], [resource: [name: 'Under-cap file entry']])
 		assert entryId.length() > 0
 
-		def underCapFile = File.createTempFile('under-cap', '.bin')
 		def payload = new byte[1024]
 		new Random(7).nextBytes(payload)
-		underCapFile.bytes = payload
+		def underCapFile = createTempBinaryFile('under-cap', '.bin', payload)
 
 		when:
 		def conn = EntryStoreClient.putRequestMultiPart('/' + contextId + '/resource/' + entryId, underCapFile)
@@ -167,10 +158,9 @@ class ZzzMultipartSizeLimitIT extends BaseSpec {
 		def entriesBefore = listContextEntryIds(contextId)
 
 		// 3 KB payload — does not need to be a valid zip, the cap fires before the controller runs.
-		def overCapZip = File.createTempFile('over-cap', '.zip')
 		def payload = new byte[3 * 1024]
 		new Random(42).nextBytes(payload)
-		overCapZip.bytes = payload
+		def overCapZip = createTempBinaryFile('over-cap', '.zip', payload)
 
 		when:
 		def conn = EntryStoreClient.postRequestMultiPart('/' + contextId + '/import', overCapZip)

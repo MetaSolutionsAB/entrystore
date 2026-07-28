@@ -189,7 +189,7 @@ class ContextExportIT extends BaseSpec {
 		descriptionNode.value().size() >= 7
 		descriptionNode['es:resource'].size() == 1
 		def entryResource = descriptionNode['es:resource'][0] as Node
-		entryResource.attributes() == ['rdf:resource': 'http://localhost:8181/store/context-export-test']
+		entryResource.attributes() == ['rdf:resource': EntryStoreClient.baseUrl + '/context-export-test']
 		entryResource.value().size() == 0
 
 		entryRespXml['es:Link'].size() == 1
