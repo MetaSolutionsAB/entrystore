@@ -17,7 +17,6 @@
 package org.entrystore.rest.springboot.configuration;
 
 import com.github.benmanes.caffeine.cache.Ticker;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.ContextManager;
@@ -53,13 +52,6 @@ public class EntryStoreConfiguration {
 
 	private final Environment environment;
 
-	@PostConstruct
-	public void logBeanStatus() {
-		if (!"on".equalsIgnoreCase(environment.getProperty(Settings.BACKUP_SCHEDULER))) {
-			log.warn("Backup is disabled in configuration");
-		}
-	}
-
 	/**
 	 * Creates a bean with Entrystore configuration needed for core.
 	 * Properties (key and value pairs) are read from property files (*.yml and *.properties) that were loaded on init by Spring-boot
@@ -94,7 +86,7 @@ public class EntryStoreConfiguration {
 		String baseURI = config.getString(Settings.BASE_URL);
 		if (baseURI == null) {
 			log.error("No Base URI specified, exiting");
-			System.exit(1);
+			throw new IllegalStateException("No base URL specified, set " + Settings.BASE_URL);
 		}
 		return new RepositoryManagerImpl(baseURI, config);
 	}
@@ -109,18 +101,16 @@ public class EntryStoreConfiguration {
 		return repositoryManager.getContextManager();
 	}
 
+	/**
+	 * Constructs the scheduler only — {@code BackupSchedulerStarter} arms the Quartz schedule once the
+	 * application is ready. Returns {@code null} when no cron expression is configured, which leaves
+	 * the {@code Optional<BackupScheduler>} injection points empty.
+	 */
 	@Bean
 	@ConditionalOnProperty(name = Settings.BACKUP_SCHEDULER, havingValue = "on")
 	public BackupScheduler backupScheduler(RepositoryManagerImpl repositoryManager) {
-		log.info("Starting backup scheduler");
 		PrincipalManager pm = repositoryManager.getPrincipalManager();
-		return PrincipalManagerUtil.runAsAdmin(pm, () -> {
-			BackupScheduler bs = BackupScheduler.createInstance(repositoryManager);
-			if (bs != null) {
-				bs.run();
-			}
-			return bs;
-		});
+		return PrincipalManagerUtil.runAsAdmin(pm, () -> BackupScheduler.createInstance(repositoryManager));
 	}
 
 	/**
