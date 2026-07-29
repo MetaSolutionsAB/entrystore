@@ -59,10 +59,19 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 				? normalize(config.getStringList(Settings.AUTH_PASSWORD_WHITELIST))
 				: List.of();
 		this.passwordLoginBlacklist = normalize(config.getStringList(Settings.AUTH_PASSWORD_BLACKLIST));
+		if (whitelistMode && passwordLoginWhitelist.isEmpty()) {
+			// Otherwise every username fails the noneMatch below: all password logins would be
+			// rejected with a 401 and a misleading "is blacklisted" warning, with nothing at startup
+			// pointing at the misspelt or missing whitelist key.
+			throw new IllegalStateException(Settings.AUTH_PASSWORD + "=whitelist requires a non-empty "
+					+ Settings.AUTH_PASSWORD_WHITELIST);
+		}
 	}
 
-	// A gap in the legacy indexed form (auth.password.blacklist.1 + .3) yields a null element, which
-	// would NPE in the equalsIgnoreCase below rather than simply not matching.
+	// Defensive: Config.getStringList does not exclude null elements from its contract, and the
+	// equalsIgnoreCase matching below would NPE on one. Note that a gap in the legacy indexed form
+	// (auth.password.blacklist.1 + .3) does not produce a null — PropertiesConfiguration stops
+	// counting at the first missing index, so .3 and anything after it is dropped entirely.
 	private static List<String> normalize(List<String> values) {
 		return values == null ? List.of() : values.stream().filter(Objects::nonNull).toList();
 	}

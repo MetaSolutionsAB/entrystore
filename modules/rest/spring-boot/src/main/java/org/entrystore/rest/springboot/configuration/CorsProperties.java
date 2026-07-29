@@ -21,6 +21,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Immutable view of the {@code entrystore.cors*} configuration, consumed by
@@ -67,7 +68,9 @@ public record CorsProperties(
 
 	/**
 	 * Origin patterns permitted without credentials. Lower-cased so a pattern configured in mixed
-	 * case still matches the lower-case origins browsers send.
+	 * case still matches; {@code EntryStoreCorsConfigurationSource} lower-cases the request origin
+	 * before matching to complete the pair, because {@code allowedOriginPatterns} compiles to a
+	 * case-sensitive regex.
 	 */
 	public List<String> originPatterns() {
 		return splitAndNormalize(origins);
@@ -83,19 +86,26 @@ public record CorsProperties(
 
 	/**
 	 * Headers to both allow on requests and expose on responses. Empty means "not configured", in
-	 * which case neither header list is set and Spring's defaults apply.
+	 * which case neither header list is set — and note that {@code CorsConfiguration} has no
+	 * permissive default there: {@code checkHeaders} returns {@code null} for a preflight carrying
+	 * {@code Access-Control-Request-Headers}, so {@code DefaultCorsProcessor} answers 403. Turning
+	 * CORS on for browser clients that send anything beyond the CORS-safelisted headers (including
+	 * {@code Content-Type: application/json}) therefore requires configuring this.
 	 */
 	public List<String> headerList() {
-		return Arrays.stream(headers.split(","))
-				.map(String::trim)
-				.filter(value -> !value.isEmpty())
-				.toList();
+		return split(headers);
 	}
 
 	private static List<String> splitAndNormalize(String value) {
+		return split(value).stream()
+				.map(pattern -> pattern.toLowerCase(Locale.ROOT))
+				.toList();
+	}
+
+	private static List<String> split(String value) {
 		return Arrays.stream(value.split(","))
-				.map(pattern -> pattern.trim().toLowerCase())
-				.filter(pattern -> !pattern.isEmpty())
+				.map(String::trim)
+				.filter(part -> !part.isEmpty())
 				.toList();
 	}
 }

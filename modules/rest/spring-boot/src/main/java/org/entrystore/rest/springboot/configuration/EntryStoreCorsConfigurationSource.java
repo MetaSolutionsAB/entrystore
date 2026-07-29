@@ -25,6 +25,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Resolves the CORS policy per request from two policies fixed at startup: one for origins allowed
@@ -34,13 +35,24 @@ import java.util.List;
  * <p>Origin matching is delegated to {@link CorsConfiguration#checkOrigin}, driven by
  * {@link CorsConfiguration#setAllowedOriginPatterns} — that supports the {@code *.suffix},
  * {@code prefix.*} and bare {@code *} forms EntryStore documents. {@code setAllowedOrigins} would
- * not work: {@code checkOrigin} rejects a literal {@code *} there when credentials are allowed,
- * whereas patterns are exempt and still echo the request origin rather than emitting {@code *}.
+ * not work for the startup policies: {@code checkOrigin} rejects a literal {@code *} there when
+ * credentials are allowed, whereas patterns are exempt and still echo the request origin rather than
+ * emitting {@code *}.
  *
- * <p>Returning {@code null} for an origin that matches neither list is deliberate and observable:
- * with a configuration present but no matching origin, {@code DefaultCorsProcessor} answers
- * <b>403</b>. EntryStore instead lets the request through unchanged, without any
- * {@code Access-Control-*} headers, and leaves it to the browser to block the response.
+ * <p>Matching is case-insensitive, as it was before the policy moved onto Spring's pattern support:
+ * the configured patterns are lower-cased by {@link CorsProperties} and the request origin is
+ * lower-cased here. Normalising the origin alone would not be enough, because
+ * {@code DefaultCorsProcessor} re-runs {@code checkOrigin} with the <em>unmodified</em> header and
+ * rejects with 403 when that second check fails. An origin that needed normalising to match therefore
+ * gets a copy of the policy carrying the raw header in {@code allowedOrigins}, which is compared with
+ * {@code equalsIgnoreCase}. Origins that are already lower case — everything a browser sends — match
+ * the shared policy directly and get it back untouched.
+ *
+ * <p>Returning {@code null} for an origin that matches neither list means a <b>simple</b> request
+ * passes through unchanged, without any {@code Access-Control-*} headers, leaving it to the browser
+ * to block the response. A <b>preflight</b> from such an origin is still answered with <b>403</b>
+ * ({@code Invalid CORS request}) by {@code DefaultCorsProcessor}, which rejects any preflight for
+ * which no configuration is resolved.
  *
  * <p>The bean name is load-bearing and must stay {@code corsConfigurationSource}: Spring Security's
  * {@code CorsConfigurer} resolves the source by that exact name, and when no such bean exists it
@@ -53,16 +65,16 @@ public class EntryStoreCorsConfigurationSource implements CorsConfigurationSourc
 
 	private static final List<String> ALLOWED_METHODS = List.of("HEAD", "GET", "PUT", "POST", "DELETE", "OPTIONS");
 
-	private final boolean enabled;
-	private final CorsConfiguration credentialPolicy;
-	private final CorsConfiguration standardPolicy;
+	private record Policies(CorsConfiguration credential, CorsConfiguration standard) {
+	}
+
+	/** Null when CORS is disabled — there is then no policy to hand out at all. */
+	private final @Nullable Policies policies;
 
 	public EntryStoreCorsConfigurationSource(CorsProperties properties) {
-		this.enabled = properties.enabled();
-		if (!enabled) {
+		if (!properties.enabled()) {
 			log.info("CORS is disabled");
-			this.credentialPolicy = new CorsConfiguration();
-			this.standardPolicy = new CorsConfiguration();
+			this.policies = null;
 			return;
 		}
 
@@ -71,6 +83,8 @@ public class EntryStoreCorsConfigurationSource implements CorsConfigurationSourc
 		List<String> credentialOriginPatterns = properties.credentialOriginPatterns();
 		originPatterns.forEach(pattern -> log.info("CORS allowed origin: {}", pattern));
 		credentialOriginPatterns.forEach(pattern -> log.info("CORS allowed origin (with credentials): {}", pattern));
+		warnAboutInteriorWildcards(originPatterns);
+		warnAboutInteriorWildcards(credentialOriginPatterns);
 
 		List<String> headers = properties.headerList();
 		if (!headers.isEmpty()) {
@@ -80,24 +94,52 @@ public class EntryStoreCorsConfigurationSource implements CorsConfigurationSourc
 			log.info("CORS max age: {}", properties.maxAge());
 		}
 
-		this.credentialPolicy = buildPolicy(credentialOriginPatterns, true, headers, properties.maxAge());
-		this.standardPolicy = buildPolicy(originPatterns, false, headers, properties.maxAge());
+		this.policies = new Policies(
+				buildPolicy(credentialOriginPatterns, true, headers, properties.maxAge()),
+				buildPolicy(originPatterns, false, headers, properties.maxAge()));
 	}
 
 	@Override
 	public @Nullable CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
 		String origin = request.getHeader(HttpHeaders.ORIGIN);
-		if (!enabled || origin == null) {
+		if (policies == null || origin == null) {
 			return null;
 		}
+
+		String normalizedOrigin = origin.toLowerCase(Locale.ROOT);
 		// Credentials first: an origin on both lists must keep getting Allow-Credentials: true.
-		if (credentialPolicy.checkOrigin(origin) != null) {
-			return credentialPolicy;
+		CorsConfiguration matched = null;
+		if (policies.credential().checkOrigin(normalizedOrigin) != null) {
+			matched = policies.credential();
+		} else if (policies.standard().checkOrigin(normalizedOrigin) != null) {
+			matched = policies.standard();
 		}
-		if (standardPolicy.checkOrigin(origin) != null) {
-			return standardPolicy;
+		if (matched == null) {
+			return null;
 		}
-		return null;
+		if (origin.equals(normalizedOrigin)) {
+			return matched;
+		}
+
+		// The origin matched only once lower-cased, but DefaultCorsProcessor re-runs checkOrigin with
+		// the unmodified header and rejects with 403 if that second check fails. Hand back a copy
+		// carrying the raw origin in allowedOrigins, which is compared with equalsIgnoreCase.
+		// Assigning rather than adding matters: the copy constructor shares list references, so
+		// addAllowedOrigin would append to the startup policy's own list.
+		CorsConfiguration perRequest = new CorsConfiguration(matched);
+		perRequest.setAllowedOrigins(List.of(origin));
+		return perRequest;
+	}
+
+	private static void warnAboutInteriorWildcards(List<String> originPatterns) {
+		originPatterns.stream()
+				.filter(pattern -> {
+					int star = pattern.indexOf('*');
+					return star > 0 && star < pattern.length() - 1;
+				})
+				.forEach(pattern -> log.warn("CORS origin pattern '{}' has an interior wildcard and matches every "
+						+ "origin the surrounding text allows; the documented forms are '*', '*suffix' and 'prefix*'",
+						pattern));
 	}
 
 	private static CorsConfiguration buildPolicy(List<String> originPatterns, boolean allowCredentials,

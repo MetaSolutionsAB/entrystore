@@ -35,8 +35,11 @@ import java.util.Optional;
  * half-initialised context mid-refresh.
  *
  * <p>Uses {@code ApplicationReadyEvent} rather than {@code SmartLifecycle} because
- * {@code BackupScheduler} exposes no shutdown hook — its Quartz scheduler is package-private — so a
- * {@code stop()} half would have nothing to call.
+ * {@code BackupScheduler} cannot stop its Quartz scheduler — that field is package-private, and the
+ * scheduler itself is the JVM-wide {@code StdSchedulerFactory.getDefaultScheduler()}. Its public
+ * {@code delete()} only unschedules the job, which the single-context production lifecycle does not
+ * need; a {@code stop()} half calling it would matter only if the same JVM refreshed the context
+ * more than once.
  */
 @Slf4j
 @Component
@@ -46,6 +49,9 @@ public class BackupSchedulerStarter {
 	private final Optional<BackupScheduler> backupScheduler;
 	private final PrincipalManager principalManager;
 
+	// Read even though an absent Optional already implies "not on" (the bean carries
+	// @ConditionalOnProperty), so the two cases can be told apart in the log: switched off entirely
+	// versus switched on but declined by createInstance.
 	@Value("${entrystore.backup.scheduler:off}")
 	private String backupSchedulerSetting;
 
@@ -55,10 +61,10 @@ public class BackupSchedulerStarter {
 			log.warn("Backup is disabled in configuration");
 			return;
 		}
-		// Absent while enabled means createInstance declined (no cron expression) and already logged why.
-		backupScheduler.ifPresent(scheduler -> {
+		backupScheduler.ifPresentOrElse(scheduler -> {
 			log.info("Starting backup scheduler");
 			PrincipalManagerUtil.runAsAdmin(principalManager, scheduler::run);
-		});
+		}, () -> log.warn("Backup is enabled but no scheduler was created; see the reason logged by "
+				+ "BackupScheduler.createInstance (typically no cron expression)"));
 	}
 }

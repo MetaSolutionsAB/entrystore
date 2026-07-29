@@ -18,7 +18,6 @@ package org.entrystore.rest.springboot.configuration;
 
 import com.github.benmanes.caffeine.cache.Ticker;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.entrystore.ContextManager;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
@@ -43,7 +42,6 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 
-@Slf4j
 @Configuration
 @RequiredArgsConstructor
 public class EntryStoreConfiguration {
@@ -85,7 +83,6 @@ public class EntryStoreConfiguration {
 	public RepositoryManagerImpl createRepositoryManager(Config config) {
 		String baseURI = config.getString(Settings.BASE_URL);
 		if (baseURI == null) {
-			log.error("No Base URI specified, exiting");
 			throw new IllegalStateException("No base URL specified, set " + Settings.BASE_URL);
 		}
 		return new RepositoryManagerImpl(baseURI, config);

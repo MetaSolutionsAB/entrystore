@@ -17,8 +17,11 @@
 package org.entrystore.rest.springboot.controller;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,5 +49,17 @@ class SearchControllerTest {
 	})
 	void clampLimit_clampsToConfiguredBounds(int requested, int expected) {
 		assertEquals(expected, searchController.clampLimit(requested));
+	}
+
+	@Test
+	void solrMaxLimit_bindsFromTheConfiguredProperty() {
+		// Pins the placeholder key itself, which the reflection-set fields above cannot: a misspelt
+		// @Value key would leave every case above green while an operator's entrystore.solr.max-limit
+		// was silently ignored and results stayed capped at the default.
+		new ApplicationContextRunner()
+				.withBean(PropertySourcesPlaceholderConfigurer.class)
+				.withBean(SearchController.class, () -> new SearchController(null, null, null))
+				.withPropertyValues("entrystore.solr.max-limit=7")
+				.run(context -> assertEquals(7, context.getBean(SearchController.class).clampLimit(150)));
 	}
 }

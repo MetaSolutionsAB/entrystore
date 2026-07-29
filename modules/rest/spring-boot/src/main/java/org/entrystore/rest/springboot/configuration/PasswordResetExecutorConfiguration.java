@@ -54,22 +54,30 @@ public class PasswordResetExecutorConfiguration {
 	 * <p>
 	 * Declared as a bean so the container owns its lifecycle: {@code afterPropertiesSet()} calls
 	 * {@code initialize()} on startup, and on context close {@code ExecutorConfigurationSupport}
-	 * calls {@code shutdown()} (graceful, because {@code waitForTasksToCompleteOnShutdown} is set)
-	 * then awaits termination for {@value #PASSWORD_RESET_DRAIN_SECONDS} seconds — giving in-flight
-	 * SMTP sends a chance to finish rather than dropping a reset email the user is already waiting
-	 * for.
+	 * calls {@code shutdown()} then awaits termination for {@value #PASSWORD_RESET_DRAIN_SECONDS}
+	 * seconds, so an SMTP send already in flight gets a chance to finish rather than dropping a reset
+	 * email the user is already waiting for.
 	 * <p>
-	 * Note that on drain timeout Spring only logs a warning; unlike the hand-rolled {@code @PreDestroy}
-	 * this replaced, it does <em>not</em> follow up with {@code shutdownNow()}. That is deliberate and
-	 * harmless here: the workers are daemons so they cannot hold JVM exit open, and the work they are
-	 * blocked on is an SMTP socket read, which {@code Thread.interrupt()} would not have unblocked
-	 * anyway.
+	 * {@code waitForTasksToCompleteOnShutdown} is deliberately left off, which makes that
+	 * {@code shutdown()} take the {@code shutdownNow()} branch: the still-queued backlog is discarded
+	 * and only the tasks already running get the drain window. Draining the queue instead would not
+	 * terminate — two workers against {@code Email}'s 5s SMTP timeouts clear roughly a dozen sends in
+	 * {@value #PASSWORD_RESET_DRAIN_SECONDS} seconds, so a queue anywhere near
+	 * {@value #PASSWORD_RESET_QUEUE_CAPACITY} cannot finish, and on timeout Spring only logs a warning
+	 * without following up with {@code shutdownNow()} the way the hand-rolled {@code @PreDestroy} this
+	 * replaced did. Those tasks would then keep running past context close, storing tokens in a cache
+	 * the restart is about to discard and mailing links that are already dead. Dropping a queued
+	 * dispatch is the outcome {@code AuthService.submitPasswordResetDispatch} already accepts on
+	 * rejection; {@code cancelRemainingTask} logs each one so the drop is not silent.
 	 * <p>
 	 * {@code newThread} is overridden to install an {@code UncaughtExceptionHandler}:
 	 * {@code AuthService.dispatchPasswordResetEmail} deliberately runs bcrypt and {@code putToken}
 	 * outside its own try/catch (nothing needs cleaning up before the token is stored), and relies on
 	 * this handler to make a {@code Throwable} from that stretch reach the logs instead of being
-	 * swallowed by {@code ThreadPoolExecutor}'s default {@code Worker.run} path.
+	 * swallowed by {@code ThreadPoolExecutor}'s default {@code Worker.run} path. That depends on the
+	 * task being handed to {@code execute()}, as {@code submitPasswordResetDispatch} does — a
+	 * {@code submit()} would capture the same {@code Throwable} into the returned {@code Future},
+	 * where the handler never fires.
 	 */
 	@Bean
 	ThreadPoolTaskExecutor passwordResetTaskExecutor() {
@@ -81,6 +89,12 @@ public class PasswordResetExecutorConfiguration {
 						log.error("Uncaught error in password-reset worker {}", t.getName(), ex));
 				return thread;
 			}
+
+			@Override
+			protected void cancelRemainingTask(Runnable task) {
+				log.warn("Dropping queued password-reset dispatch on shutdown; the user must request a new reset");
+				super.cancelRemainingTask(task);
+			}
 		};
 		executor.setCorePoolSize(PASSWORD_RESET_POOL_SIZE);
 		executor.setMaxPoolSize(PASSWORD_RESET_POOL_SIZE);
@@ -88,7 +102,6 @@ public class PasswordResetExecutorConfiguration {
 		executor.setThreadNamePrefix("password-reset-async-");
 		executor.setDaemon(true);
 		executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
-		executor.setWaitForTasksToCompleteOnShutdown(true);
 		executor.setAwaitTerminationSeconds(PASSWORD_RESET_DRAIN_SECONDS);
 		return executor;
 	}

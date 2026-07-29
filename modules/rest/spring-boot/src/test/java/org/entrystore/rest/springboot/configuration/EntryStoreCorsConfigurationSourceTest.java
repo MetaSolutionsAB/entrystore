@@ -47,9 +47,11 @@ class EntryStoreCorsConfigurationSourceTest {
 			"http://other.com,            true,  false", // second exact match
 			"http://app.test.example.com, true,  false", // *.suffix pattern
 			"http://prefix.anything.com,  true,  false", // prefix.* pattern
-			"http://localhost:3000,       true,  true",  // credentials list wins over the plain list
+			"http://localhost:3000,       true,  true",  // on the credentials list only
+			"http://EXAMPLE.com,          true,  false", // matching is case-insensitive, as before the move
 			"http://disallowed.org,       false, false", // on neither list — no CORS handling at all
-			"http://example.com.evil.net, false, false", // suffix pattern must not match a longer host
+			"http://example.com.evil.net, false, false", // exact origin must not match a longer host
+			"http://app.test.example.com.evil.net, false, false", // nor may the *.suffix pattern
 	})
 	void getCorsConfiguration_matchesConfiguredOrigins(String origin, boolean allowed, boolean credentials) {
 		CorsConfiguration config = resolve(properties(ORIGINS, CREDENTIAL_ORIGINS), origin);
@@ -71,6 +73,43 @@ class EntryStoreCorsConfigurationSourceTest {
 
 		assertNotNull(config);
 		assertEquals("http://anything.example", config.checkOrigin("http://anything.example"));
+	}
+
+	@Test
+	void getCorsConfiguration_originOnBothLists_keepsAllowCredentials() {
+		// The credentials list is consulted first on purpose. No other case here has an origin on both
+		// lists, so nothing else would catch a swap of the two checkOrigin branches.
+		CorsProperties bothLists = properties("http://example.com,http://localhost:3000", CREDENTIAL_ORIGINS);
+
+		CorsConfiguration config = resolve(bothLists, "http://localhost:3000");
+
+		assertNotNull(config);
+		assertEquals(Boolean.TRUE, config.getAllowCredentials());
+	}
+
+	@Test
+	void getCorsConfiguration_wildcardPlainList_stillAllowsCredentialsForCredentialOrigin() {
+		// entrystore.cors.origins defaults to '*', which puts every credentialed origin on both lists —
+		// the deployment shape where the precedence above actually decides the outcome.
+		CorsConfiguration config = resolve(properties("*", CREDENTIAL_ORIGINS), "http://localhost:3000");
+
+		assertNotNull(config);
+		assertEquals(Boolean.TRUE, config.getAllowCredentials());
+	}
+
+	@Test
+	void getCorsConfiguration_mixedCaseOrigin_pinsItOnACopyWithoutTouchingTheSharedPolicy() {
+		// A mixed-case origin matches only after normalising, so its raw form is pinned onto a copy —
+		// that is what makes DefaultCorsProcessor's second checkOrigin agree with the match here.
+		// Pinning the shared startup policy instead would leak one request's origin into the next.
+		var source = new EntryStoreCorsConfigurationSource(properties(ORIGINS, CREDENTIAL_ORIGINS));
+
+		CorsConfiguration mixedCase = source.getCorsConfiguration(requestWithOrigin("http://EXAMPLE.com"));
+		CorsConfiguration lowerCase = source.getCorsConfiguration(requestWithOrigin("http://other.com"));
+
+		assertEquals(List.of("http://EXAMPLE.com"), mixedCase.getAllowedOrigins());
+		assertNull(lowerCase.getAllowedOrigins(), "an already-lower-case origin matches the shared policy as-is");
+		assertEquals("http://other.com", lowerCase.checkOrigin("http://other.com"));
 	}
 
 	@Test
@@ -109,8 +148,12 @@ class EntryStoreCorsConfigurationSourceTest {
 	}
 
 	private static CorsConfiguration resolve(CorsProperties properties, String origin) {
+		return new EntryStoreCorsConfigurationSource(properties).getCorsConfiguration(requestWithOrigin(origin));
+	}
+
+	private static HttpServletRequest requestWithOrigin(String origin) {
 		HttpServletRequest request = mock(HttpServletRequest.class);
 		when(request.getHeader("Origin")).thenReturn(origin);
-		return new EntryStoreCorsConfigurationSource(properties).getCorsConfiguration(request);
+		return request;
 	}
 }

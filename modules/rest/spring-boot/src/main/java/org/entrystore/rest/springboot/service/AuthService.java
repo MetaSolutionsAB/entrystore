@@ -77,8 +77,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Collectors;
@@ -187,10 +187,10 @@ public class AuthService {
 		this.passwordResetRateLimiter = passwordResetRateLimiter;
 		this.passwordResetExecutor = passwordResetExecutor;
 
-		// we normalize the list to lower case and to not contain null
+		// Lower-cased so the domain check matches regardless of how the config spelled it. No null
+		// filter needed: SignupWhitelistProperties copies through Map.copyOf, which rejects nulls.
 		this.domainWhitelist = signupWhitelistProperties.whitelist().values().stream()
-				.filter(Objects::nonNull)
-				.map(String::toLowerCase)
+				.map(domain -> domain.toLowerCase(Locale.ROOT))
 				.collect(Collectors.toUnmodifiableSet());
 		if (!domainWhitelist.isEmpty()) {
 			log.info("Sign-up whitelist initialized with following domains: {}", Joiner.on(", ").join(domainWhitelist));
@@ -686,7 +686,9 @@ public class AuthService {
 		}
 
 		if (!domainWhitelist.isEmpty()) {
-			String emailDomain = ci.getEmail().substring(ci.getEmail().indexOf("@") + 1).toLowerCase();
+			// Same Locale.ROOT as the whitelist normalisation in the constructor, so the two agree
+			// under a locale whose lower-casing differs from the root one (e.g. Turkish dotless i).
+			String emailDomain = ci.getEmail().substring(ci.getEmail().indexOf("@") + 1).toLowerCase(Locale.ROOT);
 			if (!domainWhitelist.contains(emailDomain)) {
 				throw new ExpectationFailedHtmlException(DOMAIN_NOT_WHITELISTED_MESSAGE.replace("{}", emailDomain), title);
 			}

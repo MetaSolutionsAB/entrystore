@@ -59,14 +59,25 @@ public class ErrorResponseWriter {
 	}
 
 	/**
-	 * Redirects to the given URL if non-null, otherwise writes a 401 JSON error response.
-	 * Safe to call from servlet filter context (no exceptions thrown to the filter chain).
+	 * Redirects to the given URL if non-null, otherwise writes a 401 JSON error response. Raises no
+	 * application exception, so it is safe to use from a servlet filter or a Spring Security handler
+	 * where {@code AppExceptionHandler} cannot see the failure; only {@code IOException} propagates.
+	 *
+	 * <p>Both branches bail out on an already-committed response. This is reachable: a
+	 * last-resort {@code catch} in {@code AbstractSsoLoginSuccessHandler} calls this after a
+	 * subclass's custom-success redirect may already have committed, and {@code sendRedirect} throws
+	 * {@code IllegalStateException} in that case — which would escape the Security filter chain as a
+	 * raw container 500 instead of the intended failure response.
 	 *
 	 * @param failureMessage message for the JSON fallback body (e.g. "CAS login failed")
 	 */
 	public void redirectOrWriteUnauthorized(HttpServletResponse response, String requestUri,
 											String redirectUrl, String failureMessage) throws IOException {
 		if (redirectUrl != null) {
+			if (response.isCommitted()) {
+				log.warn("Cannot redirect to the SSO failure URL — response already committed");
+				return;
+			}
 			response.sendRedirect(redirectUrl);
 		} else {
 			writeErrorResponseAsJson(response, ErrorResponse.builder()

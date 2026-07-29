@@ -23,8 +23,7 @@ import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
-import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.stereotype.Service;
 
 /**
@@ -36,20 +35,23 @@ import org.springframework.stereotype.Service;
  * property, which determines whether test data should be loaded. If test data is already found,
  * it skips the data loading process.
  * <p>
- * Runs as an {@link ApplicationRunner} rather than from {@code @PostConstruct}: mutating the
- * repository is runtime work, and doing it during bean initialization means it happens before the
- * rest of the context (including the repository's own collaborators) is fully wired.
+ * Runs as a {@link SmartInitializingSingleton} rather than from {@code @PostConstruct}: mutating the
+ * repository is runtime work, and {@code @PostConstruct} runs mid-refresh, while this bean's own
+ * initialization is still in progress. {@code afterSingletonsInstantiated} instead runs once every
+ * singleton is wired — but still before {@code finishRefresh} starts the web server, which an
+ * {@code ApplicationRunner} would not: that runs after the connector is already accepting requests,
+ * so callers could observe a half-populated store while {@link TestSuite} was still writing to it.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class TestDataLoadService implements ApplicationRunner {
+public class TestDataLoadService implements SmartInitializingSingleton {
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final Config config;
 
 	@Override
-	public void run(ApplicationArguments args) {
+	public void afterSingletonsInstantiated() {
 		if ("on".equalsIgnoreCase(config.getString(Settings.STORE_INIT_WITH_TEST_DATA, "off"))) {
 			// Check for the existence of Donald
 			Entry donald = repositoryManager.getPrincipalManager().getPrincipalEntry("Donald");

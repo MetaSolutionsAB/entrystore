@@ -32,10 +32,12 @@ import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -61,8 +63,8 @@ class AuthServiceTest {
 	void setUp() {
 		// Only meterRegistry and the executor are touched by submitPasswordResetDispatch, so the other
 		// collaborators stay null — except the stateless EmailValidator, which is cheap to pass for
-		// real, and the whitelist properties, which the constructor reads. An empty whitelist is
-		// correct here: this test only drives the password-reset dispatch-rejection path.
+		// real, and the whitelist properties, which the constructor reads. The empty whitelist suits
+		// this shared instance; the tests that need entries build their own via the same factory.
 		meterRegistry = new SimpleMeterRegistry();
 		authService = authServiceWithSessionRegistry(null);
 	}
@@ -142,6 +144,22 @@ class AuthServiceTest {
 		service.expireUserSessions(userWithResourceUri("http://example.com/_principals/resource/42"), null);
 
 		verify(sessionRegistry, never()).getAllSessions(any(), anyBoolean());
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void constructor_signupWhitelist_isLowerCasedSoMixedCaseConfigStillMatches() {
+		// The domain comparison at the end of signup() is an exact Set lookup against a lower-cased
+		// email domain, so a whitelist entry configured as "Example.COM" would reject every
+		// alice@example.com sign-up if this normalisation were dropped. Asserted on the field because
+		// the comparison itself sits deep inside signup(), behind collaborators this test has no use for.
+		AuthService service = new AuthService(null, null, null, null, null, null, new EmailValidator(),
+				null, null, null, null, meterRegistry,
+				new SignupWhitelistProperties(Map.of("1", "Example.COM", "2", "OTHER.example.org")), executor);
+
+		var whitelist = (Set<String>) ReflectionTestUtils.getField(service, "domainWhitelist");
+
+		assertEquals(Set.of("example.com", "other.example.org"), whitelist);
 	}
 
 	private AuthService authServiceWithSessionRegistry(SessionRegistry sessionRegistry) {
