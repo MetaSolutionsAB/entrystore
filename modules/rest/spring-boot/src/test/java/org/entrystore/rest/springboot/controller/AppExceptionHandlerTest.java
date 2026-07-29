@@ -29,6 +29,7 @@ import org.entrystore.Entry;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
+import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.core.MethodParameter;
@@ -316,6 +317,30 @@ class AppExceptionHandlerTest {
 		ErrorResponse body = response.getBody();
 		assertNotNull(body, "Expected non-null ErrorResponse body");
 		assertEquals(500, body.status());
+		assertEquals("Internal Server Error", body.error(), "The generic 500 must not echo the exception message");
+	}
+
+	@Test
+	void handleGenericException_internalServerErrorException_bodyCarriesReasonPhraseNotMessage() {
+		// InternalServerErrorException's javadoc promises the response "error" is the bare reason phrase and
+		// never the exception message — which is precisely what lets call sites name internal details in the
+		// message, e.g. GraphUtil.serializeGraph reporting the RDF writer class it failed to instantiate.
+		// Nothing enforced that promise: the exception reaches this handler only because it has no dedicated
+		// @ExceptionHandler, while eight sibling handlers in AppExceptionHandler do echo ex.getMessage(). A
+		// future handler written in that prevailing style would leak the internal name with no failing test.
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/1/entry/2");
+
+		ResponseEntity<ErrorResponse> response = handler.handleGenericException(
+				new InternalServerErrorException("Failed to instantiate RDF writer org.example.SecretWriter"), req);
+
+		assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertEquals(500, body.status());
+		assertEquals("Internal Server Error", body.error());
+		assertFalse(body.error().contains("SecretWriter"),
+				"The internal writer class name must not reach the client");
 	}
 
 	@Test

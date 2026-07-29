@@ -64,6 +64,7 @@ import java.util.zip.ZipOutputStream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
@@ -232,7 +233,13 @@ class ResourceServiceTest {
 
 		String result = service.serializeResourceAsJson(entry, "application/json", new ListFilter(null, null, null, null, null, null, null));
 
+		// Routing: RDF/JSON, not the id array the isList branch would have produced.
 		assertEquals(RDFJSON.graphToRdfJson(graph), result);
+		// Content, asserted independently of RDFJSON: were graphToRdfJson to regress to an empty object,
+		// both sides of the equality above would move together and still match.
+		assertTrue(result.contains("http://purl.org/dc/terms/title"),
+				"Expected the predicate IRI in the RDF/JSON output");
+		assertTrue(result.contains("Sample"), "Expected the literal value in the RDF/JSON output");
 	}
 
 	@Test

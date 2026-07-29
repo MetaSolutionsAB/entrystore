@@ -187,11 +187,15 @@ public class GraphUtil {
 	 * the response commits as soon as the container's output buffer fills, and the status can then no longer
 	 * be changed to 5xx. Serialize into a buffer first (see {@link #serializeGraph(Model, String)}) and write
 	 * the result to the response only after this method has returned normally.
+	 * <p>
+	 * Deliberately package-private: that precondition is not expressible in the type system, so the overload
+	 * is kept out of reach of the service layer, which lives in another package and always needs a buffered
+	 * {@code String} anyway.
 	 *
 	 * @throws IllegalArgumentException     if either parameter is {@code null}
 	 * @throws InternalServerErrorException if the graph cannot be written in full
 	 */
-	public static void serializeGraph(Model graph, RDFWriter rdfWriter) {
+	static void serializeGraph(Model graph, RDFWriter rdfWriter) {
 		if (graph == null || rdfWriter == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
