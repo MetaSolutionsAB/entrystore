@@ -19,10 +19,7 @@ package org.entrystore.rest.springboot.service;
 import com.google.common.base.Joiner;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -62,7 +59,9 @@ import org.entrystore.rest.springboot.service.auth.SignupTokenCache;
 import org.entrystore.rest.springboot.util.Email;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -75,24 +74,17 @@ import java.security.SecureRandom;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AuthService {
 
 	private static final int TTL = 24 * 3600 * 1000;
@@ -135,8 +127,6 @@ public class AuthService {
 	private final SessionRegistry sessionRegistry;
 	private final SignupRateLimiter signupRateLimiter;
 	private final PasswordResetRateLimiter passwordResetRateLimiter;
-	private final MeterRegistry meterRegistry;
-	private final SignupWhitelistProperties signupWhitelistProperties;
 
 	@Value("${entrystore.auth.confirmation.legacy:true}")
 	private boolean confirmationLegacy;
@@ -158,86 +148,59 @@ public class AuthService {
 	@Value("${entrystore.trust.x-forwarded-for:false}")
 	private boolean trustForwardedFor;
 
-	private static final Object mutex = new Object();
-	private static Set<String> domainWhitelist = null;
-
 	// Shared SecureRandom (thread-safe) — used for all token generation, both from the executor's
 	// worker threads and from the request-thread signup path. Reseeding a fresh SecureRandom every
 	// request is an unnecessary entropy hit and was also a residual timing discriminator before
 	// password-reset token generation moved off the request thread (see dispatchPasswordResetEmail).
 	private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-	// Pool size is intentionally small: pwReset throughput is bounded by PasswordResetRateLimiter,
-	// so two daemon threads are enough to absorb concurrent dispatches without blocking the request
-	// path. Threads are daemons so a shutdown that misses the @PreDestroy still does not block JVM exit.
-	// The queue is bounded to cap heap growth under distributed credential-stuffing or an SMTP outage:
-	// at queue saturation `execute` throws RejectedExecutionException, which pwReset catches and treats
-	// as a client-silent drop — the response stays at the generic 200 so the timing-equivalence
-	// guarantee is preserved, but the rejection is logged at ERROR and increments the
-	// `auth.pwreset.rejected` Micrometer counter so operators can alert on sustained drops via
-	// monitoring rather than log scraping. A CallerRunsPolicy would have run the rejected task on the
-	// request thread, which re-opens the timing oracle this whole executor exists to close.
-	private static final int PASSWORD_RESET_POOL_SIZE = 2;
-	private static final int PASSWORD_RESET_QUEUE_CAPACITY = 100;
-	private ExecutorService passwordResetExecutor;
-	private Counter passwordResetRejectedCounter;
+	// Sizing, rejection policy and shutdown-drain semantics are documented on the bean definition in
+	// PasswordResetExecutorConfiguration; submitPasswordResetDispatch depends on them.
+	private final AsyncTaskExecutor passwordResetExecutor;
+	private final Set<String> domainWhitelist;
+	private final Counter passwordResetRejectedCounter;
 
-	@PostConstruct
-	public void init() {
-		synchronized (mutex) {
-			if (domainWhitelist == null) {
-				Collection<String> tmpDomainWhitelist = signupWhitelistProperties.whitelist().values();
-				domainWhitelist = new HashSet<>();
-				// we normalize the list to lower case and to not contain null
-				for (String domain : tmpDomainWhitelist) {
-					if (domain != null) {
-						domainWhitelist.add(domain.toLowerCase());
-					}
-				}
-				if (!domainWhitelist.isEmpty()) {
-					log.info("Sign-up whitelist initialized with following domains: {}", Joiner.on(", ").join(domainWhitelist));
-				} else {
-					log.info("No domains provided for sign-up whitelist; sign-ups for any domain are allowed");
-				}
-			}
+	public AuthService(RepositoryManagerImpl repositoryManager,
+					   PrincipalManager principalManager,
+					   ContextManager contextManager,
+					   RecaptchaVerifier rcVerifier,
+					   SignupTokenCache signupTokenCache,
+					   RedirectUrlValidator redirectUrlValidator,
+					   EmailValidator emailValidator,
+					   Config config,
+					   SessionRegistry sessionRegistry,
+					   SignupRateLimiter signupRateLimiter,
+					   PasswordResetRateLimiter passwordResetRateLimiter,
+					   MeterRegistry meterRegistry,
+					   SignupWhitelistProperties signupWhitelistProperties,
+					   @Qualifier("passwordResetTaskExecutor") AsyncTaskExecutor passwordResetExecutor) {
+		this.repositoryManager = repositoryManager;
+		this.principalManager = principalManager;
+		this.contextManager = contextManager;
+		this.rcVerifier = rcVerifier;
+		this.signupTokenCache = signupTokenCache;
+		this.redirectUrlValidator = redirectUrlValidator;
+		this.emailValidator = emailValidator;
+		this.config = config;
+		this.sessionRegistry = sessionRegistry;
+		this.signupRateLimiter = signupRateLimiter;
+		this.passwordResetRateLimiter = passwordResetRateLimiter;
+		this.passwordResetExecutor = passwordResetExecutor;
+
+		// Lower-cased so the domain check matches regardless of how the config spelled it. No null
+		// filter needed: SignupWhitelistProperties copies through Map.copyOf, which rejects nulls.
+		this.domainWhitelist = signupWhitelistProperties.whitelist().values().stream()
+				.map(domain -> domain.toLowerCase(Locale.ROOT))
+				.collect(Collectors.toUnmodifiableSet());
+		if (!domainWhitelist.isEmpty()) {
+			log.info("Sign-up whitelist initialized with following domains: {}", Joiner.on(", ").join(domainWhitelist));
+		} else {
+			log.info("No domains provided for sign-up whitelist; sign-ups for any domain are allowed");
 		}
-
-		AtomicInteger threadIndex = new AtomicInteger();
-		ThreadFactory threadFactory = r -> {
-			Thread t = new Thread(r, "password-reset-async-" + threadIndex.incrementAndGet());
-			t.setDaemon(true);
-			// An Error escaping the worker would otherwise be swallowed by ThreadPoolExecutor's default
-			// Worker.run path; ensure it always reaches the logs so a regression is observable.
-			t.setUncaughtExceptionHandler((thread, ex) ->
-					log.error("Uncaught error in password-reset worker {}", thread.getName(), ex));
-			return t;
-		};
-		this.passwordResetExecutor = new ThreadPoolExecutor(
-				PASSWORD_RESET_POOL_SIZE, PASSWORD_RESET_POOL_SIZE,
-				0L, TimeUnit.MILLISECONDS,
-				new ArrayBlockingQueue<>(PASSWORD_RESET_QUEUE_CAPACITY),
-				threadFactory);
 
 		this.passwordResetRejectedCounter = Counter.builder("auth.pwreset.rejected")
 				.description("Password-reset dispatches dropped because the executor queue was saturated or shutting down")
 				.register(meterRegistry);
-	}
-
-	@PreDestroy
-	public void shutdown() {
-		if (passwordResetExecutor == null) {
-			return;
-		}
-		passwordResetExecutor.shutdown();
-		try {
-			if (!passwordResetExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
-				log.warn("Password reset executor did not drain within 30s; forcing shutdown");
-				passwordResetExecutor.shutdownNow();
-			}
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			passwordResetExecutor.shutdownNow();
-		}
 	}
 
 	public List<SessionInformation> getAllUserSessions(URI userURI, boolean includeExpiredSessions) {
@@ -723,7 +686,9 @@ public class AuthService {
 		}
 
 		if (!domainWhitelist.isEmpty()) {
-			String emailDomain = ci.getEmail().substring(ci.getEmail().indexOf("@") + 1).toLowerCase();
+			// Same Locale.ROOT as the whitelist normalisation in the constructor, so the two agree
+			// under a locale whose lower-casing differs from the root one (e.g. Turkish dotless i).
+			String emailDomain = ci.getEmail().substring(ci.getEmail().indexOf("@") + 1).toLowerCase(Locale.ROOT);
 			if (!domainWhitelist.contains(emailDomain)) {
 				throw new ExpectationFailedHtmlException(DOMAIN_NOT_WHITELISTED_MESSAGE.replace("{}", emailDomain), title);
 			}

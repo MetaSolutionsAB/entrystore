@@ -24,6 +24,8 @@ import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration.Idp;
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.service.SamlAuthService;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
+import tools.jackson.databind.json.JsonMapper;
 import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -104,7 +106,7 @@ class SamlLoginSuccessHandlerTest {
 				new SamlCustomConfiguration.RedirectUrl(SUCCESS_URL),
 				new SamlCustomConfiguration.RedirectUrl(FAILURE_URL));
 		handler = new SamlLoginSuccessHandler(userService, samlAuthService, samlAuthStateCache,
-				principalManager, samlConfiguration);
+				principalManager, new ErrorResponseWriter(JsonMapper.builder().build()), samlConfiguration);
 		// Custom-success redirects route through the RedirectStrategy; the failure path writes the
 		// redirect directly to the response. Mocking the strategy keeps the success-path assertions
 		// independent of the default strategy's encodeRedirectURL handling.

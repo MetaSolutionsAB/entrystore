@@ -18,6 +18,8 @@ package org.entrystore.rest.springboot.configuration;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletResponse;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -39,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JsonpCallbackFilterTest {
 
-	private final JsonpCallbackFilter filter = new JsonpCallbackFilter(true);
+	private final JsonpCallbackFilter filter = new JsonpCallbackFilter(true, new ErrorResponseWriter(JsonMapper.builder().build()));
 
 	@Test
 	void getWithCallback_wrapsJsonAsJavascript() throws Exception {
@@ -182,7 +184,7 @@ class JsonpCallbackFilterTest {
 		var request = getRequestWithCallback("/90/entry/1", "foo");
 		var response = new MockHttpServletResponse();
 
-		new JsonpCallbackFilter(false)
+		new JsonpCallbackFilter(false, new ErrorResponseWriter(JsonMapper.builder().build()))
 				.doFilter(request, response, chainWriting(200, "application/json", "{\"a\":1}".getBytes(UTF_8)));
 
 		assertEquals("{\"a\":1}", response.getContentAsString());

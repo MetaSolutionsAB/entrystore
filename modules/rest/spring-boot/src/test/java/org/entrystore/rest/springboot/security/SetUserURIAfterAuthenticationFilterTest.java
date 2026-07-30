@@ -21,6 +21,8 @@ import org.apereo.cas.client.validation.Assertion;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -81,7 +83,8 @@ class SetUserURIAfterAuthenticationFilterTest {
 
 	@BeforeEach
 	void setUp() {
-		filter = new SetUserURIAfterAuthenticationFilter(pm, userDetailsService);
+		filter = new SetUserURIAfterAuthenticationFilter(pm, userDetailsService,
+				new ErrorResponseWriter(JsonMapper.builder().build()));
 		// Tests that need a missing-guest scenario override pm.getGuestUser() explicitly;
 		// keep these baseline stubs lenient so unused-stub failures don't mask the override.
 		lenient().when(pm.getGuestUser()).thenReturn(guestUser);

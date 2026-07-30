@@ -22,6 +22,8 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.CasVersion;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -138,7 +140,8 @@ class CasLoginSuccessHandlerTest {
 		var casConfiguration = new CasCustomConfiguration(true, CasVersion.CAS2, server, userAutoProvisioning,
 				new CasCustomConfiguration.RedirectSuccess(SUCCESS_URL),
 				new CasCustomConfiguration.RedirectFailure(FAILURE_URL));
-		var newHandler = new CasLoginSuccessHandler(userService, principalManager, casConfiguration);
+		var newHandler = new CasLoginSuccessHandler(userService, principalManager,
+				new ErrorResponseWriter(JsonMapper.builder().build()), casConfiguration);
 		// CAS has no custom-success hook, so success flows through super.onAuthenticationSuccess ->
 		// determineTargetUrl -> RedirectStrategy. Mocking the strategy and default target makes the
 		// success redirect observable; the failure path writes directly to the response.

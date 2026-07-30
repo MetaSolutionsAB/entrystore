@@ -25,6 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.service.auth.BasicVerifier;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
@@ -51,6 +52,7 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 
 	protected final ESUserDetailsService userService;
 	protected final PrincipalManager principalManager;
+	protected final ErrorResponseWriter errorResponseWriter;
 
 	@Override
 	public final void onAuthenticationSuccess(HttpServletRequest request,
@@ -67,7 +69,7 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 			// Undo the filter-persisted token before resolving the (subclass-supplied) failure URL: a
 			// throwing defaultFailureUrl() must not leave the rejected user authenticated behind the 500.
 			HttpUtil.clearAuthenticatedSession(request);
-			HttpUtil.redirectOrWriteUnauthorized(response, request.getRequestURI(), defaultFailureUrl(),
+			errorResponseWriter.redirectOrWriteUnauthorized(response, request.getRequestURI(), defaultFailureUrl(),
 					authTypeLabel() + " login failed");
 		}
 	}
@@ -144,7 +146,7 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 		// The protocol's filter already persisted the token to the SecurityContext; undo that
 		// before redirecting so the rejected user doesn't remain authenticated.
 		HttpUtil.clearAuthenticatedSession(request);
-		HttpUtil.redirectOrWriteUnauthorized(response, request.getRequestURI(), failureUrl,
+		errorResponseWriter.redirectOrWriteUnauthorized(response, request.getRequestURI(), failureUrl,
 				authTypeLabel() + " login failed");
 	}
 

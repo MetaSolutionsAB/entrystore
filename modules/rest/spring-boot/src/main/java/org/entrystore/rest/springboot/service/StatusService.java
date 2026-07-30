@@ -25,7 +25,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.configuration.AppStartedListener;
-import org.entrystore.rest.springboot.configuration.CorsConfig;
+import org.entrystore.rest.springboot.configuration.CorsProperties;
 import org.entrystore.rest.springboot.configuration.InfoAppPropertiesConfiguration;
 import org.entrystore.rest.springboot.model.api.StatusExtendedIncludeEnum;
 import org.entrystore.rest.springboot.model.api.StatusExtendedResponse;
@@ -52,7 +52,7 @@ public class StatusService {
 
 	private final InfoAppPropertiesConfiguration appConfig;
 	private final Config esConfig;
-	private final CorsConfig corsConfig;
+	private final CorsProperties corsProperties;
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final AppStartedListener appStartedListener;
@@ -108,14 +108,24 @@ public class StatusService {
 		return builder.build();
 	}
 
+	// Every value comes from CorsProperties, the same bean EntryStoreCorsConfigurationSource builds its
+	// policies from, so the report cannot disagree with the installed policy. Note that
+	// entrystore.cors.origins defaults to "*": an unset key reports that effective wildcard rather
+	// than claiming nothing is configured.
 	private Map<String, Object> buildCorsInfo() {
 		return Map.of(
-			"enabled", corsConfig.isCorsEnabled(),
-			"headers", esConfig.getString(Settings.CORS_HEADERS, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
-			"maxAge", esConfig.getString(Settings.CORS_MAX_AGE, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
-			"origins", esConfig.getString(Settings.CORS_ORIGINS, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
-			"originsAllowCredentials", esConfig.getString(Settings.CORS_ORIGINS_ALLOW_CREDENTIALS, DEFAULT_VALUE_FOR_NOT_CONFIGURED)
+			"enabled", corsProperties.enabled(),
+			"headers", valueOrUnconfigured(corsProperties.headers()),
+			"maxAge", corsProperties.maxAge() > -1
+				? String.valueOf(corsProperties.maxAge())
+				: DEFAULT_VALUE_FOR_NOT_CONFIGURED,
+			"origins", valueOrUnconfigured(corsProperties.origins()),
+			"originsAllowCredentials", valueOrUnconfigured(corsProperties.originsAllowCredentials())
 		);
+	}
+
+	private static String valueOrUnconfigured(String value) {
+		return value.isBlank() ? DEFAULT_VALUE_FOR_NOT_CONFIGURED : value;
 	}
 
 	private Map<String, Object> buildAuthenticationInfo() {

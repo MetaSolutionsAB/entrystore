@@ -25,12 +25,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
-import org.entrystore.rest.springboot.configuration.CorsConfig;
+import org.entrystore.rest.springboot.configuration.CorsProperties;
 import org.entrystore.rest.springboot.configuration.HttpBasicAuthConfiguration;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.auth.UserAuthRole;
-import org.entrystore.rest.springboot.util.HttpUtil;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.boot.context.properties.bind.BindException;
@@ -91,7 +91,8 @@ public class SecurityConfig {
 	private final FormLoginAuthenticationFailureHandler formLoginAuthenticationFailureHandler;
 	private final FormLoginAuthenticationSuccessHandler formLoginAuthenticationSuccessHandler;
 
-	private final CorsConfig corsConfig;
+	private final CorsProperties corsProperties;
+	private final ErrorResponseWriter errorResponseWriter;
 
 	private final CsrfRequestMatcher csrfRequestMatcher;
 	private final CsrfCookieFilter csrfCookieFilter;
@@ -129,7 +130,7 @@ public class SecurityConfig {
 												   AuthenticationEntryPoint customEntryPoint,
 												   AccessDeniedHandler customAccessDeniedHandler) throws Exception {
 
-		if (corsConfig.isCorsEnabled()) {
+		if (corsProperties.enabled()) {
 			http.cors(Customizer.withDefaults());
 		} else {
 			http.cors(AbstractHttpConfigurer::disable);
@@ -155,13 +156,13 @@ public class SecurityConfig {
 								.maximumSessions(-1)
 								.sessionRegistry(sessionRegistry)
 								.expiredSessionStrategy(event ->
-										HttpUtil.writeErrorResponseAsJson(event.getResponse(), ErrorResponse.builder()
+										errorResponseWriter.writeErrorResponseAsJson(event.getResponse(), ErrorResponse.builder()
 											.status(HttpStatus.UNAUTHORIZED.value())
 											.path(event.getRequest().getRequestURI())
 											.error("Session expired")
 											.build())))
 						.invalidSessionStrategy((request, response) ->
-								HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+								errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 										.status(HttpStatus.UNAUTHORIZED.value())
 										.path(request.getRequestURI())
 										.error("Session expired or invalid")
@@ -293,7 +294,7 @@ public class SecurityConfig {
 			var mv = handlerExceptionResolver.resolveException(request, response, null, authException);
 			if (mv == null && !response.isCommitted()) {
 				log.warn("AuthenticationEntryPoint: exception resolver did not handle {}", authException.getClass().getName());
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.UNAUTHORIZED.value())
 						.path(request.getRequestURI())
 						.error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
@@ -310,7 +311,7 @@ public class SecurityConfig {
 			var mv = handlerExceptionResolver.resolveException(request, response, null, accessDeniedException);
 			if (mv == null && !response.isCommitted()) {
 				log.warn("AccessDeniedHandler: exception resolver did not handle {}", accessDeniedException.getClass().getName());
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.FORBIDDEN.value())
 						.path(request.getRequestURI())
 						.error(HttpStatus.FORBIDDEN.getReasonPhrase())

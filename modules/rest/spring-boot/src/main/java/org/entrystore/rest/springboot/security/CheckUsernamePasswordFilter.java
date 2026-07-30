@@ -1,17 +1,32 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.security;
 
-import jakarta.annotation.PostConstruct;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.http.HttpStatus;
@@ -20,26 +35,56 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Class checks the request size and parameters before the authentication via username and password process starts
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 
-	private final Config config;
 	private final LoginAttemptService loginAttemptService;
-	private static List<String> passwordLoginWhitelist;
-	private static List<String> passwordLoginBlacklist;
+	private final ErrorResponseWriter errorResponseWriter;
+	private final boolean whitelistMode;
+	private final List<String> passwordLoginWhitelist;
+	private final List<String> passwordLoginBlacklist;
 
-	@PostConstruct
-	public void init() {
-		if ("whitelist".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD))) {
-			passwordLoginWhitelist = config.getStringList(Settings.AUTH_PASSWORD_WHITELIST);
+	public CheckUsernamePasswordFilter(Config config, LoginAttemptService loginAttemptService,
+									   ErrorResponseWriter errorResponseWriter) {
+		this.loginAttemptService = loginAttemptService;
+		this.errorResponseWriter = errorResponseWriter;
+		String passwordAuthMode = config.getString(Settings.AUTH_PASSWORD);
+		this.whitelistMode = "whitelist".equalsIgnoreCase(passwordAuthMode);
+		if (passwordAuthMode != null && !passwordAuthMode.isEmpty() && !whitelistMode
+				&& !"on".equalsIgnoreCase(passwordAuthMode) && !"off".equalsIgnoreCase(passwordAuthMode)) {
+			// A typo in this value fails open — whitelist enforcement silently off. 'on' and 'off'
+			// are exempt: both are legitimate values from the legacy layer ('off' is not honoured
+			// here yet) and must not trip the warning.
+			log.warn("Unrecognised value '{}' for {}: expected 'on', 'off' or 'whitelist'; "
+					+ "whitelist enforcement is off", passwordAuthMode, Settings.AUTH_PASSWORD);
 		}
-		passwordLoginBlacklist = config.getStringList(Settings.AUTH_PASSWORD_BLACKLIST);
+		this.passwordLoginWhitelist = whitelistMode
+				? normalize(config.getStringList(Settings.AUTH_PASSWORD_WHITELIST))
+				: List.of();
+		this.passwordLoginBlacklist = normalize(config.getStringList(Settings.AUTH_PASSWORD_BLACKLIST));
+		if (whitelistMode && passwordLoginWhitelist.isEmpty()) {
+			// Deliberately not a startup failure: an empty whitelist fails closed — every password
+			// login is denied — which is also the only way this layer can express "no local password
+			// logins at all", so aborting would turn that legitimate configuration into an outage.
+			// The ERROR is what points a misconfigured deployment at the misspelt or missing
+			// whitelist key.
+			log.error("{}=whitelist with no {} configured: every password login will be rejected",
+					Settings.AUTH_PASSWORD, Settings.AUTH_PASSWORD_WHITELIST);
+		}
+	}
+
+	// Defensive: Config.getStringList does not exclude null elements from its contract, and the
+	// equalsIgnoreCase matching below would NPE on one. Note that a gap in the legacy indexed form
+	// (auth.password.blacklist.1 + .3) does not produce a null — PropertiesConfiguration stops
+	// counting at the first missing index, so .3 and anything after it is dropped entirely.
+	private static List<String> normalize(List<String> values) {
+		return values == null ? List.of() : values.stream().filter(Objects::nonNull).toList();
 	}
 
 	@Override
@@ -54,7 +99,7 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 
 			if (request.getContentLength() > 0 && HttpUtil.isLargerThan(request, 32768)) {
 				log.warn("The size of the request is larger than 32KB, request blocked");
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.PAYLOAD_TOO_LARGE.value())
 						.path(request.getRequestURI())
 						.error("The size of the request is larger than 32KB")
@@ -63,7 +108,7 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 			}
 
 			if (password == null || password.isEmpty()) {
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.BAD_REQUEST.value())
 						.path(request.getRequestURI())
 						.error("Password is missing")
@@ -75,7 +120,7 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 				Password.check(password, Password.getSaltedHash(password));
 			} catch (IllegalArgumentException ex) {
 				log.warn("Password validation failed: {}", ex.getMessage(), ex);
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.BAD_REQUEST.value())
 						.path(request.getRequestURI())
 						.error("Invalid credentials format")
@@ -84,7 +129,7 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 			}
 
 			if (username == null || username.isEmpty()) {
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.BAD_REQUEST.value())
 						.path(request.getRequestURI())
 						.error("Username is missing")
@@ -98,7 +143,7 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 			// usernames take the normal auth path.
 			if (loginAttemptService.isLockedOut(username)) {
 				log.warn("User {} is temporarily locked out due to too many failed login attempts", HttpUtil.sanitizeForLog(username));
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.TOO_MANY_REQUESTS.value())
 						.path(request.getRequestURI())
 						.error("Too many login attempts. Please try again later.")
@@ -108,9 +153,14 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 
 			// Use case for whitelisting: enforced SSO with some users that should be able to log in
 			// with their local credentials, see https://entrystore.org/#!KB/Authentication.md
-			if ((passwordLoginBlacklist != null && passwordLoginBlacklist.stream().anyMatch(s -> s.equalsIgnoreCase(username))) ||
-					(passwordLoginWhitelist != null && passwordLoginWhitelist.stream().noneMatch(s -> s.equalsIgnoreCase(username)))) {
-				log.warn("User {} is blacklisted", HttpUtil.sanitizeForLog(username));
+			boolean blacklisted = passwordLoginBlacklist.stream().anyMatch(s -> s.equalsIgnoreCase(username));
+			if (blacklisted ||
+					(whitelistMode && passwordLoginWhitelist.stream().noneMatch(s -> s.equalsIgnoreCase(username)))) {
+				if (blacklisted) {
+					log.warn("User {} is blacklisted", HttpUtil.sanitizeForLog(username));
+				} else {
+					log.warn("User {} is not on the password login whitelist", HttpUtil.sanitizeForLog(username));
+				}
 				// Record the failure so blacklisted attempts trip the same lockout threshold as
 				// any other username — otherwise the absence of 429 on retries would identify
 				// which usernames are blacklisted. The call is guarded so a Caffeine fault cannot
@@ -131,7 +181,7 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 				Password.getSaltedHash(password);
 				// Body must remain identical to the generic 401 used for all other authentication
 				// failures so account state cannot be enumerated.
-				HttpUtil.writeUnauthorizedAsJson(response, request);
+				errorResponseWriter.writeUnauthorizedAsJson(response, request.getRequestURI());
 				return;
 			}
 		}

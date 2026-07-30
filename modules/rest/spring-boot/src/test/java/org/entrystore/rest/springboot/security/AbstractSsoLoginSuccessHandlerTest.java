@@ -21,6 +21,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -288,7 +290,7 @@ class AbstractSsoLoginSuccessHandlerTest {
 
 		private TestSsoLoginSuccessHandler(ESUserDetailsService userService, PrincipalManager principalManager,
 										   String failureUrl, boolean autoProvisioning) {
-			super(userService, principalManager);
+			super(userService, principalManager, new ErrorResponseWriter(JsonMapper.builder().build()));
 			this.failureUrl = failureUrl;
 			this.autoProvisioning = autoProvisioning;
 		}

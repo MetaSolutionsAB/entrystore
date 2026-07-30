@@ -24,7 +24,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
-import org.entrystore.rest.springboot.util.HttpUtil;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -50,6 +50,7 @@ public class ModificationLockOutFilter extends OncePerRequestFilter {
 			"The service is being maintained and does not accept modification requests right now, please check back later";
 
 	private final RepositoryManager repositoryManager;
+	private final ErrorResponseWriter errorResponseWriter;
 
 	@Override
 	protected void doFilterInternal(HttpServletRequest request,
@@ -62,7 +63,7 @@ public class ModificationLockOutFilter extends OncePerRequestFilter {
 		}
 
 		log.info("Modification lockout active, rejecting {} {}", request.getMethod(), request.getRequestURI());
-		HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+		errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 				.status(HttpStatus.SERVICE_UNAVAILABLE.value())
 				.path(request.getRequestURI())
 				.error(MAINTENANCE_MESSAGE)

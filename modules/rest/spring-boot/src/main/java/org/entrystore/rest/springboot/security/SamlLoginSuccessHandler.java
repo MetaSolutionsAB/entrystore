@@ -25,6 +25,7 @@ import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration.Idp;
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.service.SamlAuthService;
 import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Condition;
 import org.springframework.context.annotation.ConditionContext;
@@ -48,8 +49,9 @@ public class SamlLoginSuccessHandler
 
 	public SamlLoginSuccessHandler(ESUserDetailsService userService, SamlAuthService samlAuthService,
 								   SamlAuthStateCache samlAuthStateCache, PrincipalManager principalManager,
+								   ErrorResponseWriter errorResponseWriter,
 								   SamlCustomConfiguration samlConfiguration) {
-		super(userService, principalManager);
+		super(userService, principalManager, errorResponseWriter);
 		this.samlAuthService = samlAuthService;
 		this.samlAuthStateCache = samlAuthStateCache;
 		this.samlConfiguration = samlConfiguration;

@@ -23,6 +23,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Value;
@@ -97,9 +98,12 @@ public class JsonpCallbackFilter extends OncePerRequestFilter {
 	private static final Pattern STREAMING_PATHS = Pattern.compile("/(?:[^/]+/)?sparql");
 
 	private final boolean enabled;
+	private final ErrorResponseWriter errorResponseWriter;
 
-	public JsonpCallbackFilter(@Value("${entrystore.jsonp:true}") boolean enabled) {
+	public JsonpCallbackFilter(@Value("${entrystore.jsonp:true}") boolean enabled,
+							   ErrorResponseWriter errorResponseWriter) {
 		this.enabled = enabled;
+		this.errorResponseWriter = errorResponseWriter;
 	}
 
 	// Defense-in-depth: never re-run on the ASYNC dispatch of a request that went async.
@@ -130,7 +134,7 @@ public class JsonpCallbackFilter extends OncePerRequestFilter {
 		String callback = rawCallback.isBlank() ? DEFAULT_CALLBACK : rawCallback;
 		if (callback.length() > MAX_CALLBACK_LENGTH || !VALID_CALLBACK.matcher(callback).matches()) {
 			// Reject malicious callback syntax before any downstream work or buffering.
-			HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+			errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 					.status(HttpStatus.BAD_REQUEST.value())
 					.path(request.getRequestURI())
 					.error("Invalid JSONP callback name")

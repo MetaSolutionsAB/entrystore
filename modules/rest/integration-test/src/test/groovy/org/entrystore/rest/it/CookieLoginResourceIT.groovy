@@ -532,12 +532,24 @@ class CookieLoginResourceIT extends BaseSpec {
 		def disabledConn = EntryStoreClient.postRequest('/auth/cookie', disabledLoginBody, '', 'application/x-www-form-urlencoded')
 
 		then:
-		wrongPasswordConn.getResponseCode() == disabledConn.getResponseCode()
+		// Asserted explicitly, not merely equal across branches, so a regression returning 2xx
+		// reports as an auth bypass here rather than as an NPE on the null error stream below.
+		// getResponseCode() also makes the connection; before that, getErrorStream() returns null.
+		wrongPasswordConn.getResponseCode() == HTTP_UNAUTHORIZED
+		disabledConn.getResponseCode() == HTTP_UNAUTHORIZED
 		wrongPasswordConn.getContentType() == disabledConn.getContentType()
+
 		// The unified 401 envelope is byte-identical across branches: timestamp is nulled in
-		// HttpUtil.writeUnauthorizedAsJson so it cannot leak the bcrypt/no-bcrypt latency
+		// ErrorResponseWriter.writeUnauthorizedAsJson so it cannot leak the bcrypt/no-bcrypt latency
 		// difference between branches, and the request URI (path) is the same for both calls.
-		wrongPasswordConn.getErrorStream().text == disabledConn.getErrorStream().text
+		def wrongPasswordBodyText = wrongPasswordConn.getErrorStream().text
+		def disabledBodyText = disabledConn.getErrorStream().text
+		wrongPasswordBodyText == disabledBodyText
+		// Asserted separately because equality alone also holds if the field disappeared from both
+		// bodies. The writer now serializes with the container's ObjectMapper, so a spring.jackson
+		// setting such as default-property-inclusion=non_null would drop it and silently restore the
+		// timestamp-based oracle. This is the only assertion covering that.
+		wrongPasswordBodyText.contains('"timestamp":null')
 	}
 
 	def "GET /_principals/entry/{id}?includeAll should expose disabledUntil while user is locked out"() {

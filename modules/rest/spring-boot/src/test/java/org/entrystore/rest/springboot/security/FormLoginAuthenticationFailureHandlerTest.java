@@ -19,12 +19,13 @@ package org.entrystore.rest.springboot.security;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import tools.jackson.databind.json.JsonMapper;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -46,14 +47,16 @@ class FormLoginAuthenticationFailureHandlerTest {
 	@Mock
 	private LoginAttemptService loginAttemptService;
 
-	@InjectMocks
 	private FormLoginAuthenticationFailureHandler handler;
-
 	private MockHttpServletRequest request;
 	private MockHttpServletResponse response;
 
 	@BeforeEach
 	void setUp() {
+		// Constructed explicitly rather than via @InjectMocks: every assertion here inspects the real
+		// serialized 401 body, so ErrorResponseWriter must be a working instance and not a Mockito stub.
+		handler = new FormLoginAuthenticationFailureHandler(loginAttemptService,
+				new ErrorResponseWriter(JsonMapper.builder().build()));
 		request = new MockHttpServletRequest("POST", "/auth/cookie");
 		response = new MockHttpServletResponse();
 	}
