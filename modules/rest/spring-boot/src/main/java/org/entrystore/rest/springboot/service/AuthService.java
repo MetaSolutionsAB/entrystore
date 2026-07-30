@@ -33,7 +33,6 @@ import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
-import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
@@ -56,7 +55,7 @@ import org.entrystore.rest.springboot.service.auth.PasswordResetRateLimiter;
 import org.entrystore.rest.springboot.service.auth.RedirectUrlValidator;
 import org.entrystore.rest.springboot.service.auth.SignupRateLimiter;
 import org.entrystore.rest.springboot.service.auth.SignupTokenCache;
-import org.entrystore.rest.springboot.util.Email;
+import org.entrystore.rest.springboot.util.EmailSender;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -123,7 +122,7 @@ public class AuthService {
 	private final SignupTokenCache signupTokenCache;
 	private final RedirectUrlValidator redirectUrlValidator;
 	private final EmailValidator emailValidator;
-	private final Config config;
+	private final EmailSender emailSender;
 	private final SessionRegistry sessionRegistry;
 	private final SignupRateLimiter signupRateLimiter;
 	private final PasswordResetRateLimiter passwordResetRateLimiter;
@@ -167,7 +166,7 @@ public class AuthService {
 					   SignupTokenCache signupTokenCache,
 					   RedirectUrlValidator redirectUrlValidator,
 					   EmailValidator emailValidator,
-					   Config config,
+					   EmailSender emailSender,
 					   SessionRegistry sessionRegistry,
 					   SignupRateLimiter signupRateLimiter,
 					   PasswordResetRateLimiter passwordResetRateLimiter,
@@ -181,7 +180,7 @@ public class AuthService {
 		this.signupTokenCache = signupTokenCache;
 		this.redirectUrlValidator = redirectUrlValidator;
 		this.emailValidator = emailValidator;
-		this.config = config;
+		this.emailSender = emailSender;
 		this.sessionRegistry = sessionRegistry;
 		this.signupRateLimiter = signupRateLimiter;
 		this.passwordResetRateLimiter = passwordResetRateLimiter;
@@ -319,7 +318,7 @@ public class AuthService {
 					log.debug("Removed any authentication tokens belonging to user {}", u.getURI());
 
 					expireUserSessions(u, null);
-					Email.sendPasswordChangeConfirmation(config, u.getEntry());
+					emailSender.sendPasswordChangeConfirmation(u.getEntry());
 					log.info("Reset password for user {}", u.getURI());
 				} else {
 					log.error("Error when resetting password for user {}", u.getURI());
@@ -458,7 +457,7 @@ public class AuthService {
 		signupTokenCache.putToken(token, ci);
 
 		try {
-			boolean sendSuccessful = Email.sendPasswordResetConfirmation(config, ci.getEmail(), confirmationLink);
+			boolean sendSuccessful = emailSender.sendPasswordResetConfirmation(ci.getEmail(), confirmationLink);
 			if (sendSuccessful) {
 				log.info("Sent confirmation request to {}", emailLog);
 			} else {
@@ -720,7 +719,7 @@ public class AuthService {
 		String confirmationLink = repositoryManager.getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
 		log.info("Generated sign-up token for {}", ci.getEmail());
 
-		boolean sendSuccessful = Email.sendSignupConfirmation(config, ci.getFirstName() + " " + ci.getLastName(), ci.getEmail(), confirmationLink);
+		boolean sendSuccessful = emailSender.sendSignupConfirmation(ci.getFirstName() + " " + ci.getLastName(), ci.getEmail(), confirmationLink);
 		if (sendSuccessful) {
 			ci.setSaltedHashedPassword(Password.getSaltedHash(password));
 			signupTokenCache.putToken(token, ci);

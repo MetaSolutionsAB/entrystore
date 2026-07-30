@@ -19,7 +19,6 @@ package org.entrystore.rest.springboot.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
-import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.rest.springboot.model.api.SendMessageRequestBody;
 import org.entrystore.rest.springboot.model.api.TransportType;
@@ -27,7 +26,7 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
-import org.entrystore.rest.springboot.util.Email;
+import org.entrystore.rest.springboot.util.EmailSender;
 import org.entrystore.rest.springboot.util.HtmlSanitizer;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -38,8 +37,8 @@ import org.springframework.stereotype.Service;
 public class MessageService {
 
 	private final PrincipalManager principalManager;
-	private final RepositoryManagerImpl repositoryManager;
 	private final MessageRateLimiter messageRateLimiter;
+	private final EmailSender emailSender;
 
 	public void sendMessage(SendMessageRequestBody request) {
 		if (principalManager.currentUserIsGuest()) {
@@ -81,8 +80,7 @@ public class MessageService {
 				throw new BadRequestException("Message body is empty after sanitization");
 			}
 
-			boolean sent = Email.sendMessage(
-					repositoryManager.getConfiguration(),
+			boolean sent = emailSender.sendMessage(
 					request.recipient(), sanitizedSubject, sanitizedBody, null, replyTo);
 			if (!sent) {
 				log.error("Failed to send email to [{}] with subject [{}]", request.recipient(), sanitizedSubject);

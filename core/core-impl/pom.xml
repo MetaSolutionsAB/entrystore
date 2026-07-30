@@ -159,10 +159,6 @@
 			<artifactId>quartz</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>org.eclipse.angus</groupId>
-			<artifactId>angus-mail</artifactId>
-		</dependency>
-		<dependency>
 			<groupId>com.rometools</groupId>
 			<artifactId>rome</artifactId>
 			<version>1.19.0</version>

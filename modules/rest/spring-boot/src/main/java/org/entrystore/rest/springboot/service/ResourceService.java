@@ -56,7 +56,7 @@ import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.springboot.security.SsrfSafeHttpClient;
 import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.entrystore.rest.springboot.service.auth.BasicVerifier;
-import org.entrystore.rest.springboot.util.Email;
+import org.entrystore.rest.springboot.util.EmailSender;
 import org.entrystore.rest.springboot.util.FileUtil;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
@@ -106,6 +106,7 @@ public class ResourceService {
 	private final SsrfSafeHttpClient ssrfSafeHttpClient;
 
 	private final AuthService authService;
+	private final EmailSender emailSender;
 
 	@Value("${entrystore.import.tmpdir:${java.io.tmpdir}}")
 	@Setter(AccessLevel.PACKAGE)
@@ -383,7 +384,7 @@ public class ResourceService {
 						boolean expireAllSessions = !pm.getAuthenticatedUserURI().equals(resourceUser.getURI());
 						authService.expireUserSessions(resourceUser, expireAllSessions ? null : currentSessionId);
 
-						Email.sendPasswordChangeConfirmation(repositoryManager.getConfiguration(), entry);
+						emailSender.sendPasswordChangeConfirmation(entry);
 					} else {
 						throw new BadRequestException("Password must conform to configured rules.");
 					}

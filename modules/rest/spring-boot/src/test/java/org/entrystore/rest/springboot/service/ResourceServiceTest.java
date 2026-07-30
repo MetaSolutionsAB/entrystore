@@ -103,8 +103,10 @@ class ResourceServiceTest {
 
 	@BeforeEach
 	void setUp() {
+		// EmailSender is null: none of these cases reaches the user-settings password branch, the only
+		// place ResourceService sends mail.
 		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, ssrfValidator,
-				new SsrfSafeHttpClient(ssrfValidator), authService);
+				new SsrfSafeHttpClient(ssrfValidator), authService, null);
 		// Point importTmpDir at the JUnit-managed isolated directory so the
 		// temp-file cleanup assertions are scoped to this test and cannot be
 		// polluted by other processes or orphan files in the shared system temp.

@@ -60,11 +60,44 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.jsonp=true
 
 ## SMTP settings, required for e.g. sign-up
+## Transport security is `entrystore.smtp.security`. Releases before 6.1 documented it here as
+## `entrystore.smtp.ssl`, a key the code never read — deployments that followed this file were
+## therefore sending plaintext. As of 6.1 both spellings are honoured: `entrystore.smtp.security` is
+## read whenever it is set, and `entrystore.smtp.ssl` only as a fallback. Setting both is allowed;
+## if they disagree, `security` applies and the deprecated key is reported at WARN.
+## A value outside starttls|ssl|off fails startup for `security`, but is only reported at ERROR and
+## ignored for `ssl` — that key was never validated in any earlier release, so a stale value in it
+## must not be able to stop the application from booting.
+## `entrystore.smtp.ssl` is deprecated and will be removed in a future major version.
 # entrystore.smtp.host=smtp.host.tld
-# entrystore.smtp.port=587
-# entrystore.smtp.ssl=starttls|ssl|off
+# entrystore.smtp.port=587 (default: 25)
+# entrystore.smtp.security=starttls|ssl|off (default: off)
 # entrystore.smtp.username=smtp-user
 # entrystore.smtp.password=smtp-password
+## Envelope addresses. These supersede entrystore.auth.email.from|bcc, which are still read as a
+## fallback and log a deprecation warning at startup when used.
+# entrystore.smtp.email.from=signup@yourdomain.tld
+# entrystore.smtp.email.bcc=info+signup@yourdomain.tld
+# entrystore.smtp.email.reply-to=support@yourdomain.tld
+## Socket timeouts and TLS server-identity checking, hardcoded before 6.1. The defaults below are the
+## values that were previously compiled in; lower them only if your MTA is reliably fast.
+## Disabling check-server-identity makes TLS vulnerable to an active man-in-the-middle — it exists for
+## test MTAs with self-signed certificates, not for production.
+# entrystore.smtp.connection-timeout=5s
+# entrystore.smtp.read-timeout=5s
+# entrystore.smtp.write-timeout=5s
+# entrystore.smtp.check-server-identity=true
+## TOTAL number of send attempts before giving up, not the number of retries: 3 means two retries and
+## 1 disables retrying. Must be between 1 and 10. Attempts are immediate (no backoff) and the send runs
+## on the request thread, so a request can block for up to this many times the timeouts above — plus
+## DNS resolution, which the connection timeout does not cover.
+# entrystore.smtp.max-send-attempts=3
+##
+## Note: the spring.mail.* keys are not used; EntryStore builds its mail sender from the
+## entrystore.smtp.* keys above. spring.mail.test-connection currently has no effect, because Spring
+## Boot's validator requires a single JavaMailSenderImpl bean and EntryStore declares the bean as the
+## JavaMailSender interface. Keep that declared type — narrowing it would make the flag open an SMTP
+## connection during startup.
 
 ## Rate limiting for POST /message (0 to disable)
 # entrystore.message.rate.limit.max=10
@@ -96,6 +129,8 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.solr.search.facet-fields.max-count=16
 
 ## Generic settings for user-initiated sign-up and password reset
+## Deprecated: use entrystore.smtp.email.from / .bcc instead. Still honoured as a fallback when the
+## entrystore.smtp.email.* equivalent is unset, with a deprecation warning logged at startup.
 # entrystore.auth.email.from=signup@yourdomain.tld
 # entrystore.auth.email.bcc=info+signup@yourdomain.tld
 # entrystore.auth.recaptcha=on (default: off)

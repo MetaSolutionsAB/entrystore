@@ -111,6 +111,17 @@
 			<artifactId>spring-boot-starter-restclient</artifactId>
 		</dependency>
 
+		<!-- Provides the JavaMailSender abstraction (spring-context-support) plus the Angus Jakarta Mail
+		     implementation, in the module that actually sends mail. Declared here rather than relying on
+		     core-impl's transitive angus-mail, which was the only mail artifact before ENTRYSTORE-1054
+		     even though no core class imports jakarta.mail. MailSenderAutoConfiguration stays inert:
+		     its SMTP branch is conditional on spring.mail.host, and EntryStore binds entrystore.smtp.*
+		     instead — see MailConfiguration for why the sender is built by hand. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-thymeleaf</artifactId>
