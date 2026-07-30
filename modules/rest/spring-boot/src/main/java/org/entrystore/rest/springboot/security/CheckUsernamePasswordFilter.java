@@ -54,17 +54,28 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 									   ErrorResponseWriter errorResponseWriter) {
 		this.loginAttemptService = loginAttemptService;
 		this.errorResponseWriter = errorResponseWriter;
-		this.whitelistMode = "whitelist".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD));
+		String passwordAuthMode = config.getString(Settings.AUTH_PASSWORD);
+		this.whitelistMode = "whitelist".equalsIgnoreCase(passwordAuthMode);
+		if (passwordAuthMode != null && !passwordAuthMode.isEmpty() && !whitelistMode
+				&& !"on".equalsIgnoreCase(passwordAuthMode) && !"off".equalsIgnoreCase(passwordAuthMode)) {
+			// A typo in this value fails open — whitelist enforcement silently off. 'on' and 'off'
+			// are exempt: both are legitimate values from the legacy layer ('off' is not honoured
+			// here yet) and must not trip the warning.
+			log.warn("Unrecognised value '{}' for {}: expected 'on', 'off' or 'whitelist'; "
+					+ "whitelist enforcement is off", passwordAuthMode, Settings.AUTH_PASSWORD);
+		}
 		this.passwordLoginWhitelist = whitelistMode
 				? normalize(config.getStringList(Settings.AUTH_PASSWORD_WHITELIST))
 				: List.of();
 		this.passwordLoginBlacklist = normalize(config.getStringList(Settings.AUTH_PASSWORD_BLACKLIST));
 		if (whitelistMode && passwordLoginWhitelist.isEmpty()) {
-			// Otherwise every username fails the noneMatch below: all password logins would be
-			// rejected with a 401 and a misleading "is blacklisted" warning, with nothing at startup
-			// pointing at the misspelt or missing whitelist key.
-			throw new IllegalStateException(Settings.AUTH_PASSWORD + "=whitelist requires a non-empty "
-					+ Settings.AUTH_PASSWORD_WHITELIST);
+			// Deliberately not a startup failure: an empty whitelist fails closed — every password
+			// login is denied — which is also the only way this layer can express "no local password
+			// logins at all", so aborting would turn that legitimate configuration into an outage.
+			// The ERROR is what points a misconfigured deployment at the misspelt or missing
+			// whitelist key.
+			log.error("{}=whitelist with no {} configured: every password login will be rejected",
+					Settings.AUTH_PASSWORD, Settings.AUTH_PASSWORD_WHITELIST);
 		}
 	}
 
@@ -142,9 +153,14 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 
 			// Use case for whitelisting: enforced SSO with some users that should be able to log in
 			// with their local credentials, see https://entrystore.org/#!KB/Authentication.md
-			if (passwordLoginBlacklist.stream().anyMatch(s -> s.equalsIgnoreCase(username)) ||
+			boolean blacklisted = passwordLoginBlacklist.stream().anyMatch(s -> s.equalsIgnoreCase(username));
+			if (blacklisted ||
 					(whitelistMode && passwordLoginWhitelist.stream().noneMatch(s -> s.equalsIgnoreCase(username)))) {
-				log.warn("User {} is blacklisted", HttpUtil.sanitizeForLog(username));
+				if (blacklisted) {
+					log.warn("User {} is blacklisted", HttpUtil.sanitizeForLog(username));
+				} else {
+					log.warn("User {} is not on the password login whitelist", HttpUtil.sanitizeForLog(username));
+				}
 				// Record the failure so blacklisted attempts trip the same lockout threshold as
 				// any other username — otherwise the absence of 429 on retries would identify
 				// which usernames are blacklisted. The call is guarded so a Caffeine fault cannot

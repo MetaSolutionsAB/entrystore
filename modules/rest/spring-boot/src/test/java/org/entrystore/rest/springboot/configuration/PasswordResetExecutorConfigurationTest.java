@@ -19,6 +19,7 @@ package org.entrystore.rest.springboot.configuration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.core.task.TaskRejectedException;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
@@ -28,14 +29,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins the two properties of this executor that {@code AuthService} depends on but cannot observe,
+ * Pins the properties of this executor that {@code AuthService} depends on but cannot observe,
  * because its own tests stub the executor out: a saturated queue aborts rather than running the task
- * on the caller's thread, and shutdown discards the backlog instead of draining it.
+ * on the caller's thread, shutdown discards the backlog instead of draining it — including on the
+ * real container close path, which {@code executor.shutdown()} alone does not exercise — and worker
+ * threads carry the uncaught-exception handler {@code dispatchPasswordResetEmail} relies on.
  */
 class PasswordResetExecutorConfigurationTest {
 
@@ -85,6 +89,51 @@ class PasswordResetExecutorConfigurationTest {
 		assertEquals(0, queuedRuns.get(), "queued dispatches must be dropped, not drained, on shutdown");
 	}
 
+	@Test
+	void passwordResetTaskExecutor_containerClose_dropsTheQueuedBacklogWithoutDrainingIt() throws Exception {
+		// Drives the real lifecycle path — ContextClosedEvent, SmartLifecycle stop phase, destroy() —
+		// which the direct executor.shutdown() above bypasses. Without acceptTasksAfterContextClose
+		// the stop phase parks on the lifecycle latch while the workers keep pulling the queue:
+		// markShutdown() defeats the beforeExecute pause guard and initiateEarlyShutdown() is a no-op
+		// on ThreadPoolTaskExecutor, so every queued task below would run before close() returned.
+		AtomicInteger queuedRuns = new AtomicInteger();
+		try (var context = new AnnotationConfigApplicationContext(PasswordResetExecutorConfiguration.class)) {
+			ThreadPoolTaskExecutor containerManaged =
+					context.getBean("passwordResetTaskExecutor", ThreadPoolTaskExecutor.class);
+			CountDownLatch workersStarted = new CountDownLatch(POOL_SIZE);
+			for (int i = 0; i < POOL_SIZE; i++) {
+				containerManaged.execute(() -> {
+					workersStarted.countDown();
+					// Timed rather than indefinite, so the broken path drains instead of deadlocking:
+					// its workers wake up mid-stop-phase and pull the queue below.
+					awaitQuietly(release, 2);
+				});
+			}
+			assertTrue(workersStarted.await(5, TimeUnit.SECONDS), "workers should have picked up the blocking tasks");
+			for (int i = 0; i < 10; i++) {
+				containerManaged.execute(queuedRuns::incrementAndGet);
+			}
+
+			context.close();
+		}
+
+		assertEquals(0, queuedRuns.get(), "container close must drop the queued dispatches, not drain them");
+	}
+
+	@Test
+	void passwordResetTaskExecutor_workerThreads_carryAnUncaughtExceptionHandler() {
+		// dispatchPasswordResetEmail deliberately runs bcrypt and putToken outside its own try/catch
+		// and relies on this handler to get a Throwable from that stretch into the logs instead of
+		// being swallowed by ThreadPoolExecutor's default Worker.run path.
+		Thread thread = executor.newThread(() -> {
+		});
+
+		// getUncaughtExceptionHandler falls back to the thread group when none is set, so identity
+		// against the group is what distinguishes the installed handler from the default.
+		assertNotSame(thread.getThreadGroup(), thread.getUncaughtExceptionHandler(),
+				"worker threads must carry the log-and-continue handler, not the thread-group default");
+	}
+
 	private void occupyWorkersAndFillQueue() throws InterruptedException {
 		occupyWorkers();
 		for (int i = 0; i < QUEUE_CAPACITY; i++) {
@@ -107,6 +156,14 @@ class PasswordResetExecutorConfigurationTest {
 	private static void awaitQuietly(CountDownLatch latch) {
 		try {
 			latch.await();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	private static void awaitQuietly(CountDownLatch latch, int timeoutSeconds) {
+		try {
+			latch.await(timeoutSeconds, TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		}

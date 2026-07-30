@@ -530,18 +530,20 @@ class CookieLoginResourceIT extends BaseSpec {
 		when:
 		def wrongPasswordConn = EntryStoreClient.postRequest('/auth/cookie', wrongPasswordBody, '', 'application/x-www-form-urlencoded')
 		def disabledConn = EntryStoreClient.postRequest('/auth/cookie', disabledLoginBody, '', 'application/x-www-form-urlencoded')
-		// Read the status first: getErrorStream() stays null until the response has been consumed.
-		def wrongPasswordStatus = wrongPasswordConn.getResponseCode()
-		def disabledStatus = disabledConn.getResponseCode()
-		def wrongPasswordBodyText = wrongPasswordConn.getErrorStream().text
-		def disabledBodyText = disabledConn.getErrorStream().text
 
 		then:
-		wrongPasswordStatus == disabledStatus
+		// Asserted explicitly, not merely equal across branches, so a regression returning 2xx
+		// reports as an auth bypass here rather than as an NPE on the null error stream below.
+		// getResponseCode() also makes the connection; before that, getErrorStream() returns null.
+		wrongPasswordConn.getResponseCode() == HTTP_UNAUTHORIZED
+		disabledConn.getResponseCode() == HTTP_UNAUTHORIZED
 		wrongPasswordConn.getContentType() == disabledConn.getContentType()
+
 		// The unified 401 envelope is byte-identical across branches: timestamp is nulled in
 		// ErrorResponseWriter.writeUnauthorizedAsJson so it cannot leak the bcrypt/no-bcrypt latency
 		// difference between branches, and the request URI (path) is the same for both calls.
+		def wrongPasswordBodyText = wrongPasswordConn.getErrorStream().text
+		def disabledBodyText = disabledConn.getErrorStream().text
 		wrongPasswordBodyText == disabledBodyText
 		// Asserted separately because equality alone also holds if the field disappeared from both
 		// bodies. The writer now serializes with the container's ObjectMapper, so a spring.jackson

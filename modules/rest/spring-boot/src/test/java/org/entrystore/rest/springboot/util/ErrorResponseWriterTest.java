@@ -22,7 +22,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletResponse;
 import tools.jackson.databind.json.JsonMapper;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ErrorResponseWriterTest {
@@ -85,6 +87,21 @@ class ErrorResponseWriterTest {
 
 		assertEquals("https://example.org/failed", response.getRedirectedUrl());
 		assertEquals("", response.getContentAsString());
+	}
+
+	@Test
+	void redirectOrWriteUnauthorized_committedResponse_skipsTheRedirectInsteadOfThrowing() throws Exception {
+		// Reachable from AbstractSsoLoginSuccessHandler's last-resort catch, which runs after a
+		// subclass's custom-success redirect may already have committed the response; sendRedirect
+		// would then throw IllegalStateException and escape the Security filter chain as a raw
+		// container 500 instead of the intended failure handling.
+		var response = new MockHttpServletResponse();
+		response.flushBuffer();
+
+		assertDoesNotThrow(() -> writer.redirectOrWriteUnauthorized(
+				response, "/login/cas", "https://example.org/failed", "CAS login failed"));
+
+		assertNull(response.getRedirectedUrl());
 	}
 
 	@Test

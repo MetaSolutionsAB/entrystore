@@ -62,4 +62,16 @@ class SearchControllerTest {
 				.withPropertyValues("entrystore.solr.max-limit=7")
 				.run(context -> assertEquals(7, context.getBean(SearchController.class).clampLimit(150)));
 	}
+
+	@Test
+	void solrMaxFacetLimit_bindsFromTheConfiguredProperty() {
+		// Same key-pinning rationale as above. Asserted on the field because the value is only
+		// consumed deep inside search(), behind collaborators this test has no use for.
+		new ApplicationContextRunner()
+				.withBean(PropertySourcesPlaceholderConfigurer.class)
+				.withBean(SearchController.class, () -> new SearchController(null, null, null))
+				.withPropertyValues("entrystore.solr.facet-max-limit=7")
+				.run(context -> assertEquals(7, ReflectionTestUtils.getField(
+						context.getBean(SearchController.class), "solrMaxFacetLimit")));
+	}
 }

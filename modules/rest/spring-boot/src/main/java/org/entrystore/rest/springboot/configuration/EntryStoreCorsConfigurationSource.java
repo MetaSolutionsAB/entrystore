@@ -39,6 +39,13 @@ import java.util.Locale;
  * credentials are allowed, whereas patterns are exempt and still echo the request origin rather than
  * emitting {@code *}.
  *
+ * <p>Patterns outside the documented forms are dropped at startup with an ERROR naming them. Spring
+ * treats <em>every</em> {@code *} as a wildcard regardless of position, so honouring e.g.
+ * {@code https://*.example.com} — which the previous hand-rolled matcher silently matched against
+ * nothing — would widen the effective policy on upgrade, in the worst case handing
+ * {@code Access-Control-Allow-Credentials: true} to a whole subdomain tree. Dropping keeps such a
+ * pattern matching nothing, exactly as before.
+ *
  * <p>Matching is case-insensitive, as it was before the policy moved onto Spring's pattern support:
  * the configured patterns are lower-cased by {@link CorsProperties} and the request origin is
  * lower-cased here. Normalising the origin alone would not be enough, because
@@ -50,9 +57,10 @@ import java.util.Locale;
  *
  * <p>Returning {@code null} for an origin that matches neither list means a <b>simple</b> request
  * passes through unchanged, without any {@code Access-Control-*} headers, leaving it to the browser
- * to block the response. A <b>preflight</b> from such an origin is still answered with <b>403</b>
- * ({@code Invalid CORS request}) by {@code DefaultCorsProcessor}, which rejects any preflight for
- * which no configuration is resolved.
+ * to block the response. A <b>preflight</b> from such an origin is short-circuited by
+ * {@code CorsFilter}: {@code DefaultCorsProcessor.processRequest} returns {@code true} when no
+ * configuration is resolved, and the filter ends every preflight without invoking the chain — so
+ * the answer is 200 with no CORS headers, which the browser treats as a preflight failure.
  *
  * <p>The bean name is load-bearing and must stay {@code corsConfigurationSource}: Spring Security's
  * {@code CorsConfigurer} resolves the source by that exact name, and when no such bean exists it
@@ -79,12 +87,14 @@ public class EntryStoreCorsConfigurationSource implements CorsConfigurationSourc
 		}
 
 		log.info("CORS is enabled");
-		List<String> originPatterns = properties.originPatterns();
-		List<String> credentialOriginPatterns = properties.credentialOriginPatterns();
+		List<String> originPatterns = rejectUndocumentedWildcards(properties.originPatterns());
+		List<String> credentialOriginPatterns = rejectUndocumentedWildcards(properties.credentialOriginPatterns());
 		originPatterns.forEach(pattern -> log.info("CORS allowed origin: {}", pattern));
 		credentialOriginPatterns.forEach(pattern -> log.info("CORS allowed origin (with credentials): {}", pattern));
-		warnAboutInteriorWildcards(originPatterns);
-		warnAboutInteriorWildcards(credentialOriginPatterns);
+		if (originPatterns.isEmpty() && credentialOriginPatterns.isEmpty()) {
+			log.warn("CORS is enabled but no origin is allowed — every cross-origin request will pass through "
+					+ "without CORS headers; check entrystore.cors.origins");
+		}
 
 		List<String> headers = properties.headerList();
 		if (!headers.isEmpty()) {
@@ -107,13 +117,7 @@ public class EntryStoreCorsConfigurationSource implements CorsConfigurationSourc
 		}
 
 		String normalizedOrigin = origin.toLowerCase(Locale.ROOT);
-		// Credentials first: an origin on both lists must keep getting Allow-Credentials: true.
-		CorsConfiguration matched = null;
-		if (policies.credential().checkOrigin(normalizedOrigin) != null) {
-			matched = policies.credential();
-		} else if (policies.standard().checkOrigin(normalizedOrigin) != null) {
-			matched = policies.standard();
-		}
+		CorsConfiguration matched = matchingPolicy(policies, normalizedOrigin);
 		if (matched == null) {
 			return null;
 		}
@@ -124,22 +128,42 @@ public class EntryStoreCorsConfigurationSource implements CorsConfigurationSourc
 		// The origin matched only once lower-cased, but DefaultCorsProcessor re-runs checkOrigin with
 		// the unmodified header and rejects with 403 if that second check fails. Hand back a copy
 		// carrying the raw origin in allowedOrigins, which is compared with equalsIgnoreCase.
-		// Assigning rather than adding matters: the copy constructor shares list references, so
-		// addAllowedOrigin would append to the startup policy's own list.
+		// Only replacing setters are safe on the copy: its constructor shares the list references of
+		// allowedOriginPatterns, allowedMethods, allowedHeaders and exposedHeaders with the startup
+		// policy, so an add* would write through into the policy every other request sees.
 		CorsConfiguration perRequest = new CorsConfiguration(matched);
 		perRequest.setAllowedOrigins(List.of(origin));
 		return perRequest;
 	}
 
-	private static void warnAboutInteriorWildcards(List<String> originPatterns) {
-		originPatterns.stream()
+	/** Credentials first: an origin on both lists must keep getting {@code Allow-Credentials: true}. */
+	private static @Nullable CorsConfiguration matchingPolicy(Policies policies, String normalizedOrigin) {
+		if (policies.credential().checkOrigin(normalizedOrigin) != null) {
+			return policies.credential();
+		}
+		if (policies.standard().checkOrigin(normalizedOrigin) != null) {
+			return policies.standard();
+		}
+		return null;
+	}
+
+	private static List<String> rejectUndocumentedWildcards(List<String> originPatterns) {
+		return originPatterns.stream()
 				.filter(pattern -> {
-					int star = pattern.indexOf('*');
-					return star > 0 && star < pattern.length() - 1;
+					if (isDocumentedForm(pattern)) {
+						return true;
+					}
+					log.error("Ignoring CORS origin pattern '{}': the supported forms are '*', '*suffix' and "
+							+ "'prefix*'. Spring treats every '*' as a wildcard, so honouring this pattern would "
+							+ "allow origins the previous matcher did not", pattern);
+					return false;
 				})
-				.forEach(pattern -> log.warn("CORS origin pattern '{}' has an interior wildcard and matches every "
-						+ "origin the surrounding text allows; the documented forms are '*', '*suffix' and 'prefix*'",
-						pattern));
+				.toList();
+	}
+
+	private static boolean isDocumentedForm(String pattern) {
+		int star = pattern.indexOf('*');
+		return star < 0 || (star == pattern.lastIndexOf('*') && (star == 0 || star == pattern.length() - 1));
 	}
 
 	private static CorsConfiguration buildPolicy(List<String> originPatterns, boolean allowCredentials,

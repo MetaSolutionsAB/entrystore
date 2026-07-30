@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.URI;
@@ -76,6 +78,26 @@ class BackupSchedulerStarterTest {
 	void startBackupScheduler_enabledButNoSchedulerCreated_doesNotThrow() {
 		// createInstance returns null without a cron expression, which leaves the injection point empty.
 		assertDoesNotThrow(() -> starter(Optional.empty(), "on").startBackupScheduler());
+	}
+
+	@Test
+	void backupSchedulerSetting_bindsFromTheConfiguredProperty() {
+		// Pins the placeholder key itself, which the reflection-set field above cannot: a misspelt
+		// @Value key would leave the cases above green while a production entrystore.backup.scheduler=on
+		// resolved to the "off" default and backups silently never ran.
+		when(principalManager.getAdminUser()).thenReturn(adminUser);
+		when(adminUser.getURI()).thenReturn(ADMIN_URI);
+
+		new ApplicationContextRunner()
+				.withBean(PropertySourcesPlaceholderConfigurer.class)
+				.withBean(BackupScheduler.class, () -> backupScheduler)
+				.withBean(PrincipalManager.class, () -> principalManager)
+				.withBean(BackupSchedulerStarter.class)
+				.withPropertyValues("entrystore.backup.scheduler=on")
+				.run(context -> {
+					context.getBean(BackupSchedulerStarter.class).startBackupScheduler();
+					verify(backupScheduler).run();
+				});
 	}
 
 	private BackupSchedulerStarter starter(Optional<BackupScheduler> scheduler, String setting) {

@@ -113,6 +113,27 @@ class EntryStoreCorsConfigurationSourceTest {
 	}
 
 	@Test
+	void getCorsConfiguration_interiorWildcardOnCredentialsList_isDroppedAndMatchesNothing() {
+		// 'https://*.example.com' matched nothing under the old matcher (only '*', exact, '*suffix'
+		// and 'prefix*' were honoured), but Spring treats every '*' as a wildcard — honouring it here
+		// would grant Allow-Credentials: true to every https://<label>.example.com on upgrade. It is
+		// dropped at startup instead, so it keeps matching nothing.
+		CorsConfiguration config = resolve(properties(ORIGINS, "https://*.example.com"), "https://a.example.com");
+
+		assertNull(config);
+	}
+
+	@Test
+	void getCorsConfiguration_leadingAndTrailingStarPattern_isDroppedAndMatchesNothing() {
+		// '*example.com*' is not a documented form either, and under Spring's pattern support it would
+		// match http://example.com.evil.net. Its leading star slipped past the previous
+		// interior-wildcard warning, which only looked at indexOf('*') > 0.
+		CorsConfiguration config = resolve(properties("*example.com*", CREDENTIAL_ORIGINS), "http://example.com.evil.net");
+
+		assertNull(config);
+	}
+
+	@Test
 	void getCorsConfiguration_noOriginHeader_returnsNull() {
 		assertNull(resolve(properties(ORIGINS, CREDENTIAL_ORIGINS), null));
 	}
