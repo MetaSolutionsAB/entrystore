@@ -18,9 +18,8 @@ package org.entrystore.rest.springboot.service.auth;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.springboot.model.dto.RecaptchaSiteVerifyResponse;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
-import org.json.JSONException;
-import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -29,10 +28,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.UnknownHttpStatusCodeException;
+
+import java.util.Set;
 
 /**
  * Verifies the validity of a reCaptcha user response token.
@@ -45,6 +48,10 @@ import org.springframework.web.client.UnknownHttpStatusCodeException;
 @Service
 @RequiredArgsConstructor
 public class RecaptchaVerifier {
+
+	/** Codes that indicate the deployment's own configuration is wrong, not the caller's token. */
+	private static final Set<String> DEPLOYMENT_ERROR_CODES =
+		Set.of("missing-input-secret", "invalid-input-secret", "bad-request");
 
 	@Qualifier("recaptchaRestClient")
 	private final RestClient recaptchaRestClient;
@@ -68,15 +75,9 @@ public class RecaptchaVerifier {
 	 * @return True if the user response token has been successfully verified, false otherwise.
 	 */
 	public boolean verify(String rcResponseV2, String userIP) {
-		StringBuilder reCaptchaUrl = new StringBuilder().
-			append(url).
-			append("?secret=").append(secret).
-			append("&response=").append(rcResponseV2);
-		if (userIP != null) {
-			reCaptchaUrl.append("&remoteip=").append(userIP);
-		}
-
-		log.debug("reCaptcha URL: {}", reCaptchaUrl);
+		// The secret is a request parameter, so never build or log a URL carrying it — that writes the
+		// deployment's reCaptcha private key into the log on every verification. Log the endpoint alone.
+		log.debug("Verifying reCaptcha response via {}", url);
 
 		MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
 		params.add("secret", secret);
@@ -85,37 +86,52 @@ public class RecaptchaVerifier {
 			params.add("remoteip", userIP);
 		}
 
-		ResponseEntity<String> response;
+		ResponseEntity<RecaptchaSiteVerifyResponse> response;
 		try {
 			response = recaptchaRestClient.post()
 				.uri(url)
 				.contentType(MediaType.APPLICATION_FORM_URLENCODED)
 				.body(params)
 				.retrieve()
-				.toEntity(String.class);
+				.toEntity(RecaptchaSiteVerifyResponse.class);
 		} catch (ResourceAccessException | HttpServerErrorException | UnknownHttpStatusCodeException e) {
-			// 4xx (HttpClientErrorException) is deliberately not remapped: a misconfigured
-			// secret must surface, not be masked as a transient 503.
 			throw new CustomResponseException(
 				"reCaptcha verifier is currently unavailable. Please try again later.",
 				HttpStatus.SERVICE_UNAVAILABLE, e);
-		}
-
-		if (!response.getStatusCode().is2xxSuccessful()) {
+		} catch (HttpClientErrorException e) {
+			// 4xx is deliberately not remapped: a misconfigured secret must surface, not be masked as a
+			// transient 503. Rethrown explicitly because the RestClientException catch below would
+			// otherwise swallow it into a rejected captcha.
+			throw e;
+		} catch (RestClientException e) {
+			// The body is decoded inside toEntity, so a 2xx whose body is not this record — an
+			// intercepting proxy's text/html page, a truncated reply — surfaces here as
+			// UnknownContentTypeException or a bare RestClientException. Neither is a server fault of
+			// ours, and treating it as "not verified" both fails closed and keeps the deterministic
+			// statuses this verifier was hardened for; letting it propagate answers 500 on an
+			// unauthenticated endpoint instead.
+			log.warn("Could not read the reCaptcha siteverify response; treating the token as unverified", e);
 			return false;
 		}
 
-		try {
-			JSONObject result = new JSONObject(response.getBody());
-			if (result.has("success")) {
-				return result.getBoolean("success");
+		RecaptchaSiteVerifyResponse result = response.getBody();
+		if (!response.getStatusCode().is2xxSuccessful() || result == null) {
+			return false;
+		}
+
+		if (!result.success() && !result.errorCodes().isEmpty()) {
+			// A secret-related code means the deployment is misconfigured and *every* sign-up will fail,
+			// so it belongs above DEBUG: at the default level a total sign-up outage would otherwise be
+			// indistinguishable from ordinary users mistyping captchas. A per-user code such as
+			// timeout-or-duplicate stays at DEBUG.
+			if (result.errorCodes().stream().anyMatch(DEPLOYMENT_ERROR_CODES::contains)) {
+				log.warn("reCaptcha rejected the request for a configuration reason, error codes: {}",
+					result.errorCodes());
+			} else {
+				log.debug("reCaptcha verification rejected, error codes: {}", result.errorCodes());
 			}
-		} catch (JSONException e) {
-			log.debug(e.getMessage());
-			return false;
 		}
-
-		return false;
+		return result.success();
 	}
 
 }

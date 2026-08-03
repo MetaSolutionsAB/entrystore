@@ -49,6 +49,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -110,8 +111,11 @@ class ResourceServiceTest {
 
 	@BeforeEach
 	void setUp() {
+		// The mapper is real, since the user-settings body is parsed with it and a mock would not
+		// exercise the parsing these cases depend on.
 		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, ssrfValidator,
-				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()), authService, emailSender);
+				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()), authService, emailSender,
+				JsonMapper.builder().build());
 		// Point importTmpDir at the JUnit-managed isolated directory so the
 		// temp-file cleanup assertions are scoped to this test and cannot be
 		// polluted by other processes or orphan files in the shared system temp.

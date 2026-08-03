@@ -27,6 +27,10 @@ import java.util.regex.Pattern;
  * lack of support for flexible handling of new TLDs. This validator provides
  * less strict validation of domain names (it does not compare against a white * list),
  * but maintains a sufficient level of validation.
+ *
+ * <p>Reached declaratively through
+ * {@link org.entrystore.rest.springboot.model.validation.ValidEmail} on request bodies, and directly
+ * by {@code AuthService} on the password-reset path.
  */
 @Service
 public class EmailValidator extends org.apache.commons.validator.routines.EmailValidator {
@@ -38,8 +42,12 @@ public class EmailValidator extends org.apache.commons.validator.routines.EmailV
 	}
 
 	/**
-	 * Hides the inherited Commons factory so stale {@code getInstance()} calls fail fast
-	 * instead of silently returning the stricter Commons validator. Inject the Spring bean instead.
+	 * Hides the inherited Commons factory so a stale {@code getInstance()} call fails fast instead of
+	 * silently returning the stricter Commons validator, whose TLD whitelist rejects the very addresses
+	 * this class exists to accept. Inject the Spring bean instead.
+	 *
+	 * <p>Kept as a throwing method rather than a note in the javadoc: the inherited static stays
+	 * reachable either way, so only code can stop it being called.
 	 */
 	public static EmailValidator getInstance() {
 		throw new UnsupportedOperationException("Inject the EmailValidator Spring bean instead");

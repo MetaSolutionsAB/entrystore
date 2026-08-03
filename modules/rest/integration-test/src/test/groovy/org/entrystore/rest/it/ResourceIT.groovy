@@ -1010,6 +1010,32 @@ class ResourceIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
+	def "PUT /{context-id}/resource/{entry-id} on a User should answer 400 not 500 for #description"() {
+		given: 'a user resource'
+		def username = 'malformedBody' + description.hashCode().abs() + '@test.com'
+		def user = UserUtil.createUser(username)
+		def entryId = user['entryId'].toString()
+		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)
+		assert entryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
+		def resourceUri = (entryRespJson['info'] as Map).keySet()
+			.collect(it -> it.toString()).find { it -> it.contains('resource') }
+
+		when:
+		def conn = EntryStoreClient.putRequest(resourceUri, requestBody)
+
+		then: 'a client error — these bodies are the caller\'s mistake, not a server fault'
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+
+		where:
+		description                                | requestBody
+		'the JSON literal null'                    | 'null'
+		'a number where a string belongs'          | '{"language":5}'
+		'an explicit null where a string belongs'  | '{"language":null}'
+		'a disabled that is not a boolean'         | '{"disabled":"yes"}'
+		'an array where an object belongs'         | '{"customProperties":[]}'
+	}
+
 	def "PUT /{context-id}/resource/{entry-id} should edit other User-resource properties"() {
 		given:
 		def username = 'something@test.com'
