@@ -184,7 +184,11 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 		assertEquals(2, resourcesUpdated.size());
 
 		Entry entryNew = entries.iterator().next();
-		assertTrue(resourcesCreated.contains(entryNew.getResourceURI()));
+		// resourcesUpdated, not resourcesCreated: entryNew comes from the second merge, so the snapshot
+		// taken before it cannot contain it.
+		assertTrue(resourcesUpdated.contains(entryNew.getResourceURI()));
+		assertFalse(resourcesCreated.contains(entryNew.getResourceURI()),
+			"getResources returns a snapshot, so the set taken before the second merge must not gain its resource");
 		assertNotEquals(entry.getResourceURI(), entryNew.getResourceURI());
 
 		age = entryNew.getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();

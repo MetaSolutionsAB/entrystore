@@ -63,6 +63,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import static org.eclipse.rdf4j.model.util.Values.iri;
 import static org.eclipse.rdf4j.model.util.Values.literal;
@@ -73,8 +75,36 @@ public class ContextImpl extends ResourceImpl implements Context {
 	@Getter
 	protected final SoftCache softCache;
 	protected String id;
-	protected HashMap<URI, Object> extMdUri2entry;
-	protected HashMap<URI, Object> res2entry;
+	/**
+	 * External-metadata-URI and resource-URI indexes, mapping a URI to either a single entry URI or a
+	 * {@code Set} of them.
+	 *
+	 * <p>Concurrency (ENTRYSTORE-1095). Three properties are load-bearing:
+	 *
+	 * <ul>
+	 * <li><b>volatile</b>, and {@link #loadIndex()} assigns the field only once the map is fully
+	 * populated. Assigning an empty map first and filling it afterwards let a reader observe a
+	 * non-null field, skip {@code loadIndex()} — and so never contend for its lock — and then iterate
+	 * a map still being written.</li>
+	 * <li><b>Concurrent maps, with concurrent value sets.</b> Readers are not synchronized and the
+	 * write paths guard on {@code entry.repository} rather than on {@code loadIndex()}'s
+	 * {@code this.entry}, so there is no monitor common to both. Weakly consistent iteration is what
+	 * makes a listing safe against a concurrent entry creation or removal instead of throwing
+	 * {@code ConcurrentModificationException}.</li>
+	 * <li><b>Read once into a local</b> before use. {@link #reIndex()} nulls these fields, so reading
+	 * the field again after the null check can dereference null, and a {@code pop} followed by a
+	 * {@code push} that each re-read it can land on two different maps.</li>
+	 * </ul>
+	 *
+	 * <p>What this does and does not guarantee: reads never throw
+	 * {@code ConcurrentModificationException}, and each single-key {@code push}/{@code pop} is atomic.
+	 * It does <em>not</em> make a read plus a dependent write atomic, and it does not order an index
+	 * update against a concurrent {@link #reIndex()} — a write can still land on a map that
+	 * {@code reIndex} has already replaced, in which case the rebuilt index will not carry it. Callers
+	 * needing more must coordinate.
+	 */
+	private volatile ConcurrentMap<URI, Object> extMdUri2entry;
+	private volatile ConcurrentMap<URI, Object> res2entry;
 	protected ArrayList<URI> systemEntries = new ArrayList<>();
 
 	private static final Logger log = LoggerFactory.getLogger(ContextImpl.class);
@@ -182,85 +212,125 @@ public class ContextImpl extends ResourceImpl implements Context {
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to repository", e);
 		}
 
-		this.res2entry = null;
-		this.extMdUri2entry = null;
+		// Cleared under the same monitor loadIndex() publishes under, and both together. Nulling them
+		// separately and unsynchronized let a reader complete a whole loadIndex() between the two writes:
+		// res2entry would be republished, this method's second write would null extMdUri2entry, and the
+		// loadIndex() below would early-return because its guard tests res2entry — leaving the external
+		// metadata index null for the life of the object (ENTRYSTORE-1095).
+		synchronized (this.entry) {
+			this.res2entry = null;
+			this.extMdUri2entry = null;
+		}
 
 		loadIndex();
 	}
 
-	private void push(URI from, URI to, HashMap<URI, Object> map) {
+	/**
+	 * Adds a {@code from -> to} mapping, promoting a single value to a set when a second one arrives.
+	 *
+	 * <p>Done inside {@code compute} so the read-modify-write is atomic per key: the previous
+	 * get-then-put let two concurrent writers on the same key lose one of the two mappings.
+	 *
+	 * <p>The value stays {@code URI}-or-{@code Set<URI>} rather than always a set, which would drop the
+	 * casts below: both indexes hold a single entry per key for all but a handful of keys, and a per-key
+	 * {@code newKeySet()} costs a few hundred bytes — paid once per entry per context. {@code push} and
+	 * {@code pop} are the only writers, so the two-type union stays closed here.
+	 */
+	@SuppressWarnings("unchecked")
+	private void push(URI from, URI to, ConcurrentMap<URI, Object> map) {
 		if (from == null || to == null) {
 			return;
 		}
 		if (map == null) {
+			// Skipping is correct on the write path, even though resourceIndex()/externalMetadataIndex()
+			// throw on a null index: the repository write has already happened, so the next loadIndex()
+			// picks this mapping up from there. A null index only means "not read yet", not "lost".
 			log.warn("Map to be pushed to is not initialized");
 			return;
 		}
-		Object existingTo = map.get(from);
-		if (existingTo == null) {
-			map.put(from, to);
-		} else {
+		map.compute(from, (key, existingTo) -> {
+			if (existingTo == null) {
+				return to;
+			}
 			if (existingTo instanceof Set) {
 				((Set<URI>) existingTo).add(to);
-			} else {
-				HashSet<URI> set = new HashSet<>();
-				set.add((URI) existingTo);
-				set.add(to);
-				map.put(from, set);
+				return existingTo;
 			}
-		}
+			// Concurrent, because getEntries and getByResourceURI iterate these sets unsynchronized.
+			Set<URI> set = ConcurrentHashMap.newKeySet();
+			set.add((URI) existingTo);
+			set.add(to);
+			return set;
+		});
 	}
 
-	private void pop(URI from, URI to, HashMap<URI, Object> map) {
+	/**
+	 * Removes a {@code from -> to} mapping, dropping the key once its last value is gone. Returning
+	 * null from {@code compute} removes the entry, which is how the previous {@code map.remove(from)}
+	 * behaviour is preserved atomically.
+	 */
+	private void pop(URI from, URI to, ConcurrentMap<URI, Object> map) {
 		if (from == null || to == null) {
 			return;
 		}
 		if (map == null) {
+			// Safe to skip; see push.
 			log.warn("Map to be popped from is not initialized");
 			return;
 		}
-		Object existingTo = map.get(from);
-		if (existingTo != null) {
-			if (existingTo instanceof Set set) {
-				set.remove(to);
-				if (set.isEmpty()) {
-					map.remove(from);
-				}
-			} else if (existingTo.equals(to)) {
-				map.remove(from);
+		map.compute(from, (key, existingTo) -> {
+			if (existingTo == null) {
+				return null;
 			}
-		}
+			if (existingTo instanceof Set<?> set) {
+				set.remove(to);
+				return set.isEmpty() ? null : set;
+			}
+			return existingTo.equals(to) ? null : existingTo;
+		});
 	}
 
 	void updateResource2EntryIndex(URI oldResourceURI, URI newResourceURI, URI entryURI) {
 		if (oldResourceURI == null || newResourceURI == null || entryURI == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
+		// One read, so the removal and the addition land on the same map even if a concurrent reIndex()
+		// nulls the field between them.
+		ConcurrentMap<URI, Object> index = this.res2entry;
 		log.debug("Removing resource to entry mapping: {} -> {}", oldResourceURI, entryURI);
-		pop(oldResourceURI, entryURI, res2entry);
+		pop(oldResourceURI, entryURI, index);
 		log.debug("Adding resource to entry mapping: {} -> {}", newResourceURI, entryURI);
-		push(newResourceURI, entryURI, res2entry);
+		push(newResourceURI, entryURI, index);
 	}
 
 	void updateExternalMetadata2EntryIndex(URI oldExtMdURI, URI newExtMdURI, URI entryURI) {
 		if (oldExtMdURI == null || newExtMdURI == null || entryURI == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
+		// One read; see updateResource2EntryIndex.
+		ConcurrentMap<URI, Object> index = this.extMdUri2entry;
 		log.debug("Removing external metadata to entry mapping: {} -> {}", oldExtMdURI, entryURI);
-		pop(oldExtMdURI, entryURI, extMdUri2entry);
+		pop(oldExtMdURI, entryURI, index);
 		log.debug("Adding external metadata to entry mapping: {} -> {}", newExtMdURI, entryURI);
-		push(newExtMdURI, entryURI, extMdUri2entry);
+		push(newExtMdURI, entryURI, index);
 	}
 
 	void loadIndex() {
 		try {
 			synchronized (this.entry) {
-				if (res2entry != null) {
+				// Both fields, not just res2entry: guarding on one alone made a half-cleared pair
+				// unrecoverable, because this early return would then skip rebuilding the other.
+				if (res2entry != null && extMdUri2entry != null) {
 					return;
 				}
+				// Built locally and published only at the end. Assigning the fields up front and filling
+				// them afterwards let an unsynchronized reader see a non-null field, skip this method
+				// entirely — never contending for the lock — and iterate a half-built map
+				// (ENTRYSTORE-1095).
+				ConcurrentMap<URI, Object> resourceIndex = new ConcurrentHashMap<>();
+				ConcurrentMap<URI, Object> externalMetadataIndex = new ConcurrentHashMap<>();
+				int failedStatements = 0;
 				try (RepositoryConnection rc = entry.repository.getConnection()) {
-					res2entry = new HashMap<>();
-					extMdUri2entry = new HashMap<>();
 					RepositoryResult<Statement> statements = rc.getStatements(null, null, null, false, this.resourceURI);
 					while (statements.hasNext()) {
 						Statement statement = statements.next();
@@ -269,20 +339,37 @@ public class ContextImpl extends ResourceImpl implements Context {
 							if (predicate.equals(RepositoryProperties.mdHasEntry)) {
 								URI mdURI = URI.create(statement.getSubject().toString());
 								URI entryURI = URI.create(statement.getObject().toString());
-								push(mdURI, entryURI, extMdUri2entry);
+								push(mdURI, entryURI, externalMetadataIndex);
 							} else if (predicate.equals(RepositoryProperties.resHasEntry)) {
 								URI resourceURI = URI.create(statement.getSubject().toString());
 								URI entryURI = URI.create(statement.getObject().toString());
-								push(resourceURI, entryURI, res2entry);
+								push(resourceURI, entryURI, resourceIndex);
 							} else if (predicate.equals(RepositoryProperties.counter)) {
 								this.counter = ((Literal) statement.getObject()).intValue();
 							}
 						} catch (Exception e) {
-							log.error(e.getMessage());
+							// Counted, not just logged: publishing an index that silently dropped
+							// statements would hide those entries from every listing for the life of the
+							// object, and remove(RepositoryConnection) would skip them while clearing the
+							// graph that names them.
+							failedStatements++;
+							log.error("Could not index statement {} in context {}: {}",
+									statement, this.resourceURI, e.getMessage(), e);
 						}
 					}
 					statements.close();
 				}
+				if (failedStatements > 0) {
+					throw new org.entrystore.repository.RepositoryException(failedStatements
+							+ " statement(s) in context " + this.id
+							+ " could not be indexed; refusing to publish a partial index");
+				}
+				// extMdUri2entry first, res2entry last: both are volatile, so a reader that observes
+				// res2entry non-null is guaranteed to observe extMdUri2entry non-null too. That keeps
+				// remove(RepositoryConnection), which tests only res2entry before iterating, from
+				// proceeding on a pair where the external metadata index is not yet visible.
+				extMdUri2entry = externalMetadataIndex;
+				res2entry = resourceIndex;
 			}
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
@@ -294,16 +381,21 @@ public class ContextImpl extends ResourceImpl implements Context {
 		rc.add(resURI, RepositoryProperties.resHasEntry, entryURI, this.resourceURI);
 		URI euri = URI.create(entryURI.toString());
 
+		// Read once: a concurrent reIndex() nulls these fields, so testing the field and then passing it
+		// separately could hand push() a null it would only warn about.
+		ConcurrentMap<URI, Object> externalMetadataIndex = this.extMdUri2entry;
+		ConcurrentMap<URI, Object> resourceIndex = this.res2entry;
+
 		if (extMdURI != null) {
 			rc.add(extMdURI, RepositoryProperties.mdHasEntry, entryURI, this.resourceURI);
-			if (extMdUri2entry != null) {
+			if (externalMetadataIndex != null) {
 				URI mdURI = URI.create(extMdURI.toString());
-				push(mdURI, euri, extMdUri2entry);
+				push(mdURI, euri, externalMetadataIndex);
 			}
 		}
-		if (res2entry != null) {
+		if (resourceIndex != null) {
 			URI resourceURI = URI.create(resURI.toString());
-			push(resourceURI, euri, res2entry);
+			push(resourceURI, euri, resourceIndex);
 		}
 	}
 
@@ -314,14 +406,17 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 		rc.remove(resURI, RepositoryProperties.resHasEntry, entryURI, this.resourceURI);
 
+		ConcurrentMap<URI, Object> externalMetadataIndex = this.extMdUri2entry;
+		ConcurrentMap<URI, Object> resourceIndex = this.res2entry;
+
 		if (mdURI != null) {
 			rc.remove(mdURI, RepositoryProperties.mdHasEntry, entryURI, this.resourceURI);
-			if (extMdUri2entry != null) {
-				pop(entry.getExternalMetadataURI(), entry.getEntryURI(), extMdUri2entry);
+			if (externalMetadataIndex != null) {
+				pop(entry.getExternalMetadataURI(), entry.getEntryURI(), externalMetadataIndex);
 			}
 		}
-		if (res2entry != null) {
-			pop(entry.getResourceURI(), entry.getEntryURI(), res2entry);
+		if (resourceIndex != null) {
+			pop(entry.getResourceURI(), entry.getEntryURI(), resourceIndex);
 		}
 
 		if (RepositoryManagerImpl.trackDeletedEntries) {
@@ -754,11 +849,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	public Set<Entry> getByExternalMdURI(URI metadataURI) {
-		if (extMdUri2entry == null) {
-			loadIndex();
-		}
+		ConcurrentMap<URI, Object> index = externalMetadataIndex();
 		HashSet<Entry> entries = new HashSet<>();
-		Object value = extMdUri2entry.get(metadataURI);
+		Object value = index.get(metadataURI);
 		if (value != null) {
 			if (value instanceof URI rI) {
 				entries.add(getByEntryURI(rI));
@@ -773,11 +866,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	public Set<Entry> getByResourceURI(URI resourceURI) {
-		if (res2entry == null) {
-			loadIndex();
-		}
+		ConcurrentMap<URI, Object> index = resourceIndex();
 		HashSet<Entry> entries = new HashSet<>();
-		Object value = res2entry.get(resourceURI);
+		Object value = index.get(resourceURI);
 		if (value != null) {
 			if (value instanceof URI rI) {
 				entries.add(getByEntryURI(rI));
@@ -796,12 +887,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 		//Seeing metadata for each of the entries is determined in the normal way.
 		//		checkAccess(null, AccessProperty.ReadResource);
 
-		if (res2entry == null) {
-			loadIndex();
-		}
-
 		Set<URI> entries = new HashSet<>();
-		Collection<Object> val = res2entry.values();
+		Collection<Object> val = resourceIndex().values();
 		for (Object object : val) {
 			if (object instanceof URI rI) {
 				entries.add(rI);
@@ -816,10 +903,47 @@ public class ContextImpl extends ResourceImpl implements Context {
 	public Set<URI> getResources() {
 		checkAccess(null, AccessProperty.ReadResource);
 
-		if (res2entry == null) {
+		// Copied rather than returning keySet() directly: that is a live view of the index, so a caller
+		// holding it would observe later changes and could even remove index entries through it.
+		return new HashSet<>(resourceIndex().keySet());
+	}
+
+	/**
+	 * The resource-URI index, loading it first if needed. Reads the volatile field once so that a
+	 * concurrent {@link #reIndex()} — which nulls it — cannot turn the null check into a null
+	 * dereference at the use site.
+	 *
+	 * <p>Throws rather than substituting an empty index if the field is still null after
+	 * {@link #loadIndex()}. An empty stand-in would be indistinguishable from a genuinely empty
+	 * context, and {@code remove(RepositoryConnection)} iterates {@code getEntries()} to delete a
+	 * context's children before clearing the index graph unconditionally — so an empty answer there
+	 * deletes nothing while destroying the graph that names what was left behind.
+	 */
+	private ConcurrentMap<URI, Object> resourceIndex() {
+		ConcurrentMap<URI, Object> index = res2entry;
+		if (index == null) {
 			loadIndex();
+			index = res2entry;
 		}
-		return res2entry.keySet();
+		if (index == null) {
+			throw new org.entrystore.repository.RepositoryException(
+					"Resource index unavailable for context " + this.id);
+		}
+		return index;
+	}
+
+	/** The external-metadata-URI index, loading it first if needed. See {@link #resourceIndex()}. */
+	private ConcurrentMap<URI, Object> externalMetadataIndex() {
+		ConcurrentMap<URI, Object> index = extMdUri2entry;
+		if (index == null) {
+			loadIndex();
+			index = extMdUri2entry;
+		}
+		if (index == null) {
+			throw new org.entrystore.repository.RepositoryException(
+					"External metadata index unavailable for context " + this.id);
+		}
+		return index;
 	}
 
 	public void remove(URI entryURI) throws EntryMissingException {

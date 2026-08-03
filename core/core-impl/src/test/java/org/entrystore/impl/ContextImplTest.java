@@ -292,6 +292,185 @@ public class ContextImplTest extends AbstractCoreTest {
 		}
 	}
 
+	/**
+	 * ENTRYSTORE-1095. {@code getEntries} iterates the resource index while entry creation pushes into
+	 * it, and the two use no common monitor — the readers synchronize on nothing, the write path on
+	 * {@code entry.repository}. With a plain {@code HashMap} index this throws
+	 * {@code ConcurrentModificationException}.
+	 */
+	@Test
+	public void getEntries_concurrentWithEntryCreation_doesNotThrow() throws Exception {
+		// Seed entries so there is something to iterate; an empty index cannot fail.
+		for (int i = 0; i < 20; i++) {
+			context.createLink(null, URI.create("http://example.com/seed/" + i), null);
+		}
+
+		int readers = 8;
+		int writers = 4;
+		runConcurrently(readers + writers, index -> {
+			if (index < readers) {
+				for (int i = 0; i < 300; i++) {
+					context.getEntries();
+				}
+			} else {
+				for (int i = 0; i < 30; i++) {
+					context.createLink(null, URI.create("http://example.com/w" + index + "/" + i), null);
+				}
+			}
+		});
+	}
+
+	/**
+	 * ENTRYSTORE-1095. The same race one level down: several entries sharing a resource URI make the
+	 * index value a {@code Set}, which {@code getByResourceURI} iterates. A non-concurrent inner set
+	 * throws while another thread adds to it.
+	 */
+	@Test
+	public void getByResourceURI_concurrentWithEntryCreationOnTheSameResource_doesNotThrow() throws Exception {
+		URI shared = URI.create("http://example.com/shared-resource");
+		for (int i = 0; i < 5; i++) {
+			context.createLink(null, shared, null);
+		}
+
+		int readers = 8;
+		int writers = 4;
+		runConcurrently(readers + writers, index -> {
+			if (index < readers) {
+				for (int i = 0; i < 300; i++) {
+					context.getByResourceURI(shared);
+				}
+			} else {
+				for (int i = 0; i < 15; i++) {
+					context.createLink(null, shared, null);
+				}
+			}
+		});
+	}
+
+	/**
+	 * ENTRYSTORE-1095. {@code getResources} used to return {@code res2entry.keySet()} — a live view of
+	 * the index. A caller could observe later changes through it and, worse, remove index entries by
+	 * mutating it.
+	 */
+	@Test
+	public void getResources_returnsASnapshotNotALiveViewOfTheIndex() {
+		Entry first = context.createLink(null, URI.create("http://example.com/live/1"), null);
+		Set<URI> snapshot = context.getResources();
+		int sizeBefore = snapshot.size();
+		assertTrue(snapshot.contains(first.getResourceURI()));
+
+		context.createLink(null, URI.create("http://example.com/live/2"), null);
+
+		assertEquals(sizeBefore, snapshot.size(),
+			"getResources must return a snapshot; a live keySet would grow with the new entry");
+
+		snapshot.remove(first.getResourceURI());
+
+		assertTrue(context.getResources().contains(first.getResourceURI()),
+			"mutating the returned set must not remove the entry from the index");
+	}
+
+	/**
+	 * ENTRYSTORE-1095. {@code reIndex} nulls the index fields, so a reader must never observe a
+	 * truncated listing while it republishes.
+	 *
+	 * <p>Asserts the observed size rather than only the absence of an exception, so a reader that
+	 * answered "empty" instead of throwing would be caught. This one is a guard, not a reproduction:
+	 * unlike the other three it does not fail against the unfixed code, because a reader that observes
+	 * the null calls loadIndex, which contends for the same {@code this.entry} monitor reIndex holds and
+	 * so always reloads a complete index. Verified by reverting the production change and re-running.
+	 */
+	@Test
+	public void getEntries_concurrentWithReIndex_neverObservesATruncatedListing() throws Exception {
+		int seeded = 10;
+		for (int i = 0; i < seeded; i++) {
+			context.createLink(null, URI.create("http://example.com/reindex/" + i), null);
+		}
+		int expected = context.getEntries().size();
+
+		AtomicInteger smallestSeen = new AtomicInteger(Integer.MAX_VALUE);
+		int readers = 8;
+		runConcurrently(readers + 1, index -> {
+			if (index < readers) {
+				for (int i = 0; i < 200; i++) {
+					smallestSeen.accumulateAndGet(context.getEntries().size(), Math::min);
+				}
+			} else {
+				for (int i = 0; i < 5; i++) {
+					context.reIndex();
+				}
+			}
+		});
+
+		assertEquals(expected, smallestSeen.get(),
+			"getEntries must never observe a partial or empty index while reIndex republishes it");
+	}
+
+	/**
+	 * ENTRYSTORE-1095. Nothing else drives concurrent {@code push} calls on one key: every
+	 * {@code createLink} write serialises on the repository monitor, so pushes never overlap there.
+	 * {@code updateResource2EntryIndex} is the write path that does not hold that monitor, which makes
+	 * it the one that can prove {@code push} is atomic per key. With the previous get-then-put, two
+	 * writers racing on the same key lost one of the two mappings.
+	 */
+	@Test
+	public void concurrentPushesOnOneKey_doNotLoseAMapping() throws Exception {
+		int count = 16;
+		java.util.List<Entry> created = new ArrayList<>();
+		for (int i = 0; i < count; i++) {
+			created.add(context.createLink(null, URI.create("http://example.com/premove/" + i), null));
+		}
+		URI shared = URI.create("http://example.com/push-atomicity");
+
+		// Force the in-memory index to be loaded. updateResource2EntryIndex only mutates that index, so
+		// without this the pushes no-op on a null map and the later read reloads the original URIs from
+		// the repository instead — the test would pass vacuously against a broken push.
+		assertTrue(context.getEntries().size() >= count);
+
+		runConcurrently(count, i -> {
+			Entry e = created.get(i);
+			context.updateResource2EntryIndex(e.getResourceURI(), shared, e.getEntryURI());
+		});
+
+		assertEquals(count, context.getByResourceURI(shared).size(),
+			"every concurrent push on the same key must survive");
+		// pop's side of the same operation: the vacated keys must be gone, not left mapping to an
+		// empty set, which getByResourceURI would return as a spurious hit-with-no-entries.
+		for (Entry e : created) {
+			assertTrue(context.getByResourceURI(e.getResourceURI()).isEmpty(),
+				"the old key must be removed once its last entry moved away");
+		}
+	}
+
+	/**
+	 * ENTRYSTORE-1095. {@code getByExternalMdURI} reads the sibling index through the same machinery as
+	 * {@code getByResourceURI} but had no coverage, so neither the promote-to-set path for the
+	 * external-metadata index nor the iteration of that set was exercised anywhere.
+	 */
+	@Test
+	public void getByExternalMdURI_concurrentWithEntryCreationOnTheSameMetadataURI_doesNotThrow() throws Exception {
+		URI sharedMd = URI.create("http://example.com/shared-md");
+		for (int i = 0; i < 5; i++) {
+			context.createReference(null, URI.create("http://example.com/ref/" + i), sharedMd, null);
+		}
+		assertEquals(5, context.getByExternalMdURI(sharedMd).size());
+
+		int readers = 8;
+		int writers = 4;
+		runConcurrently(readers + writers, index -> {
+			if (index < readers) {
+				for (int i = 0; i < 300; i++) {
+					context.getByExternalMdURI(sharedMd);
+				}
+			} else {
+				for (int i = 0; i < 15; i++) {
+					context.createReference(null,
+						URI.create("http://example.com/ref/w" + index + "/" + i), sharedMd, null);
+				}
+			}
+		});
+	}
+
 	private void evictFromSoftCache(Entry e) {
 		context.softCache.remove(e);
 	}
