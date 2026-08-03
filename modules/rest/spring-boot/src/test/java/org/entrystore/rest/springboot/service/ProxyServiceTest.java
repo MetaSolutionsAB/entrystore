@@ -18,7 +18,9 @@ package org.entrystore.rest.springboot.service;
 
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture;
 import org.entrystore.rest.springboot.model.dto.ProxyResponse;
+import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.security.SsrfSafeHttpClient;
 import org.entrystore.rest.springboot.security.SsrfValidator;
@@ -27,6 +29,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.util.unit.DataSize;
 
 import java.io.ByteArrayInputStream;
 import java.net.HttpURLConnection;
@@ -63,7 +67,9 @@ class ProxyServiceTest {
 	void setUp() {
 		// A real SsrfSafeHttpClient over the mocked validator keeps the fetchUrl tests exercising
 		// the actual redirect-following and error-mapping logic.
-		service = new ProxyService(principalManager, contextService, ssrfValidator, new SsrfSafeHttpClient(ssrfValidator));
+		service = new ProxyService(principalManager, contextService, ssrfValidator,
+				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()),
+				ProxyPropertiesFixture.defaults());
 		service.setWhitelistAnon(Set.of());
 	}
 
@@ -166,6 +172,46 @@ class ProxyServiceTest {
 		SsrfValidator.ValidatedTarget result = service.validateRedirectTarget(location, true);
 
 		assertEquals("public.example.com", result.host());
+	}
+
+	@Test
+	void fetchUrl_upstreamBodyOverTheConfiguredCap_throws502() throws Exception {
+		// No coverage existed for the response-size cap at all. The cap is enforced while streaming, so
+		// the body must be rejected mid-read rather than buffered in full first.
+		ProxyService capped = new ProxyService(principalManager, contextService, ssrfValidator,
+				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()),
+				ProxyPropertiesFixture.withMaxResponseSize(DataSize.ofBytes(4)));
+		capped.setWhitelistAnon(Set.of());
+		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/big", "192.0.2.10");
+		HttpURLConnection conn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
+		when(conn.getResponseCode()).thenReturn(200);
+		when(conn.getInputStream())
+				.thenReturn(new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8)));
+
+		CustomResponseException e = assertThrows(CustomResponseException.class,
+				() -> capped.fetchUrl(target, null, false));
+
+		assertEquals(HttpStatus.BAD_GATEWAY, e.getStatus());
+		assertEquals("Upstream response exceeds maximum allowed size of 4 bytes", e.getMessage());
+	}
+
+	@Test
+	void fetchUrl_upstreamBodyExactlyAtTheCap_isReturned() throws Exception {
+		// The check is strictly greater-than, so the boundary must pass.
+		ProxyService capped = new ProxyService(principalManager, contextService, ssrfValidator,
+				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()),
+				ProxyPropertiesFixture.withMaxResponseSize(DataSize.ofBytes(5)));
+		capped.setWhitelistAnon(Set.of());
+		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/ok", "192.0.2.10");
+		HttpURLConnection conn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
+		when(conn.getResponseCode()).thenReturn(200);
+		when(conn.getContentType()).thenReturn("text/plain");
+		when(conn.getInputStream())
+				.thenReturn(new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8)));
+
+		assertEquals("hello", new String(capped.fetchUrl(target, null, false).body(), StandardCharsets.UTF_8));
 	}
 
 	@Test

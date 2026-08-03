@@ -44,6 +44,7 @@ import org.entrystore.rest.springboot.security.SsrfSafeHttpClient;
 import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.entrystore.rest.springboot.util.RDFJSON;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
+import org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -112,7 +113,7 @@ class ResourceServiceTest {
 	@BeforeEach
 	void setUp() {
 		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, ssrfValidator,
-				new SsrfSafeHttpClient(ssrfValidator), authService, emailSender);
+				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()), authService, emailSender);
 		// Point importTmpDir at the JUnit-managed isolated directory so the
 		// temp-file cleanup assertions are scoped to this test and cannot be
 		// polluted by other processes or orphan files in the shared system temp.

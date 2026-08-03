@@ -21,6 +21,7 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.security.SsrfValidator.Origin;
 import org.entrystore.rest.springboot.security.SsrfValidator.ValidatedTarget;
+import org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,7 +51,7 @@ class SsrfValidatorTest {
 
 	@BeforeEach
 	void setUp() {
-		validator = new SsrfValidator(repositoryManager);
+		validator = new SsrfValidator(repositoryManager, ProxyPropertiesFixture.defaults());
 		validator.setProxyHostWhitelist(Set.of());
 		validator.setDeleteOriginWhitelist(Set.of());
 		validator.setRowstoreOrigin(null);

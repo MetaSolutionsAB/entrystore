@@ -297,7 +297,7 @@ entrystore.solr.extract-fulltext=off
 
 ## Multipart upload limits at the Spring servlet layer (defaults: 100MB).
 ## Application-level caps that DO exist: entrystore.data.max-file-size
-## (resource uploads), 10 MB hardcoded in /echo. POST /{context-id}/import
+## (resource uploads), entrystore.echo.max-file-size for /echo. POST /{context-id}/import
 ## (multipart variant) has NO application-level cap, so its upper bound is
 ## whatever you set here. The non-multipart byte[] variant of /import
 ## currently has no enforced server-side size cap (Spring's multipart caps
@@ -339,6 +339,31 @@ entrystore.solr.extract-fulltext=off
 ## so single-host RowStore deployments need no additional configuration here.
 # entrystore.proxy.remote-resource.delete.whitelist.1=http://rowstore.internal:8282
 # entrystore.proxy.remote-resource.delete.whitelist.2=https://other-rowstore.example.com
+
+## Outbound-fetch limits, hardcoded before 6.1. The defaults below are the values that were
+## previously compiled in. These apply to BOTH outbound paths: GET /proxy (and its context-scoped
+## form) and the resource-DELETE proxy path above.
+##
+## max-redirects is a cap on redirect hops, so a value of N opens up to N+1 connections (the initial
+## request plus N hops); 0 disables redirect following entirely. Exceeding it is answered 502.
+## The timeouts apply per hop, so worst-case wall time for one request is roughly
+## (max-redirects + 1) x (connect-timeout + read-timeout) — about 24 minutes with these defaults.
+## The proxy runs on the request thread, so lower the timeouts rather than raising the redirect cap
+## if the concern is threads held by an unresponsive upstream. Note connect-timeout does not cover
+## DNS resolution, which happens first.
+##
+## max-response-size caps the upstream body that GET /proxy will buffer; exceeding it is answered 502.
+## The body is accumulated in memory, so this bounds heap per concurrent proxy request.
+# entrystore.proxy.max-response-size=10MB
+# entrystore.proxy.max-redirects=15
+# entrystore.proxy.connect-timeout=30s
+# entrystore.proxy.read-timeout=60s
+
+## Maximum payload POST /echo will reflect back; exceeding it is answered 413. Reported as
+## echoMaxEntitySize by GET /management/status?include=extended. Keep
+## spring.servlet.multipart.max-file-size at or above this value, otherwise Jetty rejects the upload
+## with a 400 before /echo ever sees it.
+# entrystore.echo.max-file-size=10MB
 
 ## Enable creation of groups with linked contexts for normal non-admin users
 # entrystore.nonadmin.group-context-creation=on|off (default: off)

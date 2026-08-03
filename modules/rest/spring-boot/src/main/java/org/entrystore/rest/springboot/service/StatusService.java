@@ -26,6 +26,7 @@ import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.configuration.AppStartedListener;
 import org.entrystore.rest.springboot.configuration.CorsProperties;
+import org.entrystore.rest.springboot.configuration.EchoProperties;
 import org.entrystore.rest.springboot.configuration.InfoAppPropertiesConfiguration;
 import org.entrystore.rest.springboot.model.api.StatusExtendedIncludeEnum;
 import org.entrystore.rest.springboot.model.api.StatusExtendedResponse;
@@ -53,6 +54,7 @@ public class StatusService {
 	private final InfoAppPropertiesConfiguration appConfig;
 	private final Config esConfig;
 	private final CorsProperties corsProperties;
+	private final EchoProperties echoProperties;
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final AppStartedListener appStartedListener;
@@ -83,8 +85,9 @@ public class StatusService {
 			.repositoryIndices(esConfig.getString(Settings.STORE_INDEXES, DEFAULT_VALUE_FOR_NOT_CONFIGURED))
 			.quota(esConfig.getBoolean(Settings.DATA_QUOTA, false))
 			.quotaDefault(esConfig.getString(Settings.DATA_QUOTA_DEFAULT, DEFAULT_VALUE_FOR_NOT_CONFIGURED))
-			// TODO: Fix below when migrating EchoResource
-			.echoMaxEntitySize(-1)
+			// Reported from the same bean EchoService enforces, so the report cannot disagree with the
+			// cap actually applied. Was hardcoded to -1 while /echo was still on Restlet.
+			.echoMaxEntitySize(echoProperties.maxFileSize().toBytes())
 			.cors(buildCorsInfo())
 			.oaiHarvester(esConfig.getBoolean(Settings.HARVESTER_OAI, false))
 			.oaiHarvesterMultiThreaded(esConfig.getBoolean(Settings.HARVESTER_OAI_MULTITHREADED, false))

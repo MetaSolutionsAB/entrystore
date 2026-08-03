@@ -18,6 +18,7 @@ package org.entrystore.rest.springboot.security;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.springboot.configuration.ProxyProperties;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -41,9 +42,8 @@ import java.util.function.Function;
 @RequiredArgsConstructor
 public class SsrfSafeHttpClient {
 
-	static final int MAX_REDIRECTS = 15;
-
 	private final SsrfValidator ssrfValidator;
+	private final ProxyProperties proxyProperties;
 
 	/**
 	 * Handles the final (non-3xx) response of {@link #execute}. The connection is disconnected
@@ -56,9 +56,12 @@ public class SsrfSafeHttpClient {
 
 	/**
 	 * Executes {@code httpMethod} against a pre-validated target, following up to
-	 * {@value #MAX_REDIRECTS} redirects. Failure mapping: redirect without Location, too many
-	 * redirects, and IO or malformed-Location failures throw 502 Bad Gateway; connection timeouts
-	 * and refusals throw 504 Gateway Timeout.
+	 * {@code entrystore.proxy.max-redirects} redirects (default 15). Failure mapping: redirect without
+	 * Location, too many redirects, and IO or malformed-Location failures throw 502 Bad Gateway;
+	 * connection timeouts and refusals throw 504 Gateway Timeout.
+	 *
+	 * <p>Note the loop bound is inclusive, so a cap of N opens up to N+1 connections: the initial
+	 * request plus N redirect hops.
 	 *
 	 * @param initialTarget     the already-validated request target
 	 * @param httpMethod        HTTP method to send on every hop
@@ -72,7 +75,9 @@ public class SsrfSafeHttpClient {
 						 ResponseHandler<T> responseHandler) {
 
 		SsrfValidator.ValidatedTarget target = initialTarget;
-		for (int redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+		int maxRedirects = proxyProperties.maxRedirects();
+		// Inclusive bound, preserved deliberately: a cap of N allows the initial request plus N hops.
+		for (int redirectCount = 0; redirectCount <= maxRedirects; redirectCount++) {
 			HttpURLConnection conn = null;
 			try {
 				conn = ssrfValidator.openPinnedConnection(target.uri(), target.resolved());
@@ -110,7 +115,7 @@ public class SsrfSafeHttpClient {
 			}
 		}
 
-		log.warn("More than {} redirect loops detected, aborting", MAX_REDIRECTS);
+		log.warn("More than {} redirect loops detected, aborting", maxRedirects);
 		throw new CustomResponseException("Too many redirects", HttpStatus.BAD_GATEWAY);
 	}
 }

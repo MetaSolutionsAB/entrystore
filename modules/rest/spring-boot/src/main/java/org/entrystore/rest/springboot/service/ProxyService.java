@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Context;
 import org.entrystore.PrincipalManager;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.springboot.configuration.ProxyProperties;
 import org.entrystore.rest.springboot.model.dto.ProxyResponse;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
@@ -46,9 +47,9 @@ public class ProxyService {
 	private final SsrfValidator ssrfValidator;
 	private final SsrfSafeHttpClient ssrfSafeHttpClient;
 
-	private Set<String> whitelistAnon;
+	private final ProxyProperties proxyProperties;
 
-	private static final int MAX_RESPONSE_BYTES = 10 * 1024 * 1024; // 10 MB
+	private Set<String> whitelistAnon;
 
 	@PostConstruct
 	void init() {
@@ -112,14 +113,17 @@ public class ProxyService {
 	}
 
 	private byte[] readWithLimit(InputStream is) throws IOException {
+		// long rather than int: the cap is operator-configurable and may legitimately exceed 2 GiB, at
+		// which point an int accumulator would overflow negative and stop enforcing the limit entirely.
+		long maxResponseBytes = proxyProperties.maxResponseSize().toBytes();
 		byte[] buf = new byte[8192];
-		int totalRead = 0;
+		long totalRead = 0;
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		int bytesRead;
 		while ((bytesRead = is.read(buf)) != -1) {
 			totalRead += bytesRead;
-			if (totalRead > MAX_RESPONSE_BYTES) {
-				throw new CustomResponseException("Upstream response exceeds maximum allowed size of " + MAX_RESPONSE_BYTES + " bytes",
+			if (totalRead > maxResponseBytes) {
+				throw new CustomResponseException("Upstream response exceeds maximum allowed size of " + maxResponseBytes + " bytes",
 						HttpStatus.BAD_GATEWAY);
 			}
 			out.write(buf, 0, bytesRead);

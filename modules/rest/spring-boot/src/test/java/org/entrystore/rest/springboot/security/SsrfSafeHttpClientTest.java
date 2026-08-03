@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.security;
 
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
+import org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,7 +50,7 @@ class SsrfSafeHttpClientTest {
 
 	@BeforeEach
 	void setUp() {
-		client = new SsrfSafeHttpClient(ssrfValidator);
+		client = new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults());
 	}
 
 	@Test
@@ -126,7 +127,8 @@ class SsrfSafeHttpClientTest {
 
 	@Test
 	void execute_sixteenRedirects_throws502() throws Exception {
-		// MAX_REDIRECTS is 15: hops 0-15 all open a connection, then the chain is aborted.
+		// The default entrystore.proxy.max-redirects is 15, and the loop bound is inclusive: hops 0-15
+		// all open a connection, then the chain is aborted.
 		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
 		HttpURLConnection conn = mock(HttpURLConnection.class);
 		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
@@ -140,6 +142,42 @@ class SsrfSafeHttpClientTest {
 		assertEquals("Too many redirects", ex.getMessage());
 		verify(ssrfValidator, times(16)).openPinnedConnection(target.uri(), target.resolved());
 		verify(conn, times(16)).disconnect();
+	}
+
+	@Test
+	void execute_honoursAConfiguredRedirectCap() throws Exception {
+		// Behavioural coverage for entrystore.proxy.max-redirects: without this, replacing
+		// proxyProperties.maxRedirects() with a literal 15 would leave every test green.
+		SsrfSafeHttpClient cappedClient =
+				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.withMaxRedirects(2));
+		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
+		HttpURLConnection conn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
+		when(conn.getResponseCode()).thenReturn(302);
+		when(conn.getHeaderField("Location")).thenReturn("http://upstream.example.com/a");
+
+		CustomResponseException ex = assertThrows(CustomResponseException.class,
+				() -> cappedClient.execute(target, "GET", Map.of(), location -> target, (status, c) -> status));
+
+		assertEquals("Too many redirects", ex.getMessage());
+		// A cap of 2 means the initial request plus 2 hops, so 3 connections.
+		verify(ssrfValidator, times(3)).openPinnedConnection(target.uri(), target.resolved());
+	}
+
+	@Test
+	void execute_zeroRedirectCap_followsNoneAndAbortsOnTheFirst302() throws Exception {
+		SsrfSafeHttpClient noRedirects =
+				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.withMaxRedirects(0));
+		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
+		HttpURLConnection conn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
+		when(conn.getResponseCode()).thenReturn(302);
+		when(conn.getHeaderField("Location")).thenReturn("http://upstream.example.com/b");
+
+		assertThrows(CustomResponseException.class,
+				() -> noRedirects.execute(target, "GET", Map.of(), location -> target, (status, c) -> status));
+
+		verify(ssrfValidator, times(1)).openPinnedConnection(target.uri(), target.resolved());
 	}
 
 	@Test

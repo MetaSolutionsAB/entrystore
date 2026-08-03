@@ -21,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.springboot.configuration.ProxyProperties;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.springframework.stereotype.Component;
@@ -53,15 +54,15 @@ import java.util.regex.Pattern;
 public class SsrfValidator {
 
 	private final RepositoryManagerImpl repositoryManager;
+	// Applied per hop on both outbound paths that use openPinnedConnection: GET /proxy and
+	// DELETE /{context-id}/resource/{entry-id}?proxy=true.
+	private final ProxyProperties proxyProperties;
 
 	private Set<String> proxyHostWhitelist;
 	private Set<Origin> deleteOriginWhitelist;
 	private Origin rowstoreOrigin;
 
 	private static final Set<String> ALLOWED_SCHEMES = Set.of("http", "https");
-
-	private static final int CONNECT_TIMEOUT_MS = 30_000;
-	private static final int READ_TIMEOUT_MS = 60_000;
 
 	private static final List<Pattern> BLACKLIST_REGEX = List.of(
 			Pattern.compile("^localhost$"),                                   // localhost
@@ -330,8 +331,8 @@ public class SsrfValidator {
 		URI pinnedUri = buildPinnedUri(originalUri, resolved);
 		HttpURLConnection conn = (HttpURLConnection) pinnedUri.toURL().openConnection();
 		conn.setInstanceFollowRedirects(false);
-		conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
-		conn.setReadTimeout(READ_TIMEOUT_MS);
+		conn.setConnectTimeout(proxyProperties.connectTimeoutMillis());
+		conn.setReadTimeout(proxyProperties.readTimeoutMillis());
 		conn.setRequestProperty("Host", buildHostHeader(originalUri));
 		if (conn instanceof HttpsURLConnection httpsConn) {
 			configureSsl(httpsConn, originalUri.getHost());
