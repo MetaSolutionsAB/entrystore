@@ -1,0 +1,84 @@
+# Requires a built entryscape frontend to be present in "./config-localhost/dist/" folder.
+# Pre-built version can be downloaded from https://entryscape.org/download/
+
+
+# Issues observed:
+
+# This branch's backend enforces CSRF double-submit for cookie-authenticated mutations, and the EntryScape frontend you're pointing at it doesn't participate:
+#
+#- SecurityConfig.java:149-153 — CSRF is wired unconditionally: CookieCsrfTokenRepository (cookie XSRF-TOKEN, HttpOnly=false) + CsrfRequestMatcher.
+#- CsrfRequestMatcher.java:71-79 — a request needs a token when: method is unsafe AND the auth_token session cookie is present AND the path isn't one of the exempt auth endpoints (/auth/cookie, /auth/signup*, /auth/pwreset*, SAML ACS).
+#- POST /_principals/groups (GroupController.java:22) is unsafe + cookie-authenticated + not exempt → the token is required. The message Invalid CSRF Token 'null' means the frontend sent no X-XSRF-TOKEN header at all.
+#
+#The backend does hand the token out (CsrfCookieFilter forces token resolution whenever the session cookie is present, so even GETs refresh Set-Cookie: XSRF-TOKEN=…), and it's readable from JS. The frontend just never echoes it back. Result: 403 for a logged-in user, 401 for anonymous (AppExceptionHandler.handleAccessDeniedException).
+#
+# Quick fix: Disable CSRF in SecurityConfig
+
+
+# Memo: each change in the code, requires a new jar with Spring-boot Entrystore to be built,
+#  then delete the preexisting local entrystore Docker image (it has the old jar running)
+# After above a new docker Entrystore image will be built from scratch (Dockerfile) using the new jar, just need to run this docker-compose
+
+
+
+
+name: metasolutions-stack
+
+
+services:
+
+  frontend:
+    image: metasolutions/apache2
+    ports:
+      - "9090:80"
+    depends_on:
+      entrystore:
+        condition: service_healthy
+    volumes:
+      - ./config-localhost/apache.conf:/etc/apache2/sites-available/000-default.conf:ro
+      - ./config-localhost/frontend/:/srv/entryscape/:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  entrystore:
+    build:
+      context: .
+      dockerfile: ./modules/rest/spring-boot/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on: # Waits for the solr service to be healthy before starting
+      solr-db:
+        condition: service_healthy
+    labels:
+      se.metasolutions.domain: "localhost"
+    volumes:
+      - ./config-localhost/docker-spring/entrystore.properties:/srv/entrystore/entrystore.properties:ro
+    environment:
+      # override properties
+      ENTRYSTORE_SOLR_URL: http://solr-db:8983/solr/entrystore-core
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/management/status"]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 5s # time before the first check.
+
+  solr-db:
+    image: solr:10.0.0
+    hostname: solr-db
+    ports:
+      - "8983:8983"
+    command: ["solr-precreate", "entrystore-core", "/entrystore-config"]
+    environment:
+      SOLR_MODULES: "analysis-extras"
+      SOLR_JETTY_CONFIG: "--module=http"  # no http2 module - to get rid of stream-cancelled errors
+    healthcheck:
+      # This check pings the specific core to ensure it's ready to accept requests.
+      # The backend service will wait for this to return a 200 OK.
+      test: ["CMD", "curl", "-f", "http://localhost:8983/solr/entrystore-core/admin/ping"]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 5s # time before the first check.
+    volumes:
+      - ./modules/rest/integration-test/src/test/resources/solr:/entrystore-config/conf:ro
