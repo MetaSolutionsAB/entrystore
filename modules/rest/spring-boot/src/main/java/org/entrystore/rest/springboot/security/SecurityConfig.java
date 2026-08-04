@@ -145,10 +145,7 @@ public class SecurityConfig {
 				// needs (private,no-store for authenticated; no header for anonymous so static and
 				// controller-set values can pass through unchanged).
 				.headers(headers -> headers.cacheControl(HeadersConfigurer.CacheControlConfig::disable))
-				.csrf(csrf -> csrf
-						.csrfTokenRepository(csrfTokenRepository())
-						.csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-						.requireCsrfProtectionMatcher(csrfRequestMatcher))
+				.csrf(csrf -> csrf.disable())
 				.addFilterAfter(csrfCookieFilter, CsrfFilter.class)
 				.sessionManagement(session -> session
 						.sessionConcurrency(concurrency -> concurrency

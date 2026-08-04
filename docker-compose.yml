@@ -1,0 +1,27 @@
+name: metasolutions-stack
+
+
+services:
+
+  frontend:
+    image: metasolutions/apache2
+    ports:
+      - "80:80"
+    depends_on:
+      - entrystore
+    volumes:
+      - ./config-localhost/apache.conf:/etc/apache2/sites-available/000-default.conf:ro
+      - ./config-localhost/theme/:/srv/entryscape-theme/:ro
+      - ./config-localhost/dist/:/srv/entryscape/:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  entrystore:
+    image: metasolutions/entrystore:develop
+    ports:
+      - "8080:8080"
+    command: ["/srv/entrystore/bin/entrystore", "--config", "file:///srv/entrystore/entrystore.properties", "--port", "8080", "--log-level", "INFO"]
+    labels:
+      se.metasolutions.domain: "localhost"
+    volumes:
+      - ./config-localhost/entrystore.properties:/srv/entrystore/entrystore.properties:ro
