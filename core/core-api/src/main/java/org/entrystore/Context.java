@@ -118,18 +118,23 @@ public interface Context extends Resource{
 	 */
 	Entry getByEntryURI(URI entryURI);
 
+	// The four methods below are served from an index built from the repository on first use. They
+	// therefore throw org.entrystore.repository.RepositoryException if that index cannot be loaded, and
+	// each returns an independent snapshot: mutating the returned collection does not affect the context,
+	// and the collection does not reflect entries added or removed after the call.
+
 	/**
 	 * @param metadataURI is the URI to an external Metadata referenced by an item in this context.
-	 * @return a set of Entries referencing this metadata, never null.
+	 * @return a set of Entries referencing this metadata, never null; empty if {@code metadataURI} is null.
 	 */
 	Set<Entry> getByExternalMdURI(URI metadataURI);
 
 	/**
 	 * @param resourceURI is the URI to the resource for a set of entries in this context.
-	 * @return a set of Entries that has this resourceURI.
+	 * @return a set of Entries that has this resourceURI, never null; empty if {@code resourceURI} is null.
 	 */
 	Set<Entry> getByResourceURI(URI resourceURI);
-	
+
 	/**
 	 * @return the set of all resources managed in this context
 	 * (each resource represented by its URI).

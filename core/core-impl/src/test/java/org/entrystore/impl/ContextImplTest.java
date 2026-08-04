@@ -35,6 +35,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntConsumer;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.List;
@@ -43,6 +46,9 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 public class ContextImplTest extends AbstractCoreTest {
+
+	/** A valid RDF4J IRI that {@code java.net.URI.create} rejects, so {@code loadIndex} cannot index it. */
+	private static final String UNPARSEABLE_IRI = "http://example.com/not a uri";
 
 	private ContextImpl context;
 
@@ -371,14 +377,13 @@ public class ContextImplTest extends AbstractCoreTest {
 	}
 
 	/**
-	 * ENTRYSTORE-1095. {@code reIndex} nulls the index fields, so a reader must never observe a
-	 * truncated listing while it republishes.
+	 * ENTRYSTORE-1095. {@code reIndex} nulls the index fields, so a reader must neither observe a
+	 * truncated listing nor fail while it republishes.
 	 *
-	 * <p>Asserts the observed size rather than only the absence of an exception, so a reader that
-	 * answered "empty" instead of throwing would be caught. This one is a guard, not a reproduction:
-	 * unlike the other three it does not fail against the unfixed code, because a reader that observes
-	 * the null calls loadIndex, which contends for the same {@code this.entry} monitor reIndex holds and
-	 * so always reloads a complete index. Verified by reverting the production change and re-running.
+	 * <p>Readers run until the writer is done rather than for a fixed count, and count the reads that
+	 * straddle a {@code reIndex} call. Asserting that overlap actually happened is what stops the test
+	 * passing vacuously: with a fixed iteration count, a run in which no read landed inside a
+	 * {@code reIndex} window satisfied the size assertion while proving nothing.
 	 */
 	@Test
 	public void getEntries_concurrentWithReIndex_neverObservesATruncatedListing() throws Exception {
@@ -389,21 +394,37 @@ public class ContextImplTest extends AbstractCoreTest {
 		int expected = context.getEntries().size();
 
 		AtomicInteger smallestSeen = new AtomicInteger(Integer.MAX_VALUE);
+		AtomicInteger overlappingReads = new AtomicInteger();
+		AtomicBoolean reIndexing = new AtomicBoolean();
+		AtomicBoolean stop = new AtomicBoolean();
 		int readers = 8;
+
 		runConcurrently(readers + 1, index -> {
 			if (index < readers) {
-				for (int i = 0; i < 200; i++) {
+				while (!stop.get()) {
+					boolean startedDuringReIndex = reIndexing.get();
 					smallestSeen.accumulateAndGet(context.getEntries().size(), Math::min);
+					if (startedDuringReIndex && reIndexing.get()) {
+						overlappingReads.incrementAndGet();
+					}
 				}
 			} else {
-				for (int i = 0; i < 5; i++) {
-					context.reIndex();
+				try {
+					for (int i = 0; i < 5; i++) {
+						reIndexing.set(true);
+						context.reIndex();
+						reIndexing.set(false);
+					}
+				} finally {
+					stop.set(true);
 				}
 			}
 		});
 
 		assertEquals(expected, smallestSeen.get(),
 			"getEntries must never observe a partial or empty index while reIndex republishes it");
+		assertTrue(overlappingReads.get() > 0,
+			"no read overlapped a reIndex, so this run proved nothing about the race");
 	}
 
 	/**
@@ -444,8 +465,9 @@ public class ContextImplTest extends AbstractCoreTest {
 
 	/**
 	 * ENTRYSTORE-1095. {@code getByExternalMdURI} reads the sibling index through the same machinery as
-	 * {@code getByResourceURI} but had no coverage, so neither the promote-to-set path for the
-	 * external-metadata index nor the iteration of that set was exercised anywhere.
+	 * {@code getByResourceURI}. {@code accessToEntries} already covers the single-value path; what was
+	 * uncovered is the promote-to-set path for the external-metadata index and the iteration of that set
+	 * while another thread adds to it.
 	 */
 	@Test
 	public void getByExternalMdURI_concurrentWithEntryCreationOnTheSameMetadataURI_doesNotThrow() throws Exception {
@@ -469,6 +491,110 @@ public class ContextImplTest extends AbstractCoreTest {
 				}
 			}
 		});
+	}
+
+	/**
+	 * ENTRYSTORE-1095. {@code ConcurrentHashMap.get(null)} throws where the previous
+	 * {@code HashMap.get(null)} returned null. A null resource URI reaches here on a normal
+	 * authorization path — {@code PrincipalManagerImpl.getUser} passes an unset
+	 * {@code authenticatedUserURI} ThreadLocal straight through — where an empty answer means "deny" and
+	 * an NPE means a 500 out of an authorization check.
+	 */
+	@Test
+	public void getByResourceURI_withNullURI_returnsEmptySet() {
+		context.createLink(null, URI.create("http://example.com/null-arg"), null);
+
+		assertTrue(context.getByResourceURI(null).isEmpty());
+	}
+
+	/** ENTRYSTORE-1095. See {@link #getByResourceURI_withNullURI_returnsEmptySet()}. */
+	@Test
+	public void getByExternalMdURI_withNullURI_returnsEmptySet() {
+		context.createReference(null, URI.create("http://example.com/null-arg-ref"),
+			URI.create("http://example.com/null-arg-md"), null);
+
+		assertTrue(context.getByExternalMdURI(null).isEmpty());
+	}
+
+	/**
+	 * ENTRYSTORE-1095. One statement that RDF4J accepts but {@code java.net.URI.create} rejects must not
+	 * take the whole context down. Refusing to publish a partial index left both index fields null for
+	 * the life of the object, so every later read rescanned the graph and threw again — and
+	 * {@code ContextManagerImpl}'s constructor loads the index, so a bad triple in the {@code _contexts}
+	 * graph prevented startup. ENTRYSTORE-839 established the log-and-continue tolerance deliberately.
+	 *
+	 * <p>The statement is planted before the first read, because the index is loaded lazily and
+	 * {@code reIndex()} would rewrite the index graph and drop it again.
+	 */
+	@Test
+	public void getEntries_withAnUnindexableStatement_stillListsTheGoodEntries() {
+		Entry good = context.createLink(null, URI.create("http://example.com/indexable"), null);
+		URI unreachable = URI.create("http://example.com/unreachable-entry");
+		addUnindexableResHasEntryStatement(context, unreachable);
+
+		Set<URI> entries = context.getEntries();
+
+		assertTrue(entries.contains(good.getEntryURI()),
+			"an unindexable statement must not hide the entries that did index");
+		assertFalse(entries.contains(unreachable),
+			"the unindexable statement itself must not appear in the listing");
+	}
+
+	/**
+	 * ENTRYSTORE-1095. Deleting a context must clear every child graph, including one the in-memory index
+	 * never saw. Pins the two halves of that guarantee together: an unparseable statement no longer
+	 * aborts the index load, and {@code remove(RepositoryConnection)} reads its child list from the
+	 * transaction instead of from the index that skipped it. Deriving it from the index left the child's
+	 * entry, metadata and resource graphs in the store while {@code rc.clear(this.resourceURI)} destroyed
+	 * the graph that named them — permanently orphaned data.
+	 *
+	 * <p>The child's only {@code resHasEntry} triple gets a subject {@code java.net.URI.create} rejects,
+	 * planted before the first read for the reason given on
+	 * {@link #getEntries_withAnUnindexableStatement_stillListsTheGoodEntries()}.
+	 */
+	@Test
+	public void removeContext_clearsAChildTheIndexCouldNotSee() throws Exception {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl doomed = (ContextImpl) contextEntry.getResource();
+		EntryImpl child = (EntryImpl) doomed.createLink(null, URI.create("http://example.com/orphan-candidate"), null);
+		IRI childEntryIRI = child.getSesameEntryURI();
+
+		hideFromIndex(doomed, child);
+		assertFalse(doomed.getEntries().contains(child.getEntryURI()),
+			"the child must be invisible to the in-memory index for this test to mean anything");
+
+		cm.remove(contextEntry.getEntryURI());
+
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			assertFalse(rc.hasStatement(null, null, null, false, childEntryIRI),
+				"the child entry graph must be cleared even though the index did not list it");
+		}
+	}
+
+	/**
+	 * Adds a {@code resHasEntry} statement to {@code owner}'s graph whose subject is a valid IRI that
+	 * {@code java.net.URI.create} rejects, so {@code loadIndex} cannot index it.
+	 */
+	private void addUnindexableResHasEntryStatement(ContextImpl owner, URI entryURI) {
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			rc.add(vf.createIRI(UNPARSEABLE_IRI), RepositoryProperties.resHasEntry,
+				vf.createIRI(entryURI.toString()), owner.resourceURI);
+		}
+	}
+
+	/**
+	 * Replaces an entry's {@code resHasEntry} subject with one {@code java.net.URI.create} rejects, so the
+	 * entry is unreachable through the in-memory index but still named in the context graph.
+	 */
+	private void hideFromIndex(ContextImpl owner, EntryImpl child) {
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			rc.remove(child.getSesameResourceURI(), RepositoryProperties.resHasEntry,
+				child.getSesameEntryURI(), owner.resourceURI);
+			rc.add(vf.createIRI(UNPARSEABLE_IRI), RepositoryProperties.resHasEntry,
+				child.getSesameEntryURI(), owner.resourceURI);
+		}
 	}
 
 	private void evictFromSoftCache(Entry e) {
