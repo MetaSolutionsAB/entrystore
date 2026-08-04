@@ -38,44 +38,54 @@ class SmtpPropertiesTest {
 	@ParameterizedTest(name = "security={0}, ssl={1} -> {2}")
 	@CsvSource(nullValues = "NULL", value = {
 			"NULL,     NULL,       OFF",
-			"SSL,      NULL,       SSL",
+			"ssl,      NULL,       SSL",
+			"starttls, NULL,       STARTTLS",
+			"off,      NULL,       OFF",
 			"STARTTLS, NULL,       STARTTLS",
 			"NULL,     starttls,   STARTTLS",
 			"NULL,     ssl,        SSL",
 			"NULL,     off,        OFF",
 			"NULL,     STARTTLS,   STARTTLS",
-			"SSL,      ssl,        SSL"
+			"ssl,      ssl,        SSL",
+			// An unrecognised canonical value falls through to the alias rather than winning as garbage.
+			"tls,      starttls,   STARTTLS",
+			"tls,      NULL,       OFF"
 	})
-	void security_resolvesTheCanonicalKeyThenTheDeprecatedAlias(
-			SmtpSecurity security, String ssl, SmtpSecurity expected) {
-		SmtpProperties properties = properties(security, ssl);
+	void effectiveSecurity_resolvesTheCanonicalKeyThenTheDeprecatedAlias(
+			String security, String ssl, SmtpSecurity expected) {
+		assertEquals(expected, properties(security, ssl).effectiveSecurity());
+	}
 
-		// The canonical constructor folds the alias in, so the component itself carries the answer and
-		// there is no accessor left that returns a stale one.
-		assertEquals(expected, properties.security());
-		assertEquals(expected, properties.effectiveSecurity());
+	@Test
+	void rawAccessorsReturnTheConfiguredStrings_notTheEffectiveValue() {
+		SmtpProperties properties = properties("tls", "starttls");
+
+		// security() and ssl() are the raw bound values, deliberately: a call site writing
+		// "ssl".equalsIgnoreCase(smtp.security()) would reintroduce the original silent-plaintext bug,
+		// so effectiveSecurity() is the only accessor that answers what is actually applied.
+		assertEquals("tls", properties.security());
+		assertEquals("starttls", properties.ssl());
+		assertEquals(SmtpSecurity.STARTTLS, properties.effectiveSecurity());
 	}
 
 	@Test
 	void canonicalKeyWins_overADisagreeingAliasWithoutFailingStartup() {
 		// Previously a hard IllegalArgumentException, which made the migration path the documentation
 		// prescribes — add entrystore.smtp.security next to an existing entrystore.smtp.ssl — an outage.
-		SmtpProperties properties = properties(SmtpSecurity.STARTTLS, "off");
+		SmtpProperties properties = properties("starttls", "off");
 
 		assertEquals(SmtpSecurity.STARTTLS, properties.effectiveSecurity());
 		assertTrue(properties.usesDeprecatedSslKey());
 	}
 
-	@ParameterizedTest(name = "ssl=''{0}'' -> OFF, startup survives")
-	@CsvSource({"true", "on", "yes", "1", "tls", "enabled"})
-	void unmappableAliasValue_isIgnoredRatherThanAbortingStartup(String ssl) {
-		// entrystore.smtp.ssl was never read before 6.1, so its value was never constrained. A stale
-		// entry must not be able to take the whole application down; it resolves to OFF — exactly what
-		// that deployment already did — and is reported at ERROR.
-		SmtpProperties properties = properties(null, ssl);
-
-		assertEquals(SmtpSecurity.OFF, properties.effectiveSecurity());
-		assertTrue(properties.usesDeprecatedSslKey(), "the key is still present, so the deprecation stands");
+	@ParameterizedTest(name = "unrecognised ''{0}'' in either key -> OFF, startup survives")
+	@CsvSource({"true", "on", "yes", "1", "tls", "none", "enabled"})
+	void unrecognisedValue_isIgnoredRatherThanAbortingStartup(String value) {
+		// Neither key was validated before 6.1 — ssl was never read, and security was compared with
+		// equalsIgnoreCase — so an unrecognised value in either meant plaintext. Resolving to OFF is what
+		// that deployment already did; aborting startup would take the whole REST API down over mail.
+		assertEquals(SmtpSecurity.OFF, properties(null, value).effectiveSecurity());
+		assertEquals(SmtpSecurity.OFF, properties(value, null).effectiveSecurity());
 	}
 
 	@Test
@@ -97,10 +107,18 @@ class SmtpPropertiesTest {
 	}
 
 	@Test
-	void halfSetCredentialPair_failsFast() {
-		assertThrows(IllegalArgumentException.class, () -> withCredentials("user", null));
-		assertThrows(IllegalArgumentException.class, () -> withCredentials(null, "secret"));
-		assertThrows(IllegalArgumentException.class, () -> withCredentials("user", "  "));
+	void halfSetCredentialPair_disablesAuthenticationInsteadOfAbortingStartup() {
+		// EntryStore 6.0 degraded to an anonymous session here and still delivered mail. Throwing would
+		// escalate a mail-only misconfiguration into a full startup outage on upgrade.
+		SmtpProperties usernameOnly = withCredentials("relay-user", null);
+
+		assertFalse(usernameOnly.hasCredentials());
+		assertNull(usernameOnly.username(), "a half-set pair must not leave a partial credential behind");
+		assertNull(usernameOnly.password());
+
+		// Including the empty-string form, which is what ${SMTP_PASSWORD} resolving to "" binds to.
+		assertFalse(withCredentials(null, "secret").hasCredentials());
+		assertFalse(withCredentials("relay-user", "  ").hasCredentials());
 	}
 
 	@Test
@@ -131,12 +149,28 @@ class SmtpPropertiesTest {
 
 	@Test
 	void maxSendAttemptsOutsideTheRange_failsFast() {
-		// Bounded above because the retry loop has no backoff and runs on the request thread: 500
-		// attempts against a firewalled MTA would pin a Jetty thread for roughly 42 minutes.
+		// Bounded above because the retry loop has no backoff: 500 attempts against a firewalled MTA
+		// would occupy its thread for roughly 42 minutes.
 		assertThrows(IllegalArgumentException.class, () -> withMaxSendAttempts(0));
 		IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> withMaxSendAttempts(500));
 		assertEquals("entrystore.smtp.max-send-attempts must be between 1 and 10, got 500", e.getMessage());
 		assertEquals(10, withMaxSendAttempts(10).maxSendAttempts());
+	}
+
+	@Test
+	void worstCaseSendDuration_multipliesEveryTimeoutByTheAttemptCount() {
+		// Each key is bounded individually, but their product is not — this is what the startup warning
+		// reports, so the arithmetic behind it is worth pinning.
+		SmtpProperties properties = new SmtpProperties("smtp.example.com", 25, null, null, null, null, true,
+				Duration.ofSeconds(10), Duration.ofSeconds(20), Duration.ofSeconds(30), 4, null);
+
+		assertEquals(Duration.ofMinutes(4), properties.worstCaseSendDuration());
+	}
+
+	@Test
+	void defaultTimeoutsAndAttemptCount_stayBelowTheReportingThreshold() {
+		// 3 x (5 + 5 + 5) = 45s, under the 60s threshold: a deployment that changes nothing stays quiet.
+		assertEquals(Duration.ofSeconds(45), hostOf("smtp.example.com").worstCaseSendDuration());
 	}
 
 	@Test
@@ -162,7 +196,7 @@ class SmtpPropertiesTest {
 			SmtpProperties smtp = context.getBean(SmtpProperties.class);
 			assertEquals("smtp.example.com", smtp.host());
 			assertEquals(2525, smtp.port());
-			assertEquals(SmtpSecurity.STARTTLS, smtp.security());
+			assertEquals(SmtpSecurity.STARTTLS, smtp.effectiveSecurity());
 			assertEquals("user", smtp.username());
 			assertEquals("secret", smtp.password());
 			assertFalse(smtp.checkServerIdentity());
@@ -187,20 +221,44 @@ class SmtpPropertiesTest {
 	}
 
 	@Test
-	void staleBooleanAliasValue_bindsAndStartsInsteadOfAbortingTheContext() {
+	void staleValueInEitherKey_bindsAndStartsInsteadOfAbortingTheContext() {
+		// The canonical key is covered here as well as the alias: it has been read since 4.8 (via
+		// Settings.SMTP_SECURITY) but never validated, so a deployment carrying security=tls boots today
+		// and must keep booting. Binding it as a strict enum would take the whole context down.
 		runner().withPropertyValues("entrystore.smtp.ssl=true")
 				.run(context -> {
 					assertNull(context.getStartupFailure(),
 							"a stale entrystore.smtp.ssl value must never abort startup");
 					assertEquals(SmtpSecurity.OFF, context.getBean(SmtpProperties.class).effectiveSecurity());
 				});
+
+		runner().withPropertyValues("entrystore.smtp.security=tls")
+				.run(context -> {
+					assertNull(context.getStartupFailure(),
+							"an unrecognised entrystore.smtp.security value must never abort startup");
+					assertEquals(SmtpSecurity.OFF, context.getBean(SmtpProperties.class).effectiveSecurity());
+				});
 	}
 
 	@Test
-	void unrecognisedCanonicalValue_failsStartup() {
-		runner().withPropertyValues("entrystore.smtp.security=tls")
-				.run(context -> assertNotNull(context.getStartupFailure(),
-						"an unrecognised value for the canonical key must fail startup, not mean 'off'"));
+	void literalPlaceholderFromTheExampleFile_bindsWithoutAbortingStartup() {
+		// entrystore.properties_example documents the key as `starttls|ssl|off`. Uncommented verbatim —
+		// which is how the surrounding keys are written — that literal must stay harmless.
+		runner().withPropertyValues("entrystore.smtp.security=starttls|ssl|off")
+				.run(context -> {
+					assertNull(context.getStartupFailure());
+					assertEquals(SmtpSecurity.OFF, context.getBean(SmtpProperties.class).effectiveSecurity());
+				});
+	}
+
+	@Test
+	void halfSetCredentialsFromTheEnvironment_startTheContext() {
+		runner().withPropertyValues("entrystore.smtp.username=relay-user")
+				.run(context -> {
+					assertNull(context.getStartupFailure(),
+							"a half-set credential pair must not abort startup");
+					assertFalse(context.getBean(SmtpProperties.class).hasCredentials());
+				});
 	}
 
 	@Test
@@ -225,7 +283,7 @@ class SmtpPropertiesTest {
 	static class EnableSmtpProperties {
 	}
 
-	private static SmtpProperties properties(SmtpSecurity security, String ssl) {
+	private static SmtpProperties properties(String security, String ssl) {
 		return new SmtpProperties("smtp.example.com", 25, security, ssl, null, null, true,
 				Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(5), 3, null);
 	}

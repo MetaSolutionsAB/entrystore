@@ -16,8 +16,14 @@
 
 package org.entrystore.rest.springboot.util;
 
+import jakarta.mail.Address;
 import jakarta.mail.Message;
+import jakarta.mail.MessagingException;
+import jakarta.mail.SendFailedException;
+import jakarta.mail.internet.AddressException;
+import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
+import org.apache.logging.log4j.Level;
 import org.entrystore.Entry;
 import org.entrystore.User;
 import org.entrystore.config.Config;
@@ -25,10 +31,12 @@ import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.configuration.DeprecatedEmailAddressProperties;
 import org.entrystore.rest.springboot.configuration.SmtpProperties;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
+import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.MailSendException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
@@ -39,12 +47,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -52,6 +62,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -63,10 +74,19 @@ class EmailSenderTest {
 
 	private JavaMailSender mailSender;
 
+	private CapturingAppender logAppender;
+
 	@BeforeEach
 	void setUp() {
 		mailSender = mock(JavaMailSender.class);
 		when(mailSender.createMimeMessage()).thenAnswer(invocation -> new JavaMailSenderImpl().createMimeMessage());
+
+		logAppender = CapturingAppender.attachTo(EmailSender.class);
+	}
+
+	@AfterEach
+	void releaseLogging() {
+		logAppender.close();
 	}
 
 	@Test
@@ -142,8 +162,10 @@ class EmailSenderTest {
 
 	@Test
 	void sendMessage_persistentFailure_returnsFalseAfterExactlyThreeAttempts(@TempDir Path tmp) throws IOException {
-		// The attempt count is load-bearing: PasswordResetResourceIT relies on three ECONNREFUSED
-		// attempts completing in milliseconds rather than blocking the request thread.
+		// The attempt count is load-bearing: PasswordResetResourceIT relies on three ECONNREFUSED attempts
+		// completing in milliseconds. That path runs on AuthService's passwordResetExecutor, not the
+		// request thread — see the "Do not add further synchronous work to the active branch" note there,
+		// which exists to keep the response free of a timing-based account-enumeration side channel.
 		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
 		doThrow(new MailSendException("down")).when(mailSender).send(any(MimeMessage.class));
 
@@ -297,6 +319,196 @@ class EmailSenderTest {
 
 		assertDoesNotThrow(() -> sender.sendPasswordChangeConfirmation(entry));
 		verifyNoInteractions(mailSender);
+	}
+
+	@Test
+	void internetAddressSingleArgConstructor_rejectsACommaSeparatedList() throws Exception {
+		// The assumption the two tests below rest on: parse() splits a comma list and returns every
+		// address, whereas the single-argument constructor throws unless the value is exactly one address.
+		assertEquals(2, InternetAddress.parse("me@example.com,victim@target.tld").length);
+		assertThrows(AddressException.class, () -> new InternetAddress("me@example.com,victim@target.tld"));
+		assertEquals("me@example.com", new InternetAddress("me@example.com").getAddress());
+	}
+
+	@Test
+	void sendMessage_commaSeparatedRecipient_isRejectedWithoutSending(@TempDir Path tmp) throws IOException {
+		// An authenticated caller can rename its own principal to a comma list — setPrincipalName strips
+		// only \p{Cf} and applies no email-format validation — and POST /message's recipient carries only
+		// @NotBlank. Splitting it would relay attacker-authored HTML to a third party under the
+		// deployment's own SPF/DKIM-aligned From address.
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+
+		assertFalse(sender.sendMessage("me@example.com,victim@target.tld", "subj", "body"));
+		verify(mailSender, never()).send(any(MimeMessage.class));
+	}
+
+	@Test
+	void sendMessage_commaSeparatedReplyTo_isRejectedWithoutSending(@TempDir Path tmp) throws IOException {
+		// Same shape: on the POST /message path Reply-To is the caller's own principal name.
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+
+		assertFalse(sender.sendMessage("user@example.com", "subj", "body",
+				null, "me@example.com,victim@target.tld"));
+		verify(mailSender, never()).send(any(MimeMessage.class));
+	}
+
+	@Test
+	void sendMessage_multipleBccAddresses_areStillAccepted(@TempDir Path tmp) throws Exception {
+		// bcc is operator-configured, so a list stays legal there — it must keep using parse().
+		EmailSender sender = senderWith(
+				smtp("smtp.example.com", FROM, "audit@example.com,archive@example.com", null),
+				configWithTemplate(tmp));
+
+		assertTrue(sender.sendMessage("user@example.com", "subj", "body"));
+		assertEquals(2, captureSentMessage().getRecipients(Message.RecipientType.BCC).length);
+	}
+
+	@Test
+	void sendMessage_unparseableRecipient_doesNotLogTheRawSubject(@TempDir Path tmp) throws IOException {
+		// The build-failure branch had no coverage at all, and it logged the raw msgSubject parameter
+		// rather than the CRLF-collapsed local — so a caller could forge lines in the ERROR log an
+		// operator uses for abuse triage, reachable in one POST /message.
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		String forged = "Hi\r\nERROR Fake log line injected by the caller";
+
+		// A space fails InternetAddress.checkAddress, so this reaches the catch rather than the sender.
+		assertFalse(sender.sendMessage("a b@example.com", forged, "body"));
+		verify(mailSender, never()).send(any(MimeMessage.class));
+		assertTrue(logAppender.allMessages()
+						.noneMatch(message -> message.contains("\r") || message.contains("\n")),
+				"no log line may carry a raw CR/LF from the subject; got: " + logAppender);
+	}
+
+	@Test
+	void sendMessage_permanentFailure_isNotRetried(@TempDir Path tmp) throws IOException {
+		// An expired SMTP password would otherwise produce max-send-attempts consecutive failed AUTHs per
+		// send, which providers answer with a temporary account lockout.
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		doThrow(new MailAuthenticationException("535 authentication failed"))
+				.when(mailSender).send(any(MimeMessage.class));
+
+		assertFalse(sender.sendMessage("user@example.com", "subj", "body"));
+		verify(mailSender, times(1)).send(any(MimeMessage.class));
+	}
+
+	@Test
+	void sendMessage_rejectedAddress_isNotRetried(@TempDir Path tmp) throws Exception {
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		SendFailedException rejected = new SendFailedException("550 no such user",
+				new MessagingException("rejected"),
+				new Address[0], new Address[0], new Address[]{new InternetAddress("user@example.com")});
+		doThrow(new MailSendException("failed", rejected)).when(mailSender).send(any(MimeMessage.class));
+
+		assertFalse(sender.sendMessage("user@example.com", "subj", "body"));
+		verify(mailSender, times(1)).send(any(MimeMessage.class));
+	}
+
+	@Test
+	void sendMessage_partialDelivery_isNotRetriedSoNoDuplicateIsSent(@TempDir Path tmp) throws Exception {
+		// Reachable when a configured bcc is rejected after the recipient has already been served.
+		// Re-sending the same MimeMessage would deliver a second password-reset mail carrying a distinct
+		// valid token, so the loop must stop even though send() threw.
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, "bad@example.com", null),
+				configWithTemplate(tmp));
+		SendFailedException partial = new SendFailedException("bcc rejected",
+				new MessagingException("550 bcc"),
+				new Address[]{new InternetAddress("user@example.com")},
+				new Address[0], new Address[]{new InternetAddress("bad@example.com")});
+		doThrow(new MailSendException("failed", partial)).when(mailSender).send(any(MimeMessage.class));
+
+		assertTrue(sender.sendMessage("user@example.com", "subj", "body"),
+				"the intended recipient was reached, so the send counts as delivered");
+		verify(mailSender, times(1)).send(any(MimeMessage.class));
+	}
+
+	@Test
+	void sendMessage_partialDeliveryViaFailedMessages_isAlsoDetected(@TempDir Path tmp) throws Exception {
+		// MailSendException keeps the real jakarta.mail exceptions in getMessageExceptions() rather than in
+		// getCause(), so both routes have to be searched.
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		SendFailedException partial = new SendFailedException("partly sent",
+				new MessagingException("550"),
+				new Address[]{new InternetAddress("other@example.com")},
+				new Address[0], new Address[]{new InternetAddress("user@example.com")});
+		doThrow(new MailSendException(Map.of("message", partial))).when(mailSender).send(any(MimeMessage.class));
+
+		assertFalse(sender.sendMessage("user@example.com", "subj", "body"),
+				"the intended recipient was not among the delivered addresses");
+		verify(mailSender, times(1)).send(any(MimeMessage.class));
+	}
+
+	@Test
+	void sendMessage_nonFinalAttemptsLogAtWarnAndOnlyTheLastAtError(@TempDir Path tmp) throws IOException {
+		// ERROR-based alerting cannot distinguish "mail is down" from "mail is fine" if every attempt,
+		// including ones the next attempt recovers from, is logged at ERROR.
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		doThrow(new MailSendException("down")).when(mailSender).send(any(MimeMessage.class));
+
+		assertFalse(sender.sendMessage("user@example.com", "subj", "body"));
+
+		assertEquals(2, logAppender.countAt(Level.WARN),
+				"attempts 1 and 2 are recoverable; got: " + logAppender);
+		assertEquals(1, logAppender.countAt(Level.ERROR),
+				"only giving up is an incident; got: " + logAppender);
+	}
+
+	@Test
+	void blankCanonicalFromKey_doesNotBeatTheDeprecatedOne(@TempDir Path tmp) throws Exception {
+		// entrystore.smtp.email.from= binds to "", which previously won on a != null check and then failed
+		// the blank guard on every send, so mail stopped with the deprecated key correctly set.
+		EmailSender sender = new EmailSender(mailSender,
+				smtp("smtp.example.com", "", null, null),
+				new DeprecatedEmailAddressProperties("legacy@example.com", null),
+				new MailTemplateRenderer(configWithTemplate(tmp)));
+
+		assertTrue(sender.sendMessage("user@example.com", "subj", "body"));
+		assertEquals("legacy@example.com", captureSentMessage().getFrom()[0].toString());
+	}
+
+	@Test
+	void unparseableConfiguredFromAddress_isReportedAtStartupNamingTheKey(@TempDir Path tmp) throws IOException {
+		// Deliberately not a startup failure — a malformed address is a mail-only misconfiguration — but it
+		// otherwise surfaced per send with a log naming neither the key nor which address was at fault.
+		senderWith(smtp("smtp.example.com", "not a valid address", null, null), configWithTemplate(tmp));
+
+		assertTrue(logAppender.messagesAt(Level.ERROR)
+						.anyMatch(message -> message.contains("entrystore.smtp.email.from")),
+				"got: " + logAppender);
+	}
+
+	@Test
+	void sendPasswordChangeConfirmation_usesThePasswordChangeTemplateAndSubject(@TempDir Path tmp) throws Exception {
+		// The happy path was unasserted, so swapping the enum constant would have mailed a sign-up body to
+		// real users with the whole suite green.
+		Config config = configWithTemplate(tmp, EmailTemplate.PASSWORD_CHANGE, "changed for __NAME__");
+		config.setProperty(EmailTemplate.PASSWORD_CHANGE.getSubjectKey(), "Your password has been changed");
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), config);
+
+		sender.sendPasswordChangeConfirmation(userEntryNamed("changed@example.com"));
+
+		MimeMessage message = captureSentMessage();
+		assertEquals("Your password has been changed", message.getSubject());
+		assertEquals("changed@example.com", message.getRecipients(Message.RecipientType.TO)[0].toString());
+		assertEquals("changed for ", message.getContent().toString(),
+				"a null display name leaves the placeholder consumed rather than throwing");
+	}
+
+	@Test
+	void sendPasswordChangeConfirmation_namelessPrincipal_fallsBackWithoutNpe() {
+		// User.getName() returning null previously NPE'd on contains("@") straight into the
+		// ENTRYSTORE-1028 catch, making both the EntryUtil.getEmail fallback and this warning unreachable.
+		assertPasswordChangeTemplateOnClasspath();
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), new PropertiesConfiguration("test"));
+
+		Entry entry = mock(Entry.class);
+		User user = mock(User.class);
+		when(user.getName()).thenReturn(null);
+		when(entry.getResource()).thenReturn(user);
+
+		assertDoesNotThrow(() -> sender.sendPasswordChangeConfirmation(entry));
+		verifyNoInteractions(mailSender);
+		assertTrue(logAppender.allMessages().anyMatch(message -> message.contains("invalid email address")),
+				"the fallback must reach the warning rather than the catch; got: " + logAppender);
 	}
 
 	private MimeMessage captureSentMessage() {

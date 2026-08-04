@@ -24,6 +24,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -86,23 +87,30 @@ public class MailConfiguration {
 	}
 
 	private static void applyTransportSecurity(Properties props, SmtpSecurity security, int port) {
-		switch (security) {
-			case SSL -> {
-				props.put("mail.smtp.ssl.enable", "true");
-				props.put("mail.smtp.socketFactory.port", Integer.toString(port));
-				props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
-				// Without this a failed TLS handshake silently retries in the clear.
-				props.put("mail.smtp.socketFactory.fallback", "false");
-			}
-			case STARTTLS -> {
-				props.put("mail.smtp.starttls.enable", "true");
-				// Without this a server that does not offer STARTTLS is used in the clear.
-				props.put("mail.smtp.starttls.required", "true");
-			}
-			case OFF -> {
-				// Plaintext: no TLS properties, as when neither key is configured.
-			}
-		}
+		props.putAll(transportSecurityProperties(security, port));
+	}
+
+	/**
+	 * A switch <em>expression</em> rather than a statement: Java requires an expression to be
+	 * exhaustive, so adding an {@link SmtpSecurity} constant without handling it here fails compilation.
+	 * The arrow-form statement this replaced compiled fine and wrote no TLS properties at all, which
+	 * would have been a silent downgrade to plaintext.
+	 */
+	private static Map<String, String> transportSecurityProperties(SmtpSecurity security, int port) {
+		return switch (security) {
+			case SSL -> Map.of(
+					"mail.smtp.ssl.enable", "true",
+					"mail.smtp.socketFactory.port", Integer.toString(port),
+					"mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory",
+					// Without this a failed TLS handshake silently retries in the clear.
+					"mail.smtp.socketFactory.fallback", "false");
+			case STARTTLS -> Map.of(
+					"mail.smtp.starttls.enable", "true",
+					// Without this a server that does not offer STARTTLS is used in the clear.
+					"mail.smtp.starttls.required", "true");
+			// Plaintext: no TLS properties, as when neither key is configured.
+			case OFF -> Map.of();
+		};
 	}
 
 	private static void logConfiguration(SmtpProperties smtp) {
@@ -117,10 +125,15 @@ public class MailConfiguration {
 		if (smtp.usesDeprecatedSslKey()) {
 			log.warn("entrystore.smtp.ssl is deprecated; rename it to entrystore.smtp.security");
 		}
-		if (smtp.hasCredentials() && security == SmtpSecurity.OFF) {
-			log.warn("entrystore.smtp.username/password are set but entrystore.smtp.security=off, so the "
-					+ "SMTP credentials will cross the network unencrypted. Set "
-					+ "entrystore.smtp.security=starttls unless the MTA is on loopback.");
+		if (security == SmtpSecurity.OFF) {
+			// Unconditional, not only when credentials are set: a deployment relaying signup and
+			// password-reset tokens over plaintext SMTP is the exact silence this feature exists to
+			// break, and an unrecognised value in either key now resolves here instead of failing
+			// startup — so this warning is what makes a typo visible.
+			log.warn("SMTP transport security is off, so mail — including password-reset links — crosses "
+					+ "the network unencrypted{}. Set entrystore.smtp.security=starttls unless the MTA is "
+					+ "on loopback, or =off explicitly to silence this.",
+					smtp.hasCredentials() ? ", together with the configured SMTP credentials" : "");
 		}
 		if (!smtp.checkServerIdentity() && security != SmtpSecurity.OFF) {
 			log.warn("entrystore.smtp.check-server-identity=false disables TLS certificate hostname "

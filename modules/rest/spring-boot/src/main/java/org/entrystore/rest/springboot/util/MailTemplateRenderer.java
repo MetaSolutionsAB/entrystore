@@ -32,7 +32,7 @@ import java.net.URISyntaxException;
 import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.Calendar;
+import java.time.Year;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -82,7 +82,9 @@ public class MailTemplateRenderer {
 		}
 
 		String rendered = body
-				.replace("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)))
+				// Year.now(), not Calendar.getInstance(): the latter honours the default locale's calendar
+				// system, so __YEAR__ renders as 2569 under a th-TH default rather than the Gregorian year.
+				.replace("__YEAR__", Integer.toString(Year.now().getValue()))
 				.replace("__DOMAIN__", resolveBaseUrlHost(config));
 		for (Map.Entry<String, String> substitution : substitutions.entrySet()) {
 			if (substitution.getValue() != null) {
@@ -147,13 +149,19 @@ public class MailTemplateRenderer {
 
 	private static @Nullable String loadClasspathTemplate(String resourceName) {
 		try (InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream(resourceName)) {
-			if (is != null) {
-				return IOUtils.toString(is, StandardCharsets.UTF_8);
+			if (is == null) {
+				// Previously silent, which made a bundled template missing from the jar indistinguishable
+				// from a rendering problem. This is the default-configuration path, so it breaks mail for
+				// every deployment that does not set an explicit template path.
+				log.error("Bundled email template {} is missing from the classpath", resourceName);
+				return null;
 			}
+			return IOUtils.toString(is, StandardCharsets.UTF_8);
 		} catch (IOException e) {
-			log.error("Failed to load classpath template {}: {}", resourceName, e.getMessage());
+			// Stack trace kept, matching loadTemplate: the two failure modes are diagnosed the same way.
+			log.error("Failed to load classpath template {}", resourceName, e);
+			return null;
 		}
-		return null;
 	}
 
 	private static @Nullable String loadTemplate(String url) {
@@ -170,9 +178,11 @@ public class MailTemplateRenderer {
 		if (!url.startsWith("http://") && !url.startsWith("https://")) {
 			return Files.newInputStream(new File(url).toPath());
 		}
-		// Bounded explicitly: URL.openStream() inherits the JVM default of no timeout at all, and this
-		// runs on the request thread. Since a failed load is not cached, an unreachable template host
-		// would otherwise pin one Jetty thread per send until the pool is exhausted.
+		// URL.openStream() inherits the JVM default of no timeout at all, so an unreachable template host
+		// would pin one thread per send until the pool is exhausted — and a failed load is deliberately
+		// not cached, so every send retries it. These bound the connect and each individual read; note
+		// that setReadTimeout is a per-read inactivity timeout, not a deadline for the whole fetch, so a
+		// server that drips a byte at a time still holds the thread.
 		URLConnection connection = new URI(url).toURL().openConnection();
 		connection.setConnectTimeout(TEMPLATE_FETCH_TIMEOUT_MS);
 		connection.setReadTimeout(TEMPLATE_FETCH_TIMEOUT_MS);

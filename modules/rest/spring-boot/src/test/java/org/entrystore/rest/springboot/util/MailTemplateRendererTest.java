@@ -25,10 +25,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import com.sun.net.httpserver.HttpServer;
+
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Calendar;
+import java.time.Year;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -76,8 +80,10 @@ class MailTemplateRendererTest {
 				.render(EmailTemplate.PASSWORD_CHANGE, Map.of("__NAME__", "Ada"));
 
 		assertNotNull(rendered);
-		assertTrue(rendered.contains(Integer.toString(Calendar.getInstance().get(Calendar.YEAR))),
-				"__YEAR__ must be substituted with the current year");
+		// Year.now(), not Calendar.getInstance(): asserting with the same locale-dependent call the
+		// production code used to make would agree with it even when both render 2569 under a th-TH default.
+		assertTrue(rendered.contains(Integer.toString(Year.now().getValue())),
+				"__YEAR__ must be substituted with the current Gregorian year");
 		assertTrue(rendered.contains("entrystore.example"), "__DOMAIN__ must be substituted with the base URL host");
 		assertFalseContains(rendered, "__YEAR__");
 		assertFalseContains(rendered, "__DOMAIN__");
@@ -153,6 +159,63 @@ class MailTemplateRendererTest {
 		config.setProperty(EmailTemplate.SIGNUP.getSubjectKey(), "Welcome aboard");
 
 		assertEquals("Welcome aboard", new MailTemplateRenderer(config).subject(EmailTemplate.SIGNUP));
+	}
+
+	@Test
+	void render_httpTemplateUrl_isFetchedAndCached() throws IOException {
+		// The http(s) branch of openTemplate was never exercised, so nothing proved a configured URL is
+		// fetched at all — only that a filesystem path is.
+		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		server.createContext("/template.html", exchange -> {
+			byte[] body = "Hello __NAME__ from HTTP".getBytes(StandardCharsets.UTF_8);
+			exchange.sendResponseHeaders(200, body.length);
+			try (var out = exchange.getResponseBody()) {
+				out.write(body);
+			}
+		});
+		server.start();
+		try {
+			Config config = new PropertiesConfiguration("test");
+			config.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(),
+					"http://127.0.0.1:" + server.getAddress().getPort() + "/template.html");
+			MailTemplateRenderer renderer = new MailTemplateRenderer(config);
+
+			assertEquals("Hello Ada from HTTP",
+					renderer.render(EmailTemplate.SIGNUP, Map.of("__NAME__", "Ada")));
+
+			server.stop(0);
+			assertEquals("Hello Grace from HTTP",
+					renderer.render(EmailTemplate.SIGNUP, Map.of("__NAME__", "Grace")),
+					"the fetched template must be cached rather than re-fetched per send");
+		} finally {
+			server.stop(0);
+		}
+	}
+
+	@Test
+	void render_unreachableHttpTemplate_returnsNullWithoutHangingIndefinitely() throws IOException {
+		// A server that accepts the connection and never answers. The read timeout is what stops this from
+		// pinning the calling thread forever, since a failed load is deliberately not cached.
+		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		server.createContext("/stalled.html", exchange -> {
+			// Never respond, never close: the connection stays open with no bytes written.
+		});
+		server.start();
+		try {
+			Config config = new PropertiesConfiguration("test");
+			config.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(),
+					"http://127.0.0.1:" + server.getAddress().getPort() + "/stalled.html");
+
+			long startedAt = System.nanoTime();
+			assertNull(new MailTemplateRenderer(config).render(EmailTemplate.SIGNUP, Collections.emptyMap()),
+					"a template that cannot be fetched must render to null");
+			long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
+
+			// The configured timeout is 5s; anything near or beyond twice that means it was not applied.
+			assertTrue(elapsedMs < 10_000, "the fetch must be bounded by the read timeout, took " + elapsedMs + "ms");
+		} finally {
+			server.stop(0);
+		}
 	}
 
 	private static Config configWithTemplate(Path tmp, EmailTemplate template, String body) throws IOException {
