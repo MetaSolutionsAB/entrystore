@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -34,7 +35,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.IntConsumer;
+import java.util.function.BooleanSupplier;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
@@ -49,6 +50,9 @@ public class ContextImplTest extends AbstractCoreTest {
 
 	/** A valid RDF4J IRI that {@code java.net.URI.create} rejects, so {@code loadIndex} cannot index it. */
 	private static final String UNPARSEABLE_IRI = "http://example.com/not a uri";
+
+	/** Wall-clock budget for one {@link #runConcurrently} run, after which its tasks are told to stop. */
+	private static final long TASK_BUDGET_SECONDS = 30;
 
 	private ContextImpl context;
 
@@ -182,7 +186,7 @@ public class ContextImplTest extends AbstractCoreTest {
 		evictFromSoftCache(created);
 
 		AtomicInteger nonNullCount = new AtomicInteger();
-		runConcurrently(threadCount, _ -> {
+		runConcurrently(threadCount, (_, _) -> {
 			Entry e = context.getByEntryURI(entryURI);
 			if (e != null && entryURI.equals(e.getEntryURI())) {
 				nonNullCount.incrementAndGet();
@@ -210,7 +214,7 @@ public class ContextImplTest extends AbstractCoreTest {
 		}
 
 		ConcurrentHashMap<URI, URI> results = new ConcurrentHashMap<>();
-		runConcurrently(entryCount, i -> {
+		runConcurrently(entryCount, (i, _) -> {
 			URI uri = uris.get(i);
 			Entry e = context.getByEntryURI(uri);
 			if (e != null) {
@@ -252,7 +256,12 @@ public class ContextImplTest extends AbstractCoreTest {
 								readersReady.countDown();
 								first = false;
 							}
-							Thread.onSpinWait();
+							// yield, not onSpinWait: the latter is a no-op hint on a virtual thread, and
+							// getByEntryURI takes an uncontended monitor on its fast path, so a reader had no
+							// point at which it unmounted. The readers then held every carrier thread and only
+							// as many of them as there are carriers ever reached the countDown above, which
+							// made the rendezvous below require a host with at least readerCount of them.
+							Thread.yield();
 						}
 					} catch (Exception e) {
 						readerFailures.add(e);
@@ -313,7 +322,7 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		int readers = 8;
 		int writers = 4;
-		runConcurrently(readers + writers, index -> {
+		runConcurrently(readers + writers, (index, _) -> {
 			if (index < readers) {
 				for (int i = 0; i < 300; i++) {
 					context.getEntries();
@@ -340,7 +349,7 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		int readers = 8;
 		int writers = 4;
-		runConcurrently(readers + writers, index -> {
+		runConcurrently(readers + writers, (index, _) -> {
 			if (index < readers) {
 				for (int i = 0; i < 300; i++) {
 					context.getByResourceURI(shared);
@@ -384,9 +393,21 @@ public class ContextImplTest extends AbstractCoreTest {
 	 * straddle a {@code reIndex} call. Asserting that overlap actually happened is what stops the test
 	 * passing vacuously: with a fixed iteration count, a run in which no read landed inside a
 	 * {@code reIndex} window satisfied the size assertion while proving nothing.
+	 *
+	 * <p>The readers yield, and stop on the run's budget as well as on the writer, because they outnumber
+	 * the carrier threads on a small CI host. {@code getEntries} takes an uncontended monitor on its fast
+	 * path, so a reader has no point at which it unmounts on its own: the first one to be scheduled kept
+	 * its carrier, the writer that sets {@code writerDone} never ran, and the loop never ended
+	 * (ENTRYSTORE-1095).
 	 */
 	@Test
 	public void getEntries_concurrentWithReIndex_neverObservesATruncatedListing() throws Exception {
+		// The premise is genuine parallelism. On a single-CPU host the writer runs reIndex from start to
+		// finish without unmounting — nothing in it blocks — so no read can land inside the window this
+		// test measures, and the overlap assertion below could never hold.
+		assumeTrue(Runtime.getRuntime().availableProcessors() >= 2,
+			"needs more than one CPU to interleave a read with reIndex");
+
 		int seeded = 10;
 		for (int i = 0; i < seeded; i++) {
 			context.createLink(null, URI.create("http://example.com/reindex/" + i), null);
@@ -396,17 +417,18 @@ public class ContextImplTest extends AbstractCoreTest {
 		AtomicInteger smallestSeen = new AtomicInteger(Integer.MAX_VALUE);
 		AtomicInteger overlappingReads = new AtomicInteger();
 		AtomicBoolean reIndexing = new AtomicBoolean();
-		AtomicBoolean stop = new AtomicBoolean();
+		AtomicBoolean writerDone = new AtomicBoolean();
 		int readers = 8;
 
-		runConcurrently(readers + 1, index -> {
+		runConcurrently(readers + 1, (index, keepRunning) -> {
 			if (index < readers) {
-				while (!stop.get()) {
+				while (!writerDone.get() && keepRunning.getAsBoolean()) {
 					boolean startedDuringReIndex = reIndexing.get();
 					smallestSeen.accumulateAndGet(context.getEntries().size(), Math::min);
 					if (startedDuringReIndex && reIndexing.get()) {
 						overlappingReads.incrementAndGet();
 					}
+					Thread.yield();
 				}
 			} else {
 				try {
@@ -416,11 +438,13 @@ public class ContextImplTest extends AbstractCoreTest {
 						reIndexing.set(false);
 					}
 				} finally {
-					stop.set(true);
+					writerDone.set(true);
 				}
 			}
 		});
 
+		assertTrue(writerDone.get(),
+			"the reIndex writer did not finish, so the readers observed no republication");
 		assertEquals(expected, smallestSeen.get(),
 			"getEntries must never observe a partial or empty index while reIndex republishes it");
 		assertTrue(overlappingReads.get() > 0,
@@ -448,7 +472,7 @@ public class ContextImplTest extends AbstractCoreTest {
 		// the repository instead — the test would pass vacuously against a broken push.
 		assertTrue(context.getEntries().size() >= count);
 
-		runConcurrently(count, i -> {
+		runConcurrently(count, (i, _) -> {
 			Entry e = created.get(i);
 			context.updateResource2EntryIndex(e.getResourceURI(), shared, e.getEntryURI());
 		});
@@ -479,7 +503,7 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		int readers = 8;
 		int writers = 4;
-		runConcurrently(readers + writers, index -> {
+		runConcurrently(readers + writers, (index, _) -> {
 			if (index < readers) {
 				for (int i = 0; i < 300; i++) {
 					context.getByExternalMdURI(sharedMd);
@@ -602,21 +626,36 @@ public class ContextImplTest extends AbstractCoreTest {
 	}
 
 	/**
-	 * Submits {@code taskCount} copies of {@code task} to a virtual-thread executor, releases them simultaneously via
-	 * a start latch, then asserts that all tasks completed without exceptions within 30 seconds.
+	 * Runs {@code taskCount} tasks on virtual threads, released together, and fails if they have not all
+	 * returned within {@link #TASK_BUDGET_SECONDS}.
+	 *
+	 * <p>A task that loops on another task's progress must also stop when the {@code keepRunning}
+	 * supplier it is handed goes false, which happens as soon as the budget expires. Nothing else can
+	 * stop such a task: {@code shutdownNow} interrupts, and neither a spin nor a blocked
+	 * {@code synchronized} acquisition responds to an interrupt.
+	 *
+	 * <p>The executor is shut down in a {@code finally} rather than closed by try-with-resources, and
+	 * the timeout is asserted after that block rather than inside it. {@code ExecutorService.close()}
+	 * calls {@code shutdown()} — which does not interrupt running tasks — and then waits for
+	 * termination without a bound, so closing while a task still runs turned the timeout below into an
+	 * unbounded hang: the assertion failure propagated into {@code close()} and never came out. The
+	 * build then went silent instead of reporting a failing test (ENTRYSTORE-1095).
 	 */
-	private static void runConcurrently(int taskCount, IntConsumer task) throws InterruptedException {
+	private static void runConcurrently(int taskCount, ConcurrentTask task) throws InterruptedException {
 		CountDownLatch start = new CountDownLatch(1);
 		CountDownLatch done = new CountDownLatch(taskCount);
 		java.util.List<Throwable> failures = Collections.synchronizedList(new ArrayList<>());
+		AtomicBoolean keepRunning = new AtomicBoolean(true);
 
-		try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+		ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+		boolean completed;
+		try {
 			for (int i = 0; i < taskCount; i++) {
 				int index = i;
 				executor.submit(() -> {
 					try {
 						start.await();
-						task.accept(index);
+						task.accept(index, keepRunning::get);
 					} catch (Exception e) {
 						failures.add(e);
 					} finally {
@@ -626,12 +665,25 @@ public class ContextImplTest extends AbstractCoreTest {
 			}
 
 			start.countDown();
-			assertTrue(done.await(30, TimeUnit.SECONDS),
-				() -> "Concurrent tasks did not complete within timeout: " + done.getCount()
-					+ " still pending; " + failures.size() + " already failed: " + failures);
+			completed = done.await(TASK_BUDGET_SECONDS, TimeUnit.SECONDS);
+		} finally {
+			keepRunning.set(false);
+			executor.shutdownNow();
 		}
 
+		assertTrue(completed,
+			() -> "Concurrent tasks did not complete within timeout: " + done.getCount()
+				+ " still pending; " + failures.size() + " already failed: " + failures);
 		assertTrue(failures.isEmpty(), () -> "Task failures: " + failures);
+	}
+
+	/**
+	 * One task in a {@link #runConcurrently} run. {@code keepRunning} reads false once the run is out of
+	 * budget; a task that does not loop on another task's progress can ignore it.
+	 */
+	@FunctionalInterface
+	private interface ConcurrentTask {
+		void accept(int index, BooleanSupplier keepRunning) throws Exception;
 	}
 
 }
