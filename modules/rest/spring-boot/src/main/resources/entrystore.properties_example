@@ -60,26 +60,34 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.jsonp=true
 
 ## SMTP settings, required for e.g. sign-up
-## Transport security is `entrystore.smtp.security`. Releases before 6.1 documented it here as
-## `entrystore.smtp.ssl`, a key the code never read — deployments that followed this file were
-## therefore sending plaintext. As of 6.1 both spellings are honoured: `entrystore.smtp.security` is
-## read whenever it resolves, and `entrystore.smtp.ssl` only as a fallback. Setting both is allowed;
-## if they disagree, `security` applies and the deprecated key is reported at WARN.
+## Transport security is `entrystore.smtp.security`. This file documented it as `entrystore.smtp.ssl`,
+## a key the code never read, up to and including 5.6.2 — deployments configured from one of those
+## copies were therefore sending plaintext. 5.7.0 through 5.8.0 documented the canonical key
+## correctly. As of 6.1 both spellings are honoured: `entrystore.smtp.security` is read whenever it
+## resolves, and `entrystore.smtp.ssl` only as a fallback. Setting both is allowed; if they disagree,
+## `security` applies and the deprecated key is reported at WARN. Values are matched on letters and
+## digits only, case-insensitively, so `STARTTLS`, `start-tls` and the `START_TLS` form an environment
+## variable naturally carries all resolve alike.
 ## Neither key was validated before 6.1 — `ssl` was never read, and `security` was compared with
-## equalsIgnoreCase — so a value outside starttls|ssl|off is reported at ERROR in either key and
-## resolves to off, which is what such a deployment already did. Startup is never aborted over it: a
-## mail misconfiguration must not take the REST API down. A configured host that ends up on plaintext
-## is warned about at startup instead, so a typo is loud rather than silent.
+## equalsIgnoreCase — so a value outside starttls|ssl|off silently meant plaintext. Such a value is now
+## reported at ERROR and NO MAIL IS SENT while it stays set: sending in the clear under a configuration
+## meant to be encrypted is not a safe default. Startup is never aborted over it — a mail
+## misconfiguration must not take the REST API down. A configured host that ends up on plaintext
+## without `security` being set at all is warned about at startup, so a missing setting is loud rather
+## than silent; setting `entrystore.smtp.security=off` declares plaintext and silences that warning.
 ## `entrystore.smtp.ssl` is deprecated and will be removed in a future major version.
 ##
-## UPGRADE NOTE: because `entrystore.smtp.ssl` is now honoured, transport security is enforced rather
-## than downgraded, and a deployment carrying a stale value in it will see sends start FAILING rather
-## than continuing insecurely. `entrystore.smtp.ssl=ssl` with the `entrystore.smtp.port=587` this file
-## documented alongside it means implicit TLS on a submission port, and `entrystore.smtp.ssl=starttls`
-## against a relay that does not advertise STARTTLS now throws instead of silently downgrading —
-## sign-up, password reset and POST /message all stop working. Verify your MTA supports the implied
-## mode before upgrading, and declare a deliberately plaintext relay explicitly with
-## `entrystore.smtp.security=off`.
+## UPGRADE NOTE: because `entrystore.smtp.ssl` is now honoured and an unresolvable value now refuses to
+## send, transport security is enforced rather than downgraded, and a deployment carrying a stale value
+## in either key will see sends start FAILING rather than continuing insecurely:
+##   - `entrystore.smtp.ssl=ssl` with the `entrystore.smtp.port=587` this file documented alongside it
+##     means implicit TLS on a submission port, so every send fails.
+##   - `entrystore.smtp.ssl=starttls` against a relay that does not advertise STARTTLS now throws
+##     instead of silently downgrading.
+##   - a value neither key can resolve — `security=tls`, `=none`, `=true` — refuses to send at all.
+## Sign-up, password reset, POST /message and the password-change confirmations stop working in each of
+## those cases. Verify your MTA supports the implied mode before upgrading, and declare a deliberately
+## plaintext relay explicitly with `entrystore.smtp.security=off`.
 # entrystore.smtp.host=smtp.host.tld
 # entrystore.smtp.port=587 (default: 25)
 # entrystore.smtp.security=starttls|ssl|off (default: off)
@@ -90,8 +98,10 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.smtp.password=smtp-password
 ## Envelope addresses. These supersede entrystore.auth.email.from|bcc, which are still read as a
 ## fallback and log a deprecation warning at startup when used. A value that is not a valid address is
-## reported at ERROR at startup, naming the key; bcc may be a comma-separated list, from and reply-to
-## must each be exactly one address.
+## reported at ERROR at startup, naming the key. bcc and reply-to may each be a comma-separated list —
+## legal for Reply-To under RFC 5322 and accepted here since 2019 — while from must be exactly one
+## mailbox. The recipient and the Reply-To of POST /message are caller-supplied rather than configured
+## here, and must each be exactly one mailbox: no list, no RFC822 group address and no CR or LF.
 # entrystore.smtp.email.from=signup@yourdomain.tld
 # entrystore.smtp.email.bcc=info+signup@yourdomain.tld
 # entrystore.smtp.email.reply-to=support@yourdomain.tld
@@ -105,14 +115,19 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.smtp.check-server-identity=true
 ## TOTAL number of send attempts before giving up, not the number of retries: 3 means two retries and
 ## 1 disables retrying. Must be between 1 and 10. Attempts are immediate (no backoff), so a single send
-## can occupy its thread for up to this many times the timeouts above — plus DNS resolution, which the
-## connection timeout does not cover. Which thread depends on the path: sign-up and POST /message send
-## on the request thread, while password-reset mail runs on the passwordResetExecutor (2 threads, queue
-## of 100, abort policy), so raising this value there fills that queue until dispatches are rejected
-## rather than slowing individual requests. A permanent failure (bad credentials, a rejected address)
-## is not retried at all, and a partially-delivered message is never re-sent, so a recipient cannot
-## receive duplicate password-reset links. The startup log warns when the timeouts and this value
-## multiply out to a long block.
+## can occupy its thread for this many times the whole SMTP exchange. Note that read-timeout above
+## bounds each individual read, not the exchange, and one exchange makes seven or so blocking reads
+## (greeting, EHLO, MAIL FROM, RCPT TO, DATA, end-of-data, QUIT) — plus DNS resolution, which no
+## timeout covers. Which thread depends on the path: sign-up, POST /message, the /auth/pwreset
+## confirmation and a user password change all send on the request thread, while password-reset mail
+## runs on the passwordResetExecutor (2 threads, queue of 100, abort policy), so raising this value
+## there fills that queue until dispatches are rejected rather than slowing individual requests.
+## A permanent failure is not retried at all — a message that will not parse, an address the server
+## rejected, or an authentication failure the server did not report with a 4xx code. A message the
+## transport reports as partially delivered is never re-sent, so that path cannot produce a duplicate
+## password-reset link; a failure that reports no delivered addresses at all, such as a read timeout
+## after DATA, is still retried and can. The startup log warns when the timeouts and this value multiply
+## out to a long block.
 # entrystore.smtp.max-send-attempts=3
 ##
 ## Note: the spring.mail.* keys are not used; EntryStore builds its mail sender from the

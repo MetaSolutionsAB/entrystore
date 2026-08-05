@@ -18,6 +18,7 @@ package org.entrystore.rest.springboot.service;
 
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
+import org.entrystore.repository.RepositoryException;
 import org.entrystore.rest.springboot.model.api.SendMessageRequestBody;
 import org.entrystore.rest.springboot.model.api.TransportType;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
@@ -122,6 +123,7 @@ class MessageServiceTest {
 		assertThrows(CustomResponseException.class, () -> service.sendMessage(
 				request("Hi&#13;&#10;ERROR Fake log line", "<p>Body</p>")));
 
+		logAppender.assertCapturedSomething();
 		assertTrue(logAppender.allMessages()
 						.noneMatch(message -> message.contains("\r") || message.contains("\n")),
 				"got: " + logAppender);
@@ -141,6 +143,36 @@ class MessageServiceTest {
 
 		assertThrows(ForbiddenException.class, () -> service.sendMessage(request("Hello", "<p>Body</p>")));
 		verifyNoInteractions(emailSender);
+	}
+
+	@Test
+	void sendMessage_unknownRecipient_doesNotLogTheRawRecipient() {
+		// The recipient is caller-supplied and carries only @NotBlank, so it can hold a CRLF. This sanitize
+		// call and the one on the lookup-failure path below were both untested: deleting either let a
+		// recipient of "nobody\r\nERROR forged" write its own log lines with the whole suite green.
+		when(principalManager.getPrincipalEntry(anyString())).thenReturn(null);
+
+		assertThrows(ForbiddenException.class, () -> service.sendMessage(new SendMessageRequestBody(
+				TransportType.EMAIL, "Hello", "nobody\r\nERROR Fake log line", "<p>Body</p>")));
+
+		logAppender.assertCapturedSomething();
+		assertTrue(logAppender.allMessages()
+						.noneMatch(message -> message.contains("\r") || message.contains("\n")),
+				"got: " + logAppender);
+	}
+
+	@Test
+	void sendMessage_recipientLookupFailure_doesNotLogTheRawRecipient() {
+		when(principalManager.getPrincipalEntry(anyString()))
+				.thenThrow(new RepositoryException("lookup exploded"));
+
+		assertThrows(ForbiddenException.class, () -> service.sendMessage(new SendMessageRequestBody(
+				TransportType.EMAIL, "Hello", "nobody\r\nERROR Fake log line", "<p>Body</p>")));
+
+		logAppender.assertCapturedSomething();
+		assertTrue(logAppender.allMessages()
+						.noneMatch(message -> message.contains("\r") || message.contains("\n")),
+				"got: " + logAppender);
 	}
 
 	@Test

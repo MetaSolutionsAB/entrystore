@@ -16,8 +16,10 @@
 
 package org.entrystore.rest.springboot.configuration;
 
+import org.apache.logging.log4j.Level;
 import org.entrystore.rest.springboot.configuration.SmtpProperties.Addresses;
 import org.entrystore.rest.springboot.configuration.SmtpProperties.SmtpSecurity;
+import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -78,14 +80,100 @@ class SmtpPropertiesTest {
 		assertTrue(properties.usesDeprecatedSslKey());
 	}
 
-	@ParameterizedTest(name = "unrecognised ''{0}'' in either key -> OFF, startup survives")
+	@ParameterizedTest(name = "unrecognised ''{0}'' in either key -> unresolved, startup survives")
 	@CsvSource({"true", "on", "yes", "1", "tls", "none", "enabled"})
-	void unrecognisedValue_isIgnoredRatherThanAbortingStartup(String value) {
-		// Neither key was validated before 6.1 — ssl was never read, and security was compared with
-		// equalsIgnoreCase — so an unrecognised value in either meant plaintext. Resolving to OFF is what
-		// that deployment already did; aborting startup would take the whole REST API down over mail.
-		assertEquals(SmtpSecurity.OFF, properties(null, value).effectiveSecurity());
-		assertEquals(SmtpSecurity.OFF, properties(value, null).effectiveSecurity());
+	void unrecognisedValue_isUnresolvedRatherThanAbortingStartup(String value) {
+		// Aborting startup would take the whole REST API down over a mail setting. But leniency is not
+		// permission to fail open: the value stays unresolved, and EmailSender refuses to send rather than
+		// sending in the clear under a configuration the operator believes is encrypted.
+		assertTrue(properties(null, value).securityIsUnresolved());
+		assertTrue(properties(value, null).securityIsUnresolved());
+		assertFalse(properties(value, null).plaintextIsDeclared(),
+				"an unresolvable value is not a declaration of plaintext");
+	}
+
+	@ParameterizedTest(name = "relaxed spelling ''{0}'' still resolves to STARTTLS")
+	@CsvSource({"STARTTLS", "starttls", "START_TLS", "start-tls", "Start.Tls", "StartTls"})
+	void relaxedSpellings_resolveAsBootsEnumBindingDid(String value) {
+		// While this bound as an enum, Boot's LenientObjectToEnumConverterFactory canonicalised on letters
+		// and digits, so every one of these reached STARTTLS. Matching the constant name exactly would
+		// silently demote ENTRYSTORE_SMTP_SECURITY=START_TLS — the form an environment variable naturally
+		// carries — to plaintext.
+		assertEquals(SmtpSecurity.STARTTLS, properties(value, null).effectiveSecurity());
+		assertFalse(properties(value, null).securityIsUnresolved());
+	}
+
+	@Test
+	void explicitOff_declaresPlaintextWhileAnUnsetKeyDoesNot() {
+		// What makes MailConfiguration's "transport security is off" warning clearable, exactly as that
+		// warning advertises. An unclearable warning is a warning that gets filtered — along with the
+		// deprecated-key, cleartext-credentials and check-server-identity warnings beside it.
+		assertTrue(properties("off", null).plaintextIsDeclared());
+		assertTrue(properties(null, "off").plaintextIsDeclared());
+		assertFalse(properties(null, null).plaintextIsDeclared());
+		assertEquals(SmtpSecurity.OFF, properties(null, null).effectiveSecurity());
+	}
+
+	@Test
+	void unresolvedSecurity_isReportedAtErrorNamingTheKeyAndValue() {
+		// These diagnostics are the whole replacement for the fail-fast validation that was removed, and
+		// nothing covered them: deleting the report or flipping its condition kept the suite green.
+		try (CapturingAppender appender = CapturingAppender.attachTo(SmtpProperties.class)) {
+			properties("tls", null);
+
+			appender.assertCapturedSomething();
+			assertTrue(appender.messagesAt(Level.ERROR).anyMatch(message ->
+							message.contains("entrystore.smtp.security") && message.contains("tls")),
+					"the ERROR must name both the key and the offending value; got: " + appender);
+		}
+	}
+
+	@Test
+	void unresolvedAliasIsReportedOnlyWhenTheCanonicalKeyDidNotDecide() {
+		// ssl=true beside security=starttls used to log "transport security is off" while STARTTLS was in
+		// fact required — a false diagnostic on the exact migration path the documentation prescribes.
+		try (CapturingAppender appender = CapturingAppender.attachTo(SmtpProperties.class)) {
+			properties("starttls", "true");
+
+			assertEquals(0, appender.countAt(Level.ERROR),
+					"the canonical key decided the outcome, so the alias must stay quiet; got: " + appender);
+		}
+	}
+
+	@Test
+	void disagreeingKeys_areReportedAtWarnWithTheCanonicalKeyWinning() {
+		try (CapturingAppender appender = CapturingAppender.attachTo(SmtpProperties.class)) {
+			SmtpProperties properties = properties("starttls", "off");
+
+			assertEquals(SmtpSecurity.STARTTLS, properties.effectiveSecurity());
+			assertTrue(appender.messagesAt(Level.WARN)
+							.anyMatch(message -> message.contains("disagree")),
+					"got: " + appender);
+		}
+	}
+
+	@Test
+	void withoutAConfiguredHost_theSecurityDiagnosticsStayQuiet() {
+		// A stale value in a deployment that never sends mail would otherwise log ERROR on every boot,
+		// which ERROR-based alerting cannot tell apart from a live relay with broken transport security.
+		try (CapturingAppender appender = CapturingAppender.attachTo(SmtpProperties.class)) {
+			new SmtpProperties(null, 25, "tls", null, null, null, true,
+					Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(5), 3, null);
+
+			assertEquals(0, appender.countAt(Level.ERROR), "got: " + appender);
+		}
+	}
+
+	@Test
+	void anExcessiveBlockingBudget_isReportedAtWarn() {
+		try (CapturingAppender appender = CapturingAppender.attachTo(SmtpProperties.class)) {
+			new SmtpProperties("smtp.example.com", 25, "off", null, null, null, true,
+					Duration.ofMinutes(5), Duration.ofMinutes(5), Duration.ofMinutes(5), 10, null);
+
+			assertTrue(appender.messagesAt(Level.WARN)
+							.anyMatch(message -> message.contains("max-send-attempts")),
+					"got: " + appender);
+		}
 	}
 
 	@Test
@@ -113,8 +201,11 @@ class SmtpPropertiesTest {
 		SmtpProperties usernameOnly = withCredentials("relay-user", null);
 
 		assertFalse(usernameOnly.hasCredentials());
-		assertNull(usernameOnly.username(), "a half-set pair must not leave a partial credential behind");
-		assertNull(usernameOnly.password());
+		// The component is left as bound rather than nulled: requiring both above is what keeps a half-set
+		// pair away from the sender, and keeping it means /actuator/configprops still shows the key as
+		// bound-and-discarded instead of unbound, which would point at a binding problem rather than at the
+		// empty value the operator actually set.
+		assertEquals("relay-user", usernameOnly.username());
 
 		// Including the empty-string form, which is what ${SMTP_PASSWORD} resolving to "" binds to.
 		assertFalse(withCredentials(null, "secret").hasCredentials());
@@ -158,19 +249,23 @@ class SmtpPropertiesTest {
 	}
 
 	@Test
-	void worstCaseSendDuration_multipliesEveryTimeoutByTheAttemptCount() {
+	void worstCaseSendDuration_chargesTheReadTimeoutOncePerBlockingRead() {
 		// Each key is bounded individually, but their product is not — this is what the startup warning
-		// reports, so the arithmetic behind it is worth pinning.
+		// reports, so the arithmetic behind it is worth pinning. read-timeout is mail.smtp.timeout, which
+		// bounds an individual read rather than the exchange, and one SMTP conversation blocks on seven or
+		// so responses; charging it once per attempt understated the figure several-fold.
 		SmtpProperties properties = new SmtpProperties("smtp.example.com", 25, null, null, null, null, true,
 				Duration.ofSeconds(10), Duration.ofSeconds(20), Duration.ofSeconds(30), 4, null);
 
-		assertEquals(Duration.ofMinutes(4), properties.worstCaseSendDuration());
+		// 4 x (10 connect + 7 x 20 read + 30 write) = 12 minutes.
+		assertEquals(Duration.ofMinutes(12), properties.worstCaseSendDuration());
 	}
 
 	@Test
 	void defaultTimeoutsAndAttemptCount_stayBelowTheReportingThreshold() {
-		// 3 x (5 + 5 + 5) = 45s, under the 60s threshold: a deployment that changes nothing stays quiet.
-		assertEquals(Duration.ofSeconds(45), hostOf("smtp.example.com").worstCaseSendDuration());
+		// 3 x (5 + 7 x 5 + 5) = 135s, under the 180s threshold: a deployment that changes nothing stays
+		// quiet even though the estimate is now several times larger.
+		assertEquals(Duration.ofSeconds(135), hostOf("smtp.example.com").worstCaseSendDuration());
 	}
 
 	@Test

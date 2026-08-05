@@ -127,22 +127,52 @@ class MailConfigurationTest {
 	}
 
 	@Test
-	void plaintextWithAConfiguredHost_isAlwaysWarnedAbout() {
+	void undeclaredPlaintextWithAConfiguredHost_isWarnedAboutWithoutCredentials() {
 		// Previously conditional on credentials being set, which left a deployment relaying password-reset
-		// links over plaintext with nothing above an INFO line. This warning is also what replaces the
-		// strict enum: an unrecognised security value now resolves to OFF, so it has to be visible.
-		configuration.javaMailSender(senderProperties("off", null, null));
+		// links over plaintext with nothing above an INFO line.
+		configuration.javaMailSender(senderProperties(null, null, null));
 
 		assertTrue(warnings().anyMatch(message -> message.contains("transport security is off")),
 				"a configured host on plaintext must warn even without credentials; got: " + logAppender);
 	}
 
 	@Test
-	void plaintextWithCredentials_warnsThatTheCredentialsAreExposedToo() {
+	void declaredPlaintext_silencesTheWarningAsTheWarningItselfAdvertises() {
+		// The warning tells the operator to set =off to silence it, and the previous revision ignored that:
+		// the branch was unconditional on OFF, so a legitimate loopback MTA — entrystore-it.properties
+		// included — got an unclearable WARN on every boot. Filtering the logger to escape it would also
+		// have suppressed the deprecated-key, cleartext-credentials and check-server-identity warnings.
+		configuration.javaMailSender(senderProperties("off", null, null));
+
+		assertTrue(warnings().noneMatch(message -> message.contains("transport security is off")),
+				"entrystore.smtp.security=off declares plaintext, so the warning must be silent; got: "
+						+ logAppender);
+	}
+
+	@Test
+	void unresolvedTransportSecurity_isReportedAsBlockingMailRatherThanAsPlaintext() {
+		// Sending is refused for this configuration, so the "crosses the network unencrypted" wording would
+		// be wrong here — what the operator needs to know is that no mail goes out until it is corrected.
+		configuration.javaMailSender(senderProperties("tls", null, null));
+
+		assertTrue(logAppender.messagesAt(Level.ERROR)
+						.anyMatch(message -> message.contains("no mail will be sent")),
+				"got: " + logAppender);
+		assertTrue(warnings().noneMatch(message -> message.contains("transport security is off")),
+				"got: " + logAppender);
+	}
+
+	@Test
+	void plaintextWithCredentials_warnsThatTheCredentialsAreExposedEvenWhenPlaintextIsDeclared() {
+		// Declaring plaintext with =off silences the "mail is unencrypted" nudge, but not this one:
+		// accepting unencrypted mail is not the same decision as accepting the relay password crossing the
+		// network in the clear, so the two warnings are independent branches.
 		configuration.javaMailSender(senderProperties("off", "user", "secret"));
 
 		assertTrue(warnings().anyMatch(message -> message.contains("SMTP credentials")),
 				"got: " + logAppender);
+		assertTrue(warnings().noneMatch(message -> message.contains("transport security is off")),
+				"the declared-plaintext nudge stays silenced; got: " + logAppender);
 	}
 
 	@Test
@@ -259,9 +289,10 @@ class MailConfigurationTest {
 	@Test
 	void beanIsDeclaredAsTheJavaMailSenderInterface() throws NoSuchMethodException {
 		// Load-bearing and otherwise enforced by nothing: Boot's MailSenderValidatorAutoConfiguration is
-		// @ConditionalOnSingleCandidate(JavaMailSenderImpl.class), so narrowing this return type would
-		// activate spring.mail.test-connection and open an SMTP connection during startup. Every other
-		// test here casts the result, so all of them would stay green through that change.
+		// @ConditionalOnSingleCandidate(JavaMailSenderImpl.class), so narrowing this return type would arm
+		// spring.mail.test-connection — which then opens an SMTP connection during startup if that flag is
+		// also set. Every other test here casts the result, so all of them would stay green through the
+		// change.
 		Method factoryMethod = MailConfiguration.class.getDeclaredMethod("javaMailSender", SmtpProperties.class);
 
 		assertEquals(JavaMailSender.class, factoryMethod.getReturnType(),

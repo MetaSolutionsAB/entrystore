@@ -80,14 +80,10 @@ public class MailConfiguration {
 		props.put("mail.smtp.connectiontimeout", Long.toString(smtp.connectionTimeout().toMillis()));
 		props.put("mail.smtp.timeout", Long.toString(smtp.readTimeout().toMillis()));
 		props.put("mail.smtp.writetimeout", Long.toString(smtp.writeTimeout().toMillis()));
-		applyTransportSecurity(props, smtp.effectiveSecurity(), smtp.port());
+		props.putAll(transportSecurityProperties(smtp.effectiveSecurity(), smtp.port()));
 
 		logConfiguration(smtp);
 		return sender;
-	}
-
-	private static void applyTransportSecurity(Properties props, SmtpSecurity security, int port) {
-		props.putAll(transportSecurityProperties(security, port));
 	}
 
 	/**
@@ -125,15 +121,31 @@ public class MailConfiguration {
 		if (smtp.usesDeprecatedSslKey()) {
 			log.warn("entrystore.smtp.ssl is deprecated; rename it to entrystore.smtp.security");
 		}
-		if (security == SmtpSecurity.OFF) {
-			// Unconditional, not only when credentials are set: a deployment relaying signup and
-			// password-reset tokens over plaintext SMTP is the exact silence this feature exists to
-			// break, and an unrecognised value in either key now resolves here instead of failing
-			// startup — so this warning is what makes a typo visible.
+		if (smtp.securityIsUnresolved()) {
+			// The value problem itself is already reported by SmtpProperties at bind time. What belongs
+			// here is the consequence, which only this class knows: a host is configured, so this
+			// deployment does intend to send mail, and no mail will go out until the value is corrected.
+			log.error("SMTP transport security could not be resolved, so no mail will be sent to {} at all "
+					+ "— sending unencrypted under a configuration meant to be encrypted is not an option. "
+					+ "Correct entrystore.smtp.security, or set it to off to send in the clear deliberately.",
+					smtp.host());
+		} else if (security == SmtpSecurity.OFF && !smtp.plaintextIsDeclared()) {
+			// Fires for plaintext the operator never asked for — neither key set — and not for
+			// entrystore.smtp.security=off, which is what makes the advice below true. An unclearable
+			// warning is a warning that gets filtered, and filtering this logger also loses the
+			// deprecated-key, cleartext-credentials and check-server-identity warnings around it.
 			log.warn("SMTP transport security is off, so mail — including password-reset links — crosses "
-					+ "the network unencrypted{}. Set entrystore.smtp.security=starttls unless the MTA is "
-					+ "on loopback, or =off explicitly to silence this.",
-					smtp.hasCredentials() ? ", together with the configured SMTP credentials" : "");
+					+ "the network unencrypted. Set entrystore.smtp.security=starttls unless the MTA is "
+					+ "on loopback, or =off explicitly to declare plaintext and silence this.");
+		}
+		if (security == SmtpSecurity.OFF && smtp.hasCredentials()) {
+			// Deliberately independent of whether plaintext was declared, and deliberately not silenceable
+			// by declaring it: entrystore.smtp.security=off says the operator accepts unencrypted mail, not
+			// that they accept SMTP AUTH LOGIN putting the relay password itself on the wire in the clear.
+			log.warn("SMTP credentials are configured with transport security off, so the SMTP AUTH exchange "
+					+ "sends entrystore.smtp.username and entrystore.smtp.password across the network in "
+					+ "the clear. Use entrystore.smtp.security=starttls, or drop the credentials if the "
+					+ "relay does not need them.");
 		}
 		if (!smtp.checkServerIdentity() && security != SmtpSecurity.OFF) {
 			log.warn("entrystore.smtp.check-server-identity=false disables TLS certificate hostname "

@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.util;
 
 import jakarta.mail.Address;
+import jakarta.mail.AuthenticationFailedException;
 import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
 import jakarta.mail.SendFailedException;
@@ -35,6 +36,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.MailSendException;
@@ -352,6 +355,116 @@ class EmailSenderTest {
 		verify(mailSender, never()).send(any(MimeMessage.class));
 	}
 
+	@ParameterizedTest(name = "recipient ''{0}'' is rejected before the transport is touched")
+	@ValueSource(strings = {
+			// A comma list: closed already, kept here so the whole rule is pinned in one place.
+			"me@example.com,victim@target.tld",
+			// RFC822 group syntax. new InternetAddress(String) enforces "exactly one address", and
+			// jakarta.mail models a group as one address with isGroup() — SMTPTransport.sendMessage then
+			// calls expandGroups() unconditionally and every member becomes an envelope RCPT TO.
+			"g:a@evil.tld,b@evil.tld;",
+			// CR/LF in the display-name phrase: checkAddress validates only the addr-spec.
+			"\"x\r\nbcc: attacker@evil.tld\" <victim@example.com>"
+	})
+	void sendMessage_recipientThatIsNotASingleMailbox_isRejectedWithoutSending(String recipient,
+																			  @TempDir Path tmp)
+			throws IOException {
+		// All three are reachable through the same self-rename primitive: ContextImpl grants every user
+		// WriteResource on their own principal entry, and PrincipalManagerImpl.setPrincipalName strips only
+		// \p{Cf}, trims and lowercases, so none of these are altered on the way in.
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+
+		assertFalse(sender.sendMessage(recipient, "subj", "body"));
+
+		verify(mailSender, never()).send(any(MimeMessage.class));
+	}
+
+	@Test
+	void sendMessage_groupRecipient_wouldOtherwiseHaveExpandedToEveryMember() throws Exception {
+		// The reason the case above matters, asserted against jakarta.mail rather than described in a
+		// comment: the value passes a bare single-address constructor and then expands.
+		InternetAddress group = new InternetAddress("g:a@evil.tld,b@evil.tld;");
+
+		assertTrue(group.isGroup());
+		assertEquals(2, group.getGroup(false).length,
+				"one accepted address, two envelope recipients — which is the relay");
+	}
+
+	@Test
+	void sendMessage_callerSuppliedReplyToThatIsAList_isRejected(@TempDir Path tmp) throws IOException {
+		// The Reply-To override on the POST /message path is the caller's own principal name.
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+
+		assertFalse(sender.sendMessage("user@example.com", "subj", "body", null,
+				"me@example.com,victim@target.tld"));
+
+		verify(mailSender, never()).send(any(MimeMessage.class));
+	}
+
+	@Test
+	void sendMessage_configuredMultiAddressReplyTo_isStillAccepted(@TempDir Path tmp) throws Exception {
+		// entrystore.smtp.email.reply-to has accepted a comma-separated list since 376abd6a (2019), which
+		// read it with InternetAddress.parse, and a list is legal for Reply-To under RFC 5322. Constraining
+		// the resolved value rather than the caller-supplied one broke every send for such a deployment:
+		// sendSignupConfirmation and both confirmation paths reach here with msgReplyTo == null.
+		EmailSender sender = senderWith(
+				smtp("smtp.example.com", FROM, null, "support@example.com,tickets@example.com"),
+				configWithTemplate(tmp));
+
+		assertTrue(sender.sendMessage("user@example.com", "subj", "body"));
+
+		Address[] replyTo = captureSentMessage().getReplyTo();
+		assertEquals(2, replyTo.length, "both configured Reply-To addresses must survive");
+		assertEquals("support@example.com", ((InternetAddress) replyTo[0]).getAddress());
+		assertEquals("tickets@example.com", ((InternetAddress) replyTo[1]).getAddress());
+	}
+
+	@Test
+	void construction_multiAddressBccAndReplyTo_leaveStartupQuiet(@TempDir Path tmp) throws IOException {
+		// The list-shaped keys must not be reported as malformed at startup, which is what pins the shape
+		// constants apart. Reply-To had no startup coverage at all.
+		senderWith(smtp("smtp.example.com", FROM, "audit@example.com,archive@example.com",
+				"support@example.com,tickets@example.com"), configWithTemplate(tmp));
+
+		assertEquals(0, logAppender.countAt(Level.ERROR),
+				"a legitimate address list must not be reported as unparseable; got: " + logAppender);
+	}
+
+	@Test
+	void construction_malformedSingleAddressKey_isReportedNamingTheKey(@TempDir Path tmp) throws IOException {
+		senderWith(smtp("smtp.example.com", "not an address", null, null), configWithTemplate(tmp));
+
+		assertTrue(logAppender.messagesAt(Level.ERROR)
+						.anyMatch(message -> message.contains("entrystore.smtp.email.from")),
+				"the ERROR must name the key the value came from; got: " + logAppender);
+	}
+
+	@Test
+	void sendMessage_unresolvedTransportSecurity_refusesToSendInTheClear(@TempDir Path tmp)
+			throws IOException {
+		// Binding stays lenient so mail configuration cannot abort startup, which means security=tls lands
+		// on OFF. Refusing here is what keeps that from silently meaning plaintext.
+		SmtpProperties smtp = new SmtpProperties("smtp.example.com", 25, "tls", null, null, null, true,
+				Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(5), 3,
+				new SmtpProperties.Addresses(FROM, null, null));
+		EmailSender sender = senderWith(smtp, configWithTemplate(tmp));
+
+		assertFalse(sender.sendMessage("user@example.com", "subj", "body"));
+
+		verify(mailSender, never()).send(any(MimeMessage.class));
+	}
+
+	@Test
+	void sendMessage_declaredPlaintext_stillSends(@TempDir Path tmp) throws Exception {
+		// The guard above must key on "cannot be resolved", not on "is plaintext": a loopback MTA declared
+		// with security=off is a supported configuration.
+		SmtpProperties smtp = new SmtpProperties("smtp.example.com", 25, "off", null, null, null, true,
+				Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(5), 3,
+				new SmtpProperties.Addresses(FROM, null, null));
+
+		assertTrue(senderWith(smtp, configWithTemplate(tmp)).sendMessage("user@example.com", "s", "b"));
+	}
+
 	@Test
 	void sendMessage_multipleBccAddresses_areStillAccepted(@TempDir Path tmp) throws Exception {
 		// bcc is operator-configured, so a list stays legal there — it must keep using parse().
@@ -374,21 +487,41 @@ class EmailSenderTest {
 		// A space fails InternetAddress.checkAddress, so this reaches the catch rather than the sender.
 		assertFalse(sender.sendMessage("a b@example.com", forged, "body"));
 		verify(mailSender, never()).send(any(MimeMessage.class));
+		// noneMatch is satisfied by an empty capture, so without this the test would keep passing if the
+		// log call it guards were deleted, or if the appender stopped reaching this class.
+		logAppender.assertCapturedSomething();
 		assertTrue(logAppender.allMessages()
 						.noneMatch(message -> message.contains("\r") || message.contains("\n")),
 				"no log line may carry a raw CR/LF from the subject; got: " + logAppender);
 	}
 
 	@Test
-	void sendMessage_permanentFailure_isNotRetried(@TempDir Path tmp) throws IOException {
+	void sendMessage_permanentAuthFailure_isNotRetried(@TempDir Path tmp) throws IOException {
 		// An expired SMTP password would otherwise produce max-send-attempts consecutive failed AUTHs per
-		// send, which providers answer with a temporary account lockout.
+		// send, which providers answer with a temporary account lockout. Shaped the way Spring actually
+		// raises it — JavaMailSenderImpl wraps the jakarta.mail exception, and its own message is the fixed
+		// "Authentication failed", so the server's reply code is only reachable through the cause.
 		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
-		doThrow(new MailAuthenticationException("535 authentication failed"))
+		doThrow(new MailAuthenticationException(
+				new AuthenticationFailedException("535 5.7.8 Username and Password not accepted")))
 				.when(mailSender).send(any(MimeMessage.class));
 
 		assertFalse(sender.sendMessage("user@example.com", "subj", "body"));
 		verify(mailSender, times(1)).send(any(MimeMessage.class));
+	}
+
+	@Test
+	void sendMessage_transientAuthFailure_isRetried(@TempDir Path tmp) throws IOException {
+		// Angus raises AuthenticationFailedException for a 4xx temporary failure exactly as for a permanent
+		// 5xx, so classifying on the exception type alone dropped mail on a relay that merely rate-limits
+		// AUTH — silently, and worst on the password-reset path where the response is a deliberate 200.
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		doThrow(new MailAuthenticationException(
+				new AuthenticationFailedException("454 4.7.0 Temporary authentication failure")))
+				.when(mailSender).send(any(MimeMessage.class));
+
+		assertFalse(sender.sendMessage("user@example.com", "subj", "body"));
+		verify(mailSender, times(3)).send(any(MimeMessage.class));
 	}
 
 	@Test
@@ -405,9 +538,11 @@ class EmailSenderTest {
 
 	@Test
 	void sendMessage_partialDelivery_isNotRetriedSoNoDuplicateIsSent(@TempDir Path tmp) throws Exception {
-		// Reachable when a configured bcc is rejected after the recipient has already been served.
-		// Re-sending the same MimeMessage would deliver a second password-reset mail carrying a distinct
-		// valid token, so the loop must stop even though send() threw.
+		// Reachable when a configured bcc is rejected after the recipient has already been served. The
+		// MimeMessage is built once and AuthService generates one token per dispatch, so re-sending would
+		// deliver a byte-identical duplicate — a second copy of the same still-valid password-reset link —
+		// and the loop must stop even though send() threw. Returning true matters just as much: a false
+		// return makes AuthService remove a token that is already in the recipient's inbox.
 		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, "bad@example.com", null),
 				configWithTemplate(tmp));
 		SendFailedException partial = new SendFailedException("bcc rejected",
@@ -419,6 +554,25 @@ class EmailSenderTest {
 		assertTrue(sender.sendMessage("user@example.com", "subj", "body"),
 				"the intended recipient was reached, so the send counts as delivered");
 		verify(mailSender, times(1)).send(any(MimeMessage.class));
+	}
+
+	@Test
+	void sendMessage_partialDeliveryToAnAngleBracketedRecipient_isStillRecognised(@TempDir Path tmp)
+			throws Exception {
+		// The verdict has to compare parsed address against parsed address. Address.toString() re-renders,
+		// dropping the angle brackets this caller supplied, so comparing it against the raw recipient
+		// string reported a delivered message as failed — MessageService then answers 503 and a retrying
+		// caller produces exactly the duplicate the branch above exists to prevent.
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, "bad@example.com", null),
+				configWithTemplate(tmp));
+		SendFailedException partial = new SendFailedException("bcc rejected",
+				new MessagingException("550 bcc"),
+				new Address[]{new InternetAddress("user@example.com")},
+				new Address[0], new Address[]{new InternetAddress("bad@example.com")});
+		doThrow(new MailSendException("failed", partial)).when(mailSender).send(any(MimeMessage.class));
+
+		assertTrue(sender.sendMessage("<user@example.com>", "subj", "body"),
+				"the delivered address is the same mailbox, just rendered without the brackets");
 	}
 
 	@Test

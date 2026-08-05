@@ -20,6 +20,7 @@ import org.entrystore.config.Config;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -33,11 +34,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Year;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -80,14 +84,39 @@ class MailTemplateRendererTest {
 				.render(EmailTemplate.PASSWORD_CHANGE, Map.of("__NAME__", "Ada"));
 
 		assertNotNull(rendered);
-		// Year.now(), not Calendar.getInstance(): asserting with the same locale-dependent call the
-		// production code used to make would agree with it even when both render 2569 under a th-TH default.
 		assertTrue(rendered.contains(Integer.toString(Year.now().getValue())),
 				"__YEAR__ must be substituted with the current Gregorian year");
 		assertTrue(rendered.contains("entrystore.example"), "__DOMAIN__ must be substituted with the base URL host");
 		assertFalseContains(rendered, "__YEAR__");
 		assertFalseContains(rendered, "__DOMAIN__");
 		assertFalseContains(rendered, "__NAME__");
+	}
+
+	@Test
+	void render_underANonGregorianDefaultLocale_stillSubstitutesTheGregorianYear() throws IOException {
+		// The locale has to be driven for this to mean anything. Asserting against Year.now() alone is the
+		// identical call production makes, so reverting to Calendar.getInstance() stayed green on every
+		// Gregorian-default machine — which is every developer machine and the CI runner. Under a th-TH
+		// default, Calendar.getInstance() returns a BuddhistCalendar whose YEAR field is 543 higher.
+		Locale previousDefault = Locale.getDefault();
+		try {
+			Locale.setDefault(Locale.of("th", "TH"));
+			int gregorianYear = Year.now().getValue();
+			// Exactly what the pre-fix production line produced under this default.
+			int buddhistYear = Calendar.getInstance().get(Calendar.YEAR);
+			assertNotEquals(gregorianYear, buddhistYear,
+					"this JVM does not give th-TH a Buddhist calendar, so the test cannot prove anything");
+
+			String rendered = new MailTemplateRenderer(configWithBaseUrl("https://entrystore.example/"))
+					.render(EmailTemplate.PASSWORD_CHANGE, Map.of("__NAME__", "Ada"));
+
+			assertNotNull(rendered);
+			assertTrue(rendered.contains(Integer.toString(gregorianYear)),
+					"__YEAR__ must be the Gregorian year regardless of the default locale's calendar");
+			assertFalseContains(rendered, Integer.toString(buddhistYear));
+		} finally {
+			Locale.setDefault(previousDefault);
+		}
 	}
 
 	@Test
@@ -193,9 +222,14 @@ class MailTemplateRendererTest {
 	}
 
 	@Test
+	@Timeout(60)
 	void render_unreachableHttpTemplate_returnsNullWithoutHangingIndefinitely() throws IOException {
 		// A server that accepts the connection and never answers. The read timeout is what stops this from
 		// pinning the calling thread forever, since a failed load is deliberately not cached.
+		//
+		// @Timeout is the build's protection, not a nicety: this module sets neither a Surefire fork timeout
+		// nor junit.jupiter.execution.timeout.default, so without it a removed setReadTimeout would hang the
+		// build indefinitely instead of failing this test.
 		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 		server.createContext("/stalled.html", exchange -> {
 			// Never respond, never close: the connection stays open with no bytes written.
@@ -211,8 +245,12 @@ class MailTemplateRendererTest {
 					"a template that cannot be fetched must render to null");
 			long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
 
-			// The configured timeout is 5s; anything near or beyond twice that means it was not applied.
+			// Bounded above and below. The upper bound (the configured timeout is 5s) shows a timeout was
+			// applied at all; the lower bound is what distinguishes "the read timeout fired" from "the
+			// server answered and nothing ever stalled", which an upper bound alone cannot tell apart.
 			assertTrue(elapsedMs < 10_000, "the fetch must be bounded by the read timeout, took " + elapsedMs + "ms");
+			assertTrue(elapsedMs >= 4_000, "the read must actually have stalled until the timeout, took "
+					+ elapsedMs + "ms — a passing upper bound alone would not prove the timeout fired");
 		} finally {
 			server.stop(0);
 		}
