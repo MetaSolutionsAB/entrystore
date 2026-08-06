@@ -39,7 +39,6 @@ import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.rest.springboot.model.api.ListFilter;
@@ -114,6 +113,10 @@ public class ResourceService {
 
 	@Value("${entrystore.http.allow-media-type-javascript:false}")
 	private boolean rewriteMediaTypeJavaScript;
+
+	@Value("${entrystore.auth.password.require-current-password:true}")
+	@Setter(AccessLevel.PACKAGE)
+	private boolean requireCurrentPassword;
 
 	public String serializeResourceAsJson(Entry entry, String mediaType, ListFilter listFilter) {
 
@@ -352,7 +355,6 @@ public class ResourceService {
 					}
 				}
 				if (entityJSON.has("password")) {
-					boolean requireCurrentPassword = repositoryManager.getConfiguration().getBoolean(Settings.AUTH_PASSWORD_REQUIRE_CURRENT_PASSWORD, true);
 					String newPassword = entityJSON.getString("password");
 
 					if (requireCurrentPassword) {

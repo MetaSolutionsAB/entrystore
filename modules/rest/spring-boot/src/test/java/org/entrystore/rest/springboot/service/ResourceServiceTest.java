@@ -28,10 +28,8 @@ import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
-import org.entrystore.config.Config;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
 import org.entrystore.rest.springboot.util.EmailSender;
@@ -160,10 +158,8 @@ class ResourceServiceTest {
 		lenient().when(resourceUser.setSecret(newPassword)).thenReturn(accepted);
 		when(entry.getGraphType()).thenReturn(GraphType.User);
 		when(entry.getResource()).thenReturn(resourceUser);
-		Config config = mock(Config.class);
 		// Skips the current-password challenge, which is a separate branch with its own coverage.
-		when(config.getBoolean(Settings.AUTH_PASSWORD_REQUIRE_CURRENT_PASSWORD, true)).thenReturn(false);
-		when(repositoryManager.getConfiguration()).thenReturn(config);
+		service.setRequireCurrentPassword(false);
 		when(repositoryManager.getPrincipalManager()).thenReturn(principalManager);
 		return resourceUser;
 	}

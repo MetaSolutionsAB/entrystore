@@ -17,7 +17,6 @@
 package org.entrystore.rest.springboot.service;
 
 import com.rometools.rome.feed.synd.SyndFeed;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.solr.client.solrj.request.SolrQuery;
@@ -27,12 +26,12 @@ import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.model.exception.MethodNotAllowedException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.util.Syndication;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -50,13 +49,8 @@ public class SyndicationService {
 
 	private final RepositoryManagerImpl repositoryManager;
 
-	private int maxFeedSize = -1;
-
-	@PostConstruct
-	public void init() {
-		// Runs after class constructor
-		maxFeedSize = repositoryManager.getConfiguration().getInt(Settings.SOLR_MAX_LIMIT, DEFAULT_FEED_SIZE);
-	}
+	@Value("${entrystore.solr.max-limit:" + DEFAULT_FEED_SIZE + "}")
+	private int maxFeedSize;
 
 	public SyndFeed getSyndicationFeedSolr(Entry entry, String type, String language, Integer feedSize) {
 

@@ -19,11 +19,10 @@ package org.entrystore.rest.springboot.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Entry;
-import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
 import org.springframework.beans.factory.SmartInitializingSingleton;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -48,11 +47,13 @@ import org.springframework.stereotype.Service;
 public class TestDataLoadService implements SmartInitializingSingleton {
 
 	private final RepositoryManagerImpl repositoryManager;
-	private final Config config;
+
+	@Value("${entrystore.repository.store.init-with-test-data:off}")
+	private String initWithTestData;
 
 	@Override
 	public void afterSingletonsInstantiated() {
-		if ("on".equalsIgnoreCase(config.getString(Settings.STORE_INIT_WITH_TEST_DATA, "off"))) {
+		if ("on".equalsIgnoreCase(initWithTestData)) {
 			// Check for the existence of Donald
 			Entry donald = repositoryManager.getPrincipalManager().getPrincipalEntry("Donald");
 			// We only initialize of test suite has not been loaded before,

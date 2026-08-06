@@ -30,10 +30,10 @@ import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.Resource;
 import org.entrystore.User;
-import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.rest.springboot.configuration.SyndicationProperties;
 import org.entrystore.rest.springboot.model.dto.QueryResultsDto;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
@@ -60,7 +60,7 @@ import java.util.List;
 public class SearchService {
 
 	private final RepositoryManagerImpl repositoryManager;
-	private final Config esConfig;
+	private final SyndicationProperties syndicationProperties;
 	private final ResourceJsonSerializer resourceJsonSerializer;
 
 
@@ -173,8 +173,8 @@ public class SearchService {
 	public String generateSyndication(HttpServletRequest request, List<Entry> entries, String feedType, String language,
 									  int limit, String urlTemplate, String feedTitle) {
 
-		SyndFeed feed = Syndication.createFeedFromEntries(repositoryManager.getPrincipalManager(), esConfig, entries,
-				language, limit, urlTemplate);
+		SyndFeed feed = Syndication.createFeedFromEntries(repositoryManager.getPrincipalManager(),
+				syndicationProperties.template(urlTemplate), entries, language, limit);
 		feed.setTitle(Syndication.sanitizeFeedTitle(feedTitle));
 		feed.setLink(buildRequestUri(request));
 		feed.setFeedType(feedType);

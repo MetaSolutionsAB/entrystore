@@ -31,11 +31,14 @@ import java.util.Map;
  * <p>The prefix is {@code entrystore.auth.signup} (not {@code ...signup.whitelist}) so the map binds
  * to the {@code whitelist} component; other {@code entrystore.auth.signup.*} keys are ignored here.
  *
- * <p>Only the indexed form binds. The legacy {@code Config.getStringList} also accepted a bare,
- * un-indexed value ({@code entrystore.auth.signup.whitelist=example.com}); the {@code Map} binding does
- * not, so a bare-only value fails startup with a bind error and a mixed bare+indexed value silently
- * drops the bare entry (both fail-closed — the effective whitelist is never widened). The bare form was
+ * <p>Only the indexed form binds, and several config shapes changed meaning relative to
+ * {@code Config.getStringList} — here that can admit a domain the legacy reader ignored.
+ * {@link IndexedListConfigValidator} documents the shapes and reports them at startup. The bare form was
  * never documented in {@code entrystore.properties_example}; use the indexed form.
+ *
+ * <p>The copy below is via {@code Map.copyOf}, which rejects null values — {@code StatusService} relies
+ * on that to lower-case the whitelist without a null filter, so do not swap it for
+ * {@code Collections.unmodifiableMap} or a {@code LinkedHashMap} copy.
  */
 @ConfigurationProperties(prefix = "entrystore.auth.signup")
 public record SignupWhitelistProperties(Map<String, String> whitelist) {

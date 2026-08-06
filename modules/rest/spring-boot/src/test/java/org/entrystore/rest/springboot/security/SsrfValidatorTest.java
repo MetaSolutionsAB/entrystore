@@ -16,18 +16,14 @@
 
 package org.entrystore.rest.springboot.security;
 
-import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.rest.springboot.configuration.ProxyProperties;
+import org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.security.SsrfValidator.Origin;
 import org.entrystore.rest.springboot.security.SsrfValidator.ValidatedTarget;
-import org.entrystore.rest.springboot.configuration.ProxyProperties;
-import org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.util.unit.DataSize;
 
 import java.net.HttpURLConnection;
@@ -44,17 +40,13 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@ExtendWith(MockitoExtension.class)
 class SsrfValidatorTest {
-
-	@Mock
-	private RepositoryManagerImpl repositoryManager;
 
 	private SsrfValidator validator;
 
 	@BeforeEach
 	void setUp() {
-		validator = new SsrfValidator(repositoryManager, ProxyPropertiesFixture.defaults());
+		validator = new SsrfValidator(ProxyPropertiesFixture.defaults(), null);
 		validator.setProxyHostWhitelist(Set.of());
 		validator.setDeleteOriginWhitelist(Set.of());
 		validator.setRowstoreOrigin(null);
@@ -293,8 +285,10 @@ class SsrfValidatorTest {
 	void openPinnedConnection_appliesEachConfiguredTimeoutToItsOwnSetting() throws Exception {
 		// Distinct values, so swapping the two setters at the call site fails here rather than passing
 		// on symmetry — and so a seconds/milliseconds slip in the *Millis() accessors is visible.
-		SsrfValidator configured = new SsrfValidator(repositoryManager,
-				new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ofSeconds(7), Duration.ofSeconds(11)));
+		SsrfValidator configured = new SsrfValidator(
+				new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ofSeconds(7), Duration.ofSeconds(11),
+						null, null),
+				null);
 		InetAddress ipv4 = Inet4Address.getByAddress("example.com",
 				new byte[]{(byte) 93, (byte) 184, (byte) 216, (byte) 34});
 

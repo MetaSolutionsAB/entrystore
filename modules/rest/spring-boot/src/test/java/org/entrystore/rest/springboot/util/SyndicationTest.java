@@ -24,8 +24,6 @@ import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.junit.jupiter.api.Test;
@@ -113,42 +111,20 @@ class SyndicationTest {
 		// Pins the off-by-one of the post-increment limit check (`limitedCount++ >= limit`):
 		// a limit of 2 yields 3 feed entries. Kept as-is for backwards compatibility.
 		PrincipalManager pm = mock(PrincipalManager.class);
-		Config config = mock(Config.class);
 		List<Entry> entries = List.of(mockFeedEntry("e1"), mockFeedEntry("e2"), mockFeedEntry("e3"),
 				mockFeedEntry("e4"), mockFeedEntry("e5"));
 
-		SyndFeed feed = Syndication.createFeedFromEntries(pm, config, entries, null, 2, null);
+		SyndFeed feed = Syndication.createFeedFromEntries(pm, null, entries, null, 2);
 
 		assertEquals(3, feed.getEntries().size());
 	}
 
 	@Test
-	void createFeedFromEntries_nullUrlTemplate_looksUpDefaultTemplate() {
+	void createFeedFromEntries_noTemplate_fallsBackToResourceUri() {
 		PrincipalManager pm = mock(PrincipalManager.class);
-		Config config = mock(Config.class);
-		when(config.getString(Settings.SYNDICATION_URL_TEMPLATE + ".default"))
-				.thenReturn("https://example.com/view/{entryid}");
-		Entry entry = mockFeedEntry("e1");
-		// the {contextid} replacement resolves the context eagerly even when the template omits it
-		Entry contextEntry = mock(Entry.class);
-		when(contextEntry.getId()).thenReturn("c1");
-		Context context = mock(Context.class);
-		when(context.getEntry()).thenReturn(contextEntry);
-		when(entry.getContext()).thenReturn(context);
-
-		SyndFeed feed = Syndication.createFeedFromEntries(pm, config, List.of(entry), null, 10, null);
-
-		assertEquals("https://example.com/view/e1", feed.getEntries().getFirst().getLink());
-	}
-
-	@Test
-	void createFeedFromEntries_noConfiguredTemplate_fallsBackToResourceUri() {
-		PrincipalManager pm = mock(PrincipalManager.class);
-		Config config = mock(Config.class);
-		when(config.getString(Settings.SYNDICATION_URL_TEMPLATE + ".default")).thenReturn(null);
 		Entry entry = mockFeedEntry("e1");
 
-		SyndFeed feed = Syndication.createFeedFromEntries(pm, config, List.of(entry), null, 10, null);
+		SyndFeed feed = Syndication.createFeedFromEntries(pm, null, List.of(entry), null, 10);
 
 		assertEquals("http://example.com/ctx/resource/e1", feed.getEntries().getFirst().getLink());
 	}
@@ -156,9 +132,6 @@ class SyndicationTest {
 	@Test
 	void createFeedFromEntries_urlTemplate_substitutesPlaceholders() {
 		PrincipalManager pm = mock(PrincipalManager.class);
-		Config config = mock(Config.class);
-		when(config.getString(Settings.SYNDICATION_URL_TEMPLATE + ".custom"))
-				.thenReturn("https://example.com/{contextid}/{entryid}?uri={entryuri}");
 		Entry entry = mockFeedEntry("e1");
 		Entry contextEntry = mock(Entry.class);
 		when(contextEntry.getId()).thenReturn("c1");
@@ -166,7 +139,8 @@ class SyndicationTest {
 		when(context.getEntry()).thenReturn(contextEntry);
 		when(entry.getContext()).thenReturn(context);
 
-		SyndFeed feed = Syndication.createFeedFromEntries(pm, config, List.of(entry), null, 10, "custom");
+		SyndFeed feed = Syndication.createFeedFromEntries(pm,
+				"https://example.com/{contextid}/{entryid}?uri={entryuri}", List.of(entry), null, 10);
 
 		String expectedEntryUri = URLEncoder.encode("http://example.com/ctx/entry/e1", UTF_8);
 		assertEquals("https://example.com/c1/e1?uri=" + expectedEntryUri, feed.getEntries().getFirst().getLink());
@@ -175,12 +149,11 @@ class SyndicationTest {
 	@Test
 	void createFeedFromEntries_authorizationException_skipsEntry() {
 		PrincipalManager pm = mock(PrincipalManager.class);
-		Config config = mock(Config.class);
 		Entry forbidden = mockFeedEntry("forbidden");
 		when(forbidden.getCreationDate()).thenThrow(new AuthorizationException(null, null, null));
 		List<Entry> entries = List.of(forbidden, mockFeedEntry("allowed"));
 
-		SyndFeed feed = Syndication.createFeedFromEntries(pm, config, entries, null, 10, null);
+		SyndFeed feed = Syndication.createFeedFromEntries(pm, null, entries, null, 10);
 
 		assertEquals(1, feed.getEntries().size());
 	}
@@ -200,12 +173,29 @@ class SyndicationTest {
 	@Test
 	void createFeedFromEntries_entryWithoutTitle_getsMissingTitlePlaceholder() {
 		PrincipalManager pm = mock(PrincipalManager.class);
-		Config config = mock(Config.class);
 		Entry entry = mockFeedEntry("e1");
 
-		SyndFeed feed = Syndication.createFeedFromEntries(pm, config, List.of(entry), null, 10, null);
+		SyndFeed feed = Syndication.createFeedFromEntries(pm, null, List.of(entry), null, 10);
 
 		assertEquals("Missing title", feed.getEntries().getFirst().getTitle());
+	}
+
+	@Test
+	void createFeedFromEntries_templateWithoutContextId_stillResolvesTheContextEagerly() {
+		// Every placeholder is substituted unconditionally, so entry.getContext() is dereferenced even for
+		// a template that never mentions {contextid} — an entry whose context is unavailable would NPE.
+		PrincipalManager pm = mock(PrincipalManager.class);
+		Entry entry = mockFeedEntry("e1");
+		Entry contextEntry = mock(Entry.class);
+		when(contextEntry.getId()).thenReturn("c1");
+		Context context = mock(Context.class);
+		when(context.getEntry()).thenReturn(contextEntry);
+		when(entry.getContext()).thenReturn(context);
+
+		SyndFeed feed = Syndication.createFeedFromEntries(pm, "https://example.com/view/{entryid}",
+				List.of(entry), null, 10);
+
+		assertEquals("https://example.com/view/e1", feed.getEntries().getFirst().getLink());
 	}
 
 	private static Entry mockFeedEntry(String id) {

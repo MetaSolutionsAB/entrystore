@@ -21,7 +21,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Context;
 import org.entrystore.PrincipalManager;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.configuration.ProxyProperties;
 import org.entrystore.rest.springboot.model.dto.ProxyResponse;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
@@ -46,14 +45,13 @@ public class ProxyService {
 	private final ContextService contextService;
 	private final SsrfValidator ssrfValidator;
 	private final SsrfSafeHttpClient ssrfSafeHttpClient;
-
 	private final ProxyProperties proxyProperties;
 
 	private Set<String> whitelistAnon;
 
 	@PostConstruct
 	void init() {
-		whitelistAnon = ssrfValidator.loadHostSet(Settings.PROXY_WHITELIST_ANONYMOUS);
+		whitelistAnon = proxyProperties.anonymousWhitelist();
 		if (!whitelistAnon.isEmpty()) {
 			log.info("Proxy whitelist for guest users initialized with following domains: {}; Requests to other domains require authentication",
 					String.join(", ", whitelistAnon));

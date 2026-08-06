@@ -16,8 +16,6 @@
 
 package org.entrystore.rest.springboot.util;
 
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -25,6 +23,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.springframework.mock.env.MockEnvironment;
 
 import com.sun.net.httpserver.HttpServer;
 
@@ -57,7 +56,7 @@ class MailTemplateRendererTest {
 			"https://entrystore.example/store/, entrystore.example"
 	})
 	void resolveBaseUrlHost_returnsHostOrEmpty(String baseUrl, String expectedDomain) {
-		assertEquals(expectedDomain, MailTemplateRenderer.resolveBaseUrlHost(configWithBaseUrl(baseUrl)));
+		assertEquals(expectedDomain, MailTemplateRenderer.resolveBaseUrlHost(environmentWithBaseUrl(baseUrl)));
 	}
 
 	@ParameterizedTest(name = "{0} bundled fallback renders")
@@ -70,7 +69,7 @@ class MailTemplateRendererTest {
 						.getResourceAsStream(template.getClasspathResource()),
 				template.getClasspathResource() + " must be on the classpath");
 
-		assertNotNull(new MailTemplateRenderer(new PropertiesConfiguration("test"))
+		assertNotNull(new MailTemplateRenderer(new MockEnvironment())
 						.render(template, Collections.emptyMap()),
 				"the bundled fallback for " + template + " must render");
 	}
@@ -78,9 +77,9 @@ class MailTemplateRendererTest {
 	@Test
 	void render_substitutesYearAndDomain() {
 		assertPasswordChangeTemplateOnClasspath();
-		Config config = configWithBaseUrl("https://entrystore.example/store/");
+		MockEnvironment environment = environmentWithBaseUrl("https://entrystore.example/store/");
 
-		String rendered = new MailTemplateRenderer(config)
+		String rendered = new MailTemplateRenderer(environment)
 				.render(EmailTemplate.PASSWORD_CHANGE, Map.of("__NAME__", "Ada"));
 
 		assertNotNull(rendered);
@@ -107,7 +106,7 @@ class MailTemplateRendererTest {
 			assertNotEquals(gregorianYear, buddhistYear,
 					"this JVM does not give th-TH a Buddhist calendar, so the test cannot prove anything");
 
-			String rendered = new MailTemplateRenderer(configWithBaseUrl("https://entrystore.example/"))
+			String rendered = new MailTemplateRenderer(environmentWithBaseUrl("https://entrystore.example/"))
 					.render(EmailTemplate.PASSWORD_CHANGE, Map.of("__NAME__", "Ada"));
 
 			assertNotNull(rendered);
@@ -124,9 +123,9 @@ class MailTemplateRendererTest {
 		// Guards the replaceAll -> replace change: with the regex form, "$1" in the *replacement* is a
 		// group reference (IllegalArgumentException here, since the pattern has no groups) and a
 		// backslash escapes the next character. Both must now survive verbatim.
-		Config config = configWithTemplate(tmp, EmailTemplate.SIGNUP, "Hello __NAME__!");
+		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.SIGNUP, "Hello __NAME__!");
 
-		String rendered = new MailTemplateRenderer(config)
+		String rendered = new MailTemplateRenderer(environment)
 				.render(EmailTemplate.SIGNUP, Map.of("__NAME__", "$1 \\ backslash"));
 
 		assertEquals("Hello $1 \\ backslash!", rendered);
@@ -134,12 +133,12 @@ class MailTemplateRendererTest {
 
 	@Test
 	void render_nullSubstitutionValue_leavesThePlaceholderInPlace(@TempDir Path tmp) throws IOException {
-		Config config = configWithTemplate(tmp, EmailTemplate.SIGNUP, "Hello __NAME__ at __EMAIL__");
+		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.SIGNUP, "Hello __NAME__ at __EMAIL__");
 		Map<String, String> substitutions = new HashMap<>();
 		substitutions.put("__NAME__", null);
 		substitutions.put("__EMAIL__", "ada@example.com");
 
-		String rendered = new MailTemplateRenderer(config).render(EmailTemplate.SIGNUP, substitutions);
+		String rendered = new MailTemplateRenderer(environment).render(EmailTemplate.SIGNUP, substitutions);
 
 		assertEquals("Hello __NAME__ at ada@example.com", rendered);
 	}
@@ -149,9 +148,9 @@ class MailTemplateRendererTest {
 		// A failed load must not be cached: the previous implementation left its static cache field null
 		// so the next send tried again, and an operator fixing the path should not need a restart.
 		Path template = tmp.resolve("signup.html");
-		Config config = new PropertiesConfiguration("test");
-		config.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(), template.toString());
-		MailTemplateRenderer renderer = new MailTemplateRenderer(config);
+		MockEnvironment environment = new MockEnvironment();
+		environment.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(), template.toString());
+		MailTemplateRenderer renderer = new MailTemplateRenderer(environment);
 
 		assertNull(renderer.render(EmailTemplate.SIGNUP, Collections.emptyMap()),
 				"a template path that cannot be read must render to null");
@@ -164,11 +163,11 @@ class MailTemplateRendererTest {
 
 	@Test
 	void render_readableTemplate_isCachedAndSurvivesTheSourceDisappearing(@TempDir Path tmp) throws IOException {
-		Config config = configWithTemplate(tmp, EmailTemplate.SIGNUP, "cached body");
-		MailTemplateRenderer renderer = new MailTemplateRenderer(config);
+		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.SIGNUP, "cached body");
+		MailTemplateRenderer renderer = new MailTemplateRenderer(environment);
 
 		assertEquals("cached body", renderer.render(EmailTemplate.SIGNUP, Collections.emptyMap()));
-		Files.delete(Path.of(config.getString(EmailTemplate.SIGNUP.getTemplatePathKey())));
+		Files.delete(Path.of(environment.getProperty(EmailTemplate.SIGNUP.getTemplatePathKey())));
 
 		assertEquals("cached body", renderer.render(EmailTemplate.SIGNUP, Collections.emptyMap()),
 				"a successfully loaded template must be served from the cache");
@@ -176,18 +175,16 @@ class MailTemplateRendererTest {
 
 	@Test
 	void subject_fallsBackToTheDocumentedDefault() {
-		Config config = new PropertiesConfiguration("test");
-
 		assertEquals(EmailTemplate.SIGNUP.getDefaultSubject(),
-				new MailTemplateRenderer(config).subject(EmailTemplate.SIGNUP));
+				new MailTemplateRenderer(new MockEnvironment()).subject(EmailTemplate.SIGNUP));
 	}
 
 	@Test
 	void subject_prefersTheConfiguredValue() {
-		Config config = new PropertiesConfiguration("test");
-		config.setProperty(EmailTemplate.SIGNUP.getSubjectKey(), "Welcome aboard");
+		MockEnvironment environment = new MockEnvironment();
+		environment.setProperty(EmailTemplate.SIGNUP.getSubjectKey(), "Welcome aboard");
 
-		assertEquals("Welcome aboard", new MailTemplateRenderer(config).subject(EmailTemplate.SIGNUP));
+		assertEquals("Welcome aboard", new MailTemplateRenderer(environment).subject(EmailTemplate.SIGNUP));
 	}
 
 	@Test
@@ -204,10 +201,10 @@ class MailTemplateRendererTest {
 		});
 		server.start();
 		try {
-			Config config = new PropertiesConfiguration("test");
-			config.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(),
+			MockEnvironment environment = new MockEnvironment();
+			environment.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(),
 					"http://127.0.0.1:" + server.getAddress().getPort() + "/template.html");
-			MailTemplateRenderer renderer = new MailTemplateRenderer(config);
+			MailTemplateRenderer renderer = new MailTemplateRenderer(environment);
 
 			assertEquals("Hello Ada from HTTP",
 					renderer.render(EmailTemplate.SIGNUP, Map.of("__NAME__", "Ada")));
@@ -236,12 +233,12 @@ class MailTemplateRendererTest {
 		});
 		server.start();
 		try {
-			Config config = new PropertiesConfiguration("test");
-			config.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(),
+			MockEnvironment environment = new MockEnvironment();
+			environment.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(),
 					"http://127.0.0.1:" + server.getAddress().getPort() + "/stalled.html");
 
 			long startedAt = System.nanoTime();
-			assertNull(new MailTemplateRenderer(config).render(EmailTemplate.SIGNUP, Collections.emptyMap()),
+			assertNull(new MailTemplateRenderer(environment).render(EmailTemplate.SIGNUP, Collections.emptyMap()),
 					"a template that cannot be fetched must render to null");
 			long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
 
@@ -256,20 +253,21 @@ class MailTemplateRendererTest {
 		}
 	}
 
-	private static Config configWithTemplate(Path tmp, EmailTemplate template, String body) throws IOException {
+	private static MockEnvironment environmentWithTemplate(Path tmp, EmailTemplate template, String body)
+			throws IOException {
 		Path file = tmp.resolve(template.getClasspathResource());
 		Files.writeString(file, body);
-		Config config = new PropertiesConfiguration("test");
-		config.setProperty(template.getTemplatePathKey(), file.toString());
-		return config;
+		MockEnvironment environment = new MockEnvironment();
+		environment.setProperty(template.getTemplatePathKey(), file.toString());
+		return environment;
 	}
 
-	private static Config configWithBaseUrl(String baseUrl) {
-		Config config = new PropertiesConfiguration("test");
+	private static MockEnvironment environmentWithBaseUrl(String baseUrl) {
+		MockEnvironment environment = new MockEnvironment();
 		if (baseUrl != null) {
-			config.setProperty(Settings.BASE_URL, baseUrl);
+			environment.setProperty(Settings.BASE_URL, baseUrl);
 		}
-		return config;
+		return environment;
 	}
 
 	private static void assertPasswordChangeTemplateOnClasspath() {

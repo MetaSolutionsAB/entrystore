@@ -54,6 +54,12 @@ public class EntryStoreConfiguration {
 	 * Creates a bean with Entrystore configuration needed for core.
 	 * Properties (key and value pairs) are read from property files (*.yml and *.properties) that were loaded on init by Spring-boot
 	 *
+	 * <p>This bean exists solely for the core layer ({@code RepositoryManagerImpl} requires it, and
+	 * {@code RepositoryManager.getConfiguration()} exposes the same instance to core-internal code).
+	 * The REST layer must not inject it or read via {@code getConfiguration()} — REST-layer config is
+	 * read through Spring mechanisms ({@code @Value} / {@code @ConfigurationProperties}) instead
+	 * (ENTRYSTORE-1052).
+	 *
 	 * @return a Config class (essentially a wrapper around java.util.Properties) needed for Entrystore core to work
 	 */
 	@Bean

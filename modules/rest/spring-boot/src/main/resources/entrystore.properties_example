@@ -211,6 +211,29 @@ entrystore.data.folder=/srv/entrystore/files/
 entrystore.auth.temp.lockout.max.attempts=0
 entrystore.auth.temp.lockout.duration=0ms
 
+## Local password login (default: on)
+## on / off  - identical today: password login stays enabled and only the blacklist is applied.
+##             "off" is accepted for legacy compatibility but is NOT yet honoured — setting it
+##             does not disable local password login.
+## whitelist - only the usernames listed below may log in with a password. An empty or missing
+##             whitelist in this mode denies every password login, and is currently the only way
+##             to disable local password login entirely.
+## The blacklist is applied in all three modes.
+## Use the indexed form (.1, .2, ...); a bare "whitelist=user" value is not supported.
+# entrystore.auth.password=on|off|whitelist
+# entrystore.auth.password.whitelist.1=admin
+# entrystore.auth.password.whitelist.2=user@yourdomain.tld
+# entrystore.auth.password.blacklist.1=blocked@yourdomain.tld
+## Require the current password when a user changes their own password (default: true)
+# entrystore.auth.password.require-current-password=false
+
+## Additional base URLs accepted as a post-login redirect target. The repository base URL
+## is always permitted; anything else must be listed here or the redirect is dropped
+## (open-redirect protection).
+## Use the indexed form (.1, .2, ...); a bare "redirects=url" value is not supported.
+# entrystore.auth.permitted.redirects.1=https://app.yourdomain.tld/
+# entrystore.auth.permitted.redirects.2=https://portal.yourdomain.tld/
+
 ## HTTP Basic authentication (default: false)
 ## Renamed in 6.0 — previously `entrystore.auth.http-basic`. The legacy key is
 ## detected at startup: a truthy value (true/on/yes/enabled/1) aborts startup,
@@ -269,6 +292,10 @@ entrystore.auth.temp.lockout.duration=0ms
 # entrystore.auth.openid.myopenid=off
 
 ## Solr
+## Maximum number of rows a search or a syndication feed returns.
+## When unset the two consumers differ: search caps at 100, syndication at 50.
+## Setting this applies one cap to both.
+# entrystore.solr.max-limit=200
 entrystore.solr=on
 entrystore.solr.reindex-on-startup=off
 entrystore.solr.url=http://localhost:8080/solr/entrystore-core1
@@ -337,8 +364,22 @@ entrystore.solr.extract-fulltext=off
 ## http://x normalizes to http://x:80 and https://x to https://x:443. The origin of
 ## entrystore.rowstore.url above (when set) is implicitly trusted for the DELETE path,
 ## so single-host RowStore deployments need no additional configuration here.
+## Use the indexed form (.1, .2, ...); a bare "whitelist=origin" value is not supported.
 # entrystore.proxy.remote-resource.delete.whitelist.1=http://rowstore.internal:8282
 # entrystore.proxy.remote-resource.delete.whitelist.2=https://other-rowstore.example.com
+
+## SSRF whitelist for the proxy-GET path. Entries are bare hostnames, not origin URLs.
+## A listed host is exempt from the SSRF hostname blacklist AND from the loopback,
+## site-local and link-local checks on the address it resolves to, so list only hosts
+## that are meant to be reachable from the server.
+## Use the indexed form (.1, .2, ...); a bare "local=host" value is not supported.
+# entrystore.proxy.whitelist.local.1=cache.internal
+# entrystore.proxy.whitelist.local.2=metadata.internal
+
+## Hosts that guest (unauthenticated) users may proxy to. Requests to any other host
+## require authentication. Bare hostnames, matched case-insensitively.
+## Use the indexed form (.1, .2, ...); a bare "anonymous=host" value is not supported.
+# entrystore.proxy.whitelist.anonymous.1=public.example.com
 
 ## Outbound-fetch limits, hardcoded before 6.1. The defaults below are the values that were
 ## previously compiled in. max-redirects, connect-timeout and read-timeout apply to BOTH outbound

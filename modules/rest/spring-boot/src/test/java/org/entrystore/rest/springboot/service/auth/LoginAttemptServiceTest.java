@@ -3,7 +3,6 @@ package org.entrystore.rest.springboot.service.auth;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
-import org.entrystore.config.Config;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,9 +12,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.net.URI;
 import java.time.Duration;
 
-import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_ADMIN;
-import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_DURATION;
-import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -24,9 +20,6 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class LoginAttemptServiceTest {
-
-	@Mock
-	private Config config;
 
 	@Mock
 	private PrincipalManager pm;
@@ -40,11 +33,7 @@ class LoginAttemptServiceTest {
 	private LoginAttemptService service;
 
 	private void initService(int maxAttempts, Duration duration, boolean includeAdmin) {
-		when(config.getInt(AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS, 5)).thenReturn(maxAttempts);
-		when(config.getDuration(AUTH_TEMP_LOCKOUT_DURATION, Duration.ofMinutes(5))).thenReturn(duration);
-		when(config.getBoolean(AUTH_TEMP_LOCKOUT_ADMIN, true)).thenReturn(includeAdmin);
-
-		service = new LoginAttemptService(config, pm, new SimpleMeterRegistry());
+		service = new LoginAttemptService(pm, new SimpleMeterRegistry(), maxAttempts, duration, includeAdmin);
 		service.init();
 	}
 

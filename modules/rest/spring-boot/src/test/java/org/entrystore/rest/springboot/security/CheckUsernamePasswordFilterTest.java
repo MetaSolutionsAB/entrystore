@@ -16,8 +16,7 @@
 
 package org.entrystore.rest.springboot.security;
 
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.springboot.configuration.PasswordLoginListProperties;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.junit.jupiter.api.Test;
@@ -30,7 +29,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,18 +51,12 @@ class CheckUsernamePasswordFilterTest {
 	private static final String PASSWORD = "s3cretPassw0rd!";
 
 	@Mock
-	private Config config;
-
-	@Mock
 	private LoginAttemptService loginAttemptService;
 
 	@Test
 	void whitelistedUsername_reachesTheFilterChain() throws Exception {
-		when(config.getString(Settings.AUTH_PASSWORD)).thenReturn("whitelist");
-		when(config.getStringList(Settings.AUTH_PASSWORD_WHITELIST)).thenReturn(List.of("admin"));
-		when(config.getStringList(Settings.AUTH_PASSWORD_BLACKLIST)).thenReturn(List.of());
 		when(loginAttemptService.isLockedOut("admin")).thenReturn(false);
-		var filter = filter();
+		var filter = filter("whitelist", Map.of("1", "admin"), Map.of());
 		var response = new MockHttpServletResponse();
 		var chain = new MockFilterChain();
 
@@ -74,11 +67,8 @@ class CheckUsernamePasswordFilterTest {
 
 	@Test
 	void usernameAbsentFromWhitelist_getsTheUnified401WithoutReachingTheChain() throws Exception {
-		when(config.getString(Settings.AUTH_PASSWORD)).thenReturn("whitelist");
-		when(config.getStringList(Settings.AUTH_PASSWORD_WHITELIST)).thenReturn(List.of("admin"));
-		when(config.getStringList(Settings.AUTH_PASSWORD_BLACKLIST)).thenReturn(List.of());
 		when(loginAttemptService.isLockedOut("other@test.com")).thenReturn(false);
-		var filter = filter();
+		var filter = filter("whitelist", Map.of("1", "admin"), Map.of());
 		var response = new MockHttpServletResponse();
 		var chain = new MockFilterChain();
 
@@ -90,10 +80,8 @@ class CheckUsernamePasswordFilterTest {
 
 	@Test
 	void blacklistedUsername_getsTheUnified401WithoutReachingTheChain() throws Exception {
-		when(config.getString(Settings.AUTH_PASSWORD)).thenReturn(null);
-		when(config.getStringList(Settings.AUTH_PASSWORD_BLACKLIST)).thenReturn(List.of("blocked@test.com"));
 		when(loginAttemptService.isLockedOut("blocked@test.com")).thenReturn(false);
-		var filter = filter();
+		var filter = filter(null, Map.of(), Map.of("1", "blocked@test.com"));
 		var response = new MockHttpServletResponse();
 		var chain = new MockFilterChain();
 
@@ -108,11 +96,8 @@ class CheckUsernamePasswordFilterTest {
 		// Fails closed rather than failing startup: this shape is both the misspelt-key mistake and
 		// the only way this layer can express "no local password logins at all", so the constructor
 		// logs an ERROR and keeps the deny-all behaviour instead of aborting the boot.
-		when(config.getString(Settings.AUTH_PASSWORD)).thenReturn("whitelist");
-		when(config.getStringList(Settings.AUTH_PASSWORD_WHITELIST)).thenReturn(List.of());
-		when(config.getStringList(Settings.AUTH_PASSWORD_BLACKLIST)).thenReturn(List.of());
 		when(loginAttemptService.isLockedOut("admin")).thenReturn(false);
-		var filter = assertDoesNotThrow(this::filter);
+		var filter = assertDoesNotThrow(() -> filter("whitelist", Map.of(), Map.of()));
 		var response = new MockHttpServletResponse();
 		var chain = new MockFilterChain();
 
@@ -122,10 +107,12 @@ class CheckUsernamePasswordFilterTest {
 		assertEquals(HttpStatus.UNAUTHORIZED.value(), response.getStatus());
 	}
 
-	private CheckUsernamePasswordFilter filter() {
+	private CheckUsernamePasswordFilter filter(String passwordAuthMode, Map<String, String> whitelist,
+			Map<String, String> blacklist) {
 		// A real writer, not a stub: the 401 assertions read the status it writes.
-		return new CheckUsernamePasswordFilter(config, loginAttemptService,
-				new ErrorResponseWriter(JsonMapper.builder().build()));
+		return new CheckUsernamePasswordFilter(loginAttemptService,
+				new ErrorResponseWriter(JsonMapper.builder().build()), passwordAuthMode,
+				new PasswordLoginListProperties(whitelist, blacklist));
 	}
 
 	private static MockHttpServletRequest loginRequest(String username) {
