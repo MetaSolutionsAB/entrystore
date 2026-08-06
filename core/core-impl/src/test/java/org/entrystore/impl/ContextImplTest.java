@@ -30,8 +30,10 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -309,12 +311,20 @@ public class ContextImplTest extends AbstractCoreTest {
 
 	/**
 	 * ENTRYSTORE-1095. {@code getEntries} iterates the resource index while entry creation pushes into
-	 * it, and the two use no common monitor — the readers synchronize on nothing, the write path on
-	 * {@code entry.repository}. With a plain {@code HashMap} index this throws
-	 * {@code ConcurrentModificationException}.
+	 * it, and the two share no monitor — the readers synchronize on nothing. With a plain {@code HashMap}
+	 * index this throws {@code ConcurrentModificationException}.
+	 *
+	 * <p>It also asserts the outcome, which is what makes it a regression guard for the load protocol
+	 * rather than only for the map types. The seeding loop leaves the indexes unpublished
+	 * ({@code createNewMinimalItem} never loads them), so the writers here genuinely race a cold load —
+	 * and a writer that reached {@code addToIndex} before publication has its {@code resHasEntry} triple
+	 * still uncommitted, invisible to the loading scan. If such a write were skipped instead of recorded
+	 * in the pending buffer, the entry would be absent from every later listing for the life of this
+	 * object, and the failure would be a missing entry rather than an exception. Nothing else in the
+	 * suite would catch it.
 	 */
 	@Test
-	public void getEntries_concurrentWithEntryCreation_doesNotThrow() throws Exception {
+	public void getEntries_concurrentWithEntryCreation_losesNoEntry() throws Exception {
 		// Seed entries so there is something to iterate; an empty index cannot fail.
 		for (int i = 0; i < 20; i++) {
 			context.createLink(null, URI.create("http://example.com/seed/" + i), null);
@@ -322,17 +332,24 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		int readers = 8;
 		int writers = 4;
-		runConcurrently(readers + writers, (index, _) -> {
+		Set<URI> createdURIs = ConcurrentHashMap.newKeySet();
+		runConcurrently(readers + writers, (index, keepRunning) -> {
 			if (index < readers) {
-				for (int i = 0; i < 300; i++) {
+				for (int i = 0; i < 300 && keepRunning.getAsBoolean(); i++) {
 					context.getEntries();
 				}
 			} else {
-				for (int i = 0; i < 30; i++) {
-					context.createLink(null, URI.create("http://example.com/w" + index + "/" + i), null);
+				for (int i = 0; i < 30 && keepRunning.getAsBoolean(); i++) {
+					createdURIs.add(context
+						.createLink(null, URI.create("http://example.com/w" + index + "/" + i), null)
+						.getEntryURI());
 				}
 			}
 		});
+
+		assertEquals(writers * 30, createdURIs.size(), "every writer must have created its entries");
+		assertTrue(context.getEntries().containsAll(createdURIs),
+			"an entry created while the index was loading must still appear in the listing");
 	}
 
 	/**
@@ -349,13 +366,13 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		int readers = 8;
 		int writers = 4;
-		runConcurrently(readers + writers, (index, _) -> {
+		runConcurrently(readers + writers, (index, keepRunning) -> {
 			if (index < readers) {
-				for (int i = 0; i < 300; i++) {
+				for (int i = 0; i < 300 && keepRunning.getAsBoolean(); i++) {
 					context.getByResourceURI(shared);
 				}
 			} else {
-				for (int i = 0; i < 15; i++) {
+				for (int i = 0; i < 15 && keepRunning.getAsBoolean(); i++) {
 					context.createLink(null, shared, null);
 				}
 			}
@@ -402,12 +419,6 @@ public class ContextImplTest extends AbstractCoreTest {
 	 */
 	@Test
 	public void getEntries_concurrentWithReIndex_neverObservesATruncatedListing() throws Exception {
-		// The premise is genuine parallelism. On a single-CPU host the writer runs reIndex from start to
-		// finish without unmounting — nothing in it blocks — so no read can land inside the window this
-		// test measures, and the overlap assertion below could never hold.
-		assumeTrue(Runtime.getRuntime().availableProcessors() >= 2,
-			"needs more than one CPU to interleave a read with reIndex");
-
 		int seeded = 10;
 		for (int i = 0; i < seeded; i++) {
 			context.createLink(null, URI.create("http://example.com/reindex/" + i), null);
@@ -416,26 +427,29 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		AtomicInteger smallestSeen = new AtomicInteger(Integer.MAX_VALUE);
 		AtomicInteger overlappingReads = new AtomicInteger();
-		AtomicBoolean reIndexing = new AtomicBoolean();
+		AtomicInteger reIndexCount = new AtomicInteger();
 		AtomicBoolean writerDone = new AtomicBoolean();
 		int readers = 8;
 
 		runConcurrently(readers + 1, (index, keepRunning) -> {
 			if (index < readers) {
 				while (!writerDone.get() && keepRunning.getAsBoolean()) {
-					boolean startedDuringReIndex = reIndexing.get();
+					// Counting completed re-indexes rather than a flag set around the whole reIndex() call.
+					// The fields are nulled only at its very end, so a flag spanning the call is true for
+					// almost entirely harmless time — both indexes still published, the race impossible —
+					// and "overlapped" would be satisfied by reads that never came near the window.
+					int before = reIndexCount.get();
 					smallestSeen.accumulateAndGet(context.getEntries().size(), Math::min);
-					if (startedDuringReIndex && reIndexing.get()) {
+					if (reIndexCount.get() != before) {
 						overlappingReads.incrementAndGet();
 					}
 					Thread.yield();
 				}
 			} else {
 				try {
-					for (int i = 0; i < 5; i++) {
-						reIndexing.set(true);
+					for (int i = 0; i < 5 && keepRunning.getAsBoolean(); i++) {
 						context.reIndex();
-						reIndexing.set(false);
+						reIndexCount.incrementAndGet();
 					}
 				} finally {
 					writerDone.set(true);
@@ -447,6 +461,12 @@ public class ContextImplTest extends AbstractCoreTest {
 			"the reIndex writer did not finish, so the readers observed no republication");
 		assertEquals(expected, smallestSeen.get(),
 			"getEntries must never observe a partial or empty index while reIndex republishes it");
+		// Only the overlap claim needs genuine parallelism, so only it is skipped on a single-CPU host: the
+		// writer there runs reIndex start to finish without unmounting, since nothing in it blocks. The
+		// truncation assertion above is the point of the test and must hold everywhere, including on a
+		// cgroup-limited CI agent, where guarding the whole body left it green while asserting nothing.
+		assumeTrue(Runtime.getRuntime().availableProcessors() >= 2,
+			"needs more than one CPU to interleave a read with reIndex");
 		assertTrue(overlappingReads.get() > 0,
 			"no read overlapped a reIndex, so this run proved nothing about the race");
 	}
@@ -503,13 +523,13 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		int readers = 8;
 		int writers = 4;
-		runConcurrently(readers + writers, (index, _) -> {
+		runConcurrently(readers + writers, (index, keepRunning) -> {
 			if (index < readers) {
-				for (int i = 0; i < 300; i++) {
+				for (int i = 0; i < 300 && keepRunning.getAsBoolean(); i++) {
 					context.getByExternalMdURI(sharedMd);
 				}
 			} else {
-				for (int i = 0; i < 15; i++) {
+				for (int i = 0; i < 15 && keepRunning.getAsBoolean(); i++) {
 					context.createReference(null,
 						URI.create("http://example.com/ref/w" + index + "/" + i), sharedMd, null);
 				}
@@ -565,6 +585,54 @@ public class ContextImplTest extends AbstractCoreTest {
 	}
 
 	/**
+	 * ENTRYSTORE-1095. The deterministic half of the publish-at-end guarantee: an index write that arrives
+	 * before anything has read the index must survive the load that follows.
+	 *
+	 * <p>{@code getEntries_concurrentWithEntryCreation_losesNoEntry} drives the real shape of the race but
+	 * cannot force its interleaving — a reader publishes the index within microseconds of the run
+	 * starting, after which writers push straight into it — so it asserts the outcome without reliably
+	 * reproducing the failure. This test removes the timing: the write below is applied while the indexes
+	 * are unpublished, and it touches only the in-memory index, so the scan that follows cannot recover it
+	 * from the store. Skipping such a write, which is what the code did before the pending-write buffer,
+	 * loses it for the life of the object.
+	 */
+	@Test
+	public void indexWriteBeforeTheFirstRead_survivesTheLoadThatFollows() {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl fresh = (ContextImpl) contextEntry.getResource();
+		Entry link = fresh.createLink(null, URI.create("http://example.com/before-any-read"), null);
+		URI moved = URI.create("http://example.com/moved-before-any-read");
+
+		fresh.updateResource2EntryIndex(link.getResourceURI(), moved, link.getEntryURI());
+
+		assertTrue(fresh.getByResourceURI(moved).stream()
+				.anyMatch(e -> link.getEntryURI().equals(e.getEntryURI())),
+			"an index write made before the first read must not be dropped by the load");
+		assertTrue(fresh.getByResourceURI(link.getResourceURI()).isEmpty(),
+			"and the removal half of that write must be replayed too");
+	}
+
+	/**
+	 * ENTRYSTORE-1095. The incompleteness has to outlive the load that discovered it. As a method-local
+	 * count it left the truncation unobservable, so the Solr purge, the persisted quota fill level and
+	 * {@code importContext}'s purge loop all acted destructively on a short listing.
+	 */
+	@Test
+	public void isIndexComplete_isFalseAfterAnUnindexableStatementAndTrueAgainOnceRepaired() {
+		URI unreachable = URI.create("http://example.com/unindexable");
+		addUnindexableResHasEntryStatement(context, unreachable);
+
+		assertFalse(context.isIndexComplete(),
+			"a statement that could not be indexed must be visible after the load that skipped it");
+
+		// reIndex() rewrites the index graph from the store, which drops the unparseable statement — the
+		// repair path. The flag is assigned on every publish, so it clears rather than sticking.
+		context.reIndex();
+
+		assertTrue(context.isIndexComplete(), "a clean reload must clear the incomplete flag");
+	}
+
+	/**
 	 * ENTRYSTORE-1095. Deleting a context must clear every child graph, including one the in-memory index
 	 * never saw. Pins the two halves of that guarantee together: an unparseable statement no longer
 	 * aborts the index load, and {@code remove(RepositoryConnection)} reads its child list from the
@@ -573,8 +641,11 @@ public class ContextImplTest extends AbstractCoreTest {
 	 * the graph that named them — permanently orphaned data.
 	 *
 	 * <p>The child's only {@code resHasEntry} triple gets a subject {@code java.net.URI.create} rejects,
-	 * planted before the first read for the reason given on
-	 * {@link #getEntries_withAnUnindexableStatement_stillListsTheGoodEntries()}.
+	 * and the context is then re-resolved from a cold cache so its index is built from the store — which
+	 * is the state a restart leaves behind, and the only state in which the index genuinely cannot see the
+	 * child. Asserting on the instance that created it would instead observe the mapping its own
+	 * {@code createLink} recorded in the pending-write buffer: correct behaviour, since that write must
+	 * never be lost, but it makes that instance the wrong witness for this test.
 	 */
 	@Test
 	public void removeContext_clearsAChildTheIndexCouldNotSee() throws Exception {
@@ -582,16 +653,31 @@ public class ContextImplTest extends AbstractCoreTest {
 		ContextImpl doomed = (ContextImpl) contextEntry.getResource();
 		EntryImpl child = (EntryImpl) doomed.createLink(null, URI.create("http://example.com/orphan-candidate"), null);
 		IRI childEntryIRI = child.getSesameEntryURI();
+		IRI childMetadataIRI = child.getSesameLocalMetadataURI();
+		IRI childRelationIRI = child.relationURI;
+		String doomedId = doomed.id;
 
 		hideFromIndex(doomed, child);
-		assertFalse(doomed.getEntries().contains(child.getEntryURI()),
+
+		((ContextManagerImpl) cm).softCache.remove(contextEntry);
+		ContextImpl reloaded = (ContextImpl) cm.getContext(doomedId);
+		assertFalse(reloaded.getEntries().contains(child.getEntryURI()),
 			"the child must be invisible to the in-memory index for this test to mean anything");
+		assertFalse(reloaded.isIndexComplete(),
+			"and the context must know its index is short");
 
 		cm.remove(contextEntry.getEntryURI());
 
 		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
 			assertFalse(rc.hasStatement(null, null, null, false, childEntryIRI),
 				"the child entry graph must be cleared even though the index did not list it");
+			// The graphs this javadoc names are cleared by the separate removeEntry.remove(rc) call, not by
+			// rc.clear(entryURI) — so asserting only the entry graph left a regression that dropped that
+			// call passing, while leaving behind exactly the orphaned data this test claims to pin.
+			assertFalse(rc.hasStatement(null, null, null, false, childMetadataIRI),
+				"the child metadata graph must be cleared too");
+			assertFalse(rc.hasStatement(null, null, null, false, childRelationIRI),
+				"the child relation graph must be cleared too");
 		}
 	}
 
@@ -640,6 +726,12 @@ public class ContextImplTest extends AbstractCoreTest {
 	 * termination without a bound, so closing while a task still runs turned the timeout below into an
 	 * unbounded hang: the assertion failure propagated into {@code close()} and never came out. The
 	 * build then went silent instead of reporting a failing test (ENTRYSTORE-1095).
+	 *
+	 * <p>Failures are collected as {@code Throwable}, not {@code Exception}. An {@code AssertionError}
+	 * raised inside a task body is not an {@code Exception}: it escaped the catch, was swallowed by the
+	 * {@code Future} nobody inspected, and {@code done.countDown()} still ran — so the run reported
+	 * success. In a harness whose whole purpose is that a concurrency failure must be visible, that was
+	 * the remaining hole.
 	 */
 	private static void runConcurrently(int taskCount, ConcurrentTask task) throws InterruptedException {
 		CountDownLatch start = new CountDownLatch(1);
@@ -648,20 +740,21 @@ public class ContextImplTest extends AbstractCoreTest {
 		AtomicBoolean keepRunning = new AtomicBoolean(true);
 
 		ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+		java.util.List<Future<?>> futures = new ArrayList<>(taskCount);
 		boolean completed;
 		try {
 			for (int i = 0; i < taskCount; i++) {
 				int index = i;
-				executor.submit(() -> {
+				futures.add(executor.submit(() -> {
 					try {
 						start.await();
 						task.accept(index, keepRunning::get);
-					} catch (Exception e) {
-						failures.add(e);
+					} catch (Throwable t) {
+						failures.add(t);
 					} finally {
 						done.countDown();
 					}
-				});
+				}));
 			}
 
 			start.countDown();
@@ -669,6 +762,18 @@ public class ContextImplTest extends AbstractCoreTest {
 		} finally {
 			keepRunning.set(false);
 			executor.shutdownNow();
+		}
+
+		// Belt to the catch above: anything a task threw before reaching it, or that the executor itself
+		// raised, is only visible through the Future.
+		for (Future<?> future : futures) {
+			if (future.isDone() && !future.isCancelled()) {
+				try {
+					future.get();
+				} catch (ExecutionException e) {
+					failures.add(e.getCause());
+				}
+			}
 		}
 
 		assertTrue(completed,

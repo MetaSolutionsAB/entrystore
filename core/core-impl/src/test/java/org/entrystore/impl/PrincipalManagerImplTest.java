@@ -39,7 +39,9 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -201,6 +203,32 @@ public class PrincipalManagerImplTest extends AbstractCoreTest {
 		assertTrue(groupUris.contains(friendsOfMickeyUri),
 				"groupUris must include Donald's friendsOfMickey membership despite the stale URI; "
 						+ "got " + groupUris);
+	}
+
+	@Test
+	public void getUser_withNullURI_returnsNullInsteadOfThrowing() {
+		// ENTRYSTORE-1095. The caller ContextImpl's null-guard exists for: isUserAdminOrAdminGroup leaves
+		// the principal null when the authenticatedUserURI ThreadLocal is unset and hands it to getUser,
+		// which calls getByResourceURI(null). ContextImplTest pins the guard itself, but stops at the guard
+		// clause, so nothing exercised the path that actually reaches it.
+		assertNull(pm.getUser(null), "an unresolvable principal must be absent, not an exception");
+		assertNull(pm.getGroup(null));
+	}
+
+	@Test
+	public void unresolvableAuthenticatedUser_isDeniedRatherThanGrantedTheUserGroupsRights() {
+		// ENTRYSTORE-1095. hasAccess used to read `currentUser != getGuestUser()` as true for a null user,
+		// so every entry granting the _users group was granted to a principal that could not be resolved —
+		// and the next check dereferenced the null. An unreadable principal must deny.
+		Context mouse = cm.getContext("mouse");
+		Entry entry = mouse.getEntry();
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getUserGroup().getURI());
+
+		PrincipalManagerImpl principalManager = (PrincipalManagerImpl) pm;
+
+		assertFalse(principalManager.hasAccess(null, entry, AccessProperty.ReadMetadata),
+			"a principal that could not be resolved must not inherit the _users group's rights");
 	}
 
 	@Test

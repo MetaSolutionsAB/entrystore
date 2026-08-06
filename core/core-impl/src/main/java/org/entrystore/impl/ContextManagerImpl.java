@@ -383,6 +383,14 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 		log.info("Removing old entries from context...");
 		Context cont = getContext(contextEntry.getId());
+		if (!cont.isIndexComplete()) {
+			// The loop below derives what to remove from a listing. An incomplete index makes that listing
+			// short, so pre-import entries it cannot see would survive a replace-import and silently
+			// coexist with the imported data (ENTRYSTORE-1095).
+			throw new org.entrystore.repository.RepositoryException("Refusing to import into context "
+					+ contextEntry.getId() + ": its index is incomplete, so old entries cannot be "
+					+ "enumerated reliably and some would survive the import");
+		}
 		Set<URI> entries = cont.getEntries();
 		for (URI entryURI : entries) {
 			String eId = cont.getByEntryURI(entryURI).getId();

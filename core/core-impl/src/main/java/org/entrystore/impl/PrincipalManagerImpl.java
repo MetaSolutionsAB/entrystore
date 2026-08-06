@@ -392,6 +392,16 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	}
 
 	protected boolean hasAccess(User currentUser, Entry entry, AccessProperty prop) {
+		if (currentUser == null) {
+			// Fail closed on a principal that could not be resolved. Without this, the "_users" check below
+			// reads currentUser != getGuestUser() as true, so every entry granting the user group would be
+			// granted to an unresolvable principal, and the check after it dereferences null. getUser
+			// returns null whenever the principal's resHasEntry mapping is unreadable — for instance from a
+			// context whose index is incomplete (ENTRYSTORE-1095) — and "I could not read the principal"
+			// must not answer the same as "this principal is allowed".
+			log.warn("Denying {} access: the authenticated principal could not be resolved to a user", prop);
+			return false;
+		}
 		Set<URI> principals = entry.getAllowedPrincipalsFor(prop);
 		if (!principals.isEmpty()) {
 
