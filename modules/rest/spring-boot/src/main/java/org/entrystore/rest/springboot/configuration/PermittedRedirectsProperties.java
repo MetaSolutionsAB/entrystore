@@ -32,7 +32,7 @@ import java.util.Map;
  * <p>Only the indexed form binds, and several config shapes changed meaning relative to
  * {@code Config.getStringList} — here that can permit a post-login redirect target the legacy reader
  * rejected, which is an open redirect. {@link IndexedListConfigValidator} documents the shapes and
- * reports them at startup.
+ * aborts startup on them, naming the key and the remedy.
  */
 @ConfigurationProperties(prefix = "entrystore.auth.permitted")
 public record PermittedRedirectsProperties(Map<String, String> redirects) {

@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -38,12 +40,13 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.when;
 
 /**
- * Pins the whitelist/blacklist gate. The integration suite cannot see the deny half of the whitelist
- * predicate: {@code entrystore-it.properties} whitelists every IT user, so no IT ever attempts a
- * password login for a username absent from a configured whitelist. If {@code whitelistMode} were
- * ever computed false — an unrecognised config value, or the flag dropped in a refactor — every
- * enforced-SSO deployment would silently accept local password logins for all accounts while the
- * whole suite stayed green; the pass-through case below is what pins the flag to the right value.
+ * Pins the whitelist/blacklist gate, including both halves of the fail-open path the constructor
+ * comment concedes ("a typo in this value fails open"): the direct-construction tests pin the mode
+ * logic, {@code whitelistMode_bindsFromTheConfiguredKey} pins that the {@code entrystore.auth.password}
+ * placeholder actually resolves through a real {@code Environment}, and
+ * {@code CookieLoginResourceIT.loginNonWhitelistedUser} asserts the denial end to end — so a key that
+ * stops resolving (yielding {@code whitelistMode == false} and enforcement silently off) no longer
+ * leaves the whole suite green.
  */
 @ExtendWith(MockitoExtension.class)
 class CheckUsernamePasswordFilterTest {
@@ -52,6 +55,31 @@ class CheckUsernamePasswordFilterTest {
 
 	@Mock
 	private LoginAttemptService loginAttemptService;
+
+	@Test
+	void whitelistMode_bindsFromTheConfiguredKey() {
+		// The mode string is the sole switch that turns whitelist enforcement on. Every other test passes
+		// it into the constructor directly, so only this one pins that the @Value placeholder resolves
+		// 'entrystore.auth.password' from a real Environment — a renamed or mistyped key would yield a
+		// null mode and enforcement silently off, with the direct-construction tests still green.
+		new ApplicationContextRunner()
+				.withBean(PropertySourcesPlaceholderConfigurer.class)
+				.withBean(LoginAttemptService.class, () -> loginAttemptService)
+				.withBean(ErrorResponseWriter.class, () -> new ErrorResponseWriter(JsonMapper.builder().build()))
+				.withBean(PasswordLoginListProperties.class,
+						() -> new PasswordLoginListProperties(Map.of("1", "admin"), Map.of()))
+				.withBean(CheckUsernamePasswordFilter.class)
+				.withPropertyValues("entrystore.auth.password=whitelist")
+				.run(context -> {
+					var response = new MockHttpServletResponse();
+
+					context.getBean(CheckUsernamePasswordFilter.class)
+							.doFilter(loginRequest("other@test.com"), response, new MockFilterChain());
+
+					assertEquals(HttpStatus.UNAUTHORIZED.value(), response.getStatus(),
+							"a non-whitelisted username must be denied when the mode resolves from the key");
+				});
+	}
 
 	@Test
 	void whitelistedUsername_reachesTheFilterChain() throws Exception {

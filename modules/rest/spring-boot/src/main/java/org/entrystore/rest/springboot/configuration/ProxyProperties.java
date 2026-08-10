@@ -59,7 +59,7 @@ import java.util.Set;
  * {@code Config.getStringList} — here that can whitelist a host the legacy reader ignored, and a
  * whitelisted host suppresses the SSRF hostname blacklist <em>and</em> the resolved-address
  * loopback/site-local/link-local checks. {@link IndexedListConfigValidator} documents the shapes and
- * reports them at startup.
+ * aborts startup on them, naming the key and the remedy.
  */
 @Slf4j
 @ConfigurationProperties(prefix = "entrystore.proxy")

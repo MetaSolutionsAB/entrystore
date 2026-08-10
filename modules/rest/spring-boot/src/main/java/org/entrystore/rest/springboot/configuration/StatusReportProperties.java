@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Immutable view of the configuration values reported by {@code StatusService} on
- * {@code GET /status/extended}. Purpose-built for that report, hence the baked-in
+ * {@code GET /management/status/extended}. Purpose-built for that report, hence the baked-in
  * {@code "unconfigured"} display defaults for the string values.
  *
  * <p>Bound through {@code @Value} rather than {@code @ConfigurationProperties} because the keys span
@@ -29,6 +29,17 @@ import org.springframework.stereotype.Component;
  * {@code entrystore.harvester.oai}, {@code entrystore.repository.provenance},
  * {@code entrystore.backup.maintenance}) are simultaneously a scalar and the prefix of further keys —
  * a layout a record component can never express.
+ *
+ * <p>The boolean keys bind as raw strings and are resolved by {@link #relaxedBoolean(String)}, which
+ * mirrors the legacy {@code Config.getBoolean} exactly ({@code on} enables, {@code off} disables,
+ * anything else falls to {@code Boolean.parseBoolean} — never throws). Two reasons, both consequences
+ * of this being a report-only DTO: it is an eagerly-instantiated component, so a strict boolean bind
+ * would put a cosmetic report on the startup-critical path and abort the boot (naming
+ * {@code constructor parameter N}, not the key) for a value such as {@code enabled} that the actual
+ * consumers tolerate; and every one of these keys is still read by core with legacy semantics
+ * ({@code RepositoryManagerImpl}, {@code BackupScheduler}, the OAI harvester — several via a literal
+ * {@code "on"} comparison), so a stricter parse here would make the report disagree with the behaviour
+ * it reports on ({@code entrystore.solr=1} would report an index core never started).
  *
  * <p>The {@code @Value} annotations sit on the explicit canonical constructor's parameters rather than
  * on the record components — see {@link CorsProperties} for why that distinction matters at startup.
@@ -38,17 +49,17 @@ public record StatusReportProperties(
 		String rowstoreUrl,
 		String repositoryType,
 		String repositoryIndices,
-		boolean quota,
+		String quotaRaw,
 		String quotaDefault,
-		boolean oaiHarvester,
-		boolean oaiHarvesterMultiThreaded,
-		boolean provenance,
-		boolean signup,
-		boolean passwordReset,
-		boolean solrEnabled,
-		boolean solrReindexOnStartup,
+		String oaiHarvesterRaw,
+		String oaiHarvesterMultiThreadedRaw,
+		String provenanceRaw,
+		String signupRaw,
+		String passwordResetRaw,
+		String solrEnabledRaw,
+		String solrReindexOnStartupRaw,
 		String backupFormat,
-		boolean backupMaintenance,
+		String backupMaintenanceRaw,
 		String backupCronExpression,
 		String backupMaintenanceExpiresAfterDays,
 		String backupMaintenanceLowerLimit,
@@ -61,17 +72,17 @@ public record StatusReportProperties(
 			@Value("${entrystore.rowstore.url:" + UNCONFIGURED + "}") String rowstoreUrl,
 			@Value("${entrystore.repository.store.type:" + UNCONFIGURED + "}") String repositoryType,
 			@Value("${entrystore.repository.store.indexes:" + UNCONFIGURED + "}") String repositoryIndices,
-			@Value("${entrystore.data.quota:false}") boolean quota,
+			@Value("${entrystore.data.quota:false}") String quotaRaw,
 			@Value("${entrystore.data.quota.default:" + UNCONFIGURED + "}") String quotaDefault,
-			@Value("${entrystore.harvester.oai:false}") boolean oaiHarvester,
-			@Value("${entrystore.harvester.oai.multithreaded:false}") boolean oaiHarvesterMultiThreaded,
-			@Value("${entrystore.repository.provenance:false}") boolean provenance,
-			@Value("${entrystore.auth.signup:false}") boolean signup,
-			@Value("${entrystore.auth.password-reset:false}") boolean passwordReset,
-			@Value("${entrystore.solr:false}") boolean solrEnabled,
-			@Value("${entrystore.solr.reindex-on-startup:false}") boolean solrReindexOnStartup,
+			@Value("${entrystore.harvester.oai:false}") String oaiHarvesterRaw,
+			@Value("${entrystore.harvester.oai.multithreaded:false}") String oaiHarvesterMultiThreadedRaw,
+			@Value("${entrystore.repository.provenance:false}") String provenanceRaw,
+			@Value("${entrystore.auth.signup:false}") String signupRaw,
+			@Value("${entrystore.auth.password-reset:false}") String passwordResetRaw,
+			@Value("${entrystore.solr:false}") String solrEnabledRaw,
+			@Value("${entrystore.solr.reindex-on-startup:false}") String solrReindexOnStartupRaw,
 			@Value("${entrystore.backup.format:" + UNCONFIGURED + "}") String backupFormat,
-			@Value("${entrystore.backup.maintenance:false}") boolean backupMaintenance,
+			@Value("${entrystore.backup.maintenance:false}") String backupMaintenanceRaw,
 			// Nested default keeps the fallback to the deprecated entrystore.backup.timeregexp key.
 			@Value("${entrystore.backup.cronexp:${entrystore.backup.timeregexp:" + UNCONFIGURED + "}}") String backupCronExpression,
 			@Value("${entrystore.backup.maintenance.expires-after-days:" + UNCONFIGURED + "}") String backupMaintenanceExpiresAfterDays,
@@ -80,20 +91,67 @@ public record StatusReportProperties(
 		this.rowstoreUrl = rowstoreUrl;
 		this.repositoryType = repositoryType;
 		this.repositoryIndices = repositoryIndices;
-		this.quota = quota;
+		this.quotaRaw = quotaRaw;
 		this.quotaDefault = quotaDefault;
-		this.oaiHarvester = oaiHarvester;
-		this.oaiHarvesterMultiThreaded = oaiHarvesterMultiThreaded;
-		this.provenance = provenance;
-		this.signup = signup;
-		this.passwordReset = passwordReset;
-		this.solrEnabled = solrEnabled;
-		this.solrReindexOnStartup = solrReindexOnStartup;
+		this.oaiHarvesterRaw = oaiHarvesterRaw;
+		this.oaiHarvesterMultiThreadedRaw = oaiHarvesterMultiThreadedRaw;
+		this.provenanceRaw = provenanceRaw;
+		this.signupRaw = signupRaw;
+		this.passwordResetRaw = passwordResetRaw;
+		this.solrEnabledRaw = solrEnabledRaw;
+		this.solrReindexOnStartupRaw = solrReindexOnStartupRaw;
 		this.backupFormat = backupFormat;
-		this.backupMaintenance = backupMaintenance;
+		this.backupMaintenanceRaw = backupMaintenanceRaw;
 		this.backupCronExpression = backupCronExpression;
 		this.backupMaintenanceExpiresAfterDays = backupMaintenanceExpiresAfterDays;
 		this.backupMaintenanceLowerLimit = backupMaintenanceLowerLimit;
 		this.backupMaintenanceUpperLimit = backupMaintenanceUpperLimit;
+	}
+
+	public boolean quota() {
+		return relaxedBoolean(quotaRaw);
+	}
+
+	public boolean oaiHarvester() {
+		return relaxedBoolean(oaiHarvesterRaw);
+	}
+
+	public boolean oaiHarvesterMultiThreaded() {
+		return relaxedBoolean(oaiHarvesterMultiThreadedRaw);
+	}
+
+	public boolean provenance() {
+		return relaxedBoolean(provenanceRaw);
+	}
+
+	public boolean signup() {
+		return relaxedBoolean(signupRaw);
+	}
+
+	public boolean passwordReset() {
+		return relaxedBoolean(passwordResetRaw);
+	}
+
+	public boolean solrEnabled() {
+		return relaxedBoolean(solrEnabledRaw);
+	}
+
+	public boolean solrReindexOnStartup() {
+		return relaxedBoolean(solrReindexOnStartupRaw);
+	}
+
+	public boolean backupMaintenance() {
+		return relaxedBoolean(backupMaintenanceRaw);
+	}
+
+	/** Mirrors {@code Config.getBoolean}: {@code on}/{@code true} enable, everything else is false — never throws. */
+	private static boolean relaxedBoolean(String value) {
+		if ("on".equalsIgnoreCase(value)) {
+			return true;
+		}
+		if ("off".equalsIgnoreCase(value)) {
+			return false;
+		}
+		return Boolean.parseBoolean(value);
 	}
 }

@@ -42,7 +42,7 @@ import java.util.Map;
  * <p>Only the indexed form binds, and several config shapes changed meaning relative to
  * {@code Config.getStringList} — here that can admit a username the legacy reader ignored (whitelist) or
  * stop blocking one it blocked (blacklist). {@link IndexedListConfigValidator} documents the shapes and
- * reports them at startup.
+ * aborts startup on them, naming the key and the remedy.
  *
  * <p>The copy below is via {@code Map.copyOf}, which rejects null values. {@code CheckUsernamePasswordFilter}
  * relies on that: it matches with {@code equalsIgnoreCase} and no longer null-filters, so do not swap the

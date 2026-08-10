@@ -24,6 +24,7 @@ import org.entrystore.rest.springboot.security.SsrfValidator.Origin;
 import org.entrystore.rest.springboot.security.SsrfValidator.ValidatedTarget;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.unit.DataSize;
 
 import java.net.HttpURLConnection;
@@ -31,6 +32,7 @@ import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -50,6 +52,28 @@ class SsrfValidatorTest {
 		validator.setProxyHostWhitelist(Set.of());
 		validator.setDeleteOriginWhitelist(Set.of());
 		validator.setRowstoreOrigin(null);
+	}
+
+	@Test
+	void init_wiresEachTrustSetToItsOwnSetting() {
+		// Every other test here bypasses init() via the package-private setters, so this is the one place
+		// pinning that init() reads each trust set from ITS setting: if deleteOriginWhitelist were wired
+		// to localWhitelist(), every proxy-GET-whitelisted host would silently become a trusted
+		// remote-resource DELETE origin — and the ITs configure neither the delete whitelist nor a
+		// rowstore URL, so nothing else would fail.
+		var properties = ProxyPropertiesFixture.withWhitelists(
+				new ProxyProperties.Whitelist(Map.of("1", "cache.internal"), Map.of("1", "guest.example")),
+				new ProxyProperties.RemoteResource(new ProxyProperties.RemoteResource.Delete(
+						Map.of("1", "http://rowstore.internal:8282"))));
+		var wired = new SsrfValidator(properties, "https://rowstore.example:9000/");
+
+		wired.init();
+
+		assertEquals(Set.of("cache.internal"), ReflectionTestUtils.getField(wired, "proxyHostWhitelist"));
+		assertEquals(Set.of(new Origin("http", "rowstore.internal", 8282)),
+				ReflectionTestUtils.getField(wired, "deleteOriginWhitelist"));
+		assertEquals(new Origin("https", "rowstore.example", 9000),
+				ReflectionTestUtils.getField(wired, "rowstoreOrigin"));
 	}
 
 	@Test

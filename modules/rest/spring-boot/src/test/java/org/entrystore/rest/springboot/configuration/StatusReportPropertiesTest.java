@@ -29,7 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * so a typo here makes {@code GET /management/status/extended} report a default for a value the operator
  * did configure. Several are also read by core through {@code Settings} — {@code entrystore.data.quota},
  * {@code .repository.provenance}, {@code .solr} and {@code .harvester.oai} — with {@code on}-based
- * truthiness that differs from the strict coercion applied here.
+ * truthiness that {@code relaxedBoolean} deliberately mirrors, so the report cannot disagree with the
+ * behaviour it reports on and a stray spelling cannot abort startup over a cosmetic DTO.
  *
  * <p>Each string key gets a distinct value, and the booleans alternate, so transposing two adjacent
  * constructor parameters fails. Two booleans further apart that happen to share a value cannot be
@@ -104,6 +105,38 @@ class StatusReportPropertiesTest {
 			assertFalse(properties.solrEnabled());
 			assertFalse(properties.backupMaintenance());
 		});
+	}
+
+	@Test
+	void booleans_mirrorTheLegacyConfigGetBooleanSemantics() {
+		// Core still reads these keys with legacy truthiness (RepositoryManagerImpl requires the literal
+		// "on" for several), so the report must resolve them identically: "on" enables, "yes"/"1"/"enabled"
+		// are false — NOT the strict Spring boolean that would flip yes/1 to true and diverge from core.
+		runner().withPropertyValues(
+						"entrystore.data.quota=on",
+						"entrystore.harvester.oai=yes",
+						"entrystore.repository.provenance=1",
+						"entrystore.solr=enabled",
+						"entrystore.auth.signup=off")
+				.run(context -> {
+					StatusReportProperties properties = context.getBean(StatusReportProperties.class);
+
+					assertTrue(properties.quota());
+					assertFalse(properties.oaiHarvester());
+					assertFalse(properties.provenance());
+					assertFalse(properties.solrEnabled());
+					assertFalse(properties.signup());
+				});
+	}
+
+	@Test
+	void unrecognisedBooleanSpelling_doesNotAbortStartup() {
+		// This component is eagerly instantiated, so a strict boolean bind would put a report-only DTO on
+		// the startup-critical path: an existing deployment carrying entrystore.solr=enabled would refuse
+		// to boot with an error naming "constructor parameter N" rather than the key.
+		runner().withPropertyValues("entrystore.solr=enabled")
+				.run(context -> assertTrue(context.getStartupFailure() == null,
+						"a stray boolean spelling must not fail context startup"));
 	}
 
 	@Test

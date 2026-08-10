@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.configuration;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.math.BigInteger;
@@ -56,13 +57,27 @@ import java.util.stream.Stream;
  * profile silently disappears — use the indexed form. And a gap is kept: {@code .1} + {@code .3} yields
  * both predicates, where {@code Config.getStringList} stopped counting at the first missing index and
  * dropped {@code .3}. Pinned by {@code TraversalPropertiesTest}.
+ *
+ * <p>The one exception is a bare {@code entrystore.traversal.<profile>.blacklist=<tuple>}: the legacy
+ * reader accepted it as a one-element denylist, and dropping it would make the traversal denylist fail
+ * open. It is honoured as a single tuple (with a WARN at bind time recommending the indexed form),
+ * ordered before the indexed entries so those win last-wins conflicts in {@code MetadataService}.
  */
 @ConfigurationProperties(prefix = "entrystore")
+@Slf4j
 public record TraversalProperties(Map<String, String> traversal) {
 
 	public TraversalProperties {
 		// Copy so the singleton never hands out the binder's mutable LinkedHashMap by reference.
 		traversal = (traversal == null) ? Map.of() : Map.copyOf(traversal);
+		// Warned once at bind time, not in blacklistTuples: that accessor runs per traversal request.
+		traversal.forEach((key, value) -> {
+			if (key.endsWith(".blacklist") && !value.isBlank()) {
+				log.warn("Configuration key 'entrystore.traversal.{}' has a bare, un-indexed value; it is "
+						+ "honoured as a single blacklist tuple so the denylist cannot fail open, but write "
+						+ "it as 'entrystore.traversal.{}.1={}'.", key, key, value);
+			}
+		});
 	}
 
 	/**
@@ -111,19 +126,25 @@ public record TraversalProperties(Map<String, String> traversal) {
 
 	/**
 	 * The profile's blacklist tuples ({@code entrystore.traversal.<profile>.blacklist.N} keys),
-	 * each a comma-separated predicate/object pair. Empty when the profile has no blacklist.
+	 * each a comma-separated predicate/object pair. Empty when the profile has no blacklist. A bare
+	 * {@code <profile>.blacklist=<tuple>} value is honoured as the first tuple (see the class javadoc).
 	 */
 	public List<String> blacklistTuples(String profile) {
 		String keyPrefix = profile + ".blacklist.";
+		String bare = traversal.get(profile + ".blacklist");
 		// Sorted by index, not by map iteration order: Map.copyOf hands back an immutable map whose order is
 		// randomised per JVM, and MetadataService.loadTraversalBlacklistForProfile puts these into a map keyed
 		// by predicate, so the last tuple for a predicate wins. Only this accessor has that contract —
 		// predicates() collects into a Set, where a sort would be discarded work on a per-request path.
-		return entriesWithNumericSuffix(keyPrefix)
-				.map(entry -> Map.entry(new BigInteger(entry.getKey().substring(keyPrefix.length())),
-						entry.getValue()))
-				.sorted(Map.Entry.comparingByKey())
-				.map(Map.Entry::getValue)
+		// The bare tuple goes first for the same reason: an indexed entry for the same predicate wins.
+		return Stream.concat(
+						(bare == null || bare.isBlank()) ? Stream.empty() : Stream.of(bare),
+						entriesWithNumericSuffix(keyPrefix)
+								.map(entry -> Map.entry(
+										new BigInteger(entry.getKey().substring(keyPrefix.length())),
+										entry.getValue()))
+								.sorted(Map.Entry.comparingByKey())
+								.map(Map.Entry::getValue))
 				.toList();
 	}
 

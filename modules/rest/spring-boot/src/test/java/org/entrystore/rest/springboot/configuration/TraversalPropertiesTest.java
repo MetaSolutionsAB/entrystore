@@ -129,6 +129,37 @@ class TraversalPropertiesTest {
 	}
 
 	@Test
+	void blacklistTuples_bareValueAlone_isHonouredAsASingleTuple() {
+		// The legacy reader accepted the bare form as a one-element denylist; dropping it would make the
+		// traversal denylist fail open, so it is the one bare value this binding honours.
+		TraversalProperties properties = new TraversalProperties(Map.of(
+				"p.blacklist", "rdf:type,foaf:Person",
+				"p.1", "http://example.com/p1"));
+
+		assertEquals(List.of("rdf:type,foaf:Person"), properties.blacklistTuples("p"));
+	}
+
+	@Test
+	void blacklistTuples_bareValuePlusIndexedEntries_ordersTheBareTupleFirst() {
+		// First, so an indexed tuple for the same predicate wins the last-wins keying in MetadataService.
+		TraversalProperties properties = new TraversalProperties(Map.of(
+				"p.blacklist", "rdf:type,foaf:Person",
+				"p.blacklist.1", "rdf:type,foaf:Agent"));
+
+		assertEquals(List.of("rdf:type,foaf:Person", "rdf:type,foaf:Agent"),
+				properties.blacklistTuples("p"));
+	}
+
+	@Test
+	void blacklistTuples_blankBareValue_isSkipped() {
+		TraversalProperties properties = new TraversalProperties(Map.of(
+				"p.blacklist", "   ",
+				"p.blacklist.1", "rdf:type,foaf:Agent"));
+
+		assertEquals(List.of("rdf:type,foaf:Agent"), properties.blacklistTuples("p"));
+	}
+
+	@Test
 	void intSettings_absent_returnEmpty() {
 		TraversalProperties properties = new TraversalProperties(Map.of("myprofile.1", "http://example.com/p1"));
 

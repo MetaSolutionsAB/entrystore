@@ -16,17 +16,16 @@
 
 package org.entrystore.rest.springboot.configuration;
 
-import org.apache.commons.logging.Log;
 import org.entrystore.repository.config.Settings;
 import org.springframework.boot.EnvironmentPostProcessor;
 import org.springframework.boot.SpringApplication;
-import org.springframework.boot.logging.DeferredLogFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.EnumerablePropertySource;
 import org.springframework.core.env.PropertySource;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -34,7 +33,7 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 
 /**
- * Reports, at startup, the config shapes whose meaning changed when the indexed list settings moved from
+ * Aborts startup on the config shapes whose meaning changed when the indexed list settings moved from
  * the legacy {@code Config.getStringList} to Spring's map binding. All of them are otherwise silent, and
  * every key below is an allowlist or denylist, so a changed value is a change in who gets in.
  *
@@ -43,21 +42,27 @@ import java.util.TreeSet;
  * returned {@code 1} as soon as the bare key existed, so the bare value was the only value and every
  * indexed entry was ignored. The map binder does the inverse: it drops the bare value and binds the
  * indexed entries. The effective list becomes a different set, not a wider or narrower one.</li>
- * <li><b>Bare value on its own.</b> It no longer binds at all and aborts startup; the resulting
- * {@code BindException} names the record, so this class names the key and the required form instead.</li>
+ * <li><b>Bare value on its own.</b> It no longer binds at all; the resulting {@code BindException} names
+ * the record, so this class names the key and the required form instead.</li>
  * <li><b>An entry the legacy reader never read.</b> It probed the literal keys {@code .1}, {@code .2}, …
  * and stopped at the first one absent, so {@code .1} + {@code .3} yielded only {@code .1}, and a list not
  * starting at {@code .1} yielded nothing at all. {@code .0} was never probed, and a zero-padded
  * {@code .01} does not match the literal {@code .1} it looked for. The map binding binds all of them.</li>
+ * <li><b>An entry with a non-numeric index suffix.</b> {@code ...whitelist.local.l=host} (letter l) or a
+ * bracketed {@code ...whitelist[partner]} was inert under the legacy reader but binds as an active list
+ * entry now.</li>
  * </ul>
  *
  * <p>An {@link EnvironmentPostProcessor} rather than a bean, for the same reason as
- * {@link LegacyPropertyKeyDetector}: it reports before any bean is created, so the diagnostic still
- * reaches the log when an unrelated bean or bind fails first. It orders itself just ahead of that
- * detector, whose fail-fast throw would otherwise suppress these findings on the same boot.
+ * {@link LegacyPropertyKeyDetector}: it runs before any bean is created, so the diagnostic is the first
+ * failure rather than being buried under an unrelated bean or bind error. It orders itself just ahead of
+ * that detector, whose own fail-fast throw would otherwise suppress these findings on the same boot.
  *
- * <p>Deliberately logs rather than aborting startup: unlike a renamed key, a list in any of these shapes
- * still binds and still works, it is just not necessarily the list the operator had before.
+ * <p>Deliberately aborts rather than logging or dropping entries: honouring a changed list would widen an
+ * access-control decision silently on upgrade, and re-implementing the legacy contiguous-from-one
+ * semantics per record would keep two readers alive forever. The same policy as
+ * {@link LegacyPropertyKeyDetector} applies — a config whose meaning changed must be fixed before the
+ * application serves requests — and the exception carries the per-key remedy.
  * {@code entrystore.traversal.*} is out of scope: its profile names are operator-chosen, so a key there
  * would have to be discovered rather than looked up, and its list divergence is documented in the
  * CHANGELOG instead.
@@ -76,53 +81,70 @@ public final class IndexedListConfigValidator implements EnvironmentPostProcesso
 			Settings.PROXY_REMOTE_RESOURCE_DELETE_WHITELIST,
 			Settings.SIGNUP_WHITELIST);
 
-	private final Log log;
-
-	public IndexedListConfigValidator(DeferredLogFactory logFactory) {
-		this.log = logFactory.getLog(IndexedListConfigValidator.class);
-	}
-
 	@Override
 	public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
+		List<String> findings = new ArrayList<>();
 		for (String key : INDEXED_LIST_KEYS) {
-			validateKey(environment, key);
+			validateKey(environment, key, findings);
+		}
+		if (!findings.isEmpty()) {
+			throw new IllegalStateException(buildFailFastMessage(findings));
 		}
 	}
 
 	// Must run after ConfigDataEnvironmentPostProcessor so entrystore.properties (imported via
 	// spring.config.import) is part of the Environment when we scan, and just ahead of
-	// LegacyPropertyKeyDetector, whose fail-fast throw would otherwise suppress these findings.
+	// LegacyPropertyKeyDetector, whose own fail-fast throw would otherwise suppress these findings.
 	@Override
 	public int getOrder() {
 		return Ordered.LOWEST_PRECEDENCE - 1;
 	}
 
-	private void validateKey(ConfigurableEnvironment environment, String key) {
-		SortedSet<String> suffixes = configuredIndexSuffixes(environment, key);
+	private static void validateKey(ConfigurableEnvironment environment, String key, List<String> findings) {
+		ConfiguredSuffixes suffixes = configuredSuffixes(environment, key);
+		if (!suffixes.nonNumeric().isEmpty()) {
+			findings.add("Configuration key '" + key + "' has entries with non-numeric index suffixes "
+					+ suffixes.nonNumeric() + ". The previous release never read them and they would bind as "
+					+ "active list entries now; list entries must use numeric indices (.1, .2, ...).");
+		}
 		boolean hasBareValue = environment.containsProperty(key);
-		if (suffixes.isEmpty()) {
+		if (suffixes.numeric().isEmpty()) {
 			if (hasBareValue) {
-				log.error("Configuration key '" + key + "' has a bare, un-indexed value. Before 6.1 that was "
-						+ "read as a single-element list; it no longer binds and will abort startup. Write it "
-						+ "as '" + key + ".1=<value>'.");
+				findings.add("Configuration key '" + key + "' has a bare, un-indexed value. Before 6.1 that "
+						+ "was read as a single-element list; it no longer binds. Write it as '" + key
+						+ ".1=<value>'.");
 			}
 			return;
 		}
 		if (hasBareValue) {
-			log.error("Configuration key '" + key + "' has both a bare value and indexed entries " + suffixes
-					+ ". Before 6.1 the bare value was used and the indexed entries were ignored; now the "
-					+ "bare value is ignored and the indexed entries apply. Remove one of the two forms.");
+			findings.add("Configuration key '" + key + "' has both a bare value and indexed entries "
+					+ suffixes.numeric() + ". Before 6.1 the bare value was used and the indexed entries were "
+					+ "ignored; now the bare value would be ignored and the indexed entries would apply. "
+					+ "Remove one of the two forms.");
 		}
 		// With a bare value present the legacy reader stopped at a count of 1 and never probed .1 at all,
 		// so every indexed entry is newly applied, not just the ones after the first hole.
-		SortedSet<String> droppedBefore = hasBareValue ? suffixes : entriesTheLegacyReaderDropped(suffixes);
+		SortedSet<String> droppedBefore = hasBareValue
+				? suffixes.numeric()
+				: entriesTheLegacyReaderDropped(suffixes.numeric());
 		if (!droppedBefore.isEmpty()) {
-			log.error("Configuration key '" + key + "' has entries the previous release never read (found "
-					+ suffixes + "; newly applied: " + droppedBefore + "). Before 6.1 counting started at .1 "
-					+ "and stopped at the first missing index."
+			findings.add("Configuration key '" + key + "' has entries the previous release never read (found "
+					+ suffixes.numeric() + "; newly applied: " + droppedBefore + "). Before 6.1 counting "
+					+ "started at .1 and stopped at the first missing index."
 					+ (hasBareValue ? " Remove the bare value above, then renumber" : " Renumber")
 					+ " contiguously from .1, without leading zeros, to restore the previous list.");
 		}
+	}
+
+	private static String buildFailFastMessage(List<String> findings) {
+		StringBuilder message = new StringBuilder(
+				"EntryStore startup aborted: indexed list settings are configured in shapes whose meaning "
+						+ "changed in 6.1. Every key below is an allowlist or denylist, so starting anyway "
+						+ "could admit callers the previous configuration excluded.\n");
+		for (String finding : findings) {
+			message.append("  - ").append(finding).append('\n');
+		}
+		return message.toString();
 	}
 
 	/**
@@ -143,44 +165,50 @@ public final class IndexedListConfigValidator implements EnvironmentPostProcesso
 
 	/**
 	 * Index suffixes across the three spellings that all bind to the same list: the dotted form, the
-	 * bracket form ({@code ...local[2]}) and the container-native environment-variable form
-	 * ({@code ENTRYSTORE_PROXY_WHITELIST_LOCAL_2}). Matching only the dotted form would leave the
-	 * diagnostic silent for exactly the deployments most likely to hit this.
+	 * bracket form ({@code ...local[2]}) and the container-native environment-variable form. Boot's
+	 * {@code SystemEnvironmentPropertyMapper} removes dashes rather than converting them, so
+	 * {@code entrystore.proxy.remote-resource.delete.whitelist} binds from
+	 * {@code ENTRYSTORE_PROXY_REMOTERESOURCE_DELETE_WHITELIST_1}. Matching only the dotted form would
+	 * leave the diagnostic silent for exactly the deployments most likely to hit this.
 	 */
-	private static SortedSet<String> configuredIndexSuffixes(ConfigurableEnvironment environment, String key) {
+	private static ConfiguredSuffixes configuredSuffixes(ConfigurableEnvironment environment, String key) {
 		String dotted = key + ".";
 		String bracketed = key + "[";
-		String environmentVariable = key.toUpperCase(Locale.ROOT).replace('.', '_').replace('-', '_') + "_";
-		SortedSet<String> suffixes = new TreeSet<>(indexOrder());
+		String environmentVariable = key.toUpperCase(Locale.ROOT).replace("-", "").replace('.', '_') + "_";
+		SortedSet<String> numeric = new TreeSet<>(indexOrder());
+		SortedSet<String> nonNumeric = new TreeSet<>();
 		for (PropertySource<?> source : environment.getPropertySources()) {
 			if (!(source instanceof EnumerablePropertySource<?> enumerable)) {
 				continue;
 			}
 			for (String name : enumerable.getPropertyNames()) {
-				String suffix = indexSuffix(name, dotted, bracketed, environmentVariable);
-				if (suffix != null) {
-					suffixes.add(suffix);
+				String suffix = rawSuffix(name, dotted, bracketed, environmentVariable);
+				if (suffix == null || suffix.isEmpty()) {
+					continue;
+				}
+				if (isAsciiDigits(suffix)) {
+					numeric.add(suffix);
+				} else {
+					nonNumeric.add(suffix);
 				}
 			}
 		}
-		return suffixes;
+		return new ConfiguredSuffixes(numeric, nonNumeric);
 	}
 
-	private static String indexSuffix(String name, String dotted, String bracketed, String environmentVariable) {
+	private record ConfiguredSuffixes(SortedSet<String> numeric, SortedSet<String> nonNumeric) {}
+
+	private static String rawSuffix(String name, String dotted, String bracketed, String environmentVariable) {
 		if (name.startsWith(dotted)) {
-			return asIndex(name.substring(dotted.length()));
+			return name.substring(dotted.length());
 		}
 		if (name.startsWith(bracketed) && name.endsWith("]")) {
-			return asIndex(name.substring(bracketed.length(), name.length() - 1));
+			return name.substring(bracketed.length(), name.length() - 1);
 		}
 		if (name.startsWith(environmentVariable)) {
-			return asIndex(name.substring(environmentVariable.length()));
+			return name.substring(environmentVariable.length());
 		}
 		return null;
-	}
-
-	private static String asIndex(String candidate) {
-		return isAsciiDigits(candidate) ? candidate : null;
 	}
 
 	/**
