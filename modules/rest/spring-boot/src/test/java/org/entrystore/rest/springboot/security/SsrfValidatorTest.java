@@ -21,17 +21,20 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.security.SsrfValidator.Origin;
 import org.entrystore.rest.springboot.security.SsrfValidator.ValidatedTarget;
+import org.entrystore.rest.springboot.configuration.ProxyProperties;
 import org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.util.unit.DataSize;
 
 import java.net.HttpURLConnection;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.URI;
+import java.time.Duration;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -281,6 +284,25 @@ class SsrfValidatorTest {
 				new URI("http://example.com/path"), ipv6);
 		try {
 			assertEquals("[2001:db8:0:0:0:0:0:1]", conn.getURL().getHost());
+		} finally {
+			conn.disconnect();
+		}
+	}
+
+	@Test
+	void openPinnedConnection_appliesEachConfiguredTimeoutToItsOwnSetting() throws Exception {
+		// Distinct values, so swapping the two setters at the call site fails here rather than passing
+		// on symmetry — and so a seconds/milliseconds slip in the *Millis() accessors is visible.
+		SsrfValidator configured = new SsrfValidator(repositoryManager,
+				new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ofSeconds(7), Duration.ofSeconds(11)));
+		InetAddress ipv4 = Inet4Address.getByAddress("example.com",
+				new byte[]{(byte) 93, (byte) 184, (byte) 216, (byte) 34});
+
+		HttpURLConnection conn = configured.openPinnedConnection(new URI("http://example.com/path"), ipv4);
+
+		try {
+			assertEquals(7_000, conn.getConnectTimeout());
+			assertEquals(11_000, conn.getReadTimeout());
 		} finally {
 			conn.disconnect();
 		}

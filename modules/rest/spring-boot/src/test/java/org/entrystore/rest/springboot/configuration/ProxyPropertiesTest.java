@@ -23,14 +23,15 @@ import org.springframework.util.unit.DataSize;
 
 import java.time.Duration;
 
+import static org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture.withMaxRedirects;
+import static org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture.withMaxResponseSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ProxyPropertiesTest {
 
 	@Test
-	void defaults_matchTheValuesEntryStore60CompiledIn() {
+	void defaults_matchTheConstantsTheseKeysReplaced() {
 		// These are the numbers the constants held before they became configurable, so an existing
 		// deployment that sets none of these keys must see no behaviour change.
 		runner().run(context -> {
@@ -68,11 +69,8 @@ class ProxyPropertiesTest {
 				"entrystore.proxy.whitelist.anonymous=example.com",
 				"entrystore.proxy.whitelist.local=internal.example.com",
 				"entrystore.proxy.remote-resource.delete.whitelist.1=http://rowstore.internal:8282"
-		).run(context -> {
-			assertNotNull(context.getStartupFailure() == null ? context.getBean(ProxyProperties.class) : null,
-					"the whitelist keys must not prevent ProxyProperties from binding");
-			assertEquals(15, context.getBean(ProxyProperties.class).maxRedirects());
-		});
+		).run(context -> assertEquals(15, context.getBean(ProxyProperties.class).maxRedirects(),
+				"the whitelist keys must not prevent ProxyProperties from binding"));
 	}
 
 	@Test
@@ -81,6 +79,35 @@ class ProxyPropertiesTest {
 				() -> new ProxyProperties(DataSize.ofBytes(0), 15, Duration.ofSeconds(30), Duration.ofSeconds(60)));
 
 		assertEquals("entrystore.proxy.max-response-size must be positive, got 0B", e.getMessage());
+	}
+
+	@Test
+	void responseSizeBeyondTheCeiling_failsFastRatherThanExhaustingTheHeap() {
+		// The body is accumulated in an int-indexed ByteArrayOutputStream, so a cap large enough to
+		// outrun the heap would throw OutOfMemoryError out of out.write before the size check could
+		// fire — an unmapped 500 instead of the 502 the cap exists to produce.
+		IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+				() -> withMaxResponseSize(DataSize.ofGigabytes(3)));
+
+		assertEquals("entrystore.proxy.max-response-size must not exceed 512MB — the response is "
+				+ "buffered in memory per request, got 3221225472B", e.getMessage());
+		// The ceiling itself is legal.
+		assertEquals(DataSize.ofMegabytes(512), withMaxResponseSize(DataSize.ofMegabytes(512)).maxResponseSize());
+	}
+
+	@Test
+	void unsuffixedTimeout_isReadAsSecondsRatherThanMilliseconds() {
+		// Without @DurationUnit, Spring's DurationStyle reads a bare number as milliseconds, so an
+		// operator migrating from the deleted CONNECT_TIMEOUT_MS = 30_000 who writes 30 would get a
+		// 30 ms connect timeout that passes validation and turns every outbound fetch into a 504.
+		runner().withPropertyValues(
+				"entrystore.proxy.connect-timeout=30",
+				"entrystore.proxy.read-timeout=60"
+		).run(context -> {
+			ProxyProperties properties = context.getBean(ProxyProperties.class);
+			assertEquals(Duration.ofSeconds(30), properties.connectTimeout());
+			assertEquals(Duration.ofSeconds(60), properties.readTimeout());
+		});
 	}
 
 	@Test
@@ -108,11 +135,6 @@ class ProxyPropertiesTest {
 				() -> new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ofDays(30), Duration.ofSeconds(60)));
 		assertThrows(IllegalArgumentException.class,
 				() -> new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ofSeconds(30), Duration.ofDays(30)));
-	}
-
-	private static ProxyProperties withMaxRedirects(int maxRedirects) {
-		return new ProxyProperties(DataSize.ofMegabytes(10), maxRedirects,
-				Duration.ofSeconds(30), Duration.ofSeconds(60));
 	}
 
 	private static ApplicationContextRunner runner() {

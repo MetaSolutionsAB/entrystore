@@ -115,7 +115,12 @@ public class SsrfSafeHttpClient {
 			}
 		}
 
-		log.warn("More than {} redirect loops detected, aborting", maxRedirects);
+		// Phrased as the cap rather than as a loop count: with entrystore.proxy.max-redirects=0 — a
+		// supported value meaning "do not follow redirects" — a single well-behaved 302 lands here, and
+		// "more than 0 loops detected" would point whoever debugs the 502 at the upstream instead of at
+		// their own configuration.
+		log.warn("Upstream exceeded the configured redirect cap of {} (entrystore.proxy.max-redirects), aborting",
+				maxRedirects);
 		throw new CustomResponseException("Too many redirects", HttpStatus.BAD_GATEWAY);
 	}
 }

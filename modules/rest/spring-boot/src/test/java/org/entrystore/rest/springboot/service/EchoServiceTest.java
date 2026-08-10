@@ -60,11 +60,6 @@ class EchoServiceTest {
 	}
 
 	@Test
-	void defaultCap_isTheTenMegabytesEntryStore60CompiledIn() {
-		assertEquals(10 * 1024 * 1024, new EchoProperties(DataSize.ofMegabytes(10)).maxFileSize().toBytes());
-	}
-
-	@Test
 	void nonPositiveCap_failsFastNamingTheKey() {
 		IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
 				() -> new EchoProperties(DataSize.ofBytes(0)));

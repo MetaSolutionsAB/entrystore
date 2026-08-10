@@ -24,8 +24,8 @@ import org.springframework.util.unit.DataSize;
  * Bindings for {@code entrystore.echo.*}, consumed by {@code EchoService} to cap the payload
  * {@code POST /echo} will reflect and by {@code StatusService} to report that cap.
  *
- * <p>The default is the value EntryStore 6.0 compiled in, so existing deployments see no change. The
- * cap is checked against the already-spooled {@code MultipartFile}, so it bounds what is read back into
+ * <p>The default is the constant this key replaced, so existing deployments see no change. The cap is
+ * checked against the already-spooled {@code MultipartFile}, so it bounds what is read back into
  * memory rather than what is accepted off the wire — {@code spring.servlet.multipart.max-file-size}
  * governs the latter and must stay at or above this value for the 413 to come from here rather than
  * from Jetty as a 400.
@@ -33,10 +33,24 @@ import org.springframework.util.unit.DataSize;
 @ConfigurationProperties(prefix = "entrystore.echo")
 public record EchoProperties(@DefaultValue("10MB") DataSize maxFileSize) {
 
+	/**
+	 * Bounds per-request heap. {@code EchoService} reads the payload back as a UTF-8 {@code String} and
+	 * the response then HTML-escapes it, so peak heap is a multiple of this cap rather than equal to it,
+	 * on an endpoint that is reachable without authentication.
+	 */
+	private static final DataSize MAX_FILE_SIZE_CEILING = DataSize.ofMegabytes(64);
+
 	public EchoProperties {
 		if (maxFileSize == null || maxFileSize.toBytes() < 1) {
 			throw new IllegalArgumentException(
 					"entrystore.echo.max-file-size must be positive, got " + maxFileSize);
+		}
+		if (maxFileSize.compareTo(MAX_FILE_SIZE_CEILING) > 0) {
+			// Ceiling spelled in MB rather than via DataSize.toString(), which renders raw bytes: the
+			// operator writes this key as "64MB", so that is what the remedy should read as.
+			throw new IllegalArgumentException("entrystore.echo.max-file-size must not exceed "
+					+ MAX_FILE_SIZE_CEILING.toMegabytes() + "MB — the payload is held in memory and "
+					+ "echoed back, got " + maxFileSize);
 		}
 	}
 }

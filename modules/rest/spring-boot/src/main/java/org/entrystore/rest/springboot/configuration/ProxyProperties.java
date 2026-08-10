@@ -18,23 +18,28 @@ package org.entrystore.rest.springboot.configuration;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.boot.convert.DurationUnit;
 import org.springframework.util.unit.DataSize;
 
 import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 
 /**
  * Bindings for the outbound-fetch limits under {@code entrystore.proxy.*}, consumed by
  * {@code ProxyService} (response-size cap), {@code SsrfSafeHttpClient} (redirect cap) and
  * {@code SsrfValidator} (socket timeouts).
  *
- * <p>All defaults are the values EntryStore 6.0 compiled in, so existing deployments see no change.
+ * <p>All defaults are the constants these keys replaced, so existing deployments see no change.
  *
  * <p>The timeouts apply per hop on <b>both</b> outbound paths that go through
  * {@code SsrfValidator.openPinnedConnection}: {@code GET /proxy} (and its context-scoped form) and
- * {@code DELETE /{context-id}/resource/{entry-id}?proxy=true}. Worst-case wall time for one request is
- * therefore roughly {@code (maxRedirects + 1) × (connectTimeout + readTimeout)} — with the defaults,
- * about 24 minutes — so lowering the timeouts matters more than lowering the redirect cap if the
- * concern is a request thread held by an unresponsive upstream.
+ * {@code DELETE /{context-id}/resource/{entry-id}?proxy=true}. Establishing all hops costs at worst
+ * roughly {@code (maxRedirects + 1) × connectTimeout}; {@code readTimeout} bounds each socket read
+ * rather than the exchange, so total wall time is <b>not</b> bounded by it — a slow-drip upstream can
+ * hold a request thread until {@code maxResponseSize} is reached. Plus DNS resolution, which no timeout
+ * here covers. Lowering {@code maxResponseSize} bounds the read loop; lowering the timeouts alone does
+ * not. {@code maxResponseSize} applies to {@code GET /proxy} only — the resource-DELETE path never reads
+ * a response body.
  *
  * <p>This prefix is shared with the SSRF whitelists ({@code entrystore.proxy.whitelist.anonymous},
  * {@code .whitelist.local}, {@code entrystore.proxy.remote-resource.delete.whitelist.N}), which are
@@ -44,12 +49,20 @@ import java.time.Duration;
 public record ProxyProperties(
 		@DefaultValue("10MB") DataSize maxResponseSize,
 		@DefaultValue("15") int maxRedirects,
-		@DefaultValue("30s") Duration connectTimeout,
-		@DefaultValue("60s") Duration readTimeout
+		@DurationUnit(ChronoUnit.SECONDS) @DefaultValue("30s") Duration connectTimeout,
+		@DurationUnit(ChronoUnit.SECONDS) @DefaultValue("60s") Duration readTimeout
 ) {
 
 	/** Guards against an operator turning one request into an unbounded chain of outbound connections. */
 	private static final int MAX_REDIRECTS_CEILING = 50;
+
+	/**
+	 * Bounds per-request heap, and is also what keeps the cap enforceable at all: the body is
+	 * accumulated in a {@code ByteArrayOutputStream}, whose backing array is int-indexed, so without a
+	 * ceiling a large enough cap would throw {@code OutOfMemoryError} out of {@code out.write} before
+	 * the size check could ever trip — an unmapped 500 instead of the 502 the cap exists to produce.
+	 */
+	private static final DataSize MAX_RESPONSE_SIZE_CEILING = DataSize.ofMegabytes(512);
 
 	/**
 	 * Upper bound on the timeouts. Also what makes {@link #connectTimeoutMillis()} safe: those return
@@ -62,6 +75,13 @@ public record ProxyProperties(
 		if (maxResponseSize == null || maxResponseSize.toBytes() < 1) {
 			throw new IllegalArgumentException(
 					"entrystore.proxy.max-response-size must be positive, got " + maxResponseSize);
+		}
+		if (maxResponseSize.compareTo(MAX_RESPONSE_SIZE_CEILING) > 0) {
+			// Ceiling spelled in MB rather than via DataSize.toString(), which renders raw bytes: the
+			// operator writes this key as "512MB", so that is what the remedy should read as.
+			throw new IllegalArgumentException("entrystore.proxy.max-response-size must not exceed "
+					+ MAX_RESPONSE_SIZE_CEILING.toMegabytes() + "MB — the response is buffered in memory "
+					+ "per request, got " + maxResponseSize);
 		}
 		if (maxRedirects < 0 || maxRedirects > MAX_REDIRECTS_CEILING) {
 			throw new IllegalArgumentException("entrystore.proxy.max-redirects must be between 0 and "

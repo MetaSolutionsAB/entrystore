@@ -113,8 +113,9 @@ public class ProxyService {
 	}
 
 	private byte[] readWithLimit(InputStream is) throws IOException {
-		// long rather than int: the cap is operator-configurable and may legitimately exceed 2 GiB, at
-		// which point an int accumulator would overflow negative and stop enforcing the limit entirely.
+		// long rather than int to match DataSize.toBytes(), and as defence in depth: an int accumulator
+		// would overflow negative and stop enforcing the limit at all. ProxyProperties caps the setting
+		// well below that point, since this buffers into an int-indexed array — see MAX_RESPONSE_SIZE_CEILING.
 		long maxResponseBytes = proxyProperties.maxResponseSize().toBytes();
 		byte[] buf = new byte[8192];
 		long totalRead = 0;

@@ -341,28 +341,35 @@ entrystore.solr.extract-fulltext=off
 # entrystore.proxy.remote-resource.delete.whitelist.2=https://other-rowstore.example.com
 
 ## Outbound-fetch limits, hardcoded before 6.1. The defaults below are the values that were
-## previously compiled in. These apply to BOTH outbound paths: GET /proxy (and its context-scoped
-## form) and the resource-DELETE proxy path above.
+## previously compiled in. max-redirects, connect-timeout and read-timeout apply to BOTH outbound
+## paths: GET /proxy (and its context-scoped form) and the resource-DELETE proxy path above.
+## max-response-size applies to GET /proxy only — the resource-DELETE path never reads a response body.
 ##
 ## max-redirects is a cap on redirect hops, so a value of N opens up to N+1 connections (the initial
 ## request plus N hops); 0 disables redirect following entirely. Exceeding it is answered 502.
-## The timeouts apply per hop, so worst-case wall time for one request is roughly
-## (max-redirects + 1) x (connect-timeout + read-timeout) — about 24 minutes with these defaults.
-## The proxy runs on the request thread, so lower the timeouts rather than raising the redirect cap
-## if the concern is threads held by an unresponsive upstream. Note connect-timeout does not cover
-## DNS resolution, which happens first.
+##
+## The timeouts apply per hop. Establishing all hops costs at worst roughly
+## (max-redirects + 1) x connect-timeout. read-timeout is a per-socket-read deadline that resets on
+## every successful read, NOT a deadline for the response, so it does not bound total wall time: an
+## upstream that trickles bytes just under the timeout holds a request thread until max-response-size
+## is reached. DNS resolution is covered by no timeout here at all. The proxy runs on the request
+## thread, so if the concern is threads held by a slow upstream, lower max-response-size — lowering
+## the timeouts alone does not create a bound.
 ##
 ## max-response-size caps the upstream body that GET /proxy will buffer; exceeding it is answered 502.
-## The body is accumulated in memory, so this bounds heap per concurrent proxy request.
+## The body is accumulated in memory, so this bounds heap per concurrent proxy request. Capped at
+## 512MB, because the buffer is an int-indexed array: without that ceiling a large enough value would
+## exhaust the heap before the size check could fire.
 # entrystore.proxy.max-response-size=10MB
 # entrystore.proxy.max-redirects=15
 # entrystore.proxy.connect-timeout=30s
 # entrystore.proxy.read-timeout=60s
 
 ## Maximum payload POST /echo will reflect back; exceeding it is answered 413. Reported as
-## echoMaxEntitySize by GET /management/status?include=extended. Keep
+## echoMaxEntitySize by GET /management/status/extended. Keep
 ## spring.servlet.multipart.max-file-size at or above this value, otherwise Jetty rejects the upload
-## with a 400 before /echo ever sees it.
+## with a 400 before /echo ever sees it. Capped at 64MB: the payload is read back as a string and
+## HTML-escaped, so peak heap is a multiple of this value on an endpoint that needs no authentication.
 # entrystore.echo.max-file-size=10MB
 
 ## Enable creation of groups with linked contexts for normal non-admin users

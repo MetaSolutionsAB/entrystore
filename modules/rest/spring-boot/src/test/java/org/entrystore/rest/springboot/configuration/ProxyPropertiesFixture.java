@@ -39,12 +39,15 @@ public final class ProxyPropertiesFixture {
 
 	/** Defaults with the redirect cap overridden, for tests that assert the cap is honoured. */
 	public static ProxyProperties withMaxRedirects(int maxRedirects) {
-		return new ProxyProperties(DataSize.ofMegabytes(10), maxRedirects,
-				Duration.ofSeconds(30), Duration.ofSeconds(60));
+		ProxyProperties defaults = defaults();
+		return new ProxyProperties(defaults.maxResponseSize(), maxRedirects,
+				defaults.connectTimeout(), defaults.readTimeout());
 	}
 
 	/** Defaults with the response-size cap overridden, for tests that assert the cap is honoured. */
 	public static ProxyProperties withMaxResponseSize(DataSize maxResponseSize) {
-		return new ProxyProperties(maxResponseSize, 15, Duration.ofSeconds(30), Duration.ofSeconds(60));
+		ProxyProperties defaults = defaults();
+		return new ProxyProperties(maxResponseSize, defaults.maxRedirects(),
+				defaults.connectTimeout(), defaults.readTimeout());
 	}
 }

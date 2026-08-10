@@ -33,6 +33,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.util.unit.DataSize;
 
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.URI;
@@ -177,23 +178,49 @@ class ProxyServiceTest {
 	@Test
 	void fetchUrl_upstreamBodyOverTheConfiguredCap_throws502() throws Exception {
 		// No coverage existed for the response-size cap at all. The cap is enforced while streaming, so
-		// the body must be rejected mid-read rather than buffered in full first.
+		// the body must be rejected mid-read rather than buffered in full first — hence a body larger
+		// than readWithLimit's 8192-byte buffer, and a stream that fails if read past the cap. A body
+		// that fits in one buffer-fill would pass even against a readAllBytes() implementation.
 		ProxyService capped = new ProxyService(principalManager, contextService, ssrfValidator,
 				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()),
-				ProxyPropertiesFixture.withMaxResponseSize(DataSize.ofBytes(4)));
+				ProxyPropertiesFixture.withMaxResponseSize(DataSize.ofBytes(8192)));
 		capped.setWhitelistAnon(Set.of());
 		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/big", "192.0.2.10");
 		HttpURLConnection conn = mock(HttpURLConnection.class);
 		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
 		when(conn.getResponseCode()).thenReturn(200);
-		when(conn.getInputStream())
-				.thenReturn(new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8)));
+		// 64 KiB of body against an 8 KiB cap: the correct reader stops after two buffer-fills, well
+		// before the 32 KiB tripwire below.
+		when(conn.getInputStream()).thenReturn(failAfter(new byte[65536], 32768));
 
 		CustomResponseException e = assertThrows(CustomResponseException.class,
 				() -> capped.fetchUrl(target, null, false));
 
 		assertEquals(HttpStatus.BAD_GATEWAY, e.getStatus());
-		assertEquals("Upstream response exceeds maximum allowed size of 4 bytes", e.getMessage());
+		assertEquals("Upstream response exceeds maximum allowed size of 8192 bytes", e.getMessage());
+	}
+
+	/**
+	 * A stream over {@code body} that throws once {@code limit} bytes have been handed out, so a reader
+	 * that buffers the whole response before checking the cap fails rather than quietly passing.
+	 */
+	private static InputStream failAfter(byte[] body, int limit) {
+		return new ByteArrayInputStream(body) {
+			private int delivered;
+
+			@Override
+			public synchronized int read(byte[] buf, int off, int len) {
+				if (delivered >= limit) {
+					throw new AssertionError("read past the cap: the body was buffered in full "
+							+ "instead of being rejected mid-read");
+				}
+				int read = super.read(buf, off, len);
+				if (read > 0) {
+					delivered += read;
+				}
+				return read;
+			}
+		};
 	}
 
 	@Test

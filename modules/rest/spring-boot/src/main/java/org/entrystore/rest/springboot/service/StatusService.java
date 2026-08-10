@@ -86,7 +86,7 @@ public class StatusService {
 			.quota(esConfig.getBoolean(Settings.DATA_QUOTA, false))
 			.quotaDefault(esConfig.getString(Settings.DATA_QUOTA_DEFAULT, DEFAULT_VALUE_FOR_NOT_CONFIGURED))
 			// Reported from the same bean EchoService enforces, so the report cannot disagree with the
-			// cap actually applied. Was hardcoded to -1 while /echo was still on Restlet.
+			// cap actually applied.
 			.echoMaxEntitySize(echoProperties.maxFileSize().toBytes())
 			.cors(buildCorsInfo())
 			.oaiHarvester(esConfig.getBoolean(Settings.HARVESTER_OAI, false))

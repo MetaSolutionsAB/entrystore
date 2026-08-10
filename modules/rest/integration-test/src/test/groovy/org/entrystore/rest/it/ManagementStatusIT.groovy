@@ -90,6 +90,9 @@ class ManagementStatusIT extends BaseSpec {
 		responseJson['solr']['status'] == 'online'
 		responseJson['startupTime'] != null
 		responseJson['stats'] == null
+		// Reported from the same EchoProperties bean EchoService enforces, so this pins both the wiring
+		// and the unit: bytes, not megabytes, and no longer the -1 placeholder.
+		responseJson['echoMaxEntitySize'] == 10 * 1024 * 1024
 	}
 
 	def "GET /management/status/extended?include=countStats as admin should reply with detailed status and stats for admin user"() {
