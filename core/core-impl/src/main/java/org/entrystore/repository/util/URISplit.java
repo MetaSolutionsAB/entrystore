@@ -119,6 +119,21 @@ public class URISplit {
 		return createURI(base, contextId, RepositoryProperties.MD_PATH, id);
 	}
 
+	/**
+	 * The graph holding the entry's cached copy of external metadata. Together with
+	 * {@link #getMetaMetadataURI()}, {@link #getMetadataURI()} and {@link #getRelationURI()} this covers
+	 * every graph {@code EntryImpl.remove} clears, so a caller that has to clean up an entry it cannot
+	 * load can still reach all four.
+	 */
+	public URI getCachedExternalMetadataURI() {
+		return createURI(base, contextId, RepositoryProperties.EXTERNAL_MD_PATH, id);
+	}
+
+	/** The graph holding the entry's inverse relations; see {@link #getCachedExternalMetadataURI()}. */
+	public URI getRelationURI() {
+		return createURI(base, contextId, RepositoryProperties.RELATION, id);
+	}
+
 	public URI getResourceURI() {
 
 		return isContext

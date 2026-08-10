@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -605,11 +606,73 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		fresh.updateResource2EntryIndex(link.getResourceURI(), moved, link.getEntryURI());
 
+		// The precondition this test is named for. Both assertions below pass identically on the published
+		// branch of applyIndexOp, so without this the test silently degrades into a warm-path test the
+		// moment anything on the createLink path publishes the index — and would then stop failing if the
+		// pending-write buffer were deleted outright.
+		assertFalse(fresh.pendingIndexOps.isEmpty(),
+			"the write must still be buffered, or this test is not exercising the unpublished branch");
+
 		assertTrue(fresh.getByResourceURI(moved).stream()
 				.anyMatch(e -> link.getEntryURI().equals(e.getEntryURI())),
 			"an index write made before the first read must not be dropped by the load");
 		assertTrue(fresh.getByResourceURI(link.getResourceURI()).isEmpty(),
 			"and the removal half of that write must be replayed too");
+	}
+
+	/**
+	 * ENTRYSTORE-1095. An index op recorded inside a transaction must not reach the index unless that
+	 * transaction commits. {@code removeFromIndex} runs before {@code removeEntry.remove(rc)},
+	 * {@code updateModifiedDateSynchronized} and {@code rc.commit()}, any of which can throw and roll
+	 * back — restoring the {@code resHasEntry} triple in the store. Applying the recorded {@code pop}
+	 * anyway left a live entry absent from every listing for the life of the object, with
+	 * {@code isIndexComplete()} still answering true, so the Solr purge deleted its document and the
+	 * persisted quota total omitted it.
+	 */
+	@Test
+	public void indexOpFromARolledBackRemoval_isNotApplied() {
+		Entry link = context.createLink(null, URI.create("http://example.com/survives-rollback"), null);
+		// Publish the index first, so a bug here pops from a live map rather than merely buffering.
+		assertTrue(context.getEntries().contains(link.getEntryURI()));
+
+		java.util.List<ContextImpl.IndexOp> txOps = new ArrayList<>();
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.begin();
+			context.removeFromIndex((EntryImpl) link, rc, txOps);
+			rc.rollback();
+		}
+
+		assertFalse(txOps.isEmpty(), "the removal must have been recorded, just not applied");
+		assertTrue(context.getEntries().contains(link.getEntryURI()),
+			"a rolled-back removal must leave the entry listed");
+		assertTrue(context.getByResourceURI(link.getResourceURI()).stream()
+				.anyMatch(e -> link.getEntryURI().equals(e.getEntryURI())),
+			"and still resolvable by its resource URI");
+	}
+
+	/**
+	 * ENTRYSTORE-1095. The mirror direction: a recorded {@code push} that outlives a rolled-back create
+	 * names an entry that was never committed. {@code recalculateQuotaFillLevel} and
+	 * {@code importContext} both dereference what a listing names, so a phantom mapping is an NPE rather
+	 * than a merely wrong listing.
+	 */
+	@Test
+	public void indexOpFromARolledBackCreate_isNotApplied() {
+		assertTrue(context.getEntries().isEmpty(), "starting from a published, empty index");
+		URI phantomResource = URI.create("http://example.com/never-committed");
+
+		java.util.List<ContextImpl.IndexOp> txOps = new ArrayList<>();
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			rc.begin();
+			context.addToIndex(vf.createIRI("http://example.com/phantom-entry"),
+				vf.createIRI(phantomResource.toString()), null, rc, txOps);
+			rc.rollback();
+		}
+
+		assertFalse(txOps.isEmpty(), "the create must have been recorded, just not applied");
+		assertTrue(context.getByResourceURI(phantomResource).isEmpty(),
+			"a rolled-back create must not leave a mapping to an entry that does not exist");
 	}
 
 	/**
@@ -679,6 +742,114 @@ public class ContextImplTest extends AbstractCoreTest {
 			assertFalse(rc.hasStatement(null, null, null, false, childRelationIRI),
 				"the child relation graph must be cleared too");
 		}
+	}
+
+	/**
+	 * ENTRYSTORE-1095. The overflow path is the one branch of this design that deliberately drops writes,
+	 * and it was untestable — {@code INDEX_OP_BUFFER_LIMIT} was {@code private static final}, so nothing
+	 * could reach it. That is what let the flag-reset race ship: an optimistic scan running while a
+	 * writer tripped the limit replayed an empty buffer, cleared the overflow flag and published, so the
+	 * compensating rescan never ran and the dropped writes were lost with {@code isIndexComplete()} still
+	 * answering true.
+	 *
+	 * <p>Every write here is committed before the read, so the store holds the truth regardless of what
+	 * the buffer did; the load must reconstruct it rather than publish a short index.
+	 */
+	@Test
+	public void writesPastTheBufferLimit_areStillVisibleAfterTheFirstRead() {
+		int originalLimit = ContextImpl.INDEX_OP_BUFFER_LIMIT;
+		ContextImpl.INDEX_OP_BUFFER_LIMIT = 3;
+		try {
+			Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+			ContextImpl overflowing = (ContextImpl) contextEntry.getResource();
+
+			Set<URI> created = new HashSet<>();
+			for (int i = 0; i < ContextImpl.INDEX_OP_BUFFER_LIMIT * 3; i++) {
+				created.add(overflowing.createLink(null,
+					URI.create("http://example.com/overflow/" + i), null).getEntryURI());
+			}
+
+			Set<URI> listed = overflowing.getEntries();
+
+			assertTrue(listed.containsAll(created),
+				"no entry may go missing when the pending-write buffer overflows before the first read; "
+					+ "missing: " + created.stream().filter(uri -> !listed.contains(uri)).toList());
+			assertTrue(overflowing.isIndexComplete(),
+				"and the index must not claim completeness while reporting a short listing");
+		} finally {
+			ContextImpl.INDEX_OP_BUFFER_LIMIT = originalLimit;
+		}
+	}
+
+	/**
+	 * ENTRYSTORE-1095. Deleting a context must not clear a graph belonging to a different context.
+	 * {@code resolveChild} answers null for an id belonging to another context as well as for an
+	 * unparseable one, and the branch that handles null used to clear whatever the statement named — so a
+	 * {@code resHasEntry} object pointing into a neighbouring context destroyed that entry's graph, with
+	 * the {@code systemEntries} guard skipped. {@code importContext} copies index-graph objects verbatim,
+	 * so restoring an export into the same repository is enough to plant one.
+	 */
+	@Test
+	public void removeContext_leavesAChildNamedInAnotherContextAlone() throws Exception {
+		Entry neighbourContextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl neighbour = (ContextImpl) neighbourContextEntry.getResource();
+		EntryImpl bystander = (EntryImpl) neighbour.createLink(null,
+			URI.create("http://example.com/innocent-bystander"), null);
+		IRI bystanderEntryIRI = bystander.getSesameEntryURI();
+		IRI bystanderMetadataIRI = bystander.getSesameLocalMetadataURI();
+		// A freshly created link has an empty metadata graph, so "no statements" would hold whether or not
+		// the deletion cleared it. Put something there, or the assertion below proves nothing.
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			rc.add(vf.createIRI(bystander.getResourceURI().toString()),
+				vf.createIRI("http://purl.org/dc/terms/title"), vf.createLiteral("bystander"),
+				bystanderMetadataIRI);
+		}
+
+		Entry doomedContextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl doomed = (ContextImpl) doomedContextEntry.getResource();
+		// Plant a resHasEntry in the doomed context whose object names the neighbour's entry. resolveChild
+		// answers null for it, because getByMMdURIDirect refuses an id from another context.
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.add(rc.getValueFactory().createIRI("http://example.com/foreign-resource"),
+				RepositoryProperties.resHasEntry, bystanderEntryIRI, doomed.resourceURI);
+		}
+
+		cm.remove(doomedContextEntry.getEntryURI());
+
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			assertTrue(rc.hasStatement(null, null, null, false, bystanderEntryIRI),
+				"deleting a context must not clear an entry graph belonging to another context");
+			assertTrue(rc.hasStatement(null, null, null, false, bystanderMetadataIRI),
+				"nor its metadata graph");
+		}
+		assertNotNull(neighbour.getByEntryURI(bystander.getEntryURI()),
+			"and the bystander must still be loadable from its own context");
+	}
+
+	/**
+	 * ENTRYSTORE-1095. {@code importContext} deletes what it enumerates before importing, so it must not
+	 * derive that list from an index a bad statement made short. Enumerating from the store is what
+	 * replaced the previous refusal, which had no repair path: {@code reIndex()} regenerates the
+	 * offending statement from the entry graph, and its only production call site sits downstream of the
+	 * refusal in the same method — so one unparseable triple locked the context out of imports for good.
+	 */
+	@Test
+	public void getChildEntryURIsFromStore_seesEntriesTheIndexCouldNotParse() {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl owner = (ContextImpl) contextEntry.getResource();
+		EntryImpl hidden = (EntryImpl) owner.createLink(null,
+			URI.create("http://example.com/hidden-from-the-index"), null);
+		hideFromIndex(owner, hidden);
+
+		((ContextManagerImpl) cm).softCache.remove(contextEntry);
+		ContextImpl reloaded = (ContextImpl) cm.getContext(owner.id);
+
+		assertFalse(reloaded.getEntries().contains(hidden.getEntryURI()),
+			"the index must be short for this test to mean anything");
+		assertFalse(reloaded.isIndexComplete(), "and must know that it is");
+		assertTrue(reloaded.getChildEntryURIsFromStore().contains(hidden.getEntryURI()),
+			"the store-backed enumeration must still see the entry the index skipped");
 	}
 
 	/**

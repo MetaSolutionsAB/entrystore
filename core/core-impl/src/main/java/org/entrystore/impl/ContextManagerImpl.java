@@ -383,17 +383,24 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 		log.info("Removing old entries from context...");
 		Context cont = getContext(contextEntry.getId());
-		if (!cont.isIndexComplete()) {
-			// The loop below derives what to remove from a listing. An incomplete index makes that listing
-			// short, so pre-import entries it cannot see would survive a replace-import and silently
-			// coexist with the imported data (ENTRYSTORE-1095).
-			throw new org.entrystore.repository.RepositoryException("Refusing to import into context "
-					+ contextEntry.getId() + ": its index is incomplete, so old entries cannot be "
-					+ "enumerated reliably and some would survive the import");
-		}
-		Set<URI> entries = cont.getEntries();
+		// Enumerated from the store rather than from getEntries(). A statement the index could not parse
+		// makes that listing short, and a pre-import entry missing from it would survive a replace-import
+		// and silently coexist with the imported data (ENTRYSTORE-1095). Refusing the import instead was
+		// worse: reIndex() regenerates the offending resHasEntry from the entry graph's es:resource, its
+		// only production call site is downstream of here in this same method, and no REST route exposes
+		// it — so one unparseable triple locked the context out of every future import for good.
+		Set<URI> entries = ((ContextImpl) cont).getChildEntryURIsFromStore();
 		for (URI entryURI : entries) {
-			String eId = cont.getByEntryURI(entryURI).getId();
+			Entry oldEntry = cont.getByEntryURI(entryURI);
+			if (oldEntry == null) {
+				// Named by the index graph but not loadable. cont.remove(URI) would throw
+				// EntryMissingException; the context's own deletion path clears such graphs, and this one
+				// leaves them for that rather than aborting the import.
+				log.warn("Entry {} in context {} is named by the index graph but could not be loaded; "
+						+ "skipping it during the pre-import purge", entryURI, contextEntry.getId());
+				continue;
+			}
+			String eId = oldEntry.getId();
 			if (!eId.startsWith("_")) {
 				log.info("Removing {}", entryURI);
 				try {

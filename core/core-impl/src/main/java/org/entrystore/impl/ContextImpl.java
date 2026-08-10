@@ -72,7 +72,14 @@ import static org.eclipse.rdf4j.model.util.Values.literal;
 
 public class ContextImpl extends ResourceImpl implements Context {
 
-	private long counter = -1;
+	/**
+	 * Next entry id to hand out. Volatile because the two paths that touch it hold different monitors:
+	 * {@link #scanAndPublish(boolean)} assigns the scanned value under {@code indexLock}, while
+	 * {@code createNewMinimalItem} reads and increments it under {@code entry.repository}. Without it
+	 * there is no happens-before edge between them, and a non-volatile {@code long} has no atomicity
+	 * guarantee either. The increment itself stays serialised by {@code entry.repository}.
+	 */
+	private volatile long counter = -1;
 	@Getter
 	protected final SoftCache softCache;
 	protected String id;
@@ -83,9 +90,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * <p>Concurrency (ENTRYSTORE-1095). Four properties are load-bearing:
 	 *
 	 * <ul>
-	 * <li><b>volatile</b>, and {@link #loadIndex()} assigns the field only once the map is fully
+	 * <li><b>volatile</b>, and {@link #scanAndPublish(boolean)} assigns the field only once the map is fully
 	 * populated. Assigning an empty map first and filling it afterwards let a reader observe a
-	 * non-null field, skip {@code loadIndex()} — and so never contend for its lock — and then iterate
+	 * non-null field, skip loading — and so never contend for its lock — and then iterate
 	 * a map still being written.</li>
 	 * <li><b>Concurrent maps, with concurrent value sets.</b> Readers hold no monitor, so weakly
 	 * consistent iteration at both levels is what makes a listing safe against a concurrent entry
@@ -93,24 +100,33 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * <li><b>Read once into a local</b> before use. {@link #reIndex()} nulls these fields, so reading
 	 * the field again after the null check can dereference null, and a {@code pop} followed by a
 	 * {@code push} that each re-read it can land on two different maps.</li>
-	 * <li><b>No write is ever dropped.</b> A writer that finds the fields unpublished records its
-	 * operation in {@link #pendingIndexOps} instead of skipping it; see {@link #applyIndexOp}.</li>
+	 * <li><b>No write is dropped, except on one bounded path.</b> A writer that finds the fields
+	 * unpublished records its operation in {@link #pendingIndexOps} instead of skipping it; see
+	 * {@link #applyIndexOp}. The exception is buffer overflow: past {@link #INDEX_OP_BUFFER_LIMIT}
+	 * un-read writes the buffer is discarded and {@link #pendingIndexOpsOverflowed} makes the next load
+	 * exclude writers for one scan instead, which reconstructs what was dropped.</li>
 	 * </ul>
 	 *
 	 * <p><b>Lock protocol.</b> {@link #indexLock} is a per-context monitor guarding the publication of
-	 * these two fields and the pending-operation list. It is the only monitor any index path takes:
+	 * these two fields, {@link #pendingIndexOps}, {@link #pendingIndexOpsOverflowed},
+	 * {@link #indexIncomplete} and {@link #counter}. It is the only monitor the index paths take, with
+	 * the single exception noted below:
 	 *
 	 * <ul>
 	 * <li>writers hold {@code entry.repository} already and acquire {@code indexLock} inside it, so the
 	 * order is {@code repository} → {@code indexLock} wherever both are held;</li>
-	 * <li>{@link #loadIndex()} scans holding <em>nothing</em>, and acquires only {@code indexLock} to
-	 * publish. It deliberately does not take {@code entry.repository}: that is a single store-wide
-	 * instance, so holding it across a full context scan stalls every write in every context — the
-	 * reason {@code 45cdc777} moved off it in 2020;</li>
+	 * <li>{@link #loadIndexes()} normally scans holding <em>nothing</em>, and acquires only
+	 * {@code indexLock} to publish. It deliberately does not take {@code entry.repository}: that is a
+	 * single store-wide instance, so holding it across a full context scan stalls every write in every
+	 * context — the reason {@code 45cdc777} moved off it in 2020;</li>
+	 * <li><b>the exception:</b> when the pending buffer has overflowed there is no record of what was
+	 * dropped, so {@link #loadIndexes()} falls back to scanning inside {@code entry.repository} to
+	 * exclude writers. That is the one path on which a reader waits for writers, and the one on which a
+	 * scan holds the store-wide monitor;</li>
 	 * <li>{@link #reIndex()} clears both fields under {@code indexLock}.</li>
 	 * </ul>
 	 *
-	 * There is therefore no lock cycle and no path on which a reader waits for a writer.
+	 * The lock order is the same on every path that holds both, so there is no cycle.
 	 *
 	 * <p>What this does and does not guarantee: reads never throw
 	 * {@code ConcurrentModificationException}, each single-key {@code push}/{@code pop} is atomic, and no
@@ -128,27 +144,41 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	/**
 	 * Index writes that arrived while the indexes were unpublished, replayed onto the freshly scanned
-	 * maps by {@link #loadIndex()} before it publishes them.
+	 * maps by {@link #scanAndPublish(boolean)} before it publishes them.
 	 *
-	 * <p>This is what makes publish-at-end safe without holding the writers' monitor across the scan.
-	 * {@code addToIndex} runs <em>inside</em> the creating transaction — {@code createNewMinimalItem}
-	 * commits several lines later — so a writer that simply skipped its push would have its
-	 * {@code resHasEntry} triple invisible both to the index (skipped) and to a scan that finished
-	 * before the commit, losing the mapping for the life of this object. Neither a write counter nor a
-	 * mutex around the index touch closes that: the reader can read the counter after the writer bumped
-	 * it and still publish before the commit lands. Recording the operation does close it, because the
-	 * publish replays whatever the scan could not see.
+	 * <p>This is what makes publish-at-end safe without holding the writers' monitor across the scan. A
+	 * writer that simply skipped its push when the indexes were unpublished could lose the mapping for
+	 * the life of this object: a scan that started before the write committed cannot see the
+	 * {@code resHasEntry} triple either, so the mapping would be missing from both. Neither a write
+	 * counter nor a mutex around the index touch closes that — the reader can read the counter after the
+	 * writer bumped it and still publish before the commit lands. Recording the operation does close it,
+	 * because the publish replays whatever the scan could not see.
+	 *
+	 * <p>Ops reach here only <em>after</em> their transaction commits; {@code addToIndex} and
+	 * {@code removeFromIndex} collect into a per-transaction list that {@link #applyIndexOps} drains once
+	 * the commit succeeds. Recording from inside the open transaction instead would survive a rollback,
+	 * and a replayed op whose store change was undone is durable index divergence — the mirror of the
+	 * problem this buffer exists to solve.
 	 *
 	 * <p>Only populated between construction (or a {@link #reIndex()}) and the first read, so it is
 	 * empty in steady state. {@link #INDEX_OP_BUFFER_LIMIT} bounds a pathological case — a bulk import
 	 * into a context nobody reads — after which {@link #pendingIndexOpsOverflowed} makes the next load
 	 * take the pessimistic path instead of growing without limit.
+	 *
+	 * <p>Package-private so {@code ContextImplTest} can assert that a test named for the unpublished
+	 * branch really is exercising it, rather than passing identically on the published branch.
 	 */
-	private final List<IndexOp> pendingIndexOps = new ArrayList<>();
+	final List<IndexOp> pendingIndexOps = new ArrayList<>();
 	private boolean pendingIndexOpsOverflowed;
 
-	/** Cap on {@link #pendingIndexOps}; see its javadoc. */
-	private static final int INDEX_OP_BUFFER_LIMIT = 10_000;
+	/**
+	 * Cap on {@link #pendingIndexOps}; see its javadoc.
+	 *
+	 * <p>Package-private and non-final so {@code ContextImplTest} can lower it far enough to reach the
+	 * overflow path deterministically. It is the one branch of this design that deliberately drops
+	 * writes, so leaving it untestable is what let the flag-reset race below ship in the first place.
+	 */
+	static int INDEX_OP_BUFFER_LIMIT = 10_000;
 
 	/**
 	 * True when the published index is missing at least one statement that could not be indexed.
@@ -157,20 +187,27 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * Listings from this context are short, and three consumers act on a short listing destructively
 	 * rather than merely incompletely: the Solr reindex purge deletes every unlisted entry from the
 	 * search index, {@code recalculateQuotaFillLevel}'s total is persisted, and
-	 * {@code ContextManagerImpl.importContext}'s purge loop keeps unlisted entries alive across a
-	 * replace-import. Each of those checks {@link #isIndexComplete()} and refuses instead. Assigned
-	 * unconditionally on every publish, so repairing the data and re-reading clears it.
+	 * {@code PublicRepository.rebuildRepository} clears the public repository and re-adds only what the
+	 * listing names. Each of those checks {@link #isIndexComplete()} and refuses instead.
+	 *
+	 * <p>Assigned unconditionally on every publish. Note that a published index is never rescanned, so
+	 * repairing the underlying data is not enough on its own: only {@link #reIndex()} or a restart
+	 * re-reads it and clears this flag.
 	 */
 	private volatile boolean indexIncomplete;
 
-	/** Which index an {@link IndexOp} applies to. */
-	private enum IndexKind {RESOURCE, EXTERNAL_METADATA}
+	/** Which index an {@link IndexOp} applies to. Package-private for the same reason as {@link IndexOp}. */
+	enum IndexKind {RESOURCE, EXTERNAL_METADATA}
 
 	/**
-	 * A deferred {@code push} or {@code pop}. {@code to} being null means "remove {@code from}'s mapping
-	 * to {@code entryURI}"; the two are otherwise identical in shape.
+	 * A deferred {@code push} or {@code pop}, collected inside the writing transaction and applied once
+	 * that transaction commits. Both {@code from} and {@code to} are non-null — {@link #applyIndexOp}
+	 * returns early otherwise, so an op with either side null can never be constructed.
+	 *
+	 * <p>Package-private so {@code EntryNamesContext} can pass the per-transaction list through its
+	 * {@code removeFromIndex} override.
 	 */
-	private record IndexOp(IndexKind kind, boolean push, URI from, URI to) {}
+	record IndexOp(IndexKind kind, boolean push, URI from, URI to) {}
 	protected ArrayList<URI> systemEntries = new ArrayList<>();
 
 	private static final Logger log = LoggerFactory.getLogger(ContextImpl.class);
@@ -372,6 +409,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 */
 	private record Indexes(ConcurrentMap<URI, Object> resource, ConcurrentMap<URI, Object> externalMetadata) {}
 
+	/**
+	 * Forces the indexes to be loaded, discarding the result. A convenience for callers that only want
+	 * the side effect; the scanning, publication and lock protocol all live in {@link #loadIndexes()}.
+	 */
 	void loadIndex() {
 		loadIndexes();
 	}
@@ -388,25 +429,36 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * <p>One case still takes {@code entry.repository}: if the pending buffer overflowed, there is no
 	 * record of what was dropped, so this falls back to excluding writers for the duration of one scan.
 	 * That needs {@link #INDEX_OP_BUFFER_LIMIT} un-read writes to a single context to happen at all.
+	 *
+	 * <p>The overflow is detected at publish time rather than sampled before the scan. Sampling first
+	 * missed the window it was meant to protect: a writer that tripped the limit <em>during</em> an
+	 * optimistic scan cleared the buffer, and that scan then replayed an empty buffer, reset the flag and
+	 * published — so the compensating rescan never ran and the dropped writes were lost silently, with
+	 * {@link #isIndexComplete()} still answering true.
 	 */
 	private Indexes loadIndexes() {
 		Indexes published = publishedIndexes();
 		if (published != null) {
 			return published;
 		}
-		boolean pessimistic;
-		synchronized (indexLock) {
-			pessimistic = pendingIndexOpsOverflowed;
+		// Null means the buffer overflowed while this scan was running, so the scan may be short and
+		// there is no longer a record of what it missed.
+		Indexes scanned = scanAndPublish(false);
+		if (scanned != null) {
+			return scanned;
 		}
-		if (pessimistic) {
-			synchronized (this.entry.repository) {
-				return scanAndPublish();
-			}
+		// Exclude writers for one scan. This terminates: the monitor below is the one every bulk-create
+		// writer holds, so no further overflow can occur while it is held.
+		synchronized (this.entry.repository) {
+			return scanAndPublish(true);
 		}
-		return scanAndPublish();
 	}
 
-	private Indexes scanAndPublish() {
+	/**
+	 * Scans and publishes, or returns null when {@code writersExcluded} is false and the pending buffer
+	 * overflowed while the scan was in flight — the caller then retries with writers excluded.
+	 */
+	private Indexes scanAndPublish(boolean writersExcluded) {
 		// Built locally and published only at the end. Assigning the fields up front and filling them
 		// afterwards let an unsynchronized reader see a non-null field, skip loading entirely — never
 		// contending for the lock — and iterate a half-built map (ENTRYSTORE-1095).
@@ -469,6 +521,12 @@ public class ContextImpl extends ResourceImpl implements Context {
 				// Another loader won the race; discard this scan rather than replacing a live index.
 				return concurrentlyPublished;
 			}
+			if (!writersExcluded && pendingIndexOpsOverflowed) {
+				// A writer tripped the limit and cleared the buffer while this scan was running, so the
+				// scan may be short and there is no record of what it missed. Publishing here is what
+				// silently lost those writes; hand back to loadIndexes() to rescan with writers excluded.
+				return null;
+			}
 			for (IndexOp op : pendingIndexOps) {
 				ConcurrentMap<URI, Object> target =
 						op.kind() == IndexKind.RESOURCE ? newResIndex : newExtMdIndex;
@@ -479,7 +537,11 @@ public class ContextImpl extends ResourceImpl implements Context {
 				}
 			}
 			pendingIndexOps.clear();
-			pendingIndexOpsOverflowed = false;
+			if (writersExcluded) {
+				// Only a scan that actually excluded writers has reconstructed what the overflow dropped.
+				// Clearing the flag after an optimistic scan is what let the compensating rescan be skipped.
+				pendingIndexOpsOverflowed = false;
+			}
 			// Assigned unconditionally, so a later clean load — or a reIndex() that repairs the data —
 			// clears the flag rather than leaving the context marked incomplete for good.
 			this.indexIncomplete = failedStatements > 0;
@@ -500,9 +562,30 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	/**
+	 * Applies every collected op once the transaction that produced them has committed. Ops recorded
+	 * inside an open transaction must not reach the index before the commit lands: a rolled-back
+	 * {@code remove} would otherwise pop a mapping whose triple was restored in the store, leaving a live
+	 * entry absent from every listing, and a rolled-back create would leave a mapping to an entry that
+	 * never existed.
+	 *
+	 * <p>Safe against the race this design exists to close. By the time these are applied the store
+	 * change is committed, so an op either finds the indexes published and applies directly, or is
+	 * buffered under {@code indexLock} before any scan can replay-and-clear.
+	 */
+	private void applyIndexOps(List<IndexOp> txOps) {
+		for (IndexOp op : txOps) {
+			applyIndexOp(op.kind(), op.push(), op.from(), op.to());
+		}
+	}
+
+	/**
 	 * Applies one index write, or records it for {@link #loadIndexes()} to replay when the indexes are
-	 * not published yet. Called with {@code entry.repository} already held by the write paths, so the
-	 * lock order is {@code repository} → {@code indexLock}.
+	 * not published yet.
+	 *
+	 * <p>Where both monitors are held the order is {@code repository} → {@code indexLock}. Not every
+	 * caller holds {@code entry.repository}: {@code EntryImpl.setResourceURI} and
+	 * {@code setExternalMetadataURI} release it before calling in through
+	 * {@link #updateResource2EntryIndex}.
 	 */
 	private void applyIndexOp(IndexKind kind, boolean isPush, URI from, URI to) {
 		if (from == null || to == null) {
@@ -527,41 +610,48 @@ public class ContextImpl extends ResourceImpl implements Context {
 							INDEX_OP_BUFFER_LIMIT, this.id);
 				}
 				pendingIndexOpsOverflowed = true;
+				// Keep this op rather than discarding it with the rest: it costs nothing and makes the
+				// dropped set exactly the ops the compensating rescan reconstructs from the store.
 				pendingIndexOps.clear();
+				pendingIndexOps.add(new IndexOp(kind, isPush, from, to));
 				return;
 			}
 			pendingIndexOps.add(new IndexOp(kind, isPush, from, to));
 		}
 	}
 
-	private void addToIndex(IRI entryURI, IRI resURI, IRI extMdURI, RepositoryConnection rc) throws RepositoryException {
+	/**
+	 * Adds the index triples inside {@code rc}'s transaction and collects the matching index operations
+	 * into {@code txOps}. The caller applies them with {@link #applyIndexOps} once the commit succeeds,
+	 * and simply drops the list on rollback — the index must not diverge from what the store kept.
+	 */
+	void addToIndex(IRI entryURI, IRI resURI, IRI extMdURI, RepositoryConnection rc,
+			List<IndexOp> txOps) throws RepositoryException {
 		rc.add(resURI, RepositoryProperties.resHasEntry, entryURI, this.resourceURI);
 		URI euri = URI.create(entryURI.toString());
 
-		// applyIndexOp, not a direct push into a field read here: this runs inside the creating
-		// transaction, which commits later, so if the indexes are not published yet the mapping has to be
-		// recorded rather than skipped — a scan that finishes before that commit cannot see the triple.
 		if (extMdURI != null) {
 			rc.add(extMdURI, RepositoryProperties.mdHasEntry, entryURI, this.resourceURI);
-			applyIndexOp(IndexKind.EXTERNAL_METADATA, true, URI.create(extMdURI.toString()), euri);
+			txOps.add(new IndexOp(IndexKind.EXTERNAL_METADATA, true, URI.create(extMdURI.toString()), euri));
 		}
-		applyIndexOp(IndexKind.RESOURCE, true, URI.create(resURI.toString()), euri);
+		txOps.add(new IndexOp(IndexKind.RESOURCE, true, URI.create(resURI.toString()), euri));
 	}
 
-	protected void removeFromIndex(EntryImpl entry, RepositoryConnection rc) throws RepositoryException {
+	/** Collects rather than applies; see {@link #addToIndex}. */
+	protected void removeFromIndex(EntryImpl entry, RepositoryConnection rc, List<IndexOp> txOps)
+			throws RepositoryException {
 		IRI entryURI = entry.getSesameEntryURI();
 		IRI resURI = entry.getSesameResourceURI();
 		IRI mdURI = entry.getSesameExternalMetadataURI();
 
 		rc.remove(resURI, RepositoryProperties.resHasEntry, entryURI, this.resourceURI);
 
-		// Recorded rather than skipped when the indexes are unpublished; see addToIndex.
 		if (mdURI != null) {
 			rc.remove(mdURI, RepositoryProperties.mdHasEntry, entryURI, this.resourceURI);
-			applyIndexOp(IndexKind.EXTERNAL_METADATA, false,
-					entry.getExternalMetadataURI(), entry.getEntryURI());
+			txOps.add(new IndexOp(IndexKind.EXTERNAL_METADATA, false,
+					entry.getExternalMetadataURI(), entry.getEntryURI()));
 		}
-		applyIndexOp(IndexKind.RESOURCE, false, entry.getResourceURI(), entry.getEntryURI());
+		txOps.add(new IndexOp(IndexKind.RESOURCE, false, entry.getResourceURI(), entry.getEntryURI()));
 
 		if (RepositoryManagerImpl.trackDeletedEntries) {
 			// add deletion information to index
@@ -726,8 +816,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 					}
 					initResource(newEntry);
 
-					// Update index with new item.
-					addToIndex(newEntry.getSesameEntryURI(), newEntry.getSesameResourceURI(), newEntry.getSesameExternalMetadataURI(), rc);
+					// Update index with new item. Collected, not applied: this transaction commits below,
+					// and an index op that outlived a rollback would name an entry that never existed.
+					List<IndexOp> txOps = new ArrayList<>();
+					addToIndex(newEntry.getSesameEntryURI(), newEntry.getSesameResourceURI(), newEntry.getSesameExternalMetadataURI(), rc, txOps);
 
 					// Update the index counter.
 					List<Statement> counters = rc.getStatements(this.resourceURI, RepositoryProperties.counter, null, false, this.resourceURI).stream().toList();
@@ -735,6 +827,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 					rc.add(this.resourceURI, RepositoryProperties.counter, vf.createLiteral(counter), this.resourceURI);
 
 					rc.commit();
+					applyIndexOps(txOps);
 					softCache.put(newEntry);
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(newEntry, RepositoryEvent.EntryCreated));
 					return newEntry;
@@ -995,11 +1088,11 @@ public class ContextImpl extends ResourceImpl implements Context {
 	public Set<Entry> getByExternalMdURI(URI metadataURI) {
 		if (metadataURI == null) {
 			// ConcurrentHashMap.get(null) throws NullPointerException where the HashMap this replaced
-			// returned null, and a null argument is a normal state here rather than a caller bug. This
-			// method's null arrives from ListRecordsJob, which passes a harvested record's metadata URI
-			// without checking it; getByResourceURI's arrives from an unset authenticatedUserURI
-			// ThreadLocal. Answering empty keeps the latter an authorization denial rather than a 500
-			// raised from inside an authorization check.
+			// returned null. These are public lookup methods, so a null argument is answered rather than
+			// thrown on: "no entry has that URI" is the truthful answer and matches the pre-existing
+			// contract callers were written against. It also matters concretely for getByResourceURI,
+			// whose null arrives from an unset authenticatedUserURI ThreadLocal — answering empty keeps
+			// that an authorization denial rather than a 500 raised from inside an authorization check.
 			return new HashSet<>();
 		}
 		return entriesFor(externalMetadataIndex().get(metadataURI));
@@ -1118,10 +1211,15 @@ public class ContextImpl extends ResourceImpl implements Context {
 			try {
 				rc = entry.repository.getConnection();
 				rc.begin();
-				removeFromIndex(removeEntry, rc);
+				// Collected, not applied: any of the three calls below can throw and roll back, which
+				// restores the resHasEntry triple. Popping it anyway would hide a live entry from every
+				// listing for the life of this object, with isIndexComplete() still answering true.
+				List<IndexOp> txOps = new ArrayList<>();
+				removeFromIndex(removeEntry, rc, txOps);
 				removeEntry.remove(rc);
 				this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
 				rc.commit();
+				applyIndexOps(txOps);
 				softCache.remove(removeEntry);
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(removeEntry, RepositoryEvent.EntryDeleted));
 			} catch (Exception e) {
@@ -1157,30 +1255,43 @@ public class ContextImpl extends ResourceImpl implements Context {
 			// store, so unlike the index it once replaced it also sees objects that java.net.URI.create
 			// rejects. Round-tripping them would abort the whole deletion on the very statements this
 			// change exists to stop the index from hiding.
-			Set<IRI> childEntryIRIs = rc
+			Set<IRI> childEntryIRIs = new HashSet<>();
+			for (Statement statement : rc
 					.getStatements(null, RepositoryProperties.resHasEntry, null, false, this.resourceURI)
 					.stream()
-					.map(Statement::getObject)
-					.filter(IRI.class::isInstance)
-					.map(IRI.class::cast)
-					.collect(Collectors.toSet());
+					.toList()) {
+				if (statement.getObject() instanceof IRI childEntryIRI) {
+					childEntryIRIs.add(childEntryIRI);
+				} else {
+					// Reported rather than dropped silently: such a child is neither cleared here nor
+					// visible to any listing, so without this line it leaves no trace anywhere.
+					log.error("Index statement {} in context {} names a child that is not an IRI; it cannot "
+							+ "be cleared and needs manual cleanup", statement, this.id);
+				}
+			}
 
 			// do not move this boolean from here, this is needed to avoid adding
 			// entries to solr after they have been removed from solr (race condition)
 			deleted = true;
 
+			// Collected and then discarded: this deletes the whole context graph, so there is no index
+			// left to keep in step, and `deleted` above has already taken this context out of service.
+			List<IndexOp> discardedOps = new ArrayList<>();
 			for (IRI childEntryIRI : childEntryIRIs) {
-				EntryImpl removeEntry = resolveChild(childEntryIRI);
-				if (removeEntry == null) {
-					// The graph is cleared regardless: leaving it behind is what orphans data, and it is
-					// named right here. Only the entry object could not be built, so removeFromIndex and
-					// the entry's own cleanup are what get skipped.
-					log.error("Child {} of context {} could not be loaded as an entry; clearing its graph "
-							+ "anyway so the deletion does not leave it orphaned", childEntryIRI, this.id);
-					rc.clear(childEntryIRI);
+				// Ownership is checked before anything is resolved or cleared, and for every child rather
+				// than only the unresolvable ones. resolveChild cannot be trusted to reject a foreign
+				// entry: SoftCache is repository-wide, so getByEntryURI answers from it for any context's
+				// entry and only the cache-miss path reaches getByMMdURIDirect's same-context check.
+				URISplit childSplit = childSplitIfOwned(childEntryIRI);
+				if (childSplit == null) {
 					continue;
 				}
-				removeFromIndex(removeEntry, rc);
+				EntryImpl removeEntry = resolveChild(childEntryIRI);
+				if (removeEntry == null) {
+					clearUnresolvableChild(childEntryIRI, childSplit, rc);
+					continue;
+				}
+				removeFromIndex(removeEntry, rc, discardedOps);
 				rc.clear(removeEntry.getSesameEntryURI());
 				if (!systemEntries.contains(removeEntry.getEntryURI())) {
 					removeEntry.remove(rc);
@@ -1188,6 +1299,97 @@ public class ContextImpl extends ResourceImpl implements Context {
 			}
 			rc.clear(this.resourceURI);
 		}
+	}
+
+	/**
+	 * The entry URIs this context's index graph names, read straight from the store rather than from the
+	 * in-memory index.
+	 *
+	 * <p>For callers that must enumerate every child even when the index could not parse some of them —
+	 * {@code ContextManagerImpl.importContext} deletes what it finds here before importing, so a listing
+	 * short by one statement would leave that entry alive alongside the imported data. Reading through
+	 * the store makes the enumeration independent of {@link #isIndexComplete()}, which is what lets an
+	 * import into a context with an unindexable statement succeed instead of being refused forever.
+	 *
+	 * <p>Objects that are not IRIs, or that {@code java.net.URI} rejects, are reported and skipped: they
+	 * name nothing this method can hand back, and they are exactly what {@code remove} logs too.
+	 */
+	public Set<URI> getChildEntryURIsFromStore() {
+		Set<URI> children = new HashSet<>();
+		synchronized (this.entry.repository) {
+			try (RepositoryConnection rc = entry.repository.getConnection()) {
+				for (Statement statement : rc
+						.getStatements(null, RepositoryProperties.resHasEntry, null, false, this.resourceURI)
+						.stream()
+						.toList()) {
+					try {
+						children.add(URI.create(statement.getObject().toString()));
+					} catch (IllegalArgumentException e) {
+						log.error("Index statement {} in context {} names a child that is not a usable URI; "
+								+ "it cannot be enumerated and needs manual cleanup", statement, this.id);
+					}
+				}
+			} catch (RepositoryException e) {
+				log.error(e.getMessage(), e);
+				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
+			}
+		}
+		return children;
+	}
+
+	/**
+	 * The parsed child URI when this context's index graph names a child that really belongs to this
+	 * context, or null — having logged why — when it does not.
+	 *
+	 * <p>Deleting a context must not touch another context's data, and the index graph can name one
+	 * without any attacker involved: {@code ContextManagerImpl.importContext} copies index-graph objects
+	 * verbatim unless they carry the old context namespace, so restoring an export into the same
+	 * repository is enough to plant one. Neither {@link #resolveChild} nor the {@code systemEntries}
+	 * guard catches it — {@code SoftCache} is repository-wide, so {@code getByEntryURI} happily returns
+	 * another context's entry (or {@code _principals/entry/_admin}) whenever it is cached, and the
+	 * deletion would then run the full removal against it.
+	 */
+	private URISplit childSplitIfOwned(IRI childEntryIRI) {
+		URISplit split;
+		try {
+			split = new URISplit(URI.create(childEntryIRI.toString()),
+					entry.getRepositoryManager().getRepositoryURL());
+		} catch (IllegalArgumentException e) {
+			// Cannot be attributed to any context, so it cannot be shown to be ours. Clearing an
+			// unattributable graph is the one outcome worse than leaving it: it can belong to anyone.
+			log.error("Child {} named by context {}'s index graph is not a usable EntryStore URI ({}); "
+					+ "leaving its graphs alone, they need manual cleanup", childEntryIRI, this.id, e.getMessage());
+			return null;
+		}
+		URI childContextURI = split.getContextURI();
+		if (childContextURI == null || !childContextURI.toString().equals(this.resourceURI.toString())) {
+			log.error("Child {} named by context {}'s index graph belongs to context {}; leaving it alone. "
+							+ "The index graph of this context should not name it and needs manual cleanup",
+					childEntryIRI, this.id, childContextURI);
+			return null;
+		}
+		return split;
+	}
+
+	/**
+	 * Clears the graphs of a child this context owns but {@link #resolveChild} could not load. Leaving it
+	 * behind is what orphans data; ownership has already been established by {@link #childSplitIfOwned}.
+	 *
+	 * <p>All four graphs are cleared, not just the entry graph. The metadata, cached-external-metadata
+	 * and relation graphs are normally cleared by {@code removeEntry.remove(rc)}, which is exactly the
+	 * call this path skips — clearing only the entry graph destroys the graph that <em>names</em> the
+	 * rest and leaves the rest behind as unreachable data.
+	 */
+	private void clearUnresolvableChild(IRI childEntryIRI, URISplit split, RepositoryConnection rc) {
+		log.error("Child {} of context {} could not be loaded as an entry; clearing its entry, metadata, "
+						+ "cached-external-metadata and relation graphs so the deletion does not leave it "
+						+ "orphaned. Inverse relations held by other contexts were NOT removed and need "
+						+ "manual cleanup", childEntryIRI, this.id);
+		ValueFactory vf = rc.getValueFactory();
+		rc.clear(childEntryIRI,
+				vf.createIRI(split.getMetadataURI().toString()),
+				vf.createIRI(split.getCachedExternalMetadataURI().toString()),
+				vf.createIRI(split.getRelationURI().toString()));
 	}
 
 	/**

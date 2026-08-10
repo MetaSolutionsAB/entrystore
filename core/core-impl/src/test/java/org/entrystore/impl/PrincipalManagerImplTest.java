@@ -220,15 +220,29 @@ public class PrincipalManagerImplTest extends AbstractCoreTest {
 		// ENTRYSTORE-1095. hasAccess used to read `currentUser != getGuestUser()` as true for a null user,
 		// so every entry granting the _users group was granted to a principal that could not be resolved —
 		// and the next check dereferenced the null. An unreadable principal must deny.
+		//
+		// Driven through checkAuthenticatedUserAuthorized rather than by calling hasAccess(null, ...)
+		// directly: that returns at the guard before the _users grant below is ever read, so it would pass
+		// against a bare `return false` and prove nothing about the path that produced the fail-open.
 		Context mouse = cm.getContext("mouse");
 		Entry entry = mouse.getEntry();
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getUserGroup().getURI());
 
-		PrincipalManagerImpl principalManager = (PrincipalManagerImpl) pm;
+		// A well-formed principal URI in the principals context that resolves to no user — the shape a
+		// session carrying a since-deleted user's URI has, and the shape an unreadable resHasEntry
+		// mapping produces.
+		URI vanished = URI.create(pm.getAdminUser().getURI().toString().replace("_admin", "_vanished"));
+		assertNull(pm.getUser(vanished), "the fixture must not resolve, or this test proves nothing");
+		pm.setAuthenticatedUserURI(vanished);
 
-		assertFalse(principalManager.hasAccess(null, entry, AccessProperty.ReadMetadata),
-			"a principal that could not be resolved must not inherit the _users group's rights");
+		try {
+			assertThrows(AuthorizationException.class,
+				() -> pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata),
+				"a principal that could not be resolved must not inherit the _users group's rights");
+		} finally {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		}
 	}
 
 	@Test
