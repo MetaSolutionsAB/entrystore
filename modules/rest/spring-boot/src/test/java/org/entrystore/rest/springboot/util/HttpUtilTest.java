@@ -20,12 +20,15 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.Date;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -177,5 +180,38 @@ class HttpUtilTest {
 		verify(session).invalidate();
 		assertNull(SecurityContextHolder.getContext().getAuthentication(),
 				"SecurityContext must be cleared even when session.invalidate() throws IllegalStateException");
+	}
+
+	/**
+	 * ENTRYSTORE-1055. Six controllers now delegate their Last-Modified and ETag headers here, including
+	 * two that previously built them by hand, so the helper is the single point where a regression would
+	 * silently drop validators from every one of those responses at once.
+	 */
+	@Test
+	void updateResponseWithModificationDateAndETag_setsBothHeadersFromTheDate() {
+		ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
+
+		HttpUtil.updateResponseWithModificationDateAndETag(builder, new Date(1686594567000L));
+
+		HttpHeaders headers = builder.build().getHeaders();
+		assertEquals(1686594567000L, headers.getLastModified());
+		// Strong ETag, epoch millis, quoted — finer-grained than Last-Modified, which is second-resolution.
+		assertEquals("\"1686594567000\"", headers.getETag());
+	}
+
+	/**
+	 * The null branch is the one RelationController gave up its own explicit guard for, so it has to omit
+	 * both headers rather than throw or emit a bogus value. Reachable for any entry whose graph carries
+	 * no dcterms:modified — legacy content, a restored backup, or a graph written externally.
+	 */
+	@Test
+	void updateResponseWithModificationDateAndETag_nullDate_omitsBothHeadersInsteadOfThrowing() {
+		ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
+
+		HttpUtil.updateResponseWithModificationDateAndETag(builder, null);
+
+		HttpHeaders headers = builder.build().getHeaders();
+		assertEquals(-1, headers.getLastModified(), "absent Last-Modified reads as -1");
+		assertNull(headers.getETag());
 	}
 }

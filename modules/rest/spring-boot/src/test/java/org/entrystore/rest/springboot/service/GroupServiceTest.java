@@ -21,7 +21,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
-import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
+import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -87,7 +87,7 @@ class GroupServiceTest {
 		when(principalManager.getGuestUser()).thenReturn(guestUser);
 		when(guestUser.getURI()).thenReturn(GUEST_URI);
 
-		assertThrows(UnauthorizedException.class, () -> service.createGroup("ctx", "name"));
+		assertThrows(ForbiddenException.class, () -> service.createGroup("ctx", "name"));
 	}
 
 	@Test
@@ -97,7 +97,7 @@ class GroupServiceTest {
 		gate(true);
 		when(principalManager.getAuthenticatedUserURI()).thenReturn(null);
 
-		assertThrows(UnauthorizedException.class, () -> service.createGroup("ctx", "name"));
+		assertThrows(ForbiddenException.class, () -> service.createGroup("ctx", "name"));
 	}
 
 	@Test
@@ -108,7 +108,7 @@ class GroupServiceTest {
 		when(principalManager.getUser(USER_URI)).thenReturn(requestingUser);
 		when(userService.isAdmin(requestingUser)).thenReturn(false);
 
-		assertThrows(UnauthorizedException.class, () -> service.createGroup("ctx", "name"));
+		assertThrows(ForbiddenException.class, () -> service.createGroup("ctx", "name"));
 		verify(userService).isAdmin(requestingUser);
 	}
 

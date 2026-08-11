@@ -37,7 +37,6 @@ import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException;
 import org.entrystore.rest.springboot.model.exception.TextareaHtmlResponseException;
-import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.ValidationErrorMessages;
 import org.entrystore.rest.springboot.util.WebResourceUrls;
@@ -204,9 +203,10 @@ public class AppExceptionHandler {
 	}
 
 	@ExceptionHandler({AuthenticationException.class})
-	public ResponseEntity<ErrorResponse> handleUnauthorizedException(RuntimeException ex,
-																	 HttpServletRequest request) {
-		log.info("UnauthorizedException at endpoint '{}'. Error: {}", request.getRequestURI(), ex.getMessage());
+	public ResponseEntity<ErrorResponse> handleAuthenticationException(RuntimeException ex,
+																	  HttpServletRequest request) {
+		log.info("AuthenticationException of type '{}' at endpoint '{}'. Error: {}",
+				ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.UNAUTHORIZED.value())
 				.path(request.getRequestURI())
@@ -269,9 +269,20 @@ public class AppExceptionHandler {
 	}
 
 	// Handles application-specific authentication/authorization exceptions whose messages are
-	// intentionally user-facing (hand-crafted at call sites in SolrManagementService, AuthService,
-	// ResourceService, ProxyService, etc.), so the message is surfaced in the HTTP body for 403.
-	@ExceptionHandler({UnauthorizedException.class, ForbiddenException.class, AuthenticationCredentialsNotFoundException.class})
+	// intentionally user-facing (hand-crafted at call sites in GroupService, MessageService,
+	// SolrManagementService, ResourceService and ProxyService), so the message is surfaced in the HTTP
+	// body for 403.
+	//
+	// SsrfValidator is deliberately NOT in that list even though it throws the same type: its denial
+	// reasons distinguish "host cannot be resolved" from "host resolves to a disallowed address", which
+	// would let an authenticated caller enumerate internal DNS through GET /proxy. Those messages reach
+	// the client today and should not — tracked separately; do not treat their exposure as reviewed.
+	//
+	// The status is a function of the caller, not of the exception type: anonymous callers get 401 and
+	// only the reason phrase, authenticated callers get 403 and the call-site message. That is why
+	// ForbiddenException is the single type for both — a separate UnauthorizedException carried no
+	// distinguishing information here and let call sites imply a status they did not control.
+	@ExceptionHandler({ForbiddenException.class, AuthenticationCredentialsNotFoundException.class})
 	public ResponseEntity<ErrorResponse> handleForbiddenException(RuntimeException ex,
 																  HttpServletRequest request,
 																  Authentication authentication) {

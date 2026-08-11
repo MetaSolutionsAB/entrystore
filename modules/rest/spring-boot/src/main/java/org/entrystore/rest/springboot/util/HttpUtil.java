@@ -94,7 +94,10 @@ public class HttpUtil {
 	 */
 	public static void setLastModifiedAndETag(HttpHeaders headers, Date modifiedDate) {
 		if (modifiedDate == null) {
-			log.warn("Last-Modified header could not be set because the modification date is null");
+			// debug, not warn: an entry whose graph carries no dcterms:modified is a data property rather
+			// than a server fault, and the read-path callers sit on endpoints that anyone can request in a
+			// loop — at warn, one such entry lets an anonymous client drive unbounded log volume.
+			log.debug("Last-Modified and ETag omitted because the modification date is null");
 		} else {
 			headers.setLastModified(modifiedDate.getTime());
 			headers.setETag(createStrongETag(Long.toString(modifiedDate.getTime())));

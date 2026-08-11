@@ -25,7 +25,6 @@ import org.entrystore.rest.springboot.model.api.TransportType;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
-import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
 import org.entrystore.rest.springboot.util.EmailSender;
 import org.entrystore.rest.springboot.util.HtmlSanitizer;
 import org.entrystore.rest.springboot.util.HttpUtil;
@@ -43,7 +42,7 @@ public class MessageService {
 
 	public void sendMessage(SendMessageRequestBody request) {
 		if (principalManager.currentUserIsGuest()) {
-			throw new UnauthorizedException("Not allowed for not-logged in or a guest user to send messages");
+			throw new ForbiddenException("Not allowed for not-logged in or a guest user to send messages");
 		}
 
 		String userUri = principalManager.getAuthenticatedUserURI().toString();

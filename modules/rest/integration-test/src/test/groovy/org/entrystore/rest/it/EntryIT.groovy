@@ -22,6 +22,7 @@ import org.entrystore.repository.util.NS
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
+import java.text.SimpleDateFormat
 import java.time.Year
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -42,6 +43,39 @@ class EntryIT extends BaseSpec {
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
+	}
+
+	/**
+	 * ENTRYSTORE-1055. The 201 from this endpoint carries Last-Modified and ETag, but no test asserted
+	 * them — the suite's other ETag assertions all cover read endpoints. When ContextController moved to
+	 * HttpUtil's helper the change was covered by nothing, and before that the only thing enforcing the
+	 * headers was an NPE on a null modification date, which the helper deliberately replaced with a log
+	 * line. Without this, a create response could lose its validators and a client issuing a conditional
+	 * PUT straight afterwards would silently lose optimistic-concurrency protection.
+	 */
+	def "POST /{context-id} should return 201 with Last-Modified and ETag headers"() {
+		given:
+		// Its own context: several tests in this spec assert an exact entry count in contextId, so
+		// creating an entry there would break them depending on declaration order.
+		def headerContextId = '11'
+		getOrCreateContext([contextId: headerContextId])
+		def beforeRequest = new Date()
+		def params = [entrytype: 'link', resource: resourceUrl]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + headerContextId + convertMapToQueryParams(params), '{}')
+
+		then:
+		connection.getResponseCode() == HTTP_CREATED
+
+		def lastModified = connection.getHeaderField('Last-Modified')
+		lastModified != null
+		def httpDateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US)
+		httpDateFormat.parse(lastModified).time >= beforeRequest.time - 1000
+
+		def etag = connection.getHeaderField('ETag')
+		etag != null
+		etag ==~ /"\d+"/
 	}
 
 	def "POST /{context-id}?entrytype=link without metadata, should create a new link entry with empty metadata"() {

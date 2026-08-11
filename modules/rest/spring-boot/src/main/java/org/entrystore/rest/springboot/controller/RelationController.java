@@ -66,11 +66,8 @@ public class RelationController {
 				.ok()
 				.contentType(MediaType.parseMediaType(mediaType));
 
-		if (entry.getModifiedDate() != null) {
-			bodyBuilder
-					.lastModified(entry.getModifiedDate().getTime())
-					.eTag(HttpUtil.createStrongETag(Long.toString(entry.getModifiedDate().getTime())));
-		}
+		HttpUtil.updateResponseWithModificationDateAndETag(bodyBuilder, entry.getModifiedDate());
+
 		return bodyBuilder
 				.body(relationsGraph);
 	}

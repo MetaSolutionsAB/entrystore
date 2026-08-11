@@ -4,6 +4,8 @@ import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
+import java.text.SimpleDateFormat
+
 import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
@@ -150,6 +152,34 @@ class RelationResourceIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('text/turtle')
+	}
+
+	/**
+	 * ENTRYSTORE-1055. This endpoint emits Last-Modified and ETag, but nothing asserted it — the whole
+	 * file had no header assertion, so when RelationController moved to HttpUtil's helper the change was
+	 * covered by nothing. Deleting the helper call would leave every relations response without
+	 * validators, silently defeating conditional GETs, with the suite still green.
+	 */
+	def "GET /{context-id}/relations/{entry-id} should include Last-Modified and ETag headers"() {
+		given:
+		def beforeRequest = new Date()
+		def entryId = createEntry(contextId, [graphtype: 'string'], [resource: 'Header test entry'])
+		assert entryId.length() > 0
+
+		when:
+		def connection = EntryStoreClient.getRequest('/' + contextId + '/relations/' + entryId)
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+
+		def lastModified = connection.getHeaderField('Last-Modified')
+		lastModified != null
+		def httpDateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US)
+		httpDateFormat.parse(lastModified).time >= beforeRequest.time - 1000
+
+		def etag = connection.getHeaderField('ETag')
+		etag != null
+		etag ==~ /"\d+"/
 	}
 
 	def "GET /{context-id}/relations/{entry-id} with Accept header containing supported type among unsupported ones should return 200"() {

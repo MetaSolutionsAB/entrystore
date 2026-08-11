@@ -24,7 +24,6 @@ import org.entrystore.rest.springboot.model.api.TransportType;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
-import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
 import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.entrystore.rest.springboot.util.EmailSender;
 import org.junit.jupiter.api.AfterEach;
@@ -133,7 +132,13 @@ class MessageServiceTest {
 	void sendMessage_guestUser_isRejectedWithoutSending() {
 		when(principalManager.currentUserIsGuest()).thenReturn(true);
 
-		assertThrows(UnauthorizedException.class, () -> service.sendMessage(request("Hello", "<p>Body</p>")));
+		// Assert the message, not just the type. Since ENTRYSTORE-1055 the guest guard and the two
+		// "Unknown recipient" rejections all throw ForbiddenException, so a bare type assertion would
+		// still pass if the guest guard moved below the recipient lookup and a guest were rejected for
+		// the wrong reason.
+		ForbiddenException e = assertThrows(ForbiddenException.class,
+				() -> service.sendMessage(request("Hello", "<p>Body</p>")));
+		assertEquals("Not allowed for not-logged in or a guest user to send messages", e.getMessage());
 		verifyNoInteractions(emailSender);
 	}
 
@@ -141,7 +146,9 @@ class MessageServiceTest {
 	void sendMessage_unknownRecipient_isRejectedWithoutSending() {
 		when(principalManager.getPrincipalEntry(RECIPIENT)).thenReturn(null);
 
-		assertThrows(ForbiddenException.class, () -> service.sendMessage(request("Hello", "<p>Body</p>")));
+		ForbiddenException e = assertThrows(ForbiddenException.class,
+				() -> service.sendMessage(request("Hello", "<p>Body</p>")));
+		assertEquals("Unknown recipient", e.getMessage());
 		verifyNoInteractions(emailSender);
 	}
 

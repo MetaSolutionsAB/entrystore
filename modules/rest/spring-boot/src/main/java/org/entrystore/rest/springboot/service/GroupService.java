@@ -29,7 +29,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
-import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
+import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -71,12 +71,12 @@ public class GroupService {
 
 		// guests are prohibited from using this resource
 		if (requestingUserUri == null || principalManager.getGuestUser().getURI().equals(requestingUserUri)) {
-			throw new UnauthorizedException("Not allowed for not-logged in or a guest user to create a group");
+			throw new ForbiddenException("Not allowed for not-logged in or a guest user to create a group");
 		}
 
 		if (!nonAdminGroupContextCreation) {
 			if (!userService.isAdmin(principalManager.getUser(requestingUserUri))) {
-				throw new UnauthorizedException("Not allowed for not-admin user to create a group");
+				throw new ForbiddenException("Not allowed for not-admin user to create a group");
 			}
 		}
 

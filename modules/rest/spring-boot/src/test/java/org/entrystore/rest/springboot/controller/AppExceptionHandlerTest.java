@@ -29,6 +29,7 @@ import org.entrystore.Entry;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
+import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.util.WebResourceUrls;
 import org.junit.jupiter.api.Test;
@@ -190,6 +191,54 @@ class AppExceptionHandlerTest {
 		assertNotNull(body, "Expected non-null ErrorResponse body");
 		assertEquals(403, body.status());
 		assertEquals("Forbidden", body.error());
+	}
+
+	/**
+	 * ENTRYSTORE-1055. The sibling handler's 2×2 quadrant above is fully pinned; this one was not pinned
+	 * at all, which matters more now that {@code ForbiddenException} is the single type for every policy
+	 * denial raised in application code. The ternary under test is the only thing suppressing call-site
+	 * messages for unauthenticated callers, and no integration test covers it: {@code ContextIT} and
+	 * {@code MessageIT} assert the status code without reading the body, and {@code ErrorResponseIT}'s
+	 * guest case goes through {@code @PreAuthorize} into {@code handleAccessDeniedException} instead.
+	 */
+	@Test
+	void handleForbiddenException_anonymousCaller_returns401WithReasonPhraseNotTheCallSiteMessage() {
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/_principals/groups");
+		Authentication anonymous = new AnonymousAuthenticationToken(
+				"key", "anonymousUser",
+				List.of(new SimpleGrantedAuthority("ROLE_ANONYMOUS")));
+
+		ResponseEntity<ErrorResponse> response = handler.handleForbiddenException(
+				new ForbiddenException("Not allowed for not-admin user to create a group"), req, anonymous);
+
+		assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertEquals(401, body.status());
+		assertEquals("Unauthorized", body.error());
+		// The message names which guard fired and that the caller is merely non-admin rather than
+		// unauthenticated; an unauthenticated prober must not learn either.
+		assertFalse(body.error().contains("not-admin"),
+				"the call-site message must not reach an anonymous caller");
+	}
+
+	@Test
+	void handleForbiddenException_authenticatedCaller_returns403WithTheCallSiteMessage() {
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/_principals/groups");
+		Authentication authenticated = new UsernamePasswordAuthenticationToken(
+				"alice", "n/a",
+				List.of(new SimpleGrantedAuthority("ROLE_USER")));
+
+		ResponseEntity<ErrorResponse> response = handler.handleForbiddenException(
+				new ForbiddenException("Not allowed for not-admin user to create a group"), req, authenticated);
+
+		assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertEquals(403, body.status());
+		assertEquals("Not allowed for not-admin user to create a group", body.error());
 	}
 
 	@Test
