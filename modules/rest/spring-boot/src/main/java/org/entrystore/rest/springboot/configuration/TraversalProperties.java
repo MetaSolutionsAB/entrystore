@@ -61,7 +61,9 @@ import java.util.stream.Stream;
  * <p>The one exception is a bare {@code entrystore.traversal.<profile>.blacklist=<tuple>}: the legacy
  * reader accepted it as a one-element denylist, and dropping it would make the traversal denylist fail
  * open. It is honoured as a single tuple (with a WARN at bind time recommending the indexed form),
- * ordered before the indexed entries so those win last-wins conflicts in {@code MetadataService}.
+ * ordered after the indexed entries: with both forms set the legacy reader returned <em>only</em> the
+ * bare tuple, so it must win the last-wins keying in {@code MetadataService} — the indexed entries can
+ * only ever add denials, never relax the one the bare tuple carries.
  */
 @ConfigurationProperties(prefix = "entrystore")
 @Slf4j
@@ -127,7 +129,7 @@ public record TraversalProperties(Map<String, String> traversal) {
 	/**
 	 * The profile's blacklist tuples ({@code entrystore.traversal.<profile>.blacklist.N} keys),
 	 * each a comma-separated predicate/object pair. Empty when the profile has no blacklist. A bare
-	 * {@code <profile>.blacklist=<tuple>} value is honoured as the first tuple (see the class javadoc).
+	 * {@code <profile>.blacklist=<tuple>} value is honoured as the last tuple (see the class javadoc).
 	 */
 	public List<String> blacklistTuples(String profile) {
 		String keyPrefix = profile + ".blacklist.";
@@ -136,15 +138,17 @@ public record TraversalProperties(Map<String, String> traversal) {
 		// randomised per JVM, and MetadataService.loadTraversalBlacklistForProfile puts these into a map keyed
 		// by predicate, so the last tuple for a predicate wins. Only this accessor has that contract —
 		// predicates() collects into a Set, where a sort would be discarded work on a per-request path.
-		// The bare tuple goes first for the same reason: an indexed entry for the same predicate wins.
+		// The bare tuple goes LAST for the same reason: it was the only tuple the legacy reader returned
+		// when both forms were set, so it must win the last-wins keying — indexed entries can add
+		// predicates but never relax a denial the bare tuple carried.
 		return Stream.concat(
-						(bare == null || bare.isBlank()) ? Stream.empty() : Stream.of(bare),
 						entriesWithNumericSuffix(keyPrefix)
 								.map(entry -> Map.entry(
 										new BigInteger(entry.getKey().substring(keyPrefix.length())),
 										entry.getValue()))
 								.sorted(Map.Entry.comparingByKey())
-								.map(Map.Entry::getValue))
+								.map(Map.Entry::getValue),
+						(bare == null || bare.isBlank()) ? Stream.empty() : Stream.of(bare))
 				.toList();
 	}
 

@@ -19,6 +19,8 @@ package org.entrystore.rest.springboot.configuration;
 import org.entrystore.repository.config.Settings;
 import org.springframework.boot.EnvironmentPostProcessor;
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.context.properties.source.ConfigurationPropertyName;
+import org.springframework.boot.context.properties.source.ConfigurationPropertyName.Form;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.EnumerablePropertySource;
@@ -52,6 +54,12 @@ import java.util.TreeSet;
  * bracketed {@code ...whitelist[partner]} was inert under the legacy reader but binds as an active list
  * entry now.</li>
  * </ul>
+ *
+ * <p>The legacy-shape rules (gap, {@code .0}, zero-padded, bare value) apply only to the dotted and
+ * environment-variable spellings — the only forms {@code Config.getStringList} could ever have been fed.
+ * A bracketed entry ({@code ...local[0]}, a YAML sequence, a CLI {@code --key[0]=} override) is
+ * Spring-native, always zero-based and carries no changed meaning, so it is accepted silently; only its
+ * non-numeric variant is a finding.
  *
  * <p>An {@link EnvironmentPostProcessor} rather than a bean, for the same reason as
  * {@link LegacyPropertyKeyDetector}: it runs before any bean is created, so the diagnostic is the first
@@ -107,29 +115,36 @@ public final class IndexedListConfigValidator implements EnvironmentPostProcesso
 					+ suffixes.nonNumeric() + ". The previous release never read them and they would bind as "
 					+ "active list entries now; list entries must use numeric indices (.1, .2, ...).");
 		}
-		boolean hasBareValue = environment.containsProperty(key);
-		if (suffixes.numeric().isEmpty()) {
-			if (hasBareValue) {
-				findings.add("Configuration key '" + key + "' has a bare, un-indexed value. Before 6.1 that "
-						+ "was read as a single-element list; it no longer binds. Write it as '" + key
-						+ ".1=<value>'.");
-			}
+		// containsProperty covers non-enumerable sources; bareNames covers spellings that only
+		// canonicalise to the bare key (see classify).
+		boolean hasBareValue = environment.containsProperty(key) || !suffixes.bareNames().isEmpty();
+		boolean hasIndexedEntries = !suffixes.legacyNumeric().isEmpty() || !suffixes.bracketNumeric().isEmpty();
+		if (hasBareValue && !hasIndexedEntries) {
+			findings.add("Configuration key '" + key + "' has a bare, un-indexed value. Before 6.1 that "
+					+ "was read as a single-element list; it no longer binds. Write it as '" + key
+					+ ".1=<value>'.");
 			return;
 		}
 		if (hasBareValue) {
+			SortedSet<String> allIndexed = new TreeSet<>(indexOrder());
+			allIndexed.addAll(suffixes.legacyNumeric());
+			allIndexed.addAll(suffixes.bracketNumeric());
 			findings.add("Configuration key '" + key + "' has both a bare value and indexed entries "
-					+ suffixes.numeric() + ". Before 6.1 the bare value was used and the indexed entries were "
+					+ allIndexed + ". Before 6.1 the bare value was used and the indexed entries were "
 					+ "ignored; now the bare value would be ignored and the indexed entries would apply. "
 					+ "Remove one of the two forms.");
 		}
+		if (suffixes.legacyNumeric().isEmpty()) {
+			return;
+		}
 		// With a bare value present the legacy reader stopped at a count of 1 and never probed .1 at all,
-		// so every indexed entry is newly applied, not just the ones after the first hole.
+		// so every legacy-form entry is newly applied, not just the ones after the first hole.
 		SortedSet<String> droppedBefore = hasBareValue
-				? suffixes.numeric()
-				: entriesTheLegacyReaderDropped(suffixes.numeric());
+				? suffixes.legacyNumeric()
+				: entriesTheLegacyReaderDropped(suffixes.legacyNumeric());
 		if (!droppedBefore.isEmpty()) {
 			findings.add("Configuration key '" + key + "' has entries the previous release never read (found "
-					+ suffixes.numeric() + "; newly applied: " + droppedBefore + "). Before 6.1 counting "
+					+ suffixes.legacyNumeric() + "; newly applied: " + droppedBefore + "). Before 6.1 counting "
 					+ "started at .1 and stopped at the first missing index."
 					+ (hasBareValue ? " Remove the bare value above, then renumber" : " Renumber")
 					+ " contiguously from .1, without leading zeros, to restore the previous list.");
@@ -139,8 +154,8 @@ public final class IndexedListConfigValidator implements EnvironmentPostProcesso
 	private static String buildFailFastMessage(List<String> findings) {
 		StringBuilder message = new StringBuilder(
 				"EntryStore startup aborted: indexed list settings are configured in shapes whose meaning "
-						+ "changed in 6.1. Every key below is an allowlist or denylist, so starting anyway "
-						+ "could admit callers the previous configuration excluded.\n");
+						+ "changed in 6.1. Every key below is an allowlist or denylist, and starting anyway "
+						+ "would apply lists that differ from what the previous release applied.\n");
 		for (String finding : findings) {
 			message.append("  - ").append(finding).append('\n');
 		}
@@ -164,51 +179,90 @@ public final class IndexedListConfigValidator implements EnvironmentPostProcesso
 	}
 
 	/**
-	 * Index suffixes across the three spellings that all bind to the same list: the dotted form, the
-	 * bracket form ({@code ...local[2]}) and the container-native environment-variable form. Boot's
-	 * {@code SystemEnvironmentPropertyMapper} removes dashes rather than converting them, so
+	 * Index suffixes across the spellings that all bind to the same list, classified into the
+	 * legacy-relevant forms (dotted and the container-native environment-variable form — the only
+	 * spellings {@code Config.getStringList} could ever have been fed), the Spring-native bracket
+	 * form ({@code ...local[0]}, YAML sequences, CLI overrides — which the legacy reader could never
+	 * parse, so no meaning changed there), and non-numeric suffixes (hazardous in every spelling).
+	 *
+	 * <p>Names are matched the way the binder matches them, not literally: the dotted/bracket forms go
+	 * through {@link ConfigurationPropertyName#adapt}, so a relaxed spelling such as
+	 * {@code ...remoteResource.delete.whitelist.evil} is seen exactly where the binder would bind it,
+	 * and the environment-variable prefix is compared case-insensitively (Boot's
+	 * {@code SystemEnvironmentPropertyMapper} removes dashes and accepts lowercase variables, so
 	 * {@code entrystore.proxy.remote-resource.delete.whitelist} binds from
-	 * {@code ENTRYSTORE_PROXY_REMOTERESOURCE_DELETE_WHITELIST_1}. Matching only the dotted form would
-	 * leave the diagnostic silent for exactly the deployments most likely to hit this.
+	 * {@code ENTRYSTORE_PROXY_REMOTERESOURCE_DELETE_WHITELIST_1}). This validator is the sole guard for
+	 * these keys — the records deliberately do not re-filter — so it must see every spelling the binder
+	 * accepts.
 	 */
 	private static ConfiguredSuffixes configuredSuffixes(ConfigurableEnvironment environment, String key) {
-		String dotted = key + ".";
-		String bracketed = key + "[";
+		ConfigurationPropertyName canonicalKey = ConfigurationPropertyName.of(key);
 		String environmentVariable = key.toUpperCase(Locale.ROOT).replace("-", "").replace('.', '_') + "_";
-		SortedSet<String> numeric = new TreeSet<>(indexOrder());
-		SortedSet<String> nonNumeric = new TreeSet<>();
+		ConfiguredSuffixes suffixes = new ConfiguredSuffixes(
+				new TreeSet<>(indexOrder()), new TreeSet<>(indexOrder()), new TreeSet<>(), new TreeSet<>());
 		for (PropertySource<?> source : environment.getPropertySources()) {
 			if (!(source instanceof EnumerablePropertySource<?> enumerable)) {
 				continue;
 			}
 			for (String name : enumerable.getPropertyNames()) {
-				String suffix = rawSuffix(name, dotted, bracketed, environmentVariable);
-				if (suffix == null || suffix.isEmpty()) {
-					continue;
-				}
-				if (isAsciiDigits(suffix)) {
-					numeric.add(suffix);
-				} else {
-					nonNumeric.add(suffix);
-				}
+				classify(name, canonicalKey, environmentVariable, suffixes);
 			}
 		}
-		return new ConfiguredSuffixes(numeric, nonNumeric);
+		return suffixes;
 	}
 
-	private record ConfiguredSuffixes(SortedSet<String> numeric, SortedSet<String> nonNumeric) {}
+	private record ConfiguredSuffixes(SortedSet<String> legacyNumeric, SortedSet<String> bracketNumeric,
+			SortedSet<String> nonNumeric, SortedSet<String> bareNames) {}
 
-	private static String rawSuffix(String name, String dotted, String bracketed, String environmentVariable) {
-		if (name.startsWith(dotted)) {
-			return name.substring(dotted.length());
+	private static void classify(String name, ConfigurationPropertyName key, String environmentVariable,
+			ConfiguredSuffixes suffixes) {
+		// Environment-variable branch first: the underscore form is not parseable as a dotted name.
+		if (name.regionMatches(true, 0, environmentVariable, 0, environmentVariable.length())) {
+			String suffix = name.substring(environmentVariable.length());
+			if (!suffix.isEmpty()) {
+				(isAsciiDigits(suffix) ? suffixes.legacyNumeric() : suffixes.nonNumeric()).add(suffix);
+			}
+			return;
 		}
-		if (name.startsWith(bracketed) && name.endsWith("]")) {
-			return name.substring(bracketed.length(), name.length() - 1);
+		ConfigurationPropertyName adapted;
+		try {
+			adapted = ConfigurationPropertyName.adapt(name, '.');
+		} catch (RuntimeException e) {
+			return; // not a name the binder could use either
 		}
-		if (name.startsWith(environmentVariable)) {
-			return name.substring(environmentVariable.length());
+		if (key.equals(adapted)) {
+			// A spelling that canonicalises to the key itself is the bare, un-indexed value.
+			suffixes.bareNames().add(name);
+			return;
 		}
-		return null;
+		if (!key.isAncestorOf(adapted)) {
+			// Includes names whose suffix consists entirely of characters adapt() rejects (e.g. a
+			// non-ASCII digit such as ٢): adapt classifies that element as EMPTY, leaving a name that is
+			// neither the key nor its descendant — and the Binder ignores such a property completely
+			// (verified empirically), so it is as inert now as it was under the legacy reader.
+			return;
+		}
+		int keyLength = key.getNumberOfElements();
+		if (adapted.getNumberOfElements() == keyLength + 1) {
+			String suffix = adapted.getElement(keyLength, Form.ORIGINAL);
+			if (!isAsciiDigits(suffix)) {
+				suffixes.nonNumeric().add(suffix);
+			} else if (adapted.isLastElementIndexed()) {
+				suffixes.bracketNumeric().add(suffix);
+			} else {
+				suffixes.legacyNumeric().add(suffix);
+			}
+			return;
+		}
+		// A deeper descendant (e.g. whitelist.1.extra) is never a list entry in any spelling.
+		StringBuilder suffix = new StringBuilder();
+		for (int i = keyLength; i < adapted.getNumberOfElements(); i++) {
+			if (!suffix.isEmpty()) {
+				suffix.append('.');
+			}
+			suffix.append(adapted.getElement(i, Form.ORIGINAL));
+		}
+		suffixes.nonNumeric().add(suffix.toString());
 	}
 
 	/**

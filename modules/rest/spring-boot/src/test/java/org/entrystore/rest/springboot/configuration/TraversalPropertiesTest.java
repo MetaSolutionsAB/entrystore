@@ -140,13 +140,29 @@ class TraversalPropertiesTest {
 	}
 
 	@Test
-	void blacklistTuples_bareValuePlusIndexedEntries_ordersTheBareTupleFirst() {
-		// First, so an indexed tuple for the same predicate wins the last-wins keying in MetadataService.
+	void blacklistTuples_bareValuePlusIndexedEntries_ordersTheBareTupleLast() {
+		// Last, so the bare tuple wins the last-wins keying in MetadataService: with both forms set the
+		// legacy reader returned ONLY the bare tuple, so an indexed entry for the same predicate must not
+		// be able to relax the denial it carries.
 		TraversalProperties properties = new TraversalProperties(Map.of(
 				"p.blacklist", "rdf:type,foaf:Person",
 				"p.blacklist.1", "rdf:type,foaf:Agent"));
 
-		assertEquals(List.of("rdf:type,foaf:Person", "rdf:type,foaf:Agent"),
+		assertEquals(List.of("rdf:type,foaf:Agent", "rdf:type,foaf:Person"),
+				properties.blacklistTuples("p"));
+	}
+
+	@Test
+	void binder_producesTheBareBlacklistScalarAlongsideItsIndexedSiblings() {
+		// The premise the bare-tuple honouring rests on: the real binder binds "p.blacklist" as a map key
+		// even though that name is simultaneously a scalar and the prefix of "p.blacklist.1". If a future
+		// Spring version dropped the scalar, the denylist would fail open again — with every
+		// direct-construction test above still green.
+		TraversalProperties properties = bind(Map.of(
+				"entrystore.traversal.p.blacklist", "rdf:type,foaf:Person",
+				"entrystore.traversal.p.blacklist.1", "rdf:type,foaf:Agent"));
+
+		assertEquals(List.of("rdf:type,foaf:Agent", "rdf:type,foaf:Person"),
 				properties.blacklistTuples("p"));
 	}
 

@@ -28,9 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * No other {@code @Value} in the REST layer reads these keys, and only two of them are covered by an IT,
  * so a typo here makes {@code GET /management/status/extended} report a default for a value the operator
  * did configure. Several are also read by core through {@code Settings} — {@code entrystore.data.quota},
- * {@code .repository.provenance}, {@code .solr} and {@code .harvester.oai} — with {@code on}-based
- * truthiness that {@code relaxedBoolean} deliberately mirrors, so the report cannot disagree with the
- * behaviour it reports on and a stray spelling cannot abort startup over a cosmetic DTO.
+ * {@code .repository.provenance}, {@code .solr} and {@code .harvester.oai} — each with its own literal
+ * comparison, which the record's per-consumer predicates deliberately mirror, so the report cannot
+ * disagree with the behaviour it reports on and a stray spelling cannot abort startup over a cosmetic DTO.
  *
  * <p>Each string key gets a distinct value, and the booleans alternate, so transposing two adjacent
  * constructor parameters fails. Two booleans further apart that happen to share a value cannot be
@@ -44,14 +44,14 @@ class StatusReportPropertiesTest {
 						"entrystore.rowstore.url=https://rowstore.example",
 						"entrystore.repository.store.type=native",
 						"entrystore.repository.store.indexes=spoc,posc",
-						"entrystore.data.quota=true",
+						"entrystore.data.quota=on",
 						"entrystore.data.quota.default=1024",
-						"entrystore.harvester.oai=false",
-						"entrystore.harvester.oai.multithreaded=true",
-						"entrystore.repository.provenance=false",
+						"entrystore.harvester.oai=off",
+						"entrystore.harvester.oai.multithreaded=on",
+						"entrystore.repository.provenance=off",
 						"entrystore.auth.signup=true",
 						"entrystore.auth.password-reset=false",
-						"entrystore.solr=true",
+						"entrystore.solr=on",
 						"entrystore.solr.reindex-on-startup=false",
 						"entrystore.backup.format=trig",
 						"entrystore.backup.maintenance=true",
@@ -108,13 +108,15 @@ class StatusReportPropertiesTest {
 	}
 
 	@Test
-	void booleans_mirrorTheLegacyConfigGetBooleanSemantics() {
-		// Core still reads these keys with legacy truthiness (RepositoryManagerImpl requires the literal
-		// "on" for several), so the report must resolve them identically: "on" enables, "yes"/"1"/"enabled"
-		// are false — NOT the strict Spring boolean that would flip yes/1 to true and diverge from core.
+	void booleans_mirrorEachKeysActualConsumer() {
+		// Each key is resolved with the predicate its real consumer uses, so the report cannot disagree
+		// with the behaviour it reports on: RepositoryManagerImpl/ListRecordsJob enable only on the
+		// literal "on" (so "true"/"1"/"enabled" report false), while OAIHarvesterFactory disables only on
+		// the literal "off" — entrystore.harvester.oai=yes runs the harvester, and must report true.
 		runner().withPropertyValues(
 						"entrystore.data.quota=on",
 						"entrystore.harvester.oai=yes",
+						"entrystore.harvester.oai.multithreaded=true",
 						"entrystore.repository.provenance=1",
 						"entrystore.solr=enabled",
 						"entrystore.auth.signup=off")
@@ -122,9 +124,10 @@ class StatusReportPropertiesTest {
 					StatusReportProperties properties = context.getBean(StatusReportProperties.class);
 
 					assertTrue(properties.quota());
-					assertFalse(properties.oaiHarvester());
+					assertTrue(properties.oaiHarvester(), "anything but the literal 'off' runs the harvester");
+					assertFalse(properties.oaiHarvesterMultiThreaded(), "ListRecordsJob requires the literal 'on'");
 					assertFalse(properties.provenance());
-					assertFalse(properties.solrEnabled());
+					assertFalse(properties.solrEnabled(), "RepositoryManagerImpl requires the literal 'on'");
 					assertFalse(properties.signup());
 				});
 	}

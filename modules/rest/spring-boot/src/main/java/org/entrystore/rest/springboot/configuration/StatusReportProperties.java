@@ -30,16 +30,22 @@ import org.springframework.stereotype.Component;
  * {@code entrystore.backup.maintenance}) are simultaneously a scalar and the prefix of further keys —
  * a layout a record component can never express.
  *
- * <p>The boolean keys bind as raw strings and are resolved by {@link #relaxedBoolean(String)}, which
- * mirrors the legacy {@code Config.getBoolean} exactly ({@code on} enables, {@code off} disables,
- * anything else falls to {@code Boolean.parseBoolean} — never throws). Two reasons, both consequences
- * of this being a report-only DTO: it is an eagerly-instantiated component, so a strict boolean bind
- * would put a cosmetic report on the startup-critical path and abort the boot (naming
- * {@code constructor parameter N}, not the key) for a value such as {@code enabled} that the actual
- * consumers tolerate; and every one of these keys is still read by core with legacy semantics
- * ({@code RepositoryManagerImpl}, {@code BackupScheduler}, the OAI harvester — several via a literal
- * {@code "on"} comparison), so a stricter parse here would make the report disagree with the behaviour
- * it reports on ({@code entrystore.solr=1} would report an index core never started).
+ * <p>The boolean keys bind as raw strings and each accessor resolves its key with the predicate the
+ * key's <em>actual consumer</em> uses, so the report cannot disagree with the behaviour it reports on
+ * and no boolean parse can abort startup over a report-only DTO (a strict bind on this
+ * eagerly-instantiated component would refuse to boot, naming {@code constructor parameter N} rather
+ * than the key, for a value the real consumer tolerates):
+ * <ul>
+ * <li>{@link #literalOn} — {@code data.quota}, {@code repository.provenance}, {@code solr}
+ * ({@code RepositoryManagerImpl}) and {@code harvester.oai.multithreaded} ({@code ListRecordsJob}) are
+ * enabled only by the literal {@code on}, case-insensitively.</li>
+ * <li>{@link #anythingButOff} — {@code harvester.oai} ({@code OAIHarvesterFactory}) is disabled only by
+ * the literal, case-sensitive {@code off}; hence its {@code off} default below.</li>
+ * <li>{@link #relaxedBoolean} — {@code solr.reindex-on-startup} and {@code backup.maintenance} are
+ * genuine {@code Config.getBoolean} reads ({@code on}/{@code off}, else {@code Boolean.parseBoolean});
+ * {@code auth.signup} and {@code auth.password-reset} have no runtime consumer at all — nothing gates
+ * on them — so the report applies the same lenient parse.</li>
+ * </ul>
  *
  * <p>The {@code @Value} annotations sit on the explicit canonical constructor's parameters rather than
  * on the record components — see {@link CorsProperties} for why that distinction matters at startup.
@@ -74,7 +80,9 @@ public record StatusReportProperties(
 			@Value("${entrystore.repository.store.indexes:" + UNCONFIGURED + "}") String repositoryIndices,
 			@Value("${entrystore.data.quota:false}") String quotaRaw,
 			@Value("${entrystore.data.quota.default:" + UNCONFIGURED + "}") String quotaDefault,
-			@Value("${entrystore.harvester.oai:false}") String oaiHarvesterRaw,
+			// Default off, not false: the consumer (OAIHarvesterFactory) enables for anything that is not
+			// the literal "off", so any other default would report an unset harvester as running.
+			@Value("${entrystore.harvester.oai:off}") String oaiHarvesterRaw,
 			@Value("${entrystore.harvester.oai.multithreaded:false}") String oaiHarvesterMultiThreadedRaw,
 			@Value("${entrystore.repository.provenance:false}") String provenanceRaw,
 			@Value("${entrystore.auth.signup:false}") String signupRaw,
@@ -109,19 +117,19 @@ public record StatusReportProperties(
 	}
 
 	public boolean quota() {
-		return relaxedBoolean(quotaRaw);
+		return literalOn(quotaRaw);
 	}
 
 	public boolean oaiHarvester() {
-		return relaxedBoolean(oaiHarvesterRaw);
+		return anythingButOff(oaiHarvesterRaw);
 	}
 
 	public boolean oaiHarvesterMultiThreaded() {
-		return relaxedBoolean(oaiHarvesterMultiThreadedRaw);
+		return literalOn(oaiHarvesterMultiThreadedRaw);
 	}
 
 	public boolean provenance() {
-		return relaxedBoolean(provenanceRaw);
+		return literalOn(provenanceRaw);
 	}
 
 	public boolean signup() {
@@ -133,7 +141,7 @@ public record StatusReportProperties(
 	}
 
 	public boolean solrEnabled() {
-		return relaxedBoolean(solrEnabledRaw);
+		return literalOn(solrEnabledRaw);
 	}
 
 	public boolean solrReindexOnStartup() {
@@ -142,6 +150,16 @@ public record StatusReportProperties(
 
 	public boolean backupMaintenance() {
 		return relaxedBoolean(backupMaintenanceRaw);
+	}
+
+	/** Mirrors {@code RepositoryManagerImpl} and {@code ListRecordsJob}: only the literal {@code on} enables. */
+	private static boolean literalOn(String value) {
+		return "on".equalsIgnoreCase(value);
+	}
+
+	/** Mirrors {@code OAIHarvesterFactory}: only the literal, case-sensitive {@code off} disables. */
+	private static boolean anythingButOff(String value) {
+		return !"off".equals(value);
 	}
 
 	/** Mirrors {@code Config.getBoolean}: {@code on}/{@code true} enable, everything else is false — never throws. */

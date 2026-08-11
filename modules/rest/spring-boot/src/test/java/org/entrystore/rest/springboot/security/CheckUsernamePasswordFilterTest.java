@@ -43,10 +43,10 @@ import static org.mockito.Mockito.when;
  * Pins the whitelist/blacklist gate, including both halves of the fail-open path the constructor
  * comment concedes ("a typo in this value fails open"): the direct-construction tests pin the mode
  * logic, {@code whitelistMode_bindsFromTheConfiguredKey} pins that the {@code entrystore.auth.password}
- * placeholder actually resolves through a real {@code Environment}, and
- * {@code CookieLoginResourceIT.loginNonWhitelistedUser} asserts the denial end to end — so a key that
- * stops resolving (yielding {@code whitelistMode == false} and enforcement silently off) no longer
- * leaves the whole suite green.
+ * placeholder actually resolves through a real {@code Environment}, and the {@code CookieLoginResourceIT}
+ * case "POST /auth/cookie should not log in a user absent from the password login whitelist" asserts the
+ * denial end to end — so a key that stops resolving (yielding {@code whitelistMode == false} and
+ * enforcement silently off) no longer leaves the whole suite green.
  */
 @ExtendWith(MockitoExtension.class)
 class CheckUsernamePasswordFilterTest {

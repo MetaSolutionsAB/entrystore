@@ -200,15 +200,57 @@ class IndexedListConfigValidatorTest {
 	}
 
 	@Test
-	void nonAsciiDigitSuffix_abortsWithoutCrashing() {
-		// StringUtils.isNumeric would accept this and then blow up in BigInteger; the legacy reader could
-		// never have matched it, but the map binder binds it — so it is a non-numeric finding, not a crash.
+	void zeroBasedBracketedList_isAcceptedAsSpringNative() {
+		// A YAML sequence flattens to whitelist[0]/whitelist[1], and CLI overrides use the same form.
+		// The legacy reader could never have been fed a bracketed name, so nothing about it changed
+		// meaning on upgrade — and "renumber from .1" is unachievable for a YAML sequence anyway.
 		var environment = new MockEnvironment()
-				.withProperty("entrystore.auth.signup.whitelist.٢", "example.com");
+				.withProperty("entrystore.auth.password.whitelist[0]", "admin")
+				.withProperty("entrystore.auth.password.whitelist[1]", "user@test.com");
+
+		assertQuiet(environment);
+	}
+
+	@Test
+	void camelCaseSpelling_isSeenTheWayTheBinderSeesIt() {
+		// Relaxed binding canonicalises remote-resource and remoteResource identically, so this spelling
+		// binds into the DELETE-path origin whitelist. Matching names literally would let it through
+		// unvalidated — and this validator is the sole guard, the records do not re-filter.
+		var environment = new MockEnvironment()
+				.withProperty("entrystore.proxy.remoteResource.delete.whitelist.evil", "https://attacker.example");
 
 		String message = assertAborts(environment);
 
-		assertTrue(message.contains("non-numeric index suffixes"), "got: " + message);
+		assertTrue(message.contains("'entrystore.proxy.remote-resource.delete.whitelist'"),
+				"the diagnostic must name the canonical dotted key; got: " + message);
+		assertTrue(message.contains("non-numeric index suffixes [evil]"), "got: " + message);
+	}
+
+	@Test
+	void lowercaseEnvironmentVariableSpelling_isDetected() {
+		// Boot's SystemEnvironmentPropertyMapper lower-cases when it maps, so a lowercase variable binds
+		// exactly like the uppercase one and must be validated like it.
+		var environment = new MockEnvironment()
+				.withProperty("entrystore_proxy_whitelist_local_0", "evil.example");
+
+		String message = assertAborts(environment);
+
+		assertTrue(message.contains("'entrystore.proxy.whitelist.local'"), "got: " + message);
+		assertTrue(message.contains("[0]"), "got: " + message);
+	}
+
+	@Test
+	void nonAsciiDigitSuffix_isIgnoredLikeTheBinderIgnoresIt() {
+		// Verified against the project's spring-boot/spring-core jars: adapt() classifies the ٢ element
+		// as EMPTY, leaving a name that is neither equal to the key nor a descendant of it — and the
+		// Binder consequently never binds the property into the map at all ({1=...} binds, ٢ does not).
+		// Inert for the binder and inert for the legacy reader means there is no meaning change to
+		// report, so the validator stays quiet rather than aborting over a value that cannot apply.
+		var environment = new MockEnvironment()
+				.withProperty("entrystore.auth.signup.whitelist.٢", "evil.example")
+				.withProperty("entrystore.auth.signup.whitelist.1", "example.com");
+
+		assertQuiet(environment);
 	}
 
 	@Test

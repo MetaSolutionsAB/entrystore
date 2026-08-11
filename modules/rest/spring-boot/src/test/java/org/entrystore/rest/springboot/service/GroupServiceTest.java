@@ -25,6 +25,8 @@ import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -37,8 +39,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -89,6 +91,16 @@ class GroupServiceTest {
 	}
 
 	@Test
+	void unauthenticatedCaller_isRejectedRegardlessOfTheGate() {
+		// The other half of the two-part guard: a null authenticated URI must short-circuit before the
+		// guest comparison (which would otherwise be the only thing standing between null and the gate).
+		gate(true);
+		when(principalManager.getAuthenticatedUserURI()).thenReturn(null);
+
+		assertThrows(UnauthorizedException.class, () -> service.createGroup("ctx", "name"));
+	}
+
+	@Test
 	void nonAdmin_withGateOff_isRejected() {
 		// The default: absent/off keeps group-with-context creation admin-only.
 		gate(false);
@@ -106,9 +118,11 @@ class GroupServiceTest {
 		authenticatedNonGuest();
 
 		// The invalid name throws AFTER the gate and BEFORE admin escalation, so reaching validation
-		// proves the non-admin was admitted — the admin check must not even run.
+		// proves the non-admin was admitted — the admin check must not even run, with any argument
+		// (an argument-specific never() could not fail: the gate path calls isAdmin with getUser's
+		// result, which is not the requestingUser mock).
 		assertThrows(BadRequestException.class, () -> service.createGroup("ctx", "bad**name"));
-		verify(userService, never()).isAdmin(requestingUser);
+		verifyNoInteractions(userService);
 	}
 
 	@Test
@@ -121,16 +135,19 @@ class GroupServiceTest {
 		assertThrows(BadRequestException.class, () -> service.createGroup("ctx", "bad**name"));
 	}
 
-	@Test
-	void gate_bindsFromTheConfiguredKey() {
+	@ParameterizedTest(name = "gate binds from the configured key with value \"{0}\"")
+	@ValueSource(strings = {"on", "true", "yes", "1"})
+	void gate_bindsFromTheConfiguredKey(String configured) {
 		// ReflectionTestUtils drives the field in the cases above, so only this pins the @Value key:
 		// a mistyped key would leave the gate permanently at its default with every other test green.
+		// All four strict-boolean enabling spellings are pinned — "on" is the one value where strict
+		// binding and the legacy reader agree, so it alone could not catch a parser regression.
 		GroupService fromContext = new GroupService(repositoryManager, principalManager, userService,
 				new ReservedNamesService());
 		new ApplicationContextRunner()
 				.withBean(PropertySourcesPlaceholderConfigurer.class)
 				.withBean(GroupService.class, () -> fromContext)
-				.withPropertyValues("entrystore.nonadmin.group-context-creation=on")
+				.withPropertyValues("entrystore.nonadmin.group-context-creation=" + configured)
 				.run(context -> assertEquals(Boolean.TRUE,
 						ReflectionTestUtils.getField(context.getBean(GroupService.class),
 								"nonAdminGroupContextCreation"),
