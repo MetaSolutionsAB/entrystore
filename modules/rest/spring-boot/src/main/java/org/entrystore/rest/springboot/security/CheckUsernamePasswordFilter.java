@@ -21,21 +21,21 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.rest.springboot.configuration.PasswordLoginListProperties;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * Class checks the request size and parameters before the authentication via username and password process starts
@@ -50,11 +50,12 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 	private final List<String> passwordLoginWhitelist;
 	private final List<String> passwordLoginBlacklist;
 
-	public CheckUsernamePasswordFilter(Config config, LoginAttemptService loginAttemptService,
-									   ErrorResponseWriter errorResponseWriter) {
+	public CheckUsernamePasswordFilter(LoginAttemptService loginAttemptService,
+									   ErrorResponseWriter errorResponseWriter,
+									   @Value("${entrystore.auth.password:#{null}}") String passwordAuthMode,
+									   PasswordLoginListProperties passwordLoginLists) {
 		this.loginAttemptService = loginAttemptService;
 		this.errorResponseWriter = errorResponseWriter;
-		String passwordAuthMode = config.getString(Settings.AUTH_PASSWORD);
 		this.whitelistMode = "whitelist".equalsIgnoreCase(passwordAuthMode);
 		if (passwordAuthMode != null && !passwordAuthMode.isEmpty() && !whitelistMode
 				&& !"on".equalsIgnoreCase(passwordAuthMode) && !"off".equalsIgnoreCase(passwordAuthMode)) {
@@ -65,9 +66,9 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 					+ "whitelist enforcement is off", passwordAuthMode, Settings.AUTH_PASSWORD);
 		}
 		this.passwordLoginWhitelist = whitelistMode
-				? normalize(config.getStringList(Settings.AUTH_PASSWORD_WHITELIST))
+				? List.copyOf(passwordLoginLists.whitelist().values())
 				: List.of();
-		this.passwordLoginBlacklist = normalize(config.getStringList(Settings.AUTH_PASSWORD_BLACKLIST));
+		this.passwordLoginBlacklist = List.copyOf(passwordLoginLists.blacklist().values());
 		if (whitelistMode && passwordLoginWhitelist.isEmpty()) {
 			// Deliberately not a startup failure: an empty whitelist fails closed — every password
 			// login is denied — which is also the only way this layer can express "no local password
@@ -77,14 +78,6 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 			log.error("{}=whitelist with no {} configured: every password login will be rejected",
 					Settings.AUTH_PASSWORD, Settings.AUTH_PASSWORD_WHITELIST);
 		}
-	}
-
-	// Defensive: Config.getStringList does not exclude null elements from its contract, and the
-	// equalsIgnoreCase matching below would NPE on one. Note that a gap in the legacy indexed form
-	// (auth.password.blacklist.1 + .3) does not produce a null — PropertiesConfiguration stops
-	// counting at the first missing index, so .3 and anything after it is dropped entirely.
-	private static List<String> normalize(List<String> values) {
-		return values == null ? List.of() : values.stream().filter(Objects::nonNull).toList();
 	}
 
 	@Override

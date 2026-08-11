@@ -16,18 +16,15 @@
 
 package org.entrystore.rest.springboot.security;
 
-import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.rest.springboot.configuration.ProxyProperties;
+import org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.security.SsrfValidator.Origin;
 import org.entrystore.rest.springboot.security.SsrfValidator.ValidatedTarget;
-import org.entrystore.rest.springboot.configuration.ProxyProperties;
-import org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.unit.DataSize;
 
 import java.net.HttpURLConnection;
@@ -35,6 +32,7 @@ import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -44,20 +42,38 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@ExtendWith(MockitoExtension.class)
 class SsrfValidatorTest {
-
-	@Mock
-	private RepositoryManagerImpl repositoryManager;
 
 	private SsrfValidator validator;
 
 	@BeforeEach
 	void setUp() {
-		validator = new SsrfValidator(repositoryManager, ProxyPropertiesFixture.defaults());
+		validator = new SsrfValidator(ProxyPropertiesFixture.defaults(), null);
 		validator.setProxyHostWhitelist(Set.of());
 		validator.setDeleteOriginWhitelist(Set.of());
 		validator.setRowstoreOrigin(null);
+	}
+
+	@Test
+	void init_wiresEachTrustSetToItsOwnSetting() {
+		// Every other test here bypasses init() via the package-private setters, so this is the one place
+		// pinning that init() reads each trust set from ITS setting: if deleteOriginWhitelist were wired
+		// to localWhitelist(), every proxy-GET-whitelisted host would silently become a trusted
+		// remote-resource DELETE origin — and the ITs configure neither the delete whitelist nor a
+		// rowstore URL, so nothing else would fail.
+		var properties = ProxyPropertiesFixture.withWhitelists(
+				new ProxyProperties.Whitelist(Map.of("1", "cache.internal"), Map.of("1", "guest.example")),
+				new ProxyProperties.RemoteResource(new ProxyProperties.RemoteResource.Delete(
+						Map.of("1", "http://rowstore.internal:8282"))));
+		var wired = new SsrfValidator(properties, "https://rowstore.example:9000/");
+
+		wired.init();
+
+		assertEquals(Set.of("cache.internal"), ReflectionTestUtils.getField(wired, "proxyHostWhitelist"));
+		assertEquals(Set.of(new Origin("http", "rowstore.internal", 8282)),
+				ReflectionTestUtils.getField(wired, "deleteOriginWhitelist"));
+		assertEquals(new Origin("https", "rowstore.example", 9000),
+				ReflectionTestUtils.getField(wired, "rowstoreOrigin"));
 	}
 
 	@Test
@@ -293,8 +309,10 @@ class SsrfValidatorTest {
 	void openPinnedConnection_appliesEachConfiguredTimeoutToItsOwnSetting() throws Exception {
 		// Distinct values, so swapping the two setters at the call site fails here rather than passing
 		// on symmetry — and so a seconds/milliseconds slip in the *Millis() accessors is visible.
-		SsrfValidator configured = new SsrfValidator(repositoryManager,
-				new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ofSeconds(7), Duration.ofSeconds(11)));
+		SsrfValidator configured = new SsrfValidator(
+				new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ofSeconds(7), Duration.ofSeconds(11),
+						null, null),
+				null);
 		InetAddress ipv4 = Inet4Address.getByAddress("example.com",
 				new byte[]{(byte) 93, (byte) 184, (byte) 216, (byte) 34});
 

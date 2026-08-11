@@ -22,7 +22,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.springboot.configuration.PermittedRedirectsProperties;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -37,6 +37,7 @@ import java.util.Objects;
 public class RedirectUrlValidator {
 
 	private final RepositoryManagerImpl repositoryManager;
+	private final PermittedRedirectsProperties permittedRedirects;
 
 	private List<String> permittedBaseUrls;
 
@@ -49,7 +50,7 @@ public class RedirectUrlValidator {
 		} else {
 			log.warn("Base URL is potentially misconfigured: {}", repoUrl);
 		}
-		urls.addAll(repositoryManager.getConfiguration().getStringList(Settings.AUTH_PERMITTED_REDIRECTS, new ArrayList<>()));
+		urls.addAll(permittedRedirects.redirects().values());
 		permittedBaseUrls = List.copyOf(urls);
 	}
 

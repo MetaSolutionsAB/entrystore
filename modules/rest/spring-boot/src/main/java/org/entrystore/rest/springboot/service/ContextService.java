@@ -26,16 +26,15 @@ import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
-import org.entrystore.config.Config;
 import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.HttpUtil;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedInputStream;
@@ -66,7 +65,9 @@ public class ContextService {
 	private final RepositoryManagerImpl repositoryManager;
 	private final ReservedNamesService reservedNames;
 	private final PrincipalManager principalManager;
-	private final Config esConfig;
+
+	@Value("${entrystore.data.folder:#{null}}")
+	private String dataFolder;
 
 
 	/**
@@ -243,9 +244,8 @@ public class ContextService {
 				addZipEntry(zipOS, "export.properties", tmpProperties);
 
 				// add resource files to zip file
-				String contextPath = esConfig.getString(Settings.DATA_FOLDER);
-				if (contextPath != null) {
-					File contextPathFile = new File(contextPath);
+				if (dataFolder != null) {
+					File contextPathFile = new File(dataFolder);
 					File contextFolder = new File(contextPathFile, contextId);
 					File[] contextFiles = contextFolder.listFiles();
 					if (contextFiles != null) {

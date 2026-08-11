@@ -18,6 +18,7 @@ package org.entrystore.rest.springboot.service;
 
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.rest.springboot.configuration.ProxyProperties;
 import org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture;
 import org.entrystore.rest.springboot.model.dto.ProxyResponse;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
@@ -38,6 +39,7 @@ import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -72,6 +74,29 @@ class ProxyServiceTest {
 				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()),
 				ProxyPropertiesFixture.defaults());
 		service.setWhitelistAnon(Set.of());
+	}
+
+	@Test
+	void init_readsTheAnonymousWhitelistNotTheLocalOne() {
+		// The only place anonymousWhitelist() is consumed, and every other test here bypasses init() via
+		// setWhitelistAnon. Reading localWhitelist() instead would silently let guests proxy to every host
+		// exempted from the SSRF blacklist — localhost in the IT deployment — with nothing else failing.
+		var properties = ProxyPropertiesFixture.withWhitelists(
+				new ProxyProperties.Whitelist(Map.of("1", "local.example"), Map.of("1", "guest.example")),
+				null);
+		var withRealProperties = new ProxyService(principalManager, contextService, ssrfValidator,
+				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()), properties);
+		withRealProperties.init();
+
+		URI guestUri = URI.create("http://example.com/_principals/resource/_guest");
+		when(principalManager.getGuestUser()).thenReturn(guestUser);
+		when(guestUser.getURI()).thenReturn(guestUri);
+		when(principalManager.getAuthenticatedUserURI()).thenReturn(guestUri);
+
+		assertDoesNotThrow(() -> withRealProperties.validateGlobalAccess("guest.example"));
+		assertThrows(ForbiddenException.class,
+				() -> withRealProperties.validateGlobalAccess("local.example"),
+				"a host on the local whitelist must not become guest-reachable");
 	}
 
 	@Test

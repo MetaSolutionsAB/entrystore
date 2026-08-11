@@ -25,8 +25,6 @@ import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.impl.DataImpl;
-import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.api.ModifyListResourceResponse;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
@@ -35,6 +33,7 @@ import org.entrystore.rest.springboot.service.ResourceService;
 import org.entrystore.rest.springboot.service.SyndicationService;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.Syndication;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -67,7 +66,8 @@ public class ResourceController {
 	private final ResourceService resourceService;
 	private final SyndicationService syndicationService;
 
-	private final RepositoryManagerImpl repositoryManager;
+	@Value("${entrystore.http.allow-content-disposition-inline:true}")
+	private boolean allowContentDispositionInline;
 
 	@Operation(
 			summary = "Returns a resource.",
@@ -284,8 +284,7 @@ public class ResourceController {
 		}
 
 		ContentDisposition contentDisposition;
-		if (!repositoryManager.getConfiguration().getBoolean(Settings.HTTP_ALLOW_CONTENT_DISPOSITION_INLINE, true)
-				|| isDownload) {
+		if (!allowContentDispositionInline || isDownload) {
 			contentDisposition = ContentDisposition.attachment().filename(fileName).build();
 		} else {
 			contentDisposition = ContentDisposition.inline().filename(fileName).build();

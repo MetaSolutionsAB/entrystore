@@ -27,9 +27,6 @@ import jakarta.mail.internet.MimeMessage;
 import org.apache.logging.log4j.Level;
 import org.entrystore.Entry;
 import org.entrystore.User;
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.PropertiesConfiguration;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.configuration.DeprecatedEmailAddressProperties;
 import org.entrystore.rest.springboot.configuration.SmtpProperties;
 import org.junit.jupiter.api.AfterEach;
@@ -39,10 +36,12 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.springframework.core.env.Environment;
 import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.MailSendException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
+import org.springframework.mock.env.MockEnvironment;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -94,7 +93,7 @@ class EmailSenderTest {
 
 	@Test
 	void sendMessage_unsetHost_returnsFalseWithoutTouchingTheSender() {
-		EmailSender sender = senderWith(smtp(null, FROM, null, null), new PropertiesConfiguration("test"));
+		EmailSender sender = senderWith(smtp(null, FROM, null, null), new MockEnvironment());
 
 		assertFalse(assertDoesNotThrow(() -> sender.sendMessage("user@example.com", "subj", "body")),
 				"sendMessage must return false when SMTP host is unset");
@@ -105,7 +104,7 @@ class EmailSenderTest {
 
 	@Test
 	void sendMessage_blankHost_returnsFalseWithoutTouchingTheSender() {
-		EmailSender sender = senderWith(smtp("   ", FROM, null, null), new PropertiesConfiguration("test"));
+		EmailSender sender = senderWith(smtp("   ", FROM, null, null), new MockEnvironment());
 
 		assertFalse(assertDoesNotThrow(() -> sender.sendMessage("user@example.com", "subj", "body")));
 		verifyNoInteractions(mailSender);
@@ -113,7 +112,7 @@ class EmailSenderTest {
 
 	@Test
 	void sendMessage_missingFromAddress_returnsFalseWithoutTouchingTheSender() {
-		EmailSender sender = senderWith(smtp("smtp.example.com", null, null, null), new PropertiesConfiguration("test"));
+		EmailSender sender = senderWith(smtp("smtp.example.com", null, null, null), new MockEnvironment());
 
 		assertFalse(assertDoesNotThrow(() -> sender.sendMessage("user@example.com", "subj", "body")));
 		verifyNoInteractions(mailSender);
@@ -121,10 +120,10 @@ class EmailSenderTest {
 
 	@Test
 	void sendSignupConfirmation_populatesTheMessageAndEscapesUserSuppliedValues(@TempDir Path tmp) throws Exception {
-		Config config = configWithTemplate(tmp, EmailTemplate.SIGNUP,
+		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.SIGNUP,
 				"<p>__NAME__ (__EMAIL__)</p><a href=\"__CONFIRMATION_LINK__\">confirm</a>");
-		config.setProperty(EmailTemplate.SIGNUP.getSubjectKey(), "Confirm your sign-up");
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, "audit@example.com", "help@example.com"), config);
+		environment.setProperty(EmailTemplate.SIGNUP.getSubjectKey(), "Confirm your sign-up");
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, "audit@example.com", "help@example.com"), environment);
 
 		boolean sent = sender.sendSignupConfirmation("Ada <b>Lovelace</b>", "ada@example.com",
 				"https://entrystore.example/confirm?token=a$b");
@@ -153,7 +152,7 @@ class EmailSenderTest {
 
 	@Test
 	void sendMessage_transientFailures_areRetriedUpToTheConfiguredLimit(@TempDir Path tmp) throws IOException {
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environmentWithTemplate(tmp));
 		doThrow(new MailSendException("first"))
 				.doThrow(new MailSendException("second"))
 				.doNothing()
@@ -169,7 +168,7 @@ class EmailSenderTest {
 		// completing in milliseconds. That path runs on AuthService's passwordResetExecutor, not the
 		// request thread — see the "Do not add further synchronous work to the active branch" note there,
 		// which exists to keep the response free of a timing-based account-enumeration side channel.
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environmentWithTemplate(tmp));
 		doThrow(new MailSendException("down")).when(mailSender).send(any(MimeMessage.class));
 
 		// MailException is unchecked, so a missed catch would escape here rather than fail to compile.
@@ -179,7 +178,7 @@ class EmailSenderTest {
 
 	@Test
 	void sendMessage_explicitFromAndReplyTo_overrideTheConfiguredDefaults(@TempDir Path tmp) throws Exception {
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, "help@example.com"), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, "help@example.com"), environmentWithTemplate(tmp));
 		doNothing().when(mailSender).send(any(MimeMessage.class));
 
 		assertTrue(sender.sendMessage("user@example.com", "subj", "body",
@@ -195,7 +194,7 @@ class EmailSenderTest {
 		EmailSender sender = new EmailSender(mailSender,
 				smtp("smtp.example.com", null, null, null),
 				new DeprecatedEmailAddressProperties("legacy@example.com", null),
-				new MailTemplateRenderer(configWithTemplate(tmp)));
+				new MailTemplateRenderer(environmentWithTemplate(tmp)));
 
 		assertTrue(sender.sendMessage("user@example.com", "subj", "body"));
 		assertEquals("legacy@example.com", captureSentMessage().getFrom()[0].toString());
@@ -205,7 +204,7 @@ class EmailSenderTest {
 	void sendMessage_subjectWithCrLf_cannotInjectAnExtraHeader(@TempDir Path tmp) throws Exception {
 		// POST /message subjects are user-supplied, and HtmlSanitizer.sanitizeToPlainText strips markup
 		// but then HTML-unescapes, so &#13;&#10; arrives here as a real CRLF.
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environmentWithTemplate(tmp));
 
 		assertTrue(sender.sendMessage("user@example.com",
 				"Hi\r\nReply-To: attacker@evil.tld\r\nContent-Type: text/html", "body"));
@@ -223,7 +222,7 @@ class EmailSenderTest {
 	void sendMessage_preEncodedUtf8Subject_isFoldedNotReEncoded(@TempDir Path tmp) throws Exception {
 		String encoded = "=?utf-8?B?" + Base64.getEncoder()
 				.encodeToString("Ärende".getBytes(StandardCharsets.UTF_8)) + "?=";
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environmentWithTemplate(tmp));
 
 		assertTrue(sender.sendMessage("user@example.com", encoded, "body"));
 
@@ -238,7 +237,7 @@ class EmailSenderTest {
 		SmtpProperties once = new SmtpProperties("smtp.example.com", 25, null, null, null, null, true,
 				Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(5), 1,
 				new SmtpProperties.Addresses(FROM, null, null));
-		EmailSender sender = senderWith(once, configWithTemplate(tmp));
+		EmailSender sender = senderWith(once, environmentWithTemplate(tmp));
 		doThrow(new MailSendException("down")).when(mailSender).send(any(MimeMessage.class));
 
 		assertFalse(sender.sendMessage("user@example.com", "subj", "body"));
@@ -249,9 +248,9 @@ class EmailSenderTest {
 	void sendPasswordResetConfirmation_usesThePasswordResetTemplateAndSubject(@TempDir Path tmp) throws Exception {
 		// Without this, swapping the enum constant would send the sign-up body for a password reset and
 		// nothing would fail — the ITs only extract a token from the body.
-		Config config = configWithTemplate(tmp, EmailTemplate.PASSWORD_RESET, "reset __EMAIL__ __CONFIRMATION_LINK__");
-		config.setProperty(EmailTemplate.PASSWORD_RESET.getSubjectKey(), "Reset your password");
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), config);
+		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.PASSWORD_RESET, "reset __EMAIL__ __CONFIRMATION_LINK__");
+		environment.setProperty(EmailTemplate.PASSWORD_RESET.getSubjectKey(), "Reset your password");
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environment);
 
 		assertTrue(sender.sendPasswordResetConfirmation("ada@example.com", "https://entrystore.example/c?t=1"));
 
@@ -262,9 +261,9 @@ class EmailSenderTest {
 
 	@Test
 	void sendSignupConfirmation_unreadableTemplate_returnsFalseWithoutSending(@TempDir Path tmp) {
-		Config config = new PropertiesConfiguration("test");
-		config.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(), tmp.resolve("missing.html").toString());
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), config);
+		MockEnvironment environment = new MockEnvironment();
+		environment.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(), tmp.resolve("missing.html").toString());
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environment);
 
 		assertFalse(sender.sendSignupConfirmation("Ada", "ada@example.com", "https://entrystore.example/c"));
 		verifyNoInteractions(mailSender);
@@ -275,7 +274,7 @@ class EmailSenderTest {
 		EmailSender sender = new EmailSender(mailSender,
 				smtp("smtp.example.com", FROM, null, null),
 				new DeprecatedEmailAddressProperties(null, "legacy-bcc@example.com"),
-				new MailTemplateRenderer(configWithTemplate(tmp)));
+				new MailTemplateRenderer(environmentWithTemplate(tmp)));
 
 		assertTrue(sender.sendMessage("user@example.com", "subj", "body"));
 
@@ -290,9 +289,8 @@ class EmailSenderTest {
 		// best-effort confirmation email is sent, so a missing/blank base URL (which used to NPE while
 		// substituting __DOMAIN__) must never make the PUT return 500.
 		assertPasswordChangeTemplateOnClasspath();
-		Config config = new PropertiesConfiguration("test");
 		// BASE_URL deliberately unset.
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), config);
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), new MockEnvironment());
 
 		assertDoesNotThrow(() -> sender.sendPasswordChangeConfirmation(userEntryNamed("changed@example.com")));
 	}
@@ -302,10 +300,10 @@ class EmailSenderTest {
 		// The best-effort confirmation email must never fail the (already-committed) password change,
 		// even when building it throws an unexpected RuntimeException.
 		assertPasswordChangeTemplateOnClasspath();
-		Config config = mock(Config.class);
-		when(config.getString(eq(EmailTemplate.PASSWORD_CHANGE.getSubjectKey()), anyString()))
+		Environment environment = mock(Environment.class);
+		when(environment.getProperty(eq(EmailTemplate.PASSWORD_CHANGE.getSubjectKey()), anyString()))
 				.thenThrow(new RuntimeException("boom while building confirmation email"));
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), config);
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environment);
 
 		assertDoesNotThrow(() -> sender.sendPasswordChangeConfirmation(userEntryNamed("changed@example.com")));
 	}
@@ -313,7 +311,7 @@ class EmailSenderTest {
 	@Test
 	void sendPasswordChangeConfirmation_invalidRecipient_doesNotSend() {
 		assertPasswordChangeTemplateOnClasspath();
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), new PropertiesConfiguration("test"));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), new MockEnvironment());
 
 		Entry entry = mock(Entry.class);
 		User user = mock(User.class);
@@ -339,7 +337,7 @@ class EmailSenderTest {
 		// only \p{Cf} and applies no email-format validation — and POST /message's recipient carries only
 		// @NotBlank. Splitting it would relay attacker-authored HTML to a third party under the
 		// deployment's own SPF/DKIM-aligned From address.
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environmentWithTemplate(tmp));
 
 		assertFalse(sender.sendMessage("me@example.com,victim@target.tld", "subj", "body"));
 		verify(mailSender, never()).send(any(MimeMessage.class));
@@ -348,7 +346,7 @@ class EmailSenderTest {
 	@Test
 	void sendMessage_commaSeparatedReplyTo_isRejectedWithoutSending(@TempDir Path tmp) throws IOException {
 		// Same shape: on the POST /message path Reply-To is the caller's own principal name.
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environmentWithTemplate(tmp));
 
 		assertFalse(sender.sendMessage("user@example.com", "subj", "body",
 				null, "me@example.com,victim@target.tld"));
@@ -372,7 +370,7 @@ class EmailSenderTest {
 		// All three are reachable through the same self-rename primitive: ContextImpl grants every user
 		// WriteResource on their own principal entry, and PrincipalManagerImpl.setPrincipalName strips only
 		// \p{Cf}, trims and lowercases, so none of these are altered on the way in.
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environmentWithTemplate(tmp));
 
 		assertFalse(sender.sendMessage(recipient, "subj", "body"));
 
@@ -393,7 +391,7 @@ class EmailSenderTest {
 	@Test
 	void sendMessage_callerSuppliedReplyToThatIsAList_isRejected(@TempDir Path tmp) throws IOException {
 		// The Reply-To override on the POST /message path is the caller's own principal name.
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environmentWithTemplate(tmp));
 
 		assertFalse(sender.sendMessage("user@example.com", "subj", "body", null,
 				"me@example.com,victim@target.tld"));
@@ -409,7 +407,7 @@ class EmailSenderTest {
 		// sendSignupConfirmation and both confirmation paths reach here with msgReplyTo == null.
 		EmailSender sender = senderWith(
 				smtp("smtp.example.com", FROM, null, "support@example.com,tickets@example.com"),
-				configWithTemplate(tmp));
+				environmentWithTemplate(tmp));
 
 		assertTrue(sender.sendMessage("user@example.com", "subj", "body"));
 
@@ -424,7 +422,7 @@ class EmailSenderTest {
 		// The list-shaped keys must not be reported as malformed at startup, which is what pins the shape
 		// constants apart. Reply-To had no startup coverage at all.
 		senderWith(smtp("smtp.example.com", FROM, "audit@example.com,archive@example.com",
-				"support@example.com,tickets@example.com"), configWithTemplate(tmp));
+				"support@example.com,tickets@example.com"), environmentWithTemplate(tmp));
 
 		assertEquals(0, logAppender.countAt(Level.ERROR),
 				"a legitimate address list must not be reported as unparseable; got: " + logAppender);
@@ -432,7 +430,7 @@ class EmailSenderTest {
 
 	@Test
 	void construction_malformedSingleAddressKey_isReportedNamingTheKey(@TempDir Path tmp) throws IOException {
-		senderWith(smtp("smtp.example.com", "not an address", null, null), configWithTemplate(tmp));
+		senderWith(smtp("smtp.example.com", "not an address", null, null), environmentWithTemplate(tmp));
 
 		assertTrue(logAppender.messagesAt(Level.ERROR)
 						.anyMatch(message -> message.contains("entrystore.smtp.email.from")),
@@ -447,7 +445,7 @@ class EmailSenderTest {
 		SmtpProperties smtp = new SmtpProperties("smtp.example.com", 25, "tls", null, null, null, true,
 				Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(5), 3,
 				new SmtpProperties.Addresses(FROM, null, null));
-		EmailSender sender = senderWith(smtp, configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp, environmentWithTemplate(tmp));
 
 		assertFalse(sender.sendMessage("user@example.com", "subj", "body"));
 
@@ -462,7 +460,7 @@ class EmailSenderTest {
 				Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(5), 3,
 				new SmtpProperties.Addresses(FROM, null, null));
 
-		assertTrue(senderWith(smtp, configWithTemplate(tmp)).sendMessage("user@example.com", "s", "b"));
+		assertTrue(senderWith(smtp, environmentWithTemplate(tmp)).sendMessage("user@example.com", "s", "b"));
 	}
 
 	@Test
@@ -470,7 +468,7 @@ class EmailSenderTest {
 		// bcc is operator-configured, so a list stays legal there — it must keep using parse().
 		EmailSender sender = senderWith(
 				smtp("smtp.example.com", FROM, "audit@example.com,archive@example.com", null),
-				configWithTemplate(tmp));
+				environmentWithTemplate(tmp));
 
 		assertTrue(sender.sendMessage("user@example.com", "subj", "body"));
 		assertEquals(2, captureSentMessage().getRecipients(Message.RecipientType.BCC).length);
@@ -481,7 +479,7 @@ class EmailSenderTest {
 		// The build-failure branch had no coverage at all, and it logged the raw msgSubject parameter
 		// rather than the CRLF-collapsed local — so a caller could forge lines in the ERROR log an
 		// operator uses for abuse triage, reachable in one POST /message.
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environmentWithTemplate(tmp));
 		String forged = "Hi\r\nERROR Fake log line injected by the caller";
 
 		// A space fails InternetAddress.checkAddress, so this reaches the catch rather than the sender.
@@ -501,7 +499,7 @@ class EmailSenderTest {
 		// send, which providers answer with a temporary account lockout. Shaped the way Spring actually
 		// raises it — JavaMailSenderImpl wraps the jakarta.mail exception, and its own message is the fixed
 		// "Authentication failed", so the server's reply code is only reachable through the cause.
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environmentWithTemplate(tmp));
 		doThrow(new MailAuthenticationException(
 				new AuthenticationFailedException("535 5.7.8 Username and Password not accepted")))
 				.when(mailSender).send(any(MimeMessage.class));
@@ -515,7 +513,7 @@ class EmailSenderTest {
 		// Angus raises AuthenticationFailedException for a 4xx temporary failure exactly as for a permanent
 		// 5xx, so classifying on the exception type alone dropped mail on a relay that merely rate-limits
 		// AUTH — silently, and worst on the password-reset path where the response is a deliberate 200.
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environmentWithTemplate(tmp));
 		doThrow(new MailAuthenticationException(
 				new AuthenticationFailedException("454 4.7.0 Temporary authentication failure")))
 				.when(mailSender).send(any(MimeMessage.class));
@@ -526,7 +524,7 @@ class EmailSenderTest {
 
 	@Test
 	void sendMessage_rejectedAddress_isNotRetried(@TempDir Path tmp) throws Exception {
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environmentWithTemplate(tmp));
 		SendFailedException rejected = new SendFailedException("550 no such user",
 				new MessagingException("rejected"),
 				new Address[0], new Address[0], new Address[]{new InternetAddress("user@example.com")});
@@ -544,7 +542,7 @@ class EmailSenderTest {
 		// and the loop must stop even though send() threw. Returning true matters just as much: a false
 		// return makes AuthService remove a token that is already in the recipient's inbox.
 		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, "bad@example.com", null),
-				configWithTemplate(tmp));
+				environmentWithTemplate(tmp));
 		SendFailedException partial = new SendFailedException("bcc rejected",
 				new MessagingException("550 bcc"),
 				new Address[]{new InternetAddress("user@example.com")},
@@ -564,7 +562,7 @@ class EmailSenderTest {
 		// string reported a delivered message as failed — MessageService then answers 503 and a retrying
 		// caller produces exactly the duplicate the branch above exists to prevent.
 		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, "bad@example.com", null),
-				configWithTemplate(tmp));
+				environmentWithTemplate(tmp));
 		SendFailedException partial = new SendFailedException("bcc rejected",
 				new MessagingException("550 bcc"),
 				new Address[]{new InternetAddress("user@example.com")},
@@ -579,7 +577,7 @@ class EmailSenderTest {
 	void sendMessage_partialDeliveryViaFailedMessages_isAlsoDetected(@TempDir Path tmp) throws Exception {
 		// MailSendException keeps the real jakarta.mail exceptions in getMessageExceptions() rather than in
 		// getCause(), so both routes have to be searched.
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environmentWithTemplate(tmp));
 		SendFailedException partial = new SendFailedException("partly sent",
 				new MessagingException("550"),
 				new Address[]{new InternetAddress("other@example.com")},
@@ -595,7 +593,7 @@ class EmailSenderTest {
 	void sendMessage_nonFinalAttemptsLogAtWarnAndOnlyTheLastAtError(@TempDir Path tmp) throws IOException {
 		// ERROR-based alerting cannot distinguish "mail is down" from "mail is fine" if every attempt,
 		// including ones the next attempt recovers from, is logged at ERROR.
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), configWithTemplate(tmp));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environmentWithTemplate(tmp));
 		doThrow(new MailSendException("down")).when(mailSender).send(any(MimeMessage.class));
 
 		assertFalse(sender.sendMessage("user@example.com", "subj", "body"));
@@ -613,7 +611,7 @@ class EmailSenderTest {
 		EmailSender sender = new EmailSender(mailSender,
 				smtp("smtp.example.com", "", null, null),
 				new DeprecatedEmailAddressProperties("legacy@example.com", null),
-				new MailTemplateRenderer(configWithTemplate(tmp)));
+				new MailTemplateRenderer(environmentWithTemplate(tmp)));
 
 		assertTrue(sender.sendMessage("user@example.com", "subj", "body"));
 		assertEquals("legacy@example.com", captureSentMessage().getFrom()[0].toString());
@@ -623,7 +621,7 @@ class EmailSenderTest {
 	void unparseableConfiguredFromAddress_isReportedAtStartupNamingTheKey(@TempDir Path tmp) throws IOException {
 		// Deliberately not a startup failure — a malformed address is a mail-only misconfiguration — but it
 		// otherwise surfaced per send with a log naming neither the key nor which address was at fault.
-		senderWith(smtp("smtp.example.com", "not a valid address", null, null), configWithTemplate(tmp));
+		senderWith(smtp("smtp.example.com", "not a valid address", null, null), environmentWithTemplate(tmp));
 
 		assertTrue(logAppender.messagesAt(Level.ERROR)
 						.anyMatch(message -> message.contains("entrystore.smtp.email.from")),
@@ -634,9 +632,9 @@ class EmailSenderTest {
 	void sendPasswordChangeConfirmation_usesThePasswordChangeTemplateAndSubject(@TempDir Path tmp) throws Exception {
 		// The happy path was unasserted, so swapping the enum constant would have mailed a sign-up body to
 		// real users with the whole suite green.
-		Config config = configWithTemplate(tmp, EmailTemplate.PASSWORD_CHANGE, "changed for __NAME__");
-		config.setProperty(EmailTemplate.PASSWORD_CHANGE.getSubjectKey(), "Your password has been changed");
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), config);
+		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.PASSWORD_CHANGE, "changed for __NAME__");
+		environment.setProperty(EmailTemplate.PASSWORD_CHANGE.getSubjectKey(), "Your password has been changed");
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environment);
 
 		sender.sendPasswordChangeConfirmation(userEntryNamed("changed@example.com"));
 
@@ -652,7 +650,7 @@ class EmailSenderTest {
 		// User.getName() returning null previously NPE'd on contains("@") straight into the
 		// ENTRYSTORE-1028 catch, making both the EntryUtil.getEmail fallback and this warning unreachable.
 		assertPasswordChangeTemplateOnClasspath();
-		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), new PropertiesConfiguration("test"));
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), new MockEnvironment());
 
 		Entry entry = mock(Entry.class);
 		User user = mock(User.class);
@@ -671,10 +669,10 @@ class EmailSenderTest {
 		return captor.getValue();
 	}
 
-	private EmailSender senderWith(SmtpProperties smtp, Config config) {
+	private EmailSender senderWith(SmtpProperties smtp, Environment environment) {
 		return new EmailSender(mailSender, smtp,
 				new DeprecatedEmailAddressProperties(null, null),
-				new MailTemplateRenderer(config));
+				new MailTemplateRenderer(environment));
 	}
 
 	private static SmtpProperties smtp(String host, String from, String bcc, String replyTo) {
@@ -683,16 +681,17 @@ class EmailSenderTest {
 				new SmtpProperties.Addresses(from, bcc, replyTo));
 	}
 
-	private static Config configWithTemplate(Path tmp) throws IOException {
-		return configWithTemplate(tmp, EmailTemplate.SIGNUP, "body");
+	private static MockEnvironment environmentWithTemplate(Path tmp) throws IOException {
+		return environmentWithTemplate(tmp, EmailTemplate.SIGNUP, "body");
 	}
 
-	private static Config configWithTemplate(Path tmp, EmailTemplate template, String body) throws IOException {
+	private static MockEnvironment environmentWithTemplate(Path tmp, EmailTemplate template, String body)
+			throws IOException {
 		Path file = tmp.resolve(template.getClasspathResource());
 		Files.writeString(file, body);
-		Config config = new PropertiesConfiguration("test");
-		config.setProperty(template.getTemplatePathKey(), file.toString());
-		return config;
+		MockEnvironment environment = new MockEnvironment();
+		environment.setProperty(template.getTemplatePathKey(), file.toString());
+		return environment;
 	}
 
 	private static Entry userEntryNamed(String name) {

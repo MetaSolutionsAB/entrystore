@@ -19,9 +19,9 @@ package org.entrystore.rest.springboot.util;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
-import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.jetbrains.annotations.Nullable;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
@@ -57,13 +57,16 @@ public class MailTemplateRenderer {
 
 	private static final int TEMPLATE_FETCH_TIMEOUT_MS = 5_000;
 
-	private final Config config;
+	// The Spring Environment rather than @Value fields: the subject and template-path keys are
+	// carried by the EmailTemplate constants, keeping the enum the single source of key names,
+	// defaults and bundled resources.
+	private final Environment environment;
 
 	private final Map<EmailTemplate, String> templateCache = new ConcurrentHashMap<>();
 
 	/** The configured subject for {@code template}, or its documented default. */
 	public String subject(EmailTemplate template) {
-		return config.getString(template.getSubjectKey(), template.getDefaultSubject());
+		return environment.getProperty(template.getSubjectKey(), template.getDefaultSubject());
 	}
 
 	/**
@@ -85,7 +88,7 @@ public class MailTemplateRenderer {
 				// Year.now(), not Calendar.getInstance(): the latter honours the default locale's calendar
 				// system, so __YEAR__ renders as 2569 under a th-TH default rather than the Gregorian year.
 				.replace("__YEAR__", Integer.toString(Year.now().getValue()))
-				.replace("__DOMAIN__", resolveBaseUrlHost(config));
+				.replace("__DOMAIN__", resolveBaseUrlHost(environment));
 		for (Map.Entry<String, String> substitution : substitutions.entrySet()) {
 			if (substitution.getValue() != null) {
 				// Literal replace, never replaceAll: the regex form interprets $ and \ in the
@@ -116,7 +119,7 @@ public class MailTemplateRenderer {
 	 * to load does not fall back to the classpath template.
 	 */
 	private @Nullable String resolveTemplate(EmailTemplate template) {
-		String templatePath = config.getString(template.getTemplatePathKey());
+		String templatePath = environment.getProperty(template.getTemplatePathKey());
 		if (templatePath != null) {
 			return loadTemplate(templatePath);
 		}
@@ -129,8 +132,8 @@ public class MailTemplateRenderer {
 	 * {@code store}), or is not a valid URI. Avoids the {@code URI.create(null)} / {@code getHost()}-is-null
 	 * NPEs that previously escaped the email helpers; a misconfigured (but non-blank) base URL is logged.
 	 */
-	static String resolveBaseUrlHost(Config config) {
-		String baseUrl = config.getString(Settings.BASE_URL);
+	static String resolveBaseUrlHost(Environment environment) {
+		String baseUrl = environment.getProperty(Settings.BASE_URL);
 		if (baseUrl == null || baseUrl.isBlank()) {
 			return "";
 		}

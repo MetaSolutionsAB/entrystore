@@ -27,11 +27,11 @@ import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -55,6 +55,9 @@ public class GroupService {
 	private final UserService userService;
 	private final ReservedNamesService reservedNamesService;
 
+	@Value("${entrystore.nonadmin.group-context-creation:false}")
+	private boolean nonAdminGroupContextCreation;
+
 
 	/**
 	 * Creates a group with linked context.
@@ -71,7 +74,7 @@ public class GroupService {
 			throw new UnauthorizedException("Not allowed for not-logged in or a guest user to create a group");
 		}
 
-		if (!repositoryManager.getConfiguration().getBoolean(Settings.NONADMIN_GROUPCONTEXT_CREATION, false)) {
+		if (!nonAdminGroupContextCreation) {
 			if (!userService.isAdmin(principalManager.getUser(requestingUserUri))) {
 				throw new UnauthorizedException("Not allowed for not-admin user to create a group");
 			}

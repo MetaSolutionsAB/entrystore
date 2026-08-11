@@ -29,8 +29,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
@@ -81,14 +79,19 @@ public class Syndication {
 		return null;
 	}
 
+	/**
+	 * Creates a feed whose entry links are built from the given URL template. The template is the
+	 * already-resolved value, not the name a client asked for — resolve it through
+	 * {@code SyndicationProperties#template(String)} first. A null template falls back to each entry's
+	 * resource URI.
+	 */
 	public static SyndFeed createFeedFromEntries(PrincipalManager principalManager,
-												 Config esConfig,
+												 String resolvedUrlTemplate,
 												 List<Entry> entries,
 												 String language,
-												 int limit,
-												 String urlTemplate) {
+												 int limit) {
 		return createFeedFromEntries(principalManager, entries, language, limit, entry -> {
-			String link = constructSyndLinkFromUrlTemplate(esConfig, Objects.requireNonNullElse(urlTemplate, "default"), entry);
+			String link = constructSyndLinkFromUrlTemplate(resolvedUrlTemplate, entry);
 			return link != null ? link : entry.getResourceURI().toString();
 		});
 	}
@@ -157,8 +160,7 @@ public class Syndication {
 		return feed;
 	}
 
-	private static String constructSyndLinkFromUrlTemplate(Config config, String templateName, Entry entry) {
-		String template = config.getString(Settings.SYNDICATION_URL_TEMPLATE + "." + templateName);
+	private static String constructSyndLinkFromUrlTemplate(String template, Entry entry) {
 		if (template != null) {
 			return template.replaceAll(VAR_ENTRYID, encode(entry.getId(), UTF_8)).
 					replaceAll(VAR_CONTEXTID, encode(entry.getContext().getEntry().getId(), UTF_8)).

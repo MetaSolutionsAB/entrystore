@@ -370,6 +370,25 @@ class CookieLoginResourceIT extends BaseSpec {
 		info.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
+	def "POST /auth/cookie should not log in a user absent from the password login whitelist"() {
+		given:
+		// entrystore-it.properties runs with entrystore.auth.password=whitelist; this username is
+		// deliberately NOT on that whitelist, so the login must be denied even with valid credentials.
+		// This is the only end-to-end check of the deny half of the whitelist predicate — every other IT
+		// user is whitelisted, so a whitelist that silently stopped resolving would fail nothing else.
+		def username = 'userNotOnWhitelist@test.com'
+		UserUtil.createUserWithPassword(username, password)
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
+
+		when:
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+
+		then:
+		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
+		loginConnection.getContentType().contains('application/json')
+		loginConnection.getErrorStream().text.contains('Unauthorized')
+	}
+
 	def "POST /auth/cookie without Accept header should not log in the blacklisted user and respond with json"() {
 		given:
 		def username = 'userForLoginBlacklist@test.com'
