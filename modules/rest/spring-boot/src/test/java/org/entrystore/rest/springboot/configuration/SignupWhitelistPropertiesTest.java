@@ -55,6 +55,21 @@ class SignupWhitelistPropertiesTest {
 	}
 
 	@Test
+	void suffixTheBinderCannotRead_doesNotEnterTheWhitelist() {
+		// The premise IndexedListConfigValidator relies on when it stays silent for such a suffix:
+		// nonAsciiDigitSuffix_isIgnoredLikeTheBinderIgnoresIt asserts only that the validator is quiet,
+		// which is safe solely because ConfigurationPropertyName.adapt drops the Arabic-Indic digit,
+		// leaving a name that is neither the key nor its descendant — so the binder never binds it. Were a
+		// future Spring version to bind it instead, that silence would turn it into an active signup
+		// whitelist entry with the whole suite still green.
+		runner().withPropertyValues(
+						"entrystore.auth.signup.whitelist.1=example.com",
+						"entrystore.auth.signup.whitelist.٢=evil.example")
+				.run(context -> assertEquals(Set.of("example.com"),
+						Set.copyOf(context.getBean(SignupWhitelistProperties.class).whitelist().values())));
+	}
+
+	@Test
 	void noSignupKeysAtAll_bindsAnEmptyWhitelist() {
 		runner().run(context -> assertTrue(
 				context.getBean(SignupWhitelistProperties.class).whitelist().isEmpty()));
