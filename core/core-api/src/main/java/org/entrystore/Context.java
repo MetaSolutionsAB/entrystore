@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -168,6 +168,11 @@ public interface Context extends Resource{
 	 * malformed triple deny every read of the context, and repairing it requires reading the context — but
 	 * a caller that deletes, purges or persists a total derived from a listing must check this first and
 	 * refuse, or it will act on data it cannot see.
+	 *
+	 * <p>Refusing is only the right answer while the destructive step is still ahead of the check. A
+	 * caller that has already destroyed something by the time it could ask — a rebuild that clears its
+	 * target first, or a purge-then-import — must instead enumerate from the store, where the listing
+	 * cannot be short, rather than skip its work on a short one and lose more than it saves.
 	 *
 	 * @return true when the index is known to be complete, which is also the answer for implementations
 	 * that do not maintain one.

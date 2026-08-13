@@ -510,20 +510,21 @@ public class PublicRepository {
 					String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
 					Context context = cm.getContext(id);
 					if (context != null) {
-						if (!context.isIndexComplete()) {
-							// rc.clear() above wiped the whole public repository, and this loop re-adds only
-							// what each listing names. A listing short by one unindexable statement would
-							// therefore drop those entries from the public repository entirely — the same
-							// destructive-on-a-short-listing failure the Solr purge and the persisted quota
-							// total are guarded against (ENTRYSTORE-1095).
-							log.error("Skipping context {}: its index is incomplete, so rebuilding the public "
-									+ "repository from its listing would silently drop the entries the index "
-									+ "cannot see. Repair the data and reindex the context", contextURI);
-							continue;
-						}
 						log.info("Adding context " + contextURI + " to public repository");
 						before = new Date();
-						Set<URI> entries = context.getEntries();
+						// Enumerated from the store, not from getEntries(). rc.clear() above wiped the whole
+						// public repository and this loop is the only thing that re-adds data, so a listing
+						// short by one unindexable statement would drop those entries from the public
+						// repository for good (ENTRYSTORE-1095). Refusing to rebuild such a context instead —
+						// which an earlier revision did — is strictly worse: the destruction has already
+						// happened by the time the check could run, so it drops every public entry of the
+						// context rather than the handful the listing misses, and rebuildRepository is only
+						// called at construction, so nothing brings them back before a restart. Enumerating
+						// from the store removes the trade-off rather than choosing a side of it, and is what
+						// importContext and ContextImpl.remove(RepositoryConnection) already do.
+						Set<URI> entries = (context instanceof ContextImpl ci)
+								? ci.getChildEntryURIsFromStore()
+								: context.getEntries();
 						log.info("Fetching entries took " + (new Date().getTime() - before.getTime()) + " ms");
 						before = new Date();
 						Date timeTracker = new Date();

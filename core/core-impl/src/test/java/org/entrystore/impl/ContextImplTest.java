@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -651,6 +652,46 @@ public class ContextImplTest extends AbstractCoreTest {
 	}
 
 	/**
+	 * ENTRYSTORE-1095. The two tests around this one drive {@code removeFromIndex}/{@code addToIndex} on
+	 * their own connection, so they only prove the helpers <em>collect</em> rather than apply. This one
+	 * goes through the real {@code remove(URI)} transaction and forces it to fail after
+	 * {@code removeFromIndex} has recorded its pop, so it pins the production path.
+	 *
+	 * <p>The failure is arranged by giving a list a member whose entry graph is gone: {@code ListImpl}
+	 * dereferences {@code getByEntryURI} for each child while unlinking itself.
+	 *
+	 * <p>What it does <b>not</b> catch, stated rather than implied: moving {@code applyIndexOps} back
+	 * above {@code rc.commit()}. The only failure this transaction can be made to throw lands at
+	 * {@code removeEntry.remove(rc)}, which precedes both statements, so either ordering leaves this
+	 * green. Covering that would need a failure between the apply and the commit — that is
+	 * {@code updateModifiedDateSynchronized} or the commit itself, neither of which can be provoked
+	 * against a memory store without a seam.
+	 */
+	@Test
+	public void indexOpFromAFailedRemoveTransaction_isNotApplied() {
+		Entry list = context.createResource(null, GraphType.List, null, null);
+		Entry member = context.createLink(null, URI.create("http://example.com/doomed-member"), null);
+		((List) list.getResource()).addChild(member.getEntryURI());
+		assertTrue(context.getEntries().contains(list.getEntryURI()), "starting from a published index");
+
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.clear(((EntryImpl) member).getSesameEntryURI());
+		}
+		evictFromSoftCache(member);
+
+		assertThrows(org.entrystore.repository.RepositoryException.class,
+			() -> context.remove(list.getEntryURI()),
+			"the removal must fail, or this test is not exercising a rollback");
+
+		assertTrue(context.getEntries().contains(list.getEntryURI()),
+			"an index op recorded by a removal that rolled back must not be applied: the resHasEntry "
+				+ "triple is still in the store, so popping it hides a live entry from every listing");
+		assertTrue(context.getByResourceURI(list.getResourceURI()).stream()
+				.anyMatch(e -> list.getEntryURI().equals(e.getEntryURI())),
+			"and it must still resolve by its resource URI");
+	}
+
+	/**
 	 * ENTRYSTORE-1095. The mirror direction: a recorded {@code push} that outlives a rolled-back create
 	 * names an entry that was never committed. {@code recalculateQuotaFillLevel} and
 	 * {@code importContext} both dereference what a listing names, so a phantom mapping is an NPE rather
@@ -720,6 +761,18 @@ public class ContextImplTest extends AbstractCoreTest {
 		IRI childRelationIRI = child.relationURI;
 		String doomedId = doomed.id;
 
+		// Planted first: a freshly created link has an empty local-metadata graph, so "no statements"
+		// below would hold whether or not the deletion cleared it.
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			rc.add(vf.createIRI(child.getResourceURI().toString()),
+				vf.createIRI("http://purl.org/dc/terms/title"), vf.createLiteral("orphan candidate"),
+				childMetadataIRI);
+			rc.add(vf.createIRI(child.getResourceURI().toString()),
+				vf.createIRI("http://purl.org/dc/terms/title"), vf.createLiteral("orphan candidate"),
+				childRelationIRI);
+		}
+
 		hideFromIndex(doomed, child);
 
 		((ContextManagerImpl) cm).softCache.remove(contextEntry);
@@ -745,40 +798,86 @@ public class ContextImplTest extends AbstractCoreTest {
 	}
 
 	/**
-	 * ENTRYSTORE-1095. The overflow path is the one branch of this design that deliberately drops writes,
-	 * and it was untestable — {@code INDEX_OP_BUFFER_LIMIT} was {@code private static final}, so nothing
-	 * could reach it. That is what let the flag-reset race ship: an optimistic scan running while a
-	 * writer tripped the limit replayed an empty buffer, cleared the overflow flag and published, so the
-	 * compensating rescan never ran and the dropped writes were lost with {@code isIndexComplete()} still
-	 * answering true.
+	 * ENTRYSTORE-1095. Branch coverage for the overflow path, which is the one branch of this design that
+	 * deliberately drops writes and had none — {@code indexOpBufferLimit} was {@code private static
+	 * final}, so nothing could reach it.
 	 *
-	 * <p>Every write here is committed before the read, so the store holds the truth regardless of what
-	 * the buffer did; the load must reconstruct it rather than publish a short index.
+	 * <p>Explicitly <b>not</b> a guard for the mid-scan flag race; an earlier revision of this test
+	 * claimed to be one and was not. Every write below commits before the single read, so no overflow
+	 * ever happens <em>during</em> a scan and the rescan is never the thing being tested — the store
+	 * simply holds the truth and the load must reconstruct it.
+	 * {@link #writeDroppedByAnOverflowDuringTheScan_isNotLost} covers the race.
 	 */
 	@Test
-	public void writesPastTheBufferLimit_areStillVisibleAfterTheFirstRead() {
-		int originalLimit = ContextImpl.INDEX_OP_BUFFER_LIMIT;
-		ContextImpl.INDEX_OP_BUFFER_LIMIT = 3;
-		try {
-			Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
-			ContextImpl overflowing = (ContextImpl) contextEntry.getResource();
+	public void writesPastTheBufferLimit_areAllVisibleAfterTheFirstRead() {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl overflowing = (ContextImpl) contextEntry.getResource();
+		overflowing.indexOpBufferLimit = 3;
 
-			Set<URI> created = new HashSet<>();
-			for (int i = 0; i < ContextImpl.INDEX_OP_BUFFER_LIMIT * 3; i++) {
-				created.add(overflowing.createLink(null,
-					URI.create("http://example.com/overflow/" + i), null).getEntryURI());
-			}
-
-			Set<URI> listed = overflowing.getEntries();
-
-			assertTrue(listed.containsAll(created),
-				"no entry may go missing when the pending-write buffer overflows before the first read; "
-					+ "missing: " + created.stream().filter(uri -> !listed.contains(uri)).toList());
-			assertTrue(overflowing.isIndexComplete(),
-				"and the index must not claim completeness while reporting a short listing");
-		} finally {
-			ContextImpl.INDEX_OP_BUFFER_LIMIT = originalLimit;
+		Set<URI> created = new HashSet<>();
+		for (int i = 0; i < overflowing.indexOpBufferLimit * 3; i++) {
+			created.add(overflowing.createLink(null,
+				URI.create("http://example.com/overflow/" + i), null).getEntryURI());
 		}
+
+		Set<URI> listed = overflowing.getEntries();
+
+		assertTrue(listed.containsAll(created),
+			"no entry may go missing when the pending-write buffer overflows before the first read; "
+				+ "missing: " + created.stream().filter(uri -> !listed.contains(uri)).toList());
+		assertTrue(overflowing.isIndexComplete(),
+			"and the index must not claim completeness while reporting a short listing");
+	}
+
+	/**
+	 * ENTRYSTORE-1095. A write dropped by a buffer overflow that happens <em>while a scan is running</em>
+	 * must not go missing: that scan may have passed the entry's part of the graph before the write
+	 * committed, so neither the scan nor the discarded buffer holds it, and only a rescan recovers it.
+	 *
+	 * <p>The hook fires on the first two scans, so both the optimistic scan and the scan that follows it
+	 * under {@code entry.repository} lose the race. Against the previous revision the second one still
+	 * published, because it reset the overflow flag on the strength of holding that monitor — which does
+	 * not in fact exclude every index writer, since {@code EntryImpl.setResourceURI} commits and then
+	 * calls in after releasing it.
+	 *
+	 * <p>A seam is intrusive and this is the only one in the class. It is here because a sequential test
+	 * cannot produce this interleaving — every write it makes commits before its read — and because the
+	 * last attempt to guard this branch without one silently guarded nothing.
+	 */
+	@Test
+	public void writeDroppedByAnOverflowDuringTheScan_isNotLost() {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl overflowing = (ContextImpl) contextEntry.getResource();
+		// One op is enough to fill the buffer, so every create inside the hook trips the limit.
+		overflowing.indexOpBufferLimit = 1;
+		overflowing.createLink(null, URI.create("http://example.com/before-the-scan"), null);
+
+		Set<URI> createdDuringAScan = new HashSet<>();
+		AtomicInteger scans = new AtomicInteger();
+		overflowing.indexScanHookForTests = () -> {
+			int scan = scans.incrementAndGet();
+			if (scan > 2) {
+				// Let the third scan finish, or the retry loop never terminates.
+				return;
+			}
+			for (String suffix : new String[]{"a", "b"}) {
+				createdDuringAScan.add(overflowing.createLink(null,
+					URI.create("http://example.com/during-scan-" + scan + "-" + suffix), null).getEntryURI());
+			}
+		};
+
+		Set<URI> listed;
+		try {
+			listed = overflowing.getEntries();
+		} finally {
+			overflowing.indexScanHookForTests = null;
+		}
+
+		assertTrue(listed.containsAll(createdDuringAScan),
+			"a write dropped by an overflow during a scan must be recovered by the rescan; missing: "
+				+ createdDuringAScan.stream().filter(uri -> !listed.contains(uri)).toList());
+		assertEquals(3, scans.get(),
+			"and both scans that raced an overflow must have been discarded rather than published");
 	}
 
 	/**
@@ -809,7 +908,10 @@ public class ContextImplTest extends AbstractCoreTest {
 		Entry doomedContextEntry = cm.createResource(null, GraphType.Context, null, null);
 		ContextImpl doomed = (ContextImpl) doomedContextEntry.getResource();
 		// Plant a resHasEntry in the doomed context whose object names the neighbour's entry. resolveChild
-		// answers null for it, because getByMMdURIDirect refuses an id from another context.
+		// does NOT answer null for it: the bystander was created moments ago, so the repository-wide
+		// SoftCache still holds it and getByEntryURI returns it live — only getByMMdURIDirect, on the
+		// cache-miss path, applies the same-context check. That is exactly why childSplitIfOwned has to
+		// run before anything is resolved, and why this test is a real guard rather than a formality.
 		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
 			rc.add(rc.getValueFactory().createIRI("http://example.com/foreign-resource"),
 				RepositoryProperties.resHasEntry, bystanderEntryIRI, doomed.resourceURI);
@@ -825,6 +927,63 @@ public class ContextImplTest extends AbstractCoreTest {
 		}
 		assertNotNull(neighbour.getByEntryURI(bystander.getEntryURI()),
 			"and the bystander must still be loadable from its own context");
+	}
+
+	/**
+	 * ENTRYSTORE-1095. Deleting a context must clear <b>every</b> graph of a child it owns but cannot
+	 * load, not just the ones that are easy to name. {@code clearUnresolvableChild} stands in for
+	 * {@code removeEntry.remove(rc)}, which clears five: entry, metadata, cached external metadata,
+	 * relations and — through {@code resource.remove(rc)} — the resource graph. Clearing four of them
+	 * leaves the fifth behind while {@code rc.clear(this.resourceURI)} destroys the index graph that
+	 * named it, which is the orphan this whole path exists to prevent.
+	 *
+	 * <p>The child is a {@code List}, deliberately. A {@code Link} has no resource graph, so the two
+	 * sibling tests could not have caught the omission — and a {@code List}'s resource graph is where its
+	 * member list lives, which is the data that would actually survive.
+	 *
+	 * <p>The graph URIs are spelled out here rather than derived through {@code URISplit}, so the test
+	 * pins the naming convention independently of the helper the production code uses to rebuild it.
+	 */
+	@Test
+	public void removeContext_clearsEveryGraphOfAnUnresolvableChild() throws Exception {
+		Entry doomedContextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl doomed = (ContextImpl) doomedContextEntry.getResource();
+		EntryImpl child = (EntryImpl) doomed.createResource(null, GraphType.List, null, null);
+		((List) child.getResource()).addChild(
+			doomed.createLink(null, URI.create("http://example.com/list-member"), null).getEntryURI());
+
+		String base = rm.getRepositoryURL().toString() + doomed.id + "/";
+		String childId = child.getId();
+		IRI childEntryIRI = child.getSesameEntryURI();
+
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			IRI subject = vf.createIRI(base + "resource/" + childId);
+			IRI predicate = vf.createIRI("http://purl.org/dc/terms/title");
+			// Planted rather than assumed: a freshly created entry leaves most of these graphs empty, so
+			// "no statements afterwards" would hold whether or not the deletion cleared them.
+			for (String path : new String[]{"metadata", "cached-external-metadata", "relations"}) {
+				rc.add(subject, predicate, vf.createLiteral(path), vf.createIRI(base + path + "/" + childId));
+			}
+			// And make the entry unloadable, which is the branch under test. The resHasEntry triple naming
+			// it lives in the context graph, so the deletion still finds the child.
+			rc.clear(childEntryIRI);
+		}
+		// Force the load path; a cached entry would resolve and take the normal removal branch instead.
+		doomed.softCache.remove(child);
+
+		cm.remove(doomedContextEntry.getEntryURI());
+
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			for (String path : new String[]{"metadata", "cached-external-metadata", "relations", "resource"}) {
+				assertFalse(rc.hasStatement(null, null, null, false, vf.createIRI(base + path + "/" + childId)),
+					"the " + path + " graph of an unresolvable child must be cleared, or it outlives the "
+						+ "index graph that named it");
+			}
+			assertFalse(rc.hasStatement(null, null, null, false, childEntryIRI),
+				"and its entry graph too");
+		}
 	}
 
 	/**
@@ -850,6 +1009,38 @@ public class ContextImplTest extends AbstractCoreTest {
 		assertFalse(reloaded.isIndexComplete(), "and must know that it is");
 		assertTrue(reloaded.getChildEntryURIsFromStore().contains(hidden.getEntryURI()),
 			"the store-backed enumeration must still see the entry the index skipped");
+	}
+
+	/**
+	 * ENTRYSTORE-1095. The store-backed enumeration bypasses the index, so it also bypasses whatever the
+	 * index would have refused to parse — including a {@code resHasEntry} object naming another context's
+	 * entry. Both consumers act destructively on what it returns: {@code importContext} removes it before
+	 * importing, and {@code PublicRepository.rebuildRepository} republishes it. Neither can detect a
+	 * foreign child on its own, because {@code SoftCache} is repository-wide and hands back a cached one
+	 * live rather than null, so the ownership filter belongs here where both inherit it.
+	 */
+	@Test
+	public void getChildEntryURIsFromStore_skipsAChildNamedInAnotherContext() {
+		Entry neighbourContextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl neighbour = (ContextImpl) neighbourContextEntry.getResource();
+		EntryImpl bystander = (EntryImpl) neighbour.createLink(null,
+			URI.create("http://example.com/enumerated-bystander"), null);
+
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl owner = (ContextImpl) contextEntry.getResource();
+		EntryImpl own = (EntryImpl) owner.createLink(null, URI.create("http://example.com/own-child"), null);
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.add(rc.getValueFactory().createIRI("http://example.com/foreign-resource"),
+				RepositoryProperties.resHasEntry, bystander.getSesameEntryURI(), owner.resourceURI);
+		}
+
+		Set<URI> enumerated = owner.getChildEntryURIsFromStore();
+
+		assertTrue(enumerated.contains(own.getEntryURI()),
+			"the context's own child must still be enumerated");
+		assertFalse(enumerated.contains(bystander.getEntryURI()),
+			"an entry belonging to another context must not be handed to callers that delete or "
+				+ "republish what this returns");
 	}
 
 	/**
