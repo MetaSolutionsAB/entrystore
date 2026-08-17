@@ -126,6 +126,9 @@
 			<artifactId>json</artifactId>
 		</dependency>
 
+		<!-- Held at 3.0.3: 3.1.0 pulls swagger-core-jakarta 2.2.52+, which requires the Jackson 2
+		     line at 2.22.x while the Boot 4.1 BOM manages 2.21.4 — requireUpperBoundDeps fails.
+		     Upgrade together with the Jackson 2 bump tracked in ENTRYSTORE-1068. -->
 		<dependency>
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
@@ -133,20 +136,54 @@
 		</dependency>
 
 		<dependency>
-			<groupId>org.projectlombok</groupId>
-			<artifactId>lombok</artifactId>
-			<scope>provided</scope>
-		</dependency>
-
-		<dependency>
 			<groupId>commons-validator</groupId>
 			<artifactId>commons-validator</artifactId>
-			<version>1.10.1</version>
+			<version>1.11.0</version>
 		</dependency>
 
 		<dependency>
 			<groupId>com.googlecode.owasp-java-html-sanitizer</groupId>
 			<artifactId>owasp-java-html-sanitizer</artifactId>
+		</dependency>
+
+		<!-- Imported directly by this module's own sources, but until now only reached
+		     transitively through entrystore-core-impl. Declared so this module's classpath
+		     does not silently break when core-impl's dependencies change. -->
+		<dependency>
+			<groupId>com.google.guava</groupId>
+			<artifactId>guava</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+		</dependency>
+
+		<!-- Syndication (feed) endpoint. -->
+		<dependency>
+			<groupId>com.rometools</groupId>
+			<artifactId>rome</artifactId>
+		</dependency>
+
+		<!-- Outgoing mail. jakarta.mail-api ships no META-INF/services/jakarta.mail.Provider, so the
+		     API alone compiles but cannot send: angus-mail is the only artifact providing that SPI.
+		     Declared here at runtime scope rather than relied on transitively via core-impl, so a
+		     future core-impl dependency cleanup cannot silently turn every outgoing mail into a
+		     NoSuchProviderException. Same pattern as the transforms modules below. -->
+		<dependency>
+			<groupId>jakarta.mail</groupId>
+			<artifactId>jakarta.mail-api</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.eclipse.angus</groupId>
+			<artifactId>angus-mail</artifactId>
+			<scope>runtime</scope>
 		</dependency>
 
 		<dependency>
@@ -234,6 +271,19 @@
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<configuration>
 					<classifier>exec</classifier>
+					<!-- repackage bundles provided-scope dependencies by default. Both of these are
+					     compile-time only (annotation processor / CLASS-retention annotations) and
+					     are never loaded at runtime, so keep them out of the shipped jar. -->
+					<excludes>
+						<exclude>
+							<groupId>org.projectlombok</groupId>
+							<artifactId>lombok</artifactId>
+						</exclude>
+						<exclude>
+							<groupId>org.jetbrains</groupId>
+							<artifactId>annotations</artifactId>
+						</exclude>
+					</excludes>
 				</configuration>
 			</plugin>
 		</plugins>

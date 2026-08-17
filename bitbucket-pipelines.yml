@@ -11,11 +11,24 @@ stepdefinitions:
         - maven
         - maven-wrapper-dists
       script:
-        - apt-get update && apt-get install -y --no-install-recommends unzip
+        - apt-get update && apt-get install -y --no-install-recommends unzip curl
         - java -version
         - ./mvnw --version
         - export TESTCONTAINERS_RYUK_DISABLED=true
         - ./mvnw -B -ntp clean install
+        # Smoke-boot the packaged executable jar. The integration tests start the app from the test
+        # classpath, so nothing else in this build ever exercises the repackaged artifact — a
+        # packaging mistake (a dependency excluded or dropped from the fat jar) would otherwise first
+        # be seen by whoever runs the release. Cf. ENTRYSTORE-1061.
+        # application.yaml imports entrystore.properties non-optionally, so the file must exist.
+        - printf 'entrystore.baseurl.folder=http://localhost:8299/store/\nentrystore.repository.store.type=memory\nentrystore.data.folder=%s/smoke-data/\nentrystore.solr=off\nentrystore.auth.temp.lockout.max.attempts=0\nentrystore.auth.temp.lockout.duration=0ms\n' "$BITBUCKET_CLONE_DIR" > entrystore.properties
+        - mkdir -p smoke-data
+        - export VERSION=`cat VERSION.txt`
+        - java -jar modules/rest/spring-boot/target/entrystore-rest-spring-boot-${VERSION}-exec.jar --server.port=8299 > smoke.log 2>&1 & echo $! > smoke.pid
+        - for i in $(seq 1 60); do curl -fsS http://localhost:8299/management/status && break || sleep 2; done
+        - curl -fsS http://localhost:8299/management/status || (echo "--- exec jar failed to start ---"; tail -100 smoke.log; kill $(cat smoke.pid) 2>/dev/null; exit 1)
+        - kill $(cat smoke.pid)
+        - rm -f entrystore.properties smoke.pid
         - rm -rf ~/.m2/repository/org/entrystore/
       services:
         - docker-large

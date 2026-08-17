@@ -34,6 +34,11 @@
 	<dependencies>
 		<dependency>
 			<groupId>org.eclipse.rdf4j</groupId>
+			<artifactId>rdf4j-model-api</artifactId>
+			<version>${rdf4j.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.eclipse.rdf4j</groupId>
 			<artifactId>rdf4j-model</artifactId>
 			<version>${rdf4j.version}</version>
 		</dependency>
@@ -56,6 +61,16 @@
 			<groupId>org.eclipse.rdf4j</groupId>
 			<artifactId>rdf4j-repository-api</artifactId>
 			<version>${rdf4j.version}</version>
+		</dependency>
+		<!-- Guava (Preconditions, Verify) and commons-lang3 (StringUtils) are both used directly by
+		     org.entrystore.config.DurationStyle; previously only reached transitively through RDF4J. -->
+		<dependency>
+			<groupId>com.google.guava</groupId>
+			<artifactId>guava</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
 		</dependency>
 	</dependencies>
 
