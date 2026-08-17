@@ -180,13 +180,14 @@
 			<scope>test</scope>
 		</dependency>
 
-		<!-- Generates self-signed certificates in RefreshableRelyingPartyRegistrationRepositoryTest's
-		     in-memory SAML metadata fixtures. Present transitively via OpenSAML, declared explicitly
-		     since the test uses it directly. Version managed by the parent. -->
+		<!-- Required at runtime by OpenSAML (X.509/PKCS operations behind the SAML relying-party
+		     registration) and used directly by RefreshableRelyingPartyRegistrationRepositoryTest's
+		     in-memory SAML metadata fixtures. Must NOT be test-scoped: a direct declaration
+		     overrides the transitive compile scope from OpenSAML and would drop bcpkix (and
+		     bcutil) from the runtime classpath. Version managed by the parent. -->
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcpkix-jdk18on</artifactId>
-			<scope>test</scope>
 		</dependency>
 
 	</dependencies>
