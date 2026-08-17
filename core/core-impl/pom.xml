@@ -147,21 +147,27 @@
 			<groupId>org.eclipse.rdf4j</groupId>
 			<artifactId>rdf4j-sail-lmdb</artifactId>
 			<version>${rdf4j.version}</version>
-			<scope>compile</scope>
 		</dependency>
 		<dependency>
 			<groupId>commons-io</groupId>
 			<artifactId>commons-io</artifactId>
-			<type>jar</type>
+		</dependency>
+		<!-- StringUtils, used by DataImpl and PrincipalManagerImpl; previously only reached
+		     transitively through RDF4J / SolrJ. -->
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+		</dependency>
+		<!-- binary.Base64 (repository/security/Password), binary.Hex and
+		     digest.MessageDigestAlgorithms (impl/DataImpl); previously only reached transitively
+		     through RDF4J / SolrJ. Password hashing depends on this, so keep it declared. -->
+		<dependency>
+			<groupId>commons-codec</groupId>
+			<artifactId>commons-codec</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.quartz-scheduler</groupId>
 			<artifactId>quartz</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>com.rometools</groupId>
-			<artifactId>rome</artifactId>
-			<version>1.19.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.solr</groupId>
@@ -180,7 +186,6 @@
 		<dependency>
 			<groupId>com.google.guava</groupId>
 			<artifactId>guava</artifactId>
-			<version>${guava.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.logging.log4j</groupId>
