@@ -41,6 +41,16 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.cors.headers=X-Custom-Header
 # entrystore.cors.max-age=7200
 
+## Cross-site request forgery (CSRF) protection.
+## When enabled, cookie-authenticated mutating requests (POST/PUT/PATCH/DELETE) must echo the
+## XSRF-TOKEN cookie value in the X-XSRF-TOKEN request header. Disabling removes this requirement
+## and stops the XSRF-TOKEN cookie from being issued. SECURITY: disabling leaves cookie sessions
+## open to CSRF attacks; only intended as a temporary migration aid for clients that do not yet
+## send the token header.
+# entrystore.csrf.enabled=true|false (default: true)
+## Name of the CSRF token cookie.
+# entrystore.csrf.cookie-name=XSRF-TOKEN
+
 ## HTTP Server response header.
 ## Default: EntryStore/<version-from-VERSION.txt>.
 ## A non-blank string here wins over the auto-computed default. Blank or unset falls through.

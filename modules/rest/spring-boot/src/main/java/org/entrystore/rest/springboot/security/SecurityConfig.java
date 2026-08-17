@@ -117,6 +117,9 @@ public class SecurityConfig {
 	@Value("${entrystore.csrf.cookie-name:XSRF-TOKEN}")
 	private String csrfCookieName;
 
+	@Value("${entrystore.csrf.enabled:true}")
+	private boolean csrfEnabled;
+
 	private Cookie.SameSite sessionCookieSameSite;
 
 	@PostConstruct
@@ -135,6 +138,23 @@ public class SecurityConfig {
 			http.cors(AbstractHttpConfigurer::disable);
 		}
 
+		if (csrfEnabled) {
+			http
+					.csrf(csrf -> csrf
+							.csrfTokenRepository(csrfTokenRepository())
+							.csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+							.requireCsrfProtectionMatcher(csrfRequestMatcher))
+					.addFilterAfter(csrfCookieFilter, CsrfFilter.class);
+		} else {
+			// Migration escape hatch for clients that do not yet echo the XSRF-TOKEN cookie as
+			// X-XSRF-TOKEN. CsrfCookieFilter is deliberately not registered either, so no
+			// XSRF-TOKEN cookie is issued while enforcement is off.
+			log.warn("CSRF protection is DISABLED (entrystore.csrf.enabled=false). Cookie-authenticated "
+					+ "sessions are exposed to cross-site request forgery; use only as a temporary measure "
+					+ "until all clients send the X-XSRF-TOKEN header.");
+			http.csrf(AbstractHttpConfigurer::disable);
+		}
+
 		var entryPoint = httpBasicConfig.enabled() ? authChallengeAwareEntryPoint(customEntryPoint) : customEntryPoint;
 
 		http
@@ -145,11 +165,6 @@ public class SecurityConfig {
 				// needs (private,no-store for authenticated; no header for anonymous so static and
 				// controller-set values can pass through unchanged).
 				.headers(headers -> headers.cacheControl(HeadersConfigurer.CacheControlConfig::disable))
-				.csrf(csrf -> csrf
-						.csrfTokenRepository(csrfTokenRepository())
-						.csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-						.requireCsrfProtectionMatcher(csrfRequestMatcher))
-				.addFilterAfter(csrfCookieFilter, CsrfFilter.class)
 				.sessionManagement(session -> session
 						.sessionConcurrency(concurrency -> concurrency
 								.maximumSessions(-1)
