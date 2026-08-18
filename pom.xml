@@ -32,7 +32,6 @@
 		<rdf4j.version>5.3.2</rdf4j.version>
 		<guava.version>33.6.0-jre</guava.version>
 		<jsonorg.version>20260814</jsonorg.version>
-		<zookeeper.version>3.9.5</zookeeper.version>
 		<!-- Applies to swagger-annotations-jakarta only (ENTRYSTORE-991). swagger-core-jakarta /
 		     swagger-models-jakarta stay on whatever springdoc pulls in (see the springdoc version
 		     in modules/rest/spring-boot/pom.xml); raising them needs Jackson 2.22.x, which the
@@ -43,7 +42,6 @@
 		     xmlsec 4. Check for a newer 3.0.x when reviewing dependencies. -->
 		<xmlsec.version>3.0.6</xmlsec.version>
 		<commonscli.version>1.11.0</commonscli.version>
-		<snappy.version>1.1.10.8</snappy.version>
 		<jetbrains-annotations.version>26.1.0</jetbrains-annotations.version>
 		<!-- bcprov/bcpkix/bcutil must all resolve to the same version; bcprov sometimes gets patch
 		     releases the other two do not, so only move to a version published for all three. -->
@@ -370,17 +368,6 @@
 			</dependency>
 			<!-- TODO: upgrade commons to org.apache.commons group -->
 			<dependency>
-				<groupId>commons-dbcp</groupId>
-				<artifactId>commons-dbcp</artifactId>
-				<version>1.4</version>
-				<exclusions>
-					<exclusion>
-						<groupId>xml-apis</groupId>
-						<artifactId>xml-apis</artifactId>
-					</exclusion>
-				</exclusions>
-			</dependency>
-			<dependency>
 				<groupId>commons-io</groupId>
 				<artifactId>commons-io</artifactId>
 				<version>2.22.0</version>
@@ -396,16 +383,6 @@
 				<version>1.15.0</version>
 			</dependency>
 			<dependency>
-				<groupId>org.apache.zookeeper</groupId>
-				<artifactId>zookeeper</artifactId>
-				<version>${zookeeper.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.apache.zookeeper</groupId>
-				<artifactId>zookeeper-jute</artifactId>
-				<version>${zookeeper.version}</version>
-			</dependency>
-			<dependency>
 				<groupId>io.swagger.core.v3</groupId>
 				<artifactId>swagger-annotations-jakarta</artifactId>
 				<version>${swagger.version}</version>
@@ -419,11 +396,6 @@
 				<groupId>com.google.guava</groupId>
 				<artifactId>guava</artifactId>
 				<version>${guava.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.xerial.snappy</groupId>
-				<artifactId>snappy-java</artifactId>
-				<version>${snappy.version}</version>
 			</dependency>
 			<dependency>
 				<groupId>com.google.errorprone</groupId>
@@ -449,21 +421,6 @@
 				<groupId>org.bouncycastle</groupId>
 				<artifactId>bcutil-jdk18on</artifactId>
 				<version>${bouncycastle.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.glassfish.hk2</groupId>
-				<artifactId>hk2-api</artifactId>
-				<version>3.1.1</version>
-			</dependency>
-			<dependency>
-				<groupId>org.glassfish.hk2</groupId>
-				<artifactId>hk2-utils</artifactId>
-				<version>3.1.1</version>
-			</dependency>
-			<dependency>
-				<groupId>org.glassfish.hk2.external</groupId>
-				<artifactId>aopalliance-repackaged</artifactId>
-				<version>3.1.1</version>
 			</dependency>
 			<dependency>
 				<groupId>com.googlecode.owasp-java-html-sanitizer</groupId>
