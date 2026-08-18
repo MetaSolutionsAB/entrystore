@@ -28,11 +28,14 @@ class ZzzMultipartSizeLimitIT extends BaseSpec {
 
 	static final String contextId = '666'
 
-	// Marker carried in Jetty 12's error HTML body when its multipart parser rejects a request
-	// for breaching the configured cap (org.eclipse.jetty.http.BadMessageException: 400: bad
-	// multipart). Asserting on this marker pins the rejection to the cap path rather than the
-	// raw 400 status, which any unrelated 4xx could produce.
-	static final String JETTY_BAD_MULTIPART_MARKER = 'bad multipart'
+	// Body of the sanitized container-level error page (ENTRYSTORE-1098). Jetty's multipart
+	// parser rejects a request breaching the configured cap with BadMessageException ("400: bad
+	// multipart") before Spring sees it; the sanitized error handlers deliberately drop that
+	// internal message from the response, so the body carries only status and reason phrase.
+	// The rejection is pinned to the cap path by the size deltas between these tests: the same
+	// request shape succeeds below both caps and fails 400 above exactly one cap at a time.
+	static final String SANITIZED_ERROR_MARKER = 'HTTP ERROR 400 Bad Request'
+	static final String JETTY_INTERNAL_MULTIPART_MESSAGE = 'bad multipart'
 
 	def setupSpec() {
 		stopPreexistingAppIfRunning()
@@ -56,9 +59,10 @@ class ZzzMultipartSizeLimitIT extends BaseSpec {
 	// Jetty 12 enforces spring.servlet.multipart.max-file-size / max-request-size at the
 	// container layer and rejects oversize requests with BadMessageException ("400: bad
 	// multipart") *before* Spring's DispatcherServlet sees them, so AppExceptionHandler cannot
-	// remap to a more semantically-correct 413. Tests below assert the current Jetty contract
-	// (status 400 + body containing the "bad multipart" marker) — that pins the rejection to
-	// the cap path rather than the raw status code.
+	// remap to a more semantically-correct 413. Tests below assert the sanitized container
+	// error contract from ENTRYSTORE-1098 (status 400 + sanitized body, internal Jetty message
+	// absent); the rejection is pinned to the cap path by the under-cap/over-cap control
+	// pairing documented on SANITIZED_ERROR_MARKER.
 	private static String readErrorBody(HttpURLConnection conn) {
 		// Force the response to be read before grabbing the error stream — without first
 		// calling getResponseCode(), HttpURLConnection may return null for getErrorStream()
@@ -86,7 +90,8 @@ class ZzzMultipartSizeLimitIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
-		errorBody.contains(JETTY_BAD_MULTIPART_MARKER)
+		errorBody.contains(SANITIZED_ERROR_MARKER)
+		!errorBody.contains(JETTY_INTERNAL_MULTIPART_MESSAGE)
 
 		when: 'the resource is fetched afterwards'
 		def getConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
@@ -116,7 +121,8 @@ class ZzzMultipartSizeLimitIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
-		errorBody.contains(JETTY_BAD_MULTIPART_MARKER)
+		errorBody.contains(SANITIZED_ERROR_MARKER)
+		!errorBody.contains(JETTY_INTERNAL_MULTIPART_MESSAGE)
 
 		when: 'the resource is fetched afterwards'
 		def getConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
@@ -168,7 +174,8 @@ class ZzzMultipartSizeLimitIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
-		errorBody.contains(JETTY_BAD_MULTIPART_MARKER)
+		errorBody.contains(SANITIZED_ERROR_MARKER)
+		!errorBody.contains(JETTY_INTERNAL_MULTIPART_MESSAGE)
 
 		when: 'the entry listing is re-fetched afterwards'
 		def entriesAfter = listContextEntryIds(contextId)
