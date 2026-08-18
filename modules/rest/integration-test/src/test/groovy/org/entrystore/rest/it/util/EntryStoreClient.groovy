@@ -1,6 +1,7 @@
 package org.entrystore.rest.it.util
 
 import groovy.json.JsonOutput
+import org.entrystore.rest.it.BaseSpec
 import org.springframework.http.HttpMethod
 
 import static java.net.HttpURLConnection.HTTP_OK
@@ -178,12 +179,27 @@ class EntryStoreClient {
 		assert conn.getResponseCode() == HTTP_OK
 		def authCookie = findSetCookie(conn, 'auth_token')
 		assert authCookie != null
-		// Fail fast here rather than letting downstream mutation ITs see opaque 401s if a regression
-		// stops emitting XSRF-TOKEN on /auth/cookie — the missing token is the real root cause.
 		def csrfValue = findCookieValue(conn, 'XSRF-TOKEN')
-		assert csrfValue != null: '/auth/cookie response must carry XSRF-TOKEN cookie'
-		csrfTokens[asUser] = csrfValue
+		if (isCsrfEnabled()) {
+			// Fail fast here rather than letting downstream mutation ITs see opaque 401s if a regression
+			// stops emitting XSRF-TOKEN on /auth/cookie — the missing token is the real root cause.
+			assert csrfValue != null: '/auth/cookie response must carry XSRF-TOKEN cookie when CSRF protection is enabled'
+			csrfTokens[asUser] = csrfValue
+		} else {
+			// Inverse fail-fast: a CSRF-disabled app must not issue a token cookie either.
+			assert csrfValue == null: '/auth/cookie response must not carry XSRF-TOKEN cookie when CSRF protection is disabled'
+		}
 		return authCookie
+	}
+
+	/**
+	 * Reads the effective CSRF setting from the running app under test, so this client adapts to
+	 * both the shared app (started by BaseSpec with {@code --entrystore.csrf.enabled=true}) and
+	 * lifecycle-owning Zzz ITs whose apps run with the default (disabled, ENTRYSTORE-1096).
+	 */
+	private static boolean isCsrfEnabled() {
+		return BaseSpec.appInstance != null &&
+			BaseSpec.appInstance.getEnvironment().getProperty('entrystore.csrf.enabled', Boolean, false)
 	}
 
 	/**
