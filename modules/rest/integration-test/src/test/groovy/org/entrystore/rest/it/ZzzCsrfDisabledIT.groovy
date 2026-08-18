@@ -50,8 +50,9 @@ class ZzzCsrfDisabledIT extends BaseSpec {
 	// our appInstance; resetting appInstance=null or appStarted=false here would violate
 	// BaseSpec invariant #2 (see BaseSpec.groovy:58-66).
 
-	// Logins below bypass EntryStoreClient.authorize on purpose: authorize asserts that the
-	// XSRF-TOKEN cookie is present on the login response, which a CSRF-disabled app never emits.
+	// Logins below bypass EntryStoreClient.authorize on purpose: this spec pins the disabled-mode
+	// cookie contract itself, so its assertions must stay independent of the client's own
+	// mode-adaptive checks in authorize().
 
 	def "POST /auth/cookie should not emit an XSRF-TOKEN cookie when CSRF protection is disabled"() {
 		when:
