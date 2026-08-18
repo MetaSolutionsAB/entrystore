@@ -117,7 +117,9 @@ public class SecurityConfig {
 	@Value("${entrystore.csrf.cookie-name:XSRF-TOKEN}")
 	private String csrfCookieName;
 
-	@Value("${entrystore.csrf.enabled:true}")
+	// Default is false until the common EntryStore clients echo the XSRF-TOKEN cookie as an
+	// X-XSRF-TOKEN header on mutations — see ENTRYSTORE-1008 for the compatibility discussion.
+	@Value("${entrystore.csrf.enabled:false}")
 	private boolean csrfEnabled;
 
 	private Cookie.SameSite sessionCookieSameSite;

@@ -136,7 +136,11 @@ abstract class BaseSpec extends Specification {
 				'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
 				'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
 				// Inject the dynamic WireMock origin into the DELETE whitelist; the port is only known at runtime.
-				'--entrystore.proxy.remote-resource.delete.whitelist.1=http://localhost:' + wireMockServer.port()
+				'--entrystore.proxy.remote-resource.delete.whitelist.1=http://localhost:' + wireMockServer.port(),
+				// CSRF protection defaults to off (ENTRYSTORE-1096) but the shared app runs with it ON so
+				// CsrfIT and every token-forwarding mutation IT keep exercising the enabled contract.
+				// The default (off) is covered by ZzzCsrfDisabledIT.
+				'--entrystore.csrf.enabled=true'
 			] as String[]
 			appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
 			// Verify the folder we guarded/armed before startup is the one the running app actually uses,

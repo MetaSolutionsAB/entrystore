@@ -24,10 +24,12 @@ import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_OK
 
 /**
- * Verifies the {@code entrystore.csrf.enabled=false} escape hatch: cookie-authenticated mutations
- * succeed without an X-XSRF-TOKEN header, and no XSRF-TOKEN cookie is issued. The enabled-mode
- * contract (rejection without a token, exemption list) is covered by {@link CsrfIT} against the
- * shared app, which runs with the default {@code entrystore.csrf.enabled=true}.
+ * Verifies CSRF-disabled behaviour — which is the DEFAULT ({@code entrystore.csrf.enabled=false},
+ * ENTRYSTORE-1096): cookie-authenticated mutations succeed without an X-XSRF-TOKEN header, and no
+ * XSRF-TOKEN cookie is issued. The app is deliberately started WITHOUT the property so this spec
+ * pins the default; a future default flip to enabled will fail here and must consciously update
+ * this spec. The enabled-mode contract (rejection without a token, exemption list) is covered by
+ * {@link CsrfIT} against the shared app, which runs with {@code --entrystore.csrf.enabled=true}.
  */
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 class ZzzCsrfDisabledIT extends BaseSpec {
@@ -35,9 +37,9 @@ class ZzzCsrfDisabledIT extends BaseSpec {
 	def setupSpec() {
 		stopPreexistingAppIfRunning()
 
+		// No --entrystore.csrf.enabled arg on purpose — this spec verifies the default (off).
 		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
-			'--entrystore.csrf.enabled=false'
+			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core'
 		] as String[]
 		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
 		appStarted = true

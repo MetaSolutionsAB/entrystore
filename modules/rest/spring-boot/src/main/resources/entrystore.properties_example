@@ -43,11 +43,12 @@ entrystore.data.folder=/srv/entrystore/files/
 
 ## Cross-site request forgery (CSRF) protection.
 ## When enabled, cookie-authenticated mutating requests (POST/PUT/PATCH/DELETE) must echo the
-## XSRF-TOKEN cookie value in the X-XSRF-TOKEN request header. Disabling removes this requirement
-## and stops the XSRF-TOKEN cookie from being issued. SECURITY: disabling leaves cookie sessions
-## open to CSRF attacks; only intended as a temporary migration aid for clients that do not yet
-## send the token header.
-# entrystore.csrf.enabled=true|false (default: true)
+## XSRF-TOKEN cookie value in the X-XSRF-TOKEN request header. When disabled, no token is
+## required and no XSRF-TOKEN cookie is issued. SECURITY: the default is off because common
+## EntryStore clients do not send the token header yet (ENTRYSTORE-1008); enable this once all
+## cookie-authenticated clients of the installation send X-XSRF-TOKEN, since without it cookie
+## sessions are open to CSRF attacks.
+# entrystore.csrf.enabled=true|false (default: false)
 ## Name of the CSRF token cookie.
 # entrystore.csrf.cookie-name=XSRF-TOKEN
 
