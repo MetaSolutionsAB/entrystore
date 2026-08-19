@@ -181,22 +181,6 @@
 			<artifactId>rome</artifactId>
 		</dependency>
 
-		<!-- Outgoing mail. jakarta.mail-api ships no META-INF/services/jakarta.mail.Provider, so the
-		     API alone compiles but cannot send: angus-mail is the only artifact providing that SPI.
-		     Declared here at runtime scope rather than relied on transitively via core-impl, so a
-		     future core-impl dependency cleanup cannot silently turn every outgoing mail into a
-		     NoSuchProviderException. Same pattern as the transforms modules below. -->
-		<dependency>
-			<groupId>jakarta.mail</groupId>
-			<artifactId>jakarta.mail-api</artifactId>
-		</dependency>
-
-		<dependency>
-			<groupId>org.eclipse.angus</groupId>
-			<artifactId>angus-mail</artifactId>
-			<scope>runtime</scope>
-		</dependency>
-
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-transforms-common</artifactId>
