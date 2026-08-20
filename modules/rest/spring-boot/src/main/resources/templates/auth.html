@@ -1,8 +1,9 @@
 <html xmlns:th="https://www.thymeleaf.org">
 <head>
     <title th:text="${title}">EntryStore</title>
+    <link rel="stylesheet" th:href="${stylesheetPath}">
 </head>
-<body style="width:500px;margin-left:auto;margin-right:auto;font-family:verdana;font-size:10pt;">
+<body>
 <div th:fragment="content">
     <br/>
     <p>
