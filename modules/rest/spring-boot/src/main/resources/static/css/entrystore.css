@@ -1,0 +1,16 @@
+/*
+ * Styling for the HTML pages EntryStore serves: the login form, the signup form,
+ * the password-reset form and the auth result/error page.
+ *
+ * Deliberately a separate stylesheet rather than inline CSS. Inline style attributes
+ * require "style-src-attr 'unsafe-inline'" in the Content-Security-Policy and an inline
+ * <style> element requires a per-change hash; a same-origin stylesheet needs only the
+ * stable "style-src 'self'". See ENTRYSTORE-1100.
+ */
+body {
+    width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+    font-family: verdana;
+    font-size: 10pt;
+}

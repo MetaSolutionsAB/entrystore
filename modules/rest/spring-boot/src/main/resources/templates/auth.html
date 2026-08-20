@@ -1,8 +1,14 @@
 <html xmlns:th="https://www.thymeleaf.org">
 <head>
     <title th:text="${title}">EntryStore</title>
+    <!--/* Relative on purpose: a reverse proxy may mount EntryStore under a path prefix
+           (e.g. /store/) and strip it before forwarding, so a root-relative href would
+           miss the app. Every page using this stylesheet is served one segment deep
+           (/auth/*), so ../css/ resolves correctly both behind such a proxy and when
+           EntryStore runs at the root. CspInlineStyleIT verifies this per page. */-->
+    <link rel="stylesheet" href="../css/entrystore.css">
 </head>
-<body style="width:500px;margin-left:auto;margin-right:auto;font-family:verdana;font-size:10pt;">
+<body>
 <div th:fragment="content">
     <br/>
     <p>
