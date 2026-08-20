@@ -32,6 +32,7 @@ import org.entrystore.rest.springboot.service.AuthService;
 import org.entrystore.rest.springboot.service.SamlAuthService;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.RequestBodyValidator;
+import org.entrystore.rest.springboot.util.WebResourceUrls;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -40,6 +41,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -55,6 +57,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class AuthController {
 
+	private final WebResourceUrls webResourceUrls;
+
 	private static final int MAX_REQUEST_SIZE = 32 * 1024;
 	private static final String SIGNUP_TITLE = "Sign-up";
 	private static final String PASSWORD_RESET_TITLE = "Password reset";
@@ -67,6 +71,16 @@ public class AuthController {
 			"To confirm your sign-up, re-enter the email address and the password you chose.");
 	private static final ConfirmForm PWRESET_FORM = new ConfirmForm(PASSWORD_RESET_TITLE, "/auth/pwreset/confirm", "New password",
 			"To reset your password, enter your email address and choose a new password.");
+
+	/**
+	 * Exposed to every view this controller renders. A bean reference cannot be used from the
+	 * templates directly: Thymeleaf forbids SpEL bean access in the restricted context that
+	 * attribute expressions are evaluated in.
+	 */
+	@ModelAttribute("stylesheetPath")
+	String stylesheetPath() {
+		return webResourceUrls.getStylesheetPath();
+	}
 
 	@Value("${entrystore.auth.saml.enabled:false}")
 	private boolean isSamlAuthEnabled;

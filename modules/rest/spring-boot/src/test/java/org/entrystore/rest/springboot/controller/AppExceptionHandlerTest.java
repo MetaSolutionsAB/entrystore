@@ -30,6 +30,7 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
+import org.entrystore.rest.springboot.util.WebResourceUrls;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.core.MethodParameter;
@@ -61,7 +62,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class AppExceptionHandlerTest {
 
-	private final AppExceptionHandler handler = new AppExceptionHandler();
+	private final AppExceptionHandler handler = new AppExceptionHandler(new WebResourceUrls("http://localhost:8181/store/"));
 
 	@Test
 	void handleRejectedExecution_returns503WithRetryMessage() {

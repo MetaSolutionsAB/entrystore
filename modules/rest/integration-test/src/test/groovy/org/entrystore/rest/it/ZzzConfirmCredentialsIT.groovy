@@ -141,6 +141,37 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		loginConn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
+	def "the confirmation form carries no inline style at either path depth it renders at (ENTRYSTORE-1100)"() {
+		given: "a signup token, so confirm_form.html can be rendered from both of its routes"
+		def username = 'cspConfirmDepth@test.com'
+		def token = startSignup(username)
+
+		when: "the form renders one segment deep, from GET /auth/signup"
+		def shallow = EntryStoreClient.getRequest('/auth/signup?confirm=' + token, '', 'text/html')
+		def shallowBody = shallow.inputStream.text
+
+		then:
+		shallow.getResponseCode() == HTTP_OK
+		!shallowBody.contains('style="')
+
+		when: "the same template renders two segments deep, from a failed POST /auth/signup/confirm"
+		def body = 'confirm=' + token + '&email=' + username + '&password=totallyWrong123'
+		def deep = EntryStoreClient.postRequest('/auth/signup/confirm', body, null, formUrlEncoded)
+		// getResponseCode() first: errorStream is null until the response has been read.
+		def deepStatus = deep.getResponseCode()
+		def deepBody = deep.errorStream.text
+
+		then:
+		deepStatus == HTTP_UNAUTHORIZED
+		!deepBody.contains('style="')
+
+		// A page-relative href could not be correct at both depths at once; a root-relative one is.
+		and: "both depths link the identical stylesheet"
+		def link = '<link rel="stylesheet" href="' + CspInlineStyleIT.STYLESHEET_HREF + '">'
+		shallowBody.contains(link)
+		deepBody.contains(link)
+	}
+
 	def "POST /auth/signup/confirm invalidates the token after three failed attempts"() {
 		given:
 		def username = 'newSignupThreeStrikes@test.com'

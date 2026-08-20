@@ -20,6 +20,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.ValidationException;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.AuthorizationException;
@@ -39,6 +40,7 @@ import org.entrystore.rest.springboot.model.exception.TextareaHtmlResponseExcept
 import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.ValidationErrorMessages;
+import org.entrystore.rest.springboot.util.WebResourceUrls;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -69,7 +71,10 @@ import java.util.concurrent.RejectedExecutionException;
  */
 @Slf4j
 @ControllerAdvice
+@RequiredArgsConstructor
 public class AppExceptionHandler {
+
+	private final WebResourceUrls webResourceUrls;
 
 	@ExceptionHandler(RedirectTemporaryException.class)
 	public ResponseEntity<Void> handleUrlRedirectException(RedirectTemporaryException ex) {
@@ -429,6 +434,9 @@ public class AppExceptionHandler {
 		} else {
 			log.debug("HtmlResponseException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
 		}
+		// @ModelAttribute methods are not invoked for @ExceptionHandler views, so the path the
+		// controller would normally contribute has to be set here as well.
+		model.addAttribute("stylesheetPath", webResourceUrls.getStylesheetPath());
 		model.addAttribute("title", ex.getTitle());
 		model.addAttribute("message", ex.getMessage());
 		String linkUrl = ex.getLinkUrl();
