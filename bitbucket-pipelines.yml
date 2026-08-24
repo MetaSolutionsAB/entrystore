@@ -99,6 +99,9 @@ pipelines:
       - step: *build
       - step: *deploy
       - step: *dockerhub
+    develop-spring:
+      - step: *build
+      - step: *dockerhub
 
 definitions:
   caches:
