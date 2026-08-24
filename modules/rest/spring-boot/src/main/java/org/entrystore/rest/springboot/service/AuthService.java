@@ -49,6 +49,7 @@ import org.entrystore.rest.springboot.model.exception.ExpectationFailedHtmlExcep
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.PwResetEntityNotFoundHtmlException;
 import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException;
+import org.entrystore.rest.springboot.model.validation.AuthValidationMessages;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
 import org.entrystore.rest.springboot.service.auth.RecaptchaVerifier;
 import org.entrystore.rest.springboot.service.auth.PasswordResetRateLimiter;
@@ -87,14 +88,21 @@ import java.util.stream.Collectors;
 public class AuthService {
 
 	private static final int TTL = 24 * 3600 * 1000;
+	/** Shared by sign-up and password reset, so the policy cannot be raised on one path only. */
+	private static final int MIN_PASSWORD_LENGTH = 8;
 
 	private static final String POST_SUCCESS_MESSAGE = "A confirmation message was sent to {}, if the user exists.";
 	private static final String CONFIRM_PASSWORD_RESET_SUCCESS_MESSAGE = "Password reset was successful.";
 	private static final String CONFIRM_SIGNUP_SUCCESS_MESSAGE = "Sign-up successful.";
-	private static final String PARAMETERS_MISSING_MESSAGE = "One or more parameters are missing.";
+	private static final String PARAMETERS_MISSING_MESSAGE = AuthValidationMessages.PARAMETERS_MISSING;
+	/** Prefix marking a sign-up body member as a custom property to carry onto the new user. */
+	private static final String CUSTOM_PROPERTY_PREFIX = "custom_";
 	private static final String SHORT_PASSWORD_MESSAGE = "The password has to consist of at least 8 characters.";
 	private static final String BAD_PASSWORD_FORMAT_MESSAGE = "The password must conform to the configured rules.";
-	private static final String INVALID_EMAIL_MESSAGE = "Invalid email address: {}.";
+	// Shared with @ValidEmail, which the sign-up body uses instead of validateAndSetEmail. The two paths
+	// must render the same string, so the placeholder is spelled the Bean Validation way in both.
+	private static final String INVALID_EMAIL_MESSAGE = AuthValidationMessages.INVALID_EMAIL;
+	private static final String EMAIL_PLACEHOLDER = "{email}";
 	private static final String INVALID_NAME_MESSAGE = "Invalid name.";
 	private static final String RECAPTCHA_MISSING_MESSAGE = "reCaptcha information missing.";
 	private static final String RECAPTCHA_INVALID_MESSAGE = "Invalid reCaptcha received.";
@@ -627,12 +635,23 @@ public class AuthService {
 	}
 
 	private String validatePasswordFormat(String password, String title) {
+		return validatePasswordFormat(password, SHORT_PASSWORD_MESSAGE, title);
+	}
+
+	/**
+	 * Returns the trimmed password, which is the value that gets hashed — so a password padded with
+	 * spaces is not accepted as long enough on the strength of the padding.
+	 *
+	 * @param tooShortMessage wording for the length failure; the two flows word it differently, and the
+	 *                        integration tests assert each string exactly
+	 */
+	private String validatePasswordFormat(String password, String tooShortMessage, String title) {
 		if (StringUtils.isEmpty(password)) {
 			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
 		}
 		String trimmed = password.trim();
-		if (trimmed.length() < 8) {
-			throw new BadRequestHtmlException(SHORT_PASSWORD_MESSAGE, title);
+		if (trimmed.length() < MIN_PASSWORD_LENGTH) {
+			throw new BadRequestHtmlException(tooShortMessage, title);
 		}
 		return trimmed;
 	}
@@ -643,30 +662,39 @@ public class AuthService {
 		return url.getProtocol() + "://" + url.getHost() + (isDefaultPort ? "" : ":" + url.getPort());
 	}
 
-	public String signup(HttpServletRequest request, SignupRequestBody requestBody, Map<String, String> extraProperties, String title) {
+	/**
+	 * Presence of the four required fields and the format of the address are constraints on
+	 * {@link SignupRequestBody}, enforced by {@code RequestBodyValidator.assertValid} in the controller —
+	 * on <em>both</em> endpoints, and deliberately not by {@code @Valid} on either, so that the
+	 * request-size limit still answers 413 before validation can answer 400. Removing either
+	 * {@code assertValid} call re-opens the unguarded dereferences below.
+	 *
+	 * <p>A constraint on the record is metadata, not a guarantee the type holds, so the four fields are
+	 * re-checked here rather than trusted: this method is {@code public}, and a future caller that builds
+	 * a {@link SignupRequestBody} directly would otherwise reach a Lombok {@code @NonNull} setter and
+	 * answer 500 where a caller deserves 400.
+	 *
+	 * <p>What remains genuinely service-side are the rules that need more than one field's own value: the
+	 * password length applies to the trimmed value, and the name rules span both name fields.
+	 */
+	public String signup(HttpServletRequest request, SignupRequestBody requestBody, String title) {
 		SignupInfo ci = new SignupInfo();
 		ci.setExpirationDate(new Date(new Date().getTime() + TTL)); // 24 hours later
 
 		String rcResponseV2;
-		String password;
 
-		validateAndSetEmail(requestBody.email(), ci, title);
-
-		if (StringUtils.isNotEmpty(requestBody.password())) {
-			password = requestBody.password().trim();
-			if (password.length() < 8) {
-				throw new BadRequestHtmlException(BAD_PASSWORD_FORMAT_MESSAGE, title);
-			}
-		} else {
+		if (StringUtils.isEmpty(requestBody.email()) || StringUtils.isEmpty(requestBody.firstName())
+				|| StringUtils.isEmpty(requestBody.lastName())) {
 			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
 		}
+		ci.setEmail(requestBody.email());
 
-		if (StringUtils.isNotEmpty(requestBody.firstName()) && StringUtils.isNotEmpty(requestBody.lastName())) {
-			ci.setFirstName(requestBody.firstName());
-			ci.setLastName(requestBody.lastName());
-		} else {
-			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
-		}
+		// Same rule as the password-reset path, so the minimum length lives in one place; only the message
+		// differs, since sign-up has always worded it in terms of the configured rules.
+		String password = validatePasswordFormat(requestBody.password(), BAD_PASSWORD_FORMAT_MESSAGE, title);
+
+		ci.setFirstName(requestBody.firstName());
+		ci.setLastName(requestBody.lastName());
 
 		if (isInvalidName(ci.getFirstName()) || isInvalidName(ci.getLastName())) {
 			throw new BadRequestHtmlException(INVALID_NAME_MESSAGE, title);
@@ -675,11 +703,11 @@ public class AuthService {
 		setRedirectUrlIfPermitted(requestBody.urlFailure(), ci::setUrlFailure, "failure");
 		setRedirectUrlIfPermitted(requestBody.urlSuccess(), ci::setUrlSuccess, "success");
 
-		if (!extraProperties.isEmpty()) {
+		if (!requestBody.extraProperties().isEmpty()) {
 			ci.setCustomProperties(new HashMap<>());
-			extraProperties.forEach((key, value) -> {
-				if (key.startsWith("custom_")) {
-					ci.getCustomProperties().put(key.substring(7), value);
+			requestBody.extraProperties().forEach((key, value) -> {
+				if (key.startsWith(CUSTOM_PROPERTY_PREFIX)) {
+					ci.getCustomProperties().put(key.substring(CUSTOM_PROPERTY_PREFIX.length()), value);
 				}
 			});
 		}
@@ -739,7 +767,7 @@ public class AuthService {
 		}
 
 		if (!emailValidator.isValid(ci.getEmail())) {
-			throw new BadRequestHtmlException(INVALID_EMAIL_MESSAGE.replace("{}", ci.getEmail()), title);
+			throw new BadRequestHtmlException(INVALID_EMAIL_MESSAGE.replace(EMAIL_PLACEHOLDER, ci.getEmail()), title);
 		}
 	}
 

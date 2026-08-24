@@ -1,7 +1,24 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
 
@@ -220,6 +237,31 @@ class MessageIT extends BaseSpec {
 		def conn = EntryStoreClient.postRequest('/message', requestBody)
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
+		greenMail.getReceivedMessages().length == 0
+	}
+
+	def "POST /message should report a failed constraint without leaking internals"() {
+		given: 'a body missing the required subject and recipient'
+		def requestBody = JsonOutput.toJson([transport: 'email', body: 'Hello'])
+
+		when:
+		def conn = EntryStoreClient.postRequest('/message', requestBody)
+		// getResponseCode() first: getErrorStream() does not itself read the response, so it answers
+		// null until the status line has been consumed.
+		def status = conn.getResponseCode()
+		def error = new JsonSlurper().parseText(conn.errorStream.text).error as String
+
+		then: 'the constraint message, not the Java signature Spring builds for this exception'
+		status == HTTP_BAD_REQUEST
+		!error.contains('Validation failed for argument')
+		!error.contains('org.entrystore')
+		!error.contains('SendMessageRequestBody')
+		!error.contains('codes [')
+		!error.contains('rejected value')
+		// The exact winner, not merely "something non-empty": the handler falls back to the bare reason
+		// phrase when no message resolves, and that fallback would satisfy a length check while telling
+		// the caller nothing.
+		error == 'must not be blank'
 		greenMail.getReceivedMessages().length == 0
 	}
 }

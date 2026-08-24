@@ -45,6 +45,9 @@ import org.springframework.security.authorization.AuthorizationResult;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.validation.BeanPropertyBindingResult;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
@@ -409,4 +412,85 @@ class AppExceptionHandlerTest {
 	@SuppressWarnings("unused")
 	private void bindingTarget(MediaType format) {
 	}
+
+	/**
+	 * Without a dedicated handler, MethodArgumentNotValidException reaches handleGenericException, which
+	 * echoes {@code ex.getMessage()} because the exception implements Spring's ErrorResponse. That
+	 * message is assembled from the failing method's {@code toGenericString()} and every
+	 * {@code ObjectError.toString()}, so the client would receive the Java signature, the DTO class name
+	 * and Spring's constraint codes. This asserts the message the client sees carries none of that.
+	 */
+	@Test
+	void handleValidationFailure_reportsOnlyTheConstraintMessage() throws Exception {
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/message");
+
+		ResponseEntity<ErrorResponse> response = handler.handleValidationFailure(
+				validationFailure(jsonTarget(), "subject", "must not be blank"), req);
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertEquals("must not be blank", body.error());
+		assertEquals("/message", body.path());
+		assertFalse(body.error().contains("jsonTarget"), "must not name the failing method");
+		assertFalse(body.error().contains("ValidatedBody"), "must not name the body class");
+		assertFalse(body.error().contains("codes ["), "must not expose Spring constraint codes");
+	}
+
+	/**
+	 * Two fields failing at once must resolve to the field declared first, not to whichever the
+	 * validator happened to return first — the sequential checks this replaced always reported the
+	 * earlier field.
+	 */
+	@Test
+	void handleValidationFailure_severalFields_reportsTheFirstDeclaredOne() throws Exception {
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/message");
+
+		ResponseEntity<ErrorResponse> response = handler.handleValidationFailure(
+				validationFailure(jsonTarget(), "password", "password message", "email", "email message"), req);
+
+		assertNotNull(response.getBody());
+		assertEquals("email message", response.getBody().error());
+	}
+
+	/** Nothing usable in the binding result still has to reject the request, not pass it. */
+	@Test
+	void handleValidationFailure_noFieldErrors_fallsBackToTheReasonPhrase() throws Exception {
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/message");
+
+		ResponseEntity<ErrorResponse> response = handler.handleValidationFailure(
+				validationFailure(jsonTarget()), req);
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		assertNotNull(response.getBody());
+		assertEquals("Bad Request", response.getBody().error());
+	}
+
+	/** field/message pairs, in the order Spring would hand them over. */
+	private static MethodArgumentNotValidException validationFailure(MethodParameter parameter,
+																	 String... fieldsAndMessages) {
+		BeanPropertyBindingResult binding =
+				new BeanPropertyBindingResult(null, parameter.getParameterType().getSimpleName());
+		for (int i = 0; i < fieldsAndMessages.length; i += 2) {
+			binding.addError(new FieldError(binding.getObjectName(), fieldsAndMessages[i],
+					null, false, null, null, fieldsAndMessages[i + 1]));
+		}
+		return new MethodArgumentNotValidException(parameter, binding);
+	}
+
+	private MethodParameter jsonTarget() throws NoSuchMethodException {
+		return new MethodParameter(
+				AppExceptionHandlerTest.class.getDeclaredMethod("jsonTargetMethod", ValidatedBody.class), 0);
+	}
+
+	private record ValidatedBody(String email, String password, String subject) {
+	}
+
+	@SuppressWarnings("unused")
+	private void jsonTargetMethod(ValidatedBody body) {
+	}
+
 }

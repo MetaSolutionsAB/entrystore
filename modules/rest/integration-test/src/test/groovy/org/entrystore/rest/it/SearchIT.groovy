@@ -888,7 +888,10 @@ class SearchIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('application/json')
 		def resp = JSON_PARSER.parseText(conn.errorStream.text)
-		resp['error'] == 'findEntriesSparql.query: \'query\' param length must be minimum 3'
+		// The constraint message alone: the leading "findEntriesSparql.query:" that
+		// ConstraintViolationException.getMessage() prepends handed the controller method name to
+		// anonymous callers.
+		resp['error'] == '\'query\' param length must be minimum 3'
 	}
 
 	def "GET /search?type=sparql&query=dc&syndication=rss_2.0 as admin should return BAD-REQUEST 400 due to short query"() {
@@ -902,7 +905,10 @@ class SearchIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('application/json')
 		def resp = JSON_PARSER.parseText(conn.errorStream.text)
-		resp['error'] == 'findEntriesSparql.query: \'query\' param length must be minimum 3'
+		// The constraint message alone: the leading "findEntriesSparql.query:" that
+		// ConstraintViolationException.getMessage() prepends handed the controller method name to
+		// anonymous callers.
+		resp['error'] == '\'query\' param length must be minimum 3'
 	}
 
 	def "GET /search?type=solr&syndication=rss_2.0 with X-Forwarded headers should use configured base URL, not forwarded host"() {
