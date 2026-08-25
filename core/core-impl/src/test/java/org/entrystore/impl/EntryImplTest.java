@@ -22,6 +22,7 @@ import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
@@ -96,6 +97,35 @@ public class EntryImplTest extends AbstractCoreTest {
 		assertSame(GraphType.None, refEntry.getGraphType());
 		refEntry.setGraphType(GraphType.List);
 		assertSame(GraphType.List, refEntry.getGraphType());
+	}
+
+	/**
+	 * ENTRYSTORE-1074 lets a MetadataImpl skip clearing a metadata graph it believes it left empty.
+	 * That belief only covers writes that went through the MetadataImpl itself, so deletion must not
+	 * act on it: whatever else put statements there — a restore, a repair, a direct store write —
+	 * still has to go, and a skipped clear leaves it orphaned behind an entry that no longer exists.
+	 */
+	@Test
+	public void remove_clearsAMetadataGraphWrittenBehindTheEntrysBack() {
+		EntryImpl entry = (EntryImpl) context.createLink(null, URI.create("http://example.com/behind-the-back"), null);
+		IRI metadataIRI = entry.getSesameLocalMetadataURI();
+
+		// Written straight to the store so the entry's own MetadataImpl still holds the knownEmpty
+		// hint it was created with; going through setGraph would clear the hint and prove nothing.
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			rc.add(vf.createIRI(entry.getResourceURI().toString()),
+					vf.createIRI("http://purl.org/dc/terms/title"), vf.createLiteral("behind the back"),
+					metadataIRI);
+		}
+
+		context.remove(entry.getEntryURI());
+
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			assertFalse(rc.hasStatement(null, null, null, false, metadataIRI),
+					"deleting an entry must clear its metadata graph, including statements its own "
+							+ "MetadataImpl never wrote");
+		}
 	}
 
 	@Test
