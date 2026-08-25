@@ -16,6 +16,11 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -24,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -125,6 +131,41 @@ public class BatchAwareSettersTest extends AbstractCoreTest {
 				"cached ACL view must reflect committed state after a rolled-back batch");
 		assertEquals(Set.of(donald), freshLoad(entry).getAllowedPrincipalsFor(AccessProperty.ReadMetadata),
 				"persisted ACL must be unchanged after a rolled-back batch");
+	}
+
+	/**
+	 * ENTRYSTORE-1074's {@code knownEmpty} hint is the same class of cached state as the ACL cache
+	 * above, and needs the same treatment: a batch only stages its statements, so a hint saying
+	 * "this metadata graph holds nothing" may not be published until the batch commits. Left set
+	 * across a rollback it makes the next {@code setGraph} skip its overwrite and merge onto the
+	 * data the rollback restored.
+	 */
+	@Test
+	public void metadataGraphMustNotBeClaimedEmptyAfterBatchRollback() {
+		Entry entry = duck.createResource(null, GraphType.None, null, null);
+		ValueFactory vf = rm.getRepository().getValueFactory();
+		IRI resource = vf.createIRI(entry.getResourceURI().toString());
+		IRI title = vf.createIRI("http://purl.org/dc/terms/title");
+		entry.getLocalMetadata().setGraph(titleGraph(vf, resource, title, "committed"));
+
+		// Blanking the graph is what produces the hint; the rollback then puts "committed" back.
+		assertThrows(IllegalStateException.class, () -> rm.inBatch(() -> {
+			entry.getLocalMetadata().setGraph(new LinkedHashModel());
+			throw new IllegalStateException("boom");
+		}));
+
+		entry.getLocalMetadata().setGraph(titleGraph(vf, resource, title, "replacement"));
+
+		Model persisted = freshLoad(entry).getLocalMetadata().getGraph();
+		assertEquals(List.of("replacement"),
+				persisted.filter(resource, title, null).objects().stream().map(Value::stringValue).sorted().toList(),
+				"setGraph must replace the graph the rolled-back batch restored, not merge onto it");
+	}
+
+	private static Model titleGraph(ValueFactory vf, IRI resource, IRI title, String value) {
+		Model graph = new LinkedHashModel();
+		graph.add(resource, title, vf.createLiteral(value));
+		return graph;
 	}
 
 	@Test
