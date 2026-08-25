@@ -208,6 +208,8 @@ class SsrfSafeHttpClientTest {
 		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
 		when(conn.getResponseCode()).thenReturn(302);
 		when(conn.getHeaderField("Location")).thenReturn("http://upstream.example.com/a");
+		// A fresh stream per hop: drainForReuse closes each one it consumes.
+		when(conn.getInputStream()).thenAnswer(invocation -> emptyBody());
 
 		CustomResponseException ex = assertThrows(CustomResponseException.class,
 				() -> cappedClient.execute(target, "GET", Map.of(), location -> target, (status, c) -> status));
@@ -226,6 +228,7 @@ class SsrfSafeHttpClientTest {
 		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
 		when(conn.getResponseCode()).thenReturn(302);
 		when(conn.getHeaderField("Location")).thenReturn("http://upstream.example.com/b");
+		when(conn.getInputStream()).thenAnswer(invocation -> emptyBody());
 
 		assertThrows(CustomResponseException.class,
 				() -> noRedirects.execute(target, "GET", Map.of(), location -> target, (status, c) -> status));
