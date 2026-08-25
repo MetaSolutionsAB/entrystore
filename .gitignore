@@ -21,3 +21,4 @@ templates/node_modules/
 /.claude/worktrees/
 /CLAUDE.local.md
 /nul
+/config-localhost/
