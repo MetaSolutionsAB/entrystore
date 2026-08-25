@@ -21,6 +21,7 @@ import org.springframework.boot.context.properties.bind.BindException;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -53,6 +54,19 @@ class SamlCustomConfigurationTest {
 		assertRejected("0");
 		assertRejected("-1");
 		assertRejected("30");
+	}
+
+	// Config-side case variance: domains must be lowercased at binding, because the routing lookup
+	// (SamlAuthService.findIdpIdForDomain) compares against a case-folded request domain — an
+	// uppercase entry would otherwise silently misroute to the wildcard IdP (mirrors
+	// OidcCustomConfiguration.Provider).
+	@Test
+	void idpDomains_areLowercasedAtBinding() {
+		var config = bind(Map.of(
+				"entrystore.auth.saml.enabled", "true",
+				"entrystore.auth.saml.idp.acme.domains", "EXAMPLE.com,*"));
+
+		assertEquals(List.of("example.com", "*"), config.idp().get("acme").domains());
 	}
 
 	private static void assertRejected(String maxAge) {

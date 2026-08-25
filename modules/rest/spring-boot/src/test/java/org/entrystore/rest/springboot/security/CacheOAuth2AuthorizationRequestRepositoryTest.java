@@ -16,14 +16,18 @@
 
 package org.entrystore.rest.springboot.security;
 
+import org.apache.logging.log4j.Level;
+import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The repository must key strictly on the {@code state} request parameter — never the HTTP
@@ -80,6 +84,27 @@ class CacheOAuth2AuthorizationRequestRepositoryTest {
 		repository.saveAuthorizationRequest(authorizationRequest(STATE), callbackRequest(null), new MockHttpServletResponse());
 
 		assertNull(repository.loadAuthorizationRequest(callbackRequest("other-state")));
+	}
+
+	// The maximumSize bound and its throttled SIZE-eviction warn are the DoS defences on this
+	// anonymously writable cache — this pins both: the cache never grows past its cap, and
+	// sustained capacity eviction emits one throttled WARN rather than one line per eviction
+	// (which would trade the heap bound for log amplification).
+	@Test
+	void capacityEvictionIsBoundedAndWarnsOnce() {
+		try (var appender = CapturingAppender.attachTo(CacheOAuth2AuthorizationRequestRepository.class)) {
+			var request = callbackRequest(null);
+			var response = new MockHttpServletResponse();
+			for (int i = 0; i < CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES + 100; i++) {
+				repository.saveAuthorizationRequest(authorizationRequest("state-" + i), request, response);
+			}
+			var cache = repository.caffeineCaches().get("oauth2-authz-requests");
+			cache.cleanUp();
+
+			assertTrue(cache.estimatedSize() <= CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES);
+			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
+			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
+		}
 	}
 
 	@Test

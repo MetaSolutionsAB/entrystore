@@ -18,6 +18,8 @@ package org.entrystore.rest.springboot.configuration;
 
 import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration.Provider;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -107,9 +109,19 @@ class OidcCustomConfigurationTest {
 		assertEquals(List.of("app.example.com"), config.redirectDomainWhitelist());
 	}
 
+	// The whitelist lookup compares URI.getHost() — a bare hostname — so an entry with a scheme,
+	// port, path or userinfo can never match and would silently drop every custom redirect URL.
+	@ParameterizedTest(name = "\"{0}\"")
+	@ValueSource(strings = {"https://app.example.com", "app.example.com:8443", "app.example.com/",
+			"user@app.example.com"})
+	void nonBareHostnameWhitelistEntryFailsFast(String entry) {
+		assertThrows(IllegalArgumentException.class,
+				() -> new OidcCustomConfiguration(true, null, List.of(entry), null, null, null));
+	}
+
 	// A blank binding (`entrystore.auth.oidc.redirect-success.url=`) bypasses the null-only
-	// defaulting; sendRedirect("") then resolves against the current request URI, looping every
-	// post-login redirect back to the OAuth callback.
+	// defaulting; downstream the redirect handlers reject it at bean creation, but only when OIDC
+	// is enabled and without naming the key — so it must fail at binding.
 	@Test
 	void blankRedirectUrlFailsFast() {
 		assertThrows(IllegalArgumentException.class, () -> new OidcCustomConfiguration.RedirectUrl("  "));

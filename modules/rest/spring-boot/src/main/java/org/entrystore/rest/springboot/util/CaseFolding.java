@@ -19,13 +19,15 @@ package org.entrystore.rest.springboot.util;
 import java.util.Locale;
 
 /**
- * Locale-independent case folding for identifier comparison (hostnames, email domains, usernames,
- * enum names, configuration keys). The bare {@link String#toLowerCase()} uses the JVM default
- * locale, which breaks identifier matching on e.g. Turkish/Azerbaijani JVMs where {@code "I"}
- * folds to a dotless {@code "ı"} — use this helper instead so the locale is fixed in one place
- * and never spelled out at call sites.
+ * Locale-independent case folding for identifier comparison (hostnames, email domains). The bare
+ * {@link String#toLowerCase()} uses the JVM default locale, which breaks identifier matching on
+ * e.g. Turkish/Azerbaijani JVMs where {@code "I"} folds to a dotless {@code "ı"} — use this helper
+ * instead so the locale is fixed in one place and never spelled out at call sites.
  *
- * <p>Not for user-facing display text, where the user's locale is the correct choice.
+ * <p>Not for user-facing display text, where the user's locale is the correct choice. Also not for
+ * reserved-name guards: {@code AbstractSsoLoginSuccessHandler#isReservedUsername} deliberately uses
+ * {@code equalsIgnoreCase}, because any {@code toLowerCase}-based lookup applies full case mapping
+ * and would let variants such as {@code "ADMİN"} (U+0130) past the guard.
  */
 public final class CaseFolding {
 

@@ -161,25 +161,27 @@ public class AuthController {
 			redirectAttributes.addAttribute("failureurl", failureUrl);
 		}
 
-		String providerId = oidcAuthService.findProviderIdForRequest(username, provider);
+		var selection = oidcAuthService.findProviderIdForRequest(username, provider);
 		// An unknown registration id would otherwise surface deep inside Spring Security's
 		// OAuth2AuthorizationRequestRedirectFilter as an HTML 500 that bypasses AppExceptionHandler —
-		// fail early instead. A bogus ?provider= parameter is the caller's fault (400); an id derived
-		// from configuration (default-provider typo, or a provider.{id}.domains entry naming a
-		// nonexistent registration) is a server misconfiguration that breaks every affected login —
-		// surface it as a 500, which AppExceptionHandler logs at error, instead of a silent 400.
+		// fail early instead, classified by the selection's provenance: a bogus ?provider= parameter
+		// is the caller's fault (400); a config-derived id (default-provider typo, or a
+		// provider.{id}.domains entry naming a nonexistent registration) is a server misconfiguration
+		// that breaks every affected login — surface it as a 500, which AppExceptionHandler logs at
+		// error. OidcProviderRegistrationValidator rejects such config at startup; this is the
+		// runtime backstop.
 		boolean knownProvider = clientRegistrationRepository
-				.map(registrations -> registrations.findByRegistrationId(providerId) != null)
+				.map(registrations -> registrations.findByRegistrationId(selection.id()) != null)
 				.orElse(false);
 		if (!knownProvider) {
-			if (providerId.equals(provider)) {
-				throw new BadRequestException("Unknown OIDC provider: " + providerId);
+			if (selection.fromRequestParameter()) {
+				throw new BadRequestException("Unknown OIDC provider: " + selection.id());
 			}
-			throw new IllegalStateException("Configured OIDC provider id '" + providerId
+			throw new IllegalStateException("Configured OIDC provider id '" + selection.id()
 					+ "' has no matching spring.security.oauth2.client.registration entry — check "
 					+ "entrystore.auth.oidc.default-provider and entrystore.auth.oidc.provider.*.domains");
 		}
-		redirectAttributes.addAttribute("providerId", providerId);
+		redirectAttributes.addAttribute("providerId", selection.id());
 
 		// Spring Security's OAuth2AuthorizationRequestRedirectFilter serves this path;
 		// OidcAuthorizationRequestResolver re-validates and caches the redirect URLs there.

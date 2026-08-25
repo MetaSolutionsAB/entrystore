@@ -19,6 +19,7 @@ package org.entrystore.rest.springboot.service;
 import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration.Provider;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.service.OidcAuthService.ProviderSelection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -87,7 +88,7 @@ class OidcAuthServiceTest {
 				"keycloak", new Provider(List.of("*"), true, null),
 				"corp", new Provider(List.of("EXAMPLE.com"), false, null)));
 
-		assertEquals("corp", svc.findProviderIdForRequest("user@Example.COM", null));
+		assertEquals(new ProviderSelection("corp", false), svc.findProviderIdForRequest("user@Example.COM", null));
 	}
 
 	@Test
@@ -96,7 +97,7 @@ class OidcAuthServiceTest {
 				"keycloak", new Provider(List.of("*"), true, null),
 				"corp", new Provider(List.of("example.com"), false, null)));
 
-		assertEquals("corp", svc.findProviderIdForRequest("user@example.com", null));
+		assertEquals(new ProviderSelection("corp", false), svc.findProviderIdForRequest("user@example.com", null));
 	}
 
 	@Test
@@ -105,7 +106,7 @@ class OidcAuthServiceTest {
 				"keycloak", new Provider(List.of("*"), true, null),
 				"corp", new Provider(List.of("example.com"), false, null)));
 
-		assertEquals("keycloak", svc.findProviderIdForRequest("user@other.com", null));
+		assertEquals(new ProviderSelection("keycloak", false), svc.findProviderIdForRequest("user@other.com", null));
 	}
 
 	// Deliberate deviation from the SAML equivalent (which surfaces a null IdP id here): with no
@@ -117,7 +118,7 @@ class OidcAuthServiceTest {
 				"corp", new Provider(List.of("example.com"), false, null),
 				"keycloak", new Provider(List.of("keycloak.org"), true, null)));
 
-		assertEquals("keycloak", svc.findProviderIdForRequest("user@other.com", null));
+		assertEquals(new ProviderSelection("keycloak", false), svc.findProviderIdForRequest("user@other.com", null));
 	}
 
 	@Test
@@ -125,21 +126,21 @@ class OidcAuthServiceTest {
 		var svc = serviceWithProviders("keycloak", Map.of(
 				"corp", new Provider(List.of("example.com"), false, null)));
 
-		assertEquals("explicit", svc.findProviderIdForRequest("user@other.com", "explicit"));
+		assertEquals(new ProviderSelection("explicit", true), svc.findProviderIdForRequest("user@other.com", "explicit"));
 	}
 
 	@Test
 	void findProviderIdForRequest_explicitProviderParameterIsUsedWhenNoUsername() {
 		var svc = serviceWithProviders("keycloak", Map.of("keycloak", new Provider(List.of("*"), true, null)));
 
-		assertEquals("explicit", svc.findProviderIdForRequest(null, "explicit"));
+		assertEquals(new ProviderSelection("explicit", true), svc.findProviderIdForRequest(null, "explicit"));
 	}
 
 	@Test
 	void findProviderIdForRequest_fallsBackToDefaultProvider() {
 		var svc = serviceWithProviders("keycloak", Map.of("keycloak", new Provider(List.of("*"), true, null)));
 
-		assertEquals("keycloak", svc.findProviderIdForRequest(null, null));
+		assertEquals(new ProviderSelection("keycloak", false), svc.findProviderIdForRequest(null, null));
 	}
 
 	@Test

@@ -22,8 +22,10 @@ import com.github.benmanes.caffeine.cache.RemovalCause;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
 import org.entrystore.rest.springboot.model.auth.AuthState;
+import org.entrystore.rest.springboot.util.LogThrottle;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -42,15 +44,16 @@ public class OidcAuthStateCache implements CaffeineCacheSource {
 	// heap (mirrors CacheOAuth2AuthorizationRequestRepository).
 	static final long MAX_ENTRIES = 10_000;
 
+	private final LogThrottle evictionWarnThrottle = new LogThrottle(Duration.ofMinutes(1));
+
 	private final Cache<String, AuthState> requestCache = Caffeine.newBuilder()
 			.expireAfterWrite(2, TimeUnit.MINUTES)
 			.maximumSize(MAX_ENTRIES)
-			// Capacity evictions only happen under the flood the cap defends against (or a severe
-			// overload) — make that diagnosable, since ordinary expiry looks identical from the
-			// outside (mirrors CacheOAuth2AuthorizationRequestRepository).
+			// SIZE filter and throttle are both load-bearing — see the sibling listener in
+			// CacheOAuth2AuthorizationRequestRepository for the full rationale.
 			.evictionListener((String state, AuthState value, RemovalCause cause) -> {
-				if (cause == RemovalCause.SIZE) {
-					log.warn("OIDC auth-state cache evicted an entry at capacity ({}) — "
+				if (cause == RemovalCause.SIZE && evictionWarnThrottle.shouldLog()) {
+					log.warn("OIDC auth-state cache is evicting at capacity ({}) — "
 							+ "possible login-initiation flood", MAX_ENTRIES);
 				}
 			})

@@ -23,11 +23,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
+import org.entrystore.rest.springboot.util.LogThrottle;
 import org.springframework.security.oauth2.client.web.AuthorizationRequestRepository;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -48,17 +50,20 @@ public class CacheOAuth2AuthorizationRequestRepository
 	// entries could exhaust the heap. 10k entries ≈ a few MB, far above legitimate concurrent logins.
 	static final long MAX_ENTRIES = 10_000;
 
+	private final LogThrottle evictionWarnThrottle = new LogThrottle(Duration.ofMinutes(1));
+
 	private final Cache<String, OAuth2AuthorizationRequest> cache =
 			Caffeine.newBuilder()
 					.expireAfterWrite(2, TimeUnit.MINUTES)
 					.maximumSize(MAX_ENTRIES)
-					// Capacity evictions only happen under the flood the cap defends against (or a
-					// severe overload) — make that diagnosable, since expiry and replay-consumption
-					// look identical from the outside. evictionListener runs synchronously at
-					// eviction; removalListener would also fire for ordinary expiry.
+					// The SIZE filter is load-bearing: evictionListener fires for every evicted cause,
+					// including ordinary EXPIRED — only capacity evictions indicate a flood. The
+					// listener runs synchronously inside the cache's atomic eviction on an anonymously
+					// writable path, so the warn is throttled: at capacity every further initiation
+					// evicts, and one line per eviction would trade the heap bound for log amplification.
 					.evictionListener((String state, OAuth2AuthorizationRequest value, RemovalCause cause) -> {
-						if (cause == RemovalCause.SIZE) {
-							log.warn("OAuth2 authorization-request cache evicted an entry at capacity ({}) — "
+						if (cause == RemovalCause.SIZE && evictionWarnThrottle.shouldLog()) {
+							log.warn("OAuth2 authorization-request cache is evicting at capacity ({}) — "
 									+ "possible login-initiation flood", MAX_ENTRIES);
 						}
 					})

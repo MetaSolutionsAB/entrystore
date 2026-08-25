@@ -48,6 +48,16 @@ public record OidcCustomConfiguration(
 		// entry would otherwise silently reject legitimate redirect URLs.
 		redirectDomainWhitelist = redirectDomainWhitelist == null ? List.of()
 				: redirectDomainWhitelist.stream().map(CaseFolding::toLowerCase).toList();
+		// Shape check: the whitelist lookup compares URI.getHost() — a bare hostname — so an entry
+		// carrying a scheme, port, path or userinfo can never match and would silently drop every
+		// caller-supplied successurl/failureurl. Same silent-misroute class the lowercasing above
+		// exists to prevent; fail at binding instead.
+		for (String host : redirectDomainWhitelist) {
+			if (host.contains("/") || host.contains(":") || host.contains("@")) {
+				throw new IllegalArgumentException("entrystore.auth.oidc.redirect-domain-whitelist entries "
+						+ "must be bare hostnames without scheme, port, path or userinfo; got: '" + host + "'");
+			}
+		}
 		provider = provider == null ? Map.of() : Map.copyOf(provider);
 	}
 
@@ -75,9 +85,9 @@ public record OidcCustomConfiguration(
 	public record RedirectUrl(String url) {
 		public RedirectUrl {
 			// A blank binding (e.g. `entrystore.auth.oidc.redirect-success.url=`) would bypass the
-			// null-only defaulting in the outer constructor; sendRedirect("") then resolves against
-			// the current request URI, looping every post-login redirect back to the OAuth callback —
-			// fail fast at startup instead.
+			// null-only defaulting in the outer constructor. Downstream it fails anyway — the success
+			// and failure handlers assert UrlUtils.isValidRedirectUrl at bean creation — but only when
+			// OIDC is enabled, and without naming the offending key. Fail at binding instead.
 			if (url == null || url.isBlank()) {
 				throw new IllegalArgumentException(
 						"entrystore.auth.oidc redirect-success.url/redirect-failure.url must not be blank when configured");

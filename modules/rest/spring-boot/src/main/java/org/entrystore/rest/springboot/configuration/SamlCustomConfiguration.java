@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.configuration;
 
+import org.entrystore.rest.springboot.util.CaseFolding;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
@@ -46,7 +47,11 @@ public record SamlCustomConfiguration(
 			Metadata metadata
 	) {
 		public Idp {
-			domains = domains == null ? List.of("*") : List.copyOf(domains);
+			// Copy + lowercase: email domains are case-insensitive, and the routing lookup
+			// (SamlAuthService.findIdpIdForDomain) compares against a case-folded request domain —
+			// an uppercase config entry would otherwise silently misroute to the wildcard IdP
+			// (mirrors OidcCustomConfiguration.Provider).
+			domains = domains == null ? List.of("*") : domains.stream().map(CaseFolding::toLowerCase).toList();
 			metadata = metadata == null ? new Metadata(Metadata.DEFAULT_MAX_AGE_SECONDS) : metadata;
 		}
 

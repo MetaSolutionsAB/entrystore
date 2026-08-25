@@ -59,7 +59,15 @@ public class OidcAuthService {
 		}
 	}
 
-	public String findProviderIdForRequest(String username, String provider) {
+	/**
+	 * The selected registration id together with its provenance, so the caller can classify an
+	 * unknown id correctly: {@code fromRequestParameter} is true only when the id is the caller's
+	 * raw {@code ?provider=} value (a 400), never when it came from configuration — email-domain
+	 * routing or {@code default-provider} — where an unknown id is a server misconfiguration.
+	 */
+	public record ProviderSelection(String id, boolean fromRequestParameter) {}
+
+	public ProviderSelection findProviderIdForRequest(String username, String provider) {
 
 		if (StringUtils.isNotBlank(username)) {
 			String domain = StringUtils.substringAfter(username, "@");
@@ -68,12 +76,12 @@ public class OidcAuthService {
 				// Unlike the SAML equivalent, an unmatched domain falls through to the explicit
 				// provider parameter / default provider instead of surfacing a null provider id.
 				if (providerId != null) {
-					return providerId;
+					return new ProviderSelection(providerId, false);
 				}
 			}
 		}
 		if (StringUtils.isNotBlank(provider)) {
-			return provider;
+			return new ProviderSelection(provider, true);
 		}
 
 		String defaultProvider = oidcConfiguration.defaultProvider();
@@ -82,7 +90,7 @@ public class OidcAuthService {
 			throw new BadRequestException("Unable to initialize OIDC provider configuration. "
 					+ "Provider parameter missing and no default provider configured.");
 		}
-		return defaultProvider;
+		return new ProviderSelection(defaultProvider, false);
 	}
 
 	private String findProviderIdForDomain(String domain) {
