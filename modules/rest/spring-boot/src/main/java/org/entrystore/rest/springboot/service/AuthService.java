@@ -19,10 +19,7 @@ package org.entrystore.rest.springboot.service;
 import com.google.common.base.Joiner;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -36,7 +33,6 @@ import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
-import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
@@ -53,16 +49,19 @@ import org.entrystore.rest.springboot.model.exception.ExpectationFailedHtmlExcep
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.PwResetEntityNotFoundHtmlException;
 import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException;
+import org.entrystore.rest.springboot.model.validation.AuthValidationMessages;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
 import org.entrystore.rest.springboot.service.auth.RecaptchaVerifier;
 import org.entrystore.rest.springboot.service.auth.PasswordResetRateLimiter;
 import org.entrystore.rest.springboot.service.auth.RedirectUrlValidator;
 import org.entrystore.rest.springboot.service.auth.SignupRateLimiter;
 import org.entrystore.rest.springboot.service.auth.SignupTokenCache;
-import org.entrystore.rest.springboot.util.Email;
+import org.entrystore.rest.springboot.util.EmailSender;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -73,36 +72,37 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.security.SecureRandom;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AuthService {
 
 	private static final int TTL = 24 * 3600 * 1000;
+	/** Shared by sign-up and password reset, so the policy cannot be raised on one path only. */
+	private static final int MIN_PASSWORD_LENGTH = 8;
 
 	private static final String POST_SUCCESS_MESSAGE = "A confirmation message was sent to {}, if the user exists.";
 	private static final String CONFIRM_PASSWORD_RESET_SUCCESS_MESSAGE = "Password reset was successful.";
 	private static final String CONFIRM_SIGNUP_SUCCESS_MESSAGE = "Sign-up successful.";
-	private static final String PARAMETERS_MISSING_MESSAGE = "One or more parameters are missing.";
+	private static final String PARAMETERS_MISSING_MESSAGE = AuthValidationMessages.PARAMETERS_MISSING;
+	/** Prefix marking a sign-up body member as a custom property to carry onto the new user. */
+	private static final String CUSTOM_PROPERTY_PREFIX = "custom_";
 	private static final String SHORT_PASSWORD_MESSAGE = "The password has to consist of at least 8 characters.";
 	private static final String BAD_PASSWORD_FORMAT_MESSAGE = "The password must conform to the configured rules.";
-	private static final String INVALID_EMAIL_MESSAGE = "Invalid email address: {}.";
+	// Shared with @ValidEmail, which the sign-up body uses instead of validateAndSetEmail. The two paths
+	// must render the same string, so the placeholder is spelled the Bean Validation way in both.
+	private static final String INVALID_EMAIL_MESSAGE = AuthValidationMessages.INVALID_EMAIL;
+	private static final String EMAIL_PLACEHOLDER = "{email}";
 	private static final String INVALID_NAME_MESSAGE = "Invalid name.";
 	private static final String RECAPTCHA_MISSING_MESSAGE = "reCaptcha information missing.";
 	private static final String RECAPTCHA_INVALID_MESSAGE = "Invalid reCaptcha received.";
@@ -130,12 +130,10 @@ public class AuthService {
 	private final SignupTokenCache signupTokenCache;
 	private final RedirectUrlValidator redirectUrlValidator;
 	private final EmailValidator emailValidator;
-	private final Config config;
+	private final EmailSender emailSender;
 	private final SessionRegistry sessionRegistry;
 	private final SignupRateLimiter signupRateLimiter;
 	private final PasswordResetRateLimiter passwordResetRateLimiter;
-	private final MeterRegistry meterRegistry;
-	private final SignupWhitelistProperties signupWhitelistProperties;
 
 	@Value("${entrystore.auth.confirmation.legacy:true}")
 	private boolean confirmationLegacy;
@@ -157,86 +155,59 @@ public class AuthService {
 	@Value("${entrystore.trust.x-forwarded-for:false}")
 	private boolean trustForwardedFor;
 
-	private static final Object mutex = new Object();
-	private static Set<String> domainWhitelist = null;
-
-	// Shared SecureRandom — token generation runs from the executor's worker threads and these never
-	// construct one per call. Reseeding a fresh SecureRandom every request is an unnecessary entropy
-	// hit and was also a residual timing discriminator before token generation moved off the request
-	// thread (see dispatchPasswordResetEmail).
+	// Shared SecureRandom (thread-safe) — used for all token generation, both from the executor's
+	// worker threads and from the request-thread signup path. Reseeding a fresh SecureRandom every
+	// request is an unnecessary entropy hit and was also a residual timing discriminator before
+	// password-reset token generation moved off the request thread (see dispatchPasswordResetEmail).
 	private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-	// Pool size is intentionally small: pwReset throughput is bounded by PasswordResetRateLimiter,
-	// so two daemon threads are enough to absorb concurrent dispatches without blocking the request
-	// path. Threads are daemons so a shutdown that misses the @PreDestroy still does not block JVM exit.
-	// The queue is bounded to cap heap growth under distributed credential-stuffing or an SMTP outage:
-	// at queue saturation `execute` throws RejectedExecutionException, which pwReset catches and treats
-	// as a client-silent drop — the response stays at the generic 200 so the timing-equivalence
-	// guarantee is preserved, but the rejection is logged at ERROR and increments the
-	// `auth.pwreset.rejected` Micrometer counter so operators can alert on sustained drops via
-	// monitoring rather than log scraping. A CallerRunsPolicy would have run the rejected task on the
-	// request thread, which re-opens the timing oracle this whole executor exists to close.
-	private static final int PASSWORD_RESET_POOL_SIZE = 2;
-	private static final int PASSWORD_RESET_QUEUE_CAPACITY = 100;
-	private ExecutorService passwordResetExecutor;
-	private Counter passwordResetRejectedCounter;
+	// Sizing, rejection policy and shutdown-drain semantics are documented on the bean definition in
+	// PasswordResetExecutorConfiguration; submitPasswordResetDispatch depends on them.
+	private final AsyncTaskExecutor passwordResetExecutor;
+	private final Set<String> domainWhitelist;
+	private final Counter passwordResetRejectedCounter;
 
-	@PostConstruct
-	public void init() {
-		synchronized (mutex) {
-			if (domainWhitelist == null) {
-				Collection<String> tmpDomainWhitelist = signupWhitelistProperties.whitelist().values();
-				domainWhitelist = new HashSet<>();
-				// we normalize the list to lower case and to not contain null
-				for (String domain : tmpDomainWhitelist) {
-					if (domain != null) {
-						domainWhitelist.add(domain.toLowerCase());
-					}
-				}
-				if (!domainWhitelist.isEmpty()) {
-					log.info("Sign-up whitelist initialized with following domains: {}", Joiner.on(", ").join(domainWhitelist));
-				} else {
-					log.info("No domains provided for sign-up whitelist; sign-ups for any domain are allowed");
-				}
-			}
+	public AuthService(RepositoryManagerImpl repositoryManager,
+					   PrincipalManager principalManager,
+					   ContextManager contextManager,
+					   RecaptchaVerifier rcVerifier,
+					   SignupTokenCache signupTokenCache,
+					   RedirectUrlValidator redirectUrlValidator,
+					   EmailValidator emailValidator,
+					   EmailSender emailSender,
+					   SessionRegistry sessionRegistry,
+					   SignupRateLimiter signupRateLimiter,
+					   PasswordResetRateLimiter passwordResetRateLimiter,
+					   MeterRegistry meterRegistry,
+					   SignupWhitelistProperties signupWhitelistProperties,
+					   @Qualifier("passwordResetTaskExecutor") AsyncTaskExecutor passwordResetExecutor) {
+		this.repositoryManager = repositoryManager;
+		this.principalManager = principalManager;
+		this.contextManager = contextManager;
+		this.rcVerifier = rcVerifier;
+		this.signupTokenCache = signupTokenCache;
+		this.redirectUrlValidator = redirectUrlValidator;
+		this.emailValidator = emailValidator;
+		this.emailSender = emailSender;
+		this.sessionRegistry = sessionRegistry;
+		this.signupRateLimiter = signupRateLimiter;
+		this.passwordResetRateLimiter = passwordResetRateLimiter;
+		this.passwordResetExecutor = passwordResetExecutor;
+
+		// Lower-cased so the domain check matches regardless of how the config spelled it. No null
+		// filter needed: SignupWhitelistProperties copies through Map.copyOf, which rejects nulls.
+		this.domainWhitelist = signupWhitelistProperties.whitelist().values().stream()
+				.map(domain -> domain.toLowerCase(Locale.ROOT))
+				.collect(Collectors.toUnmodifiableSet());
+		if (!domainWhitelist.isEmpty()) {
+			log.info("Sign-up whitelist initialized with following domains: {}", Joiner.on(", ").join(domainWhitelist));
+		} else {
+			log.info("No domains provided for sign-up whitelist; sign-ups for any domain are allowed");
 		}
-
-		AtomicInteger threadIndex = new AtomicInteger();
-		ThreadFactory threadFactory = r -> {
-			Thread t = new Thread(r, "password-reset-async-" + threadIndex.incrementAndGet());
-			t.setDaemon(true);
-			// An Error escaping the worker would otherwise be swallowed by ThreadPoolExecutor's default
-			// Worker.run path; ensure it always reaches the logs so a regression is observable.
-			t.setUncaughtExceptionHandler((thread, ex) ->
-					log.error("Uncaught error in password-reset worker {}", thread.getName(), ex));
-			return t;
-		};
-		this.passwordResetExecutor = new ThreadPoolExecutor(
-				PASSWORD_RESET_POOL_SIZE, PASSWORD_RESET_POOL_SIZE,
-				0L, TimeUnit.MILLISECONDS,
-				new ArrayBlockingQueue<>(PASSWORD_RESET_QUEUE_CAPACITY),
-				threadFactory);
 
 		this.passwordResetRejectedCounter = Counter.builder("auth.pwreset.rejected")
 				.description("Password-reset dispatches dropped because the executor queue was saturated or shutting down")
 				.register(meterRegistry);
-	}
-
-	@PreDestroy
-	public void shutdown() {
-		if (passwordResetExecutor == null) {
-			return;
-		}
-		passwordResetExecutor.shutdown();
-		try {
-			if (!passwordResetExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
-				log.warn("Password reset executor did not drain within 30s; forcing shutdown");
-				passwordResetExecutor.shutdownNow();
-			}
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			passwordResetExecutor.shutdownNow();
-		}
 	}
 
 	public List<SessionInformation> getAllUserSessions(URI userURI, boolean includeExpiredSessions) {
@@ -270,6 +241,25 @@ public class AuthService {
 		}
 
 		return sessionsList;
+	}
+
+	/**
+	 * Expires all registered sessions of the given user. A non-null {@code exceptSessionId} is
+	 * spared — used when a user (or admin) changes their own password so the session performing
+	 * the change stays alive.
+	 */
+	public void expireUserSessions(User user, String exceptSessionId) {
+		String username = user.getEntry().getResourceURI().toString();
+		for (Object principal : sessionRegistry.getAllPrincipals()) {
+			if (principal instanceof UserDetails userDetails && userDetails.getUsername().equals(username)) {
+				for (SessionInformation session : sessionRegistry.getAllSessions(userDetails, false)) {
+					if (exceptSessionId == null || !session.getSessionId().equals(exceptSessionId)) {
+						session.expireNow();
+					}
+				}
+				break;
+			}
+		}
 	}
 
 	/**
@@ -316,11 +306,7 @@ public class AuthService {
 	}
 
 	private String applyPasswordReset(SignupInfo ci, String title) {
-		URI authUser = principalManager.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
-
+		PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(ci.getEmail());
 			User u;
 			if (userEntry != null) {
@@ -331,45 +317,27 @@ public class AuthService {
 				u = principalManager.getUserByExternalID(ci.getEmail());
 			}
 			if (u == null) {
-				if (ci.getUrlFailure() != null) {
-					handleUrlRedirect(ci.getUrlFailure());
-				} else {
-					throw new PwResetEntityNotFoundHtmlException(USER_NOT_FOUND_MESSAGE, title);
-				}
+				throw failWithRedirectOr(ci.getUrlFailure(),
+						() -> new PwResetEntityNotFoundHtmlException(USER_NOT_FOUND_MESSAGE, title));
 			} else {
 				// Reset password
 				if (u.setSaltedHashedSecret(ci.getSaltedHashedPassword())) {
 					signupTokenCache.removeAllTokens(ci.getEmail());
 					log.debug("Removed any authentication tokens belonging to user {}", u.getURI());
 
-					List<Object> allPrincipals = sessionRegistry.getAllPrincipals();
-					for (Object principal : allPrincipals) {
-						if (principal instanceof UserDetails user && user.getUsername().equals(u.getEntry().getResourceURI().toString())) {
-							for (SessionInformation session : sessionRegistry.getAllSessions(principal, false)) {
-								session.expireNow();
-							}
-						}
-					}
-					Email.sendPasswordChangeConfirmation(config, u.getEntry());
+					expireUserSessions(u, null);
+					emailSender.sendPasswordChangeConfirmation(u.getEntry());
 					log.info("Reset password for user {}", u.getURI());
 				} else {
 					log.error("Error when resetting password for user {}", u.getURI());
-					if (ci.getUrlFailure() != null) {
-						handleUrlRedirect(ci.getUrlFailure());
-					} else {
-						throw new InternalServerErrorException(INTERNAL_ERROR_MESSAGE);
-					}
+					throw failWithRedirectOr(ci.getUrlFailure(),
+							() -> new InternalServerErrorException(INTERNAL_ERROR_MESSAGE));
 				}
 			}
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser, primary);
-		}
+		});
 
 		if (ci.getUrlSuccess() != null) {
-			handleUrlRedirect(ci.getUrlSuccess());
+			throw handleUrlRedirect(ci.getUrlSuccess());
 		}
 
 		return CONFIRM_PASSWORD_RESET_SUCCESS_MESSAGE;
@@ -423,13 +391,7 @@ public class AuthService {
 			}
 		}
 
-		URI authUser = principalManager.getAuthenticatedUserURI();
-		boolean shouldSend = false;
-		Throwable primary = null;
-
-		try {
-			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
-
+		boolean shouldSend = PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(ci.getEmail());
 			User u;
 			if (userEntry != null) {
@@ -444,18 +406,14 @@ public class AuthService {
 			// endpoint does not leak which usernames exist or are active; the actual outcome is only logged.
 			if (u == null) {
 				log.info("Ignoring password reset attempt for non-existing user {}", HttpUtil.sanitizeForLog(ci.getEmail()));
+				return false;
 			} else if (u.isDisabled()) {
 				log.info("Ignoring password reset attempt for disabled user {}", HttpUtil.sanitizeForLog(ci.getEmail()));
-			} else {
-				shouldSend = true;
-				log.info("Resolved active user for password reset attempt {}", HttpUtil.sanitizeForLog(ci.getEmail()));
+				return false;
 			}
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser, primary);
-		}
+			log.info("Resolved active user for password reset attempt {}", HttpUtil.sanitizeForLog(ci.getEmail()));
+			return true;
+		});
 
 		// The expensive work (token generation + bcrypt + SMTP send) runs on a background thread so
 		// all three branches (nonexistent / disabled / active) return to the client without the
@@ -507,7 +465,7 @@ public class AuthService {
 		signupTokenCache.putToken(token, ci);
 
 		try {
-			boolean sendSuccessful = Email.sendPasswordResetConfirmation(config, ci.getEmail(), confirmationLink);
+			boolean sendSuccessful = emailSender.sendPasswordResetConfirmation(ci.getEmail(), confirmationLink);
 			if (sendSuccessful) {
 				log.info("Sent confirmation request to {}", emailLog);
 			} else {
@@ -562,33 +520,21 @@ public class AuthService {
 	}
 
 	private String createUserFromSignup(SignupInfo signupInfo, String title) {
-		URI authUser = principalManager.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
-
+		PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(signupInfo.getEmail());
 
 			if ((userEntry != null && GraphType.User.equals(userEntry.getGraphType())) ||
 					principalManager.getUserByExternalID(signupInfo.getEmail()) != null) {
-				if (signupInfo.getUrlFailure() != null) {
-					handleUrlRedirect(signupInfo.getUrlFailure());
-					return null;
-				} else {
-					throw new DataConflictHtmlException(USER_ALREADY_EXISTS_MESSAGE, title);
-				}
+				throw failWithRedirectOr(signupInfo.getUrlFailure(),
+						() -> new DataConflictHtmlException(USER_ALREADY_EXISTS_MESSAGE, title));
 			}
 
 			// Create user
 			Entry entry = principalManager.createResource(null, GraphType.User, null, null);
 			if (entry == null) {
 				log.error("Error when creating new user during sign-up ");
-				if (signupInfo.getUrlFailure() != null) {
-					handleUrlRedirect(signupInfo.getUrlFailure());
-					return null;
-				} else {
-					throw new InternalServerErrorException(UNABLE_TO_CREATE_USER_MESSAGE);
-				}
+				throw failWithRedirectOr(signupInfo.getUrlFailure(),
+						() -> new InternalServerErrorException(UNABLE_TO_CREATE_USER_MESSAGE));
 			} else {
 				// Set alias, metadata and password
 				principalManager.setPrincipalName(entry.getResourceURI(), signupInfo.getEmail());
@@ -612,16 +558,10 @@ public class AuthService {
 					log.info("Set home context of user {} to {}", u.getURI(), homeContext.getResourceURI());
 				}
 			}
-
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser, primary);
-		}
+		});
 
 		if (signupInfo.getUrlSuccess() != null) {
-			handleUrlRedirect(signupInfo.getUrlSuccess());
+			throw handleUrlRedirect(signupInfo.getUrlSuccess());
 		}
 
 		return CONFIRM_SIGNUP_SUCCESS_MESSAGE;
@@ -695,12 +635,23 @@ public class AuthService {
 	}
 
 	private String validatePasswordFormat(String password, String title) {
+		return validatePasswordFormat(password, SHORT_PASSWORD_MESSAGE, title);
+	}
+
+	/**
+	 * Returns the trimmed password, which is the value that gets hashed — so a password padded with
+	 * spaces is not accepted as long enough on the strength of the padding.
+	 *
+	 * @param tooShortMessage wording for the length failure; the two flows word it differently, and the
+	 *                        integration tests assert each string exactly
+	 */
+	private String validatePasswordFormat(String password, String tooShortMessage, String title) {
 		if (StringUtils.isEmpty(password)) {
 			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
 		}
 		String trimmed = password.trim();
-		if (trimmed.length() < 8) {
-			throw new BadRequestHtmlException(SHORT_PASSWORD_MESSAGE, title);
+		if (trimmed.length() < MIN_PASSWORD_LENGTH) {
+			throw new BadRequestHtmlException(tooShortMessage, title);
 		}
 		return trimmed;
 	}
@@ -711,30 +662,39 @@ public class AuthService {
 		return url.getProtocol() + "://" + url.getHost() + (isDefaultPort ? "" : ":" + url.getPort());
 	}
 
-	public String signup(HttpServletRequest request, SignupRequestBody requestBody, Map<String, String> extraProperties, String title) {
+	/**
+	 * Presence of the four required fields and the format of the address are constraints on
+	 * {@link SignupRequestBody}, enforced by {@code RequestBodyValidator.assertValid} in the controller —
+	 * on <em>both</em> endpoints, and deliberately not by {@code @Valid} on either, so that the
+	 * request-size limit still answers 413 before validation can answer 400. Removing either
+	 * {@code assertValid} call re-opens the unguarded dereferences below.
+	 *
+	 * <p>A constraint on the record is metadata, not a guarantee the type holds, so the four fields are
+	 * re-checked here rather than trusted: this method is {@code public}, and a future caller that builds
+	 * a {@link SignupRequestBody} directly would otherwise reach a Lombok {@code @NonNull} setter and
+	 * answer 500 where a caller deserves 400.
+	 *
+	 * <p>What remains genuinely service-side are the rules that need more than one field's own value: the
+	 * password length applies to the trimmed value, and the name rules span both name fields.
+	 */
+	public String signup(HttpServletRequest request, SignupRequestBody requestBody, String title) {
 		SignupInfo ci = new SignupInfo();
 		ci.setExpirationDate(new Date(new Date().getTime() + TTL)); // 24 hours later
 
 		String rcResponseV2;
-		String password;
 
-		validateAndSetEmail(requestBody.email(), ci, title);
-
-		if (StringUtils.isNotEmpty(requestBody.password())) {
-			password = requestBody.password().trim();
-			if (password.length() < 8) {
-				throw new BadRequestHtmlException(BAD_PASSWORD_FORMAT_MESSAGE, title);
-			}
-		} else {
+		if (StringUtils.isEmpty(requestBody.email()) || StringUtils.isEmpty(requestBody.firstName())
+				|| StringUtils.isEmpty(requestBody.lastName())) {
 			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
 		}
+		ci.setEmail(requestBody.email());
 
-		if (StringUtils.isNotEmpty(requestBody.firstName()) && StringUtils.isNotEmpty(requestBody.lastName())) {
-			ci.setFirstName(requestBody.firstName());
-			ci.setLastName(requestBody.lastName());
-		} else {
-			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
-		}
+		// Same rule as the password-reset path, so the minimum length lives in one place; only the message
+		// differs, since sign-up has always worded it in terms of the configured rules.
+		String password = validatePasswordFormat(requestBody.password(), BAD_PASSWORD_FORMAT_MESSAGE, title);
+
+		ci.setFirstName(requestBody.firstName());
+		ci.setLastName(requestBody.lastName());
 
 		if (isInvalidName(ci.getFirstName()) || isInvalidName(ci.getLastName())) {
 			throw new BadRequestHtmlException(INVALID_NAME_MESSAGE, title);
@@ -743,17 +703,19 @@ public class AuthService {
 		setRedirectUrlIfPermitted(requestBody.urlFailure(), ci::setUrlFailure, "failure");
 		setRedirectUrlIfPermitted(requestBody.urlSuccess(), ci::setUrlSuccess, "success");
 
-		if (!extraProperties.isEmpty()) {
+		if (!requestBody.extraProperties().isEmpty()) {
 			ci.setCustomProperties(new HashMap<>());
-			extraProperties.forEach((key, value) -> {
-				if (key.startsWith("custom_")) {
-					ci.getCustomProperties().put(key.substring(7), value);
+			requestBody.extraProperties().forEach((key, value) -> {
+				if (key.startsWith(CUSTOM_PROPERTY_PREFIX)) {
+					ci.getCustomProperties().put(key.substring(CUSTOM_PROPERTY_PREFIX.length()), value);
 				}
 			});
 		}
 
 		if (!domainWhitelist.isEmpty()) {
-			String emailDomain = ci.getEmail().substring(ci.getEmail().indexOf("@") + 1).toLowerCase();
+			// Same Locale.ROOT as the whitelist normalisation in the constructor, so the two agree
+			// under a locale whose lower-casing differs from the root one (e.g. Turkish dotless i).
+			String emailDomain = ci.getEmail().substring(ci.getEmail().indexOf("@") + 1).toLowerCase(Locale.ROOT);
 			if (!domainWhitelist.contains(emailDomain)) {
 				throw new ExpectationFailedHtmlException(DOMAIN_NOT_WHITELISTED_MESSAGE.replace("{}", emailDomain), title);
 			}
@@ -781,11 +743,11 @@ public class AuthService {
 			}
 		}
 
-		String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
+		String token = RandomStringUtils.random(16, 0, 0, true, true, null, SECURE_RANDOM);
 		String confirmationLink = repositoryManager.getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
 		log.info("Generated sign-up token for {}", ci.getEmail());
 
-		boolean sendSuccessful = Email.sendSignupConfirmation(config, ci.getFirstName() + " " + ci.getLastName(), ci.getEmail(), confirmationLink);
+		boolean sendSuccessful = emailSender.sendSignupConfirmation(ci.getFirstName() + " " + ci.getLastName(), ci.getEmail(), confirmationLink);
 		if (sendSuccessful) {
 			ci.setSaltedHashedPassword(Password.getSaltedHash(password));
 			signupTokenCache.putToken(token, ci);
@@ -805,7 +767,7 @@ public class AuthService {
 		}
 
 		if (!emailValidator.isValid(ci.getEmail())) {
-			throw new BadRequestHtmlException(INVALID_EMAIL_MESSAGE.replace("{}", ci.getEmail()), title);
+			throw new BadRequestHtmlException(INVALID_EMAIL_MESSAGE.replace(EMAIL_PLACEHOLDER, ci.getEmail()), title);
 		}
 	}
 
@@ -819,7 +781,27 @@ public class AuthService {
 		}
 	}
 
-	private void handleUrlRedirect(String url) {
+	/**
+	 * Terminates a failure branch. When {@code urlFailure} is provided, delegates to
+	 * {@link #handleUrlRedirect(String)}, which always throws — a {@link RedirectTemporaryException}
+	 * for permitted URLs, or an {@link InternalServerErrorException} for non-permitted ones (no
+	 * redirect happens then). Otherwise throws {@code fallback}. Never returns normally — the
+	 * {@link RuntimeException} return type only lets call sites write
+	 * {@code throw failWithRedirectOr(...)} so the compiler sees the branch end.
+	 */
+	private RuntimeException failWithRedirectOr(String urlFailure, Supplier<RuntimeException> fallback) {
+		if (urlFailure != null) {
+			throw handleUrlRedirect(urlFailure);
+		}
+		throw fallback.get();
+	}
+
+	/**
+	 * Always throws: {@link RedirectTemporaryException} for a permitted URL, otherwise
+	 * {@link InternalServerErrorException}. The {@link RuntimeException} return type lets call
+	 * sites write {@code throw handleUrlRedirect(...)} so the compiler sees the branch end.
+	 */
+	private RuntimeException handleUrlRedirect(String url) {
 		if (!redirectUrlValidator.isPermitted(url)) {
 			throw new InternalServerErrorException("Redirect to non-permitted URL blocked: " + url);
 		}

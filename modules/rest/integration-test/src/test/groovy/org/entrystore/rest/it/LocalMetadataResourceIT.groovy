@@ -39,14 +39,18 @@ class LocalMetadataResourceIT extends BaseSpec {
 		getOrCreateContext([contextId: contextId])
 	}
 
-	def "GET /{context-id}/metadata/{entryId} as guest should respond with Not Found 404"() {
-		given:
+	/** Creates a link entry whose local metadata is a single dcterms:title and returns [entryId, metadataUri]. */
+	private List createEntryWithTitle(String title = 'Cool entry') {
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
-		def entryId = createEntry(contextId, params, body)
+		def entryId = createEntry(contextId, params, createTitleMetadataBody(newResourceIri, title))
 		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+		return [entryId, metadataUri]
+	}
+
+	def "GET /{context-id}/metadata/{entryId} as guest should respond with Not Found 404"() {
+		given:
+		def (entryId, metadataUri) = createEntryWithTitle()
 
 		when:
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri, '')
@@ -58,12 +62,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 
 	def "GET /{context-id}/metadata/{entryId} as non-admin user should respond with Forbidden"() {
 		given:
-		def params = [entrytype: 'link', resource: resourceUrl]
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
-		def entryId = createEntry(contextId, params, body)
-		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+		def (entryId, metadataUri) = createEntryWithTitle()
 
 		when:
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri, 'user')
@@ -74,12 +73,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 
 	def "GET /{context-id}/metadata/{entryId} as admin should fetch local metadata of the entry"() {
 		given:
-		def params = [entrytype: 'link', resource: resourceUrl]
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
-		def entryId = createEntry(contextId, params, body)
-		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+		def (entryId, metadataUri) = createEntryWithTitle()
 
 		when:
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri)
@@ -99,12 +93,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 
 	def "GET /{context-id}/metadata/{entryId} as admin should not fetch local metadata of deleted entry"() {
 		given:
-		def params = [entrytype: 'link', resource: resourceUrl]
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
-		def entryId = createEntry(contextId, params, body)
-		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+		def (entryId, metadataUri) = createEntryWithTitle()
 		def deleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId)
 		assert deleteConn.getResponseCode() == HTTP_NO_CONTENT
 
@@ -117,12 +106,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 
 	def "GET /{context-id}/metadata/{entryId} as guest should not fetch local metadata of deleted entry"() {
 		given:
-		def params = [entrytype: 'link', resource: resourceUrl]
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
-		def entryId = createEntry(contextId, params, body)
-		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+		def (entryId, metadataUri) = createEntryWithTitle()
 		def deleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId)
 		assert deleteConn.getResponseCode() == HTTP_NO_CONTENT
 
@@ -138,8 +122,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def metadataUrl = 'https://bbc.co.uk/metadata'
 		def params = [entrytype: 'reference', resource: resourceUrl, 'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
+		def body = createTitleMetadataBody(newResourceIri, 'Cool entry')
 		def entryId = createEntry(contextId, params, body)
 		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
 
@@ -155,8 +138,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def metadataUrl = 'https://bbc.co.uk/metadata'
 		def params = [entrytype: 'reference', resource: resourceUrl, 'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
+		def body = createTitleMetadataBody(newResourceIri, 'Cool entry')
 		def entryId = createEntry(contextId, params, body)
 		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
 
@@ -169,12 +151,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 
 	def "GET /{context-id}/metadata/{entryId} should not fetch local metadata with an invalid recursive parameter"() {
 		given:
-		def params = [entrytype: 'link', resource: resourceUrl]
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
-		def entryId = createEntry(contextId, params, body)
-		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+		def (entryId, metadataUri) = createEntryWithTitle()
 
 		when:
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + "?recursive=10")
@@ -187,8 +164,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
+		def body = createTitleMetadataBody(newResourceIri, 'Cool entry')
 		def entryId = createEntry(contextId, params, body)
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
@@ -207,8 +183,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
+		def body = createTitleMetadataBody(newResourceIri, 'Cool entry')
 		def entryId = createEntry(contextId, params, body)
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
@@ -257,8 +232,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
+		def body = createTitleMetadataBody(newResourceIri, 'Cool entry')
 		def entryId = createEntry(contextId, params, body)
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
@@ -281,8 +255,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
+		def body = createTitleMetadataBody(newResourceIri, 'Cool entry')
 		def entryId = createEntry(contextId, params, body)
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
@@ -306,8 +279,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
+		def body = createTitleMetadataBody(newResourceIri, 'Cool entry')
 		def entryId = createEntry(contextId, params, body)
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
@@ -345,8 +317,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
+		def body = createTitleMetadataBody(newResourceIri, 'Cool entry')
 		def entryId = createEntry(contextId, params, body)
 
 		when:
@@ -429,11 +400,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		given:
 		def entryD2params = [entrytype: 'link', resource: resourceUrl + '/2']
 		def entryD2ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def entryD2body = [metadata: [(entryD2ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [
-				[type: 'literal', value: 'Depth2']
-			]
-		]]]
+		def entryD2body = createTitleMetadataBody(entryD2ResourceIri, 'Depth2')
 		def entryD2Id = createEntry(contextId, entryD2params, entryD2body)
 
 		def entryD1params = [entrytype: 'link', resource: resourceUrl + '/1']
@@ -502,11 +469,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		given:
 		def entryD2params = [entrytype: 'link', resource: resourceUrl + '/2']
 		def entryD2ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def entryD2body = [metadata: [(entryD2ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [
-				[type: 'literal', value: 'Depth2']
-			]
-		]]]
+		def entryD2body = createTitleMetadataBody(entryD2ResourceIri, 'Depth2')
 		def entryD2Id = createEntry(contextId, entryD2params, entryD2body)
 
 		def entryD1params = [entrytype: 'link', resource: resourceUrl + '/']
@@ -570,11 +533,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		given:
 		def entryD3params = [entrytype: 'link', resource: resourceUrl + '/3']
 		def entryD3ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def entryD3body = [metadata: [(entryD3ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [
-				[type: 'literal', value: 'Depth3']
-			]
-		]]]
+		def entryD3body = createTitleMetadataBody(entryD3ResourceIri, 'Depth3')
 		def entryD3Id = createEntry(contextId, entryD3params, entryD3body)
 
 		def entryD2params = [entrytype: 'link', resource: resourceUrl + '/2']
@@ -652,20 +611,12 @@ class LocalMetadataResourceIT extends BaseSpec {
 		given:
 		def entryD3params = [entrytype: 'link', resource: resourceUrl + '/1']
 		def entryD3ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def entryD3body = [metadata: [(entryD3ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [
-				[type: 'literal', value: 'Depth3']
-			]
-		]]]
+		def entryD3body = createTitleMetadataBody(entryD3ResourceIri, 'Depth3')
 		def entryD3Id = createEntry(contextId, entryD3params, entryD3body)
 
 		def entryD2params = [entrytype: 'link', resource: resourceUrl + '/2']
 		def entryD2ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def entryD2body = [metadata: [(entryD2ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [
-				[type: 'literal', value: 'Depth2']
-			]
-		]]]
+		def entryD2body = createTitleMetadataBody(entryD2ResourceIri, 'Depth2')
 		def entryD2Id = createEntry(contextId, entryD2params, entryD2body)
 
 		def params = [entrytype: 'link', resource: resourceUrl]
@@ -719,38 +670,22 @@ class LocalMetadataResourceIT extends BaseSpec {
 		given:
 		def entryD6params = [entrytype: 'link', resource: resourceUrl + '/6']
 		def entryD6ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def entryD6body = [metadata: [(entryD6ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [
-				[type: 'literal', value: 'Width6']
-			]
-		]]]
+		def entryD6body = createTitleMetadataBody(entryD6ResourceIri, 'Width6')
 		def entryD6Id = createEntry(contextId, entryD6params, entryD6body)
 
 		def entryD5params = [entrytype: 'link', resource: resourceUrl + '/5']
 		def entryD5ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def entryD5body = [metadata: [(entryD5ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [
-				[type: 'literal', value: 'Width5']
-			]
-		]]]
+		def entryD5body = createTitleMetadataBody(entryD5ResourceIri, 'Width5')
 		def entryD5Id = createEntry(contextId, entryD5params, entryD5body)
 
 		def entryD4params = [entrytype: 'link', resource: resourceUrl + '/4']
 		def entryD4ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def entryD4body = [metadata: [(entryD4ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [
-				[type: 'literal', value: 'Width4']
-			]
-		]]]
+		def entryD4body = createTitleMetadataBody(entryD4ResourceIri, 'Width4')
 		def entryD4Id = createEntry(contextId, entryD4params, entryD4body)
 
 		def entryD3params = [entrytype: 'link', resource: resourceUrl + '/3']
 		def entryD3ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def entryD3body = [metadata: [(entryD3ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [
-				[type: 'literal', value: 'Depth3']
-			]
-		]]]
+		def entryD3body = createTitleMetadataBody(entryD3ResourceIri, 'Depth3')
 		def entryD3Id = createEntry(contextId, entryD3params, entryD3body)
 
 		def entryD2params = [entrytype: 'link', resource: resourceUrl + '/2']
@@ -819,12 +754,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 	def "GET /{context-id}/metadata/{entryId} should include Last-Modified and ETag headers"() {
 		given:
 		def beforeRequest = new Date()
-		def params = [entrytype: 'link', resource: resourceUrl]
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Header test entry']],]]]
-		def entryId = createEntry(contextId, params, body)
-		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+		def (entryId, metadataUri) = createEntryWithTitle('Header test entry')
 
 		when:
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri)
@@ -847,11 +777,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def beforeRequest = new Date()
 		def entryD1params = [entrytype: 'link', resource: resourceUrl + '/rec1']
 		def entryD1ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def entryD1body = [metadata: [(entryD1ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [
-				[type: 'literal', value: 'Recursive depth 1']
-			]
-		]]]
+		def entryD1body = createTitleMetadataBody(entryD1ResourceIri, 'Recursive depth 1')
 		def entryD1Id = createEntry(contextId, entryD1params, entryD1body)
 
 		def entryD0params = [entrytype: 'link', resource: resourceUrl + '/rec0']
@@ -886,12 +812,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 
 	def "GET /{context-id}/metadata/{entryId} with format=text/html should return 406 Not Acceptable"() {
 		given:
-		def params = [entrytype: 'link', resource: resourceUrl]
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
-		def entryId = createEntry(contextId, params, body)
-		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+		def (entryId, metadataUri) = createEntryWithTitle()
 
 		when:
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + '?format=text/html')
@@ -902,12 +823,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 
 	def "GET /{context-id}/metadata/{entryId} with format=application/rdf+xml should return 200"() {
 		given:
-		def params = [entrytype: 'link', resource: resourceUrl]
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
-		def entryId = createEntry(contextId, params, body)
-		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+		def (entryId, metadataUri) = createEntryWithTitle()
 
 		when:
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + '?format=application/rdf%2Bxml')
@@ -917,14 +833,23 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryMetaConn.getContentType().contains('application/rdf+xml')
 	}
 
+	def "GET /{context-id}/metadata/{entryId} with empty format should be treated as absent and return 200"() {
+		given:
+		// an empty format= binds to null (MediaTypeConverter returns null for blank input), so the
+		// endpoint falls back to Accept-header negotiation — proven by the turtle response below
+		def (entryId, metadataUri) = createEntryWithTitle()
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + '?format=', 'admin', 'text/turtle')
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_OK
+		entryMetaConn.getContentType().contains('text/turtle')
+	}
+
 	def "GET /{context-id}/metadata/{entryId} with Accept header containing supported type among unsupported ones should return 200"() {
 		given:
-		def params = [entrytype: 'link', resource: resourceUrl]
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
-		def entryId = createEntry(contextId, params, body)
-		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+		def (entryId, metadataUri) = createEntryWithTitle()
 
 		when:
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri, 'admin', 'text/html, application/rdf+xml')
@@ -936,12 +861,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 
 	def "GET /{context-id}/metadata/{entry-id} with Accept text/rdf+n3 should return N3 with Content-Type text/n3"() {
 		given:
-		def params = [entrytype: 'link', resource: resourceUrl]
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
-		def entryId = createEntry(contextId, params, body)
-		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+		def (entryId, metadataUri) = createEntryWithTitle()
 
 		when:
 		def getConn = EntryStoreClient.getRequest(metadataUri, 'admin', 'text/rdf+n3')
@@ -957,8 +877,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
-																					value: 'Cool entry']],]]]
+		def body = createTitleMetadataBody(newResourceIri, 'Cool entry')
 		def entryId = createEntry(contextId, params, body)
 		def metadataUri = '/' + contextId + '/metadata/' + entryId
 

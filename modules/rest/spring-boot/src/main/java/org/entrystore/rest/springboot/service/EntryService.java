@@ -71,6 +71,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import static org.entrystore.EntryType.Link;
@@ -112,13 +113,7 @@ public class EntryService {
 	public String getEntryInRdfFormat(String contextId, String entryId, String mediaType) {
 		Entry entry = getEntryByContextIdAndEntryId(contextId, entryId);
 
-		Model graph = entry.getGraph();
-		String serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
-		if (serializedGraph == null) {
-			// TODO: not sure we should throw a 400 here (should be 500?), but this was the Restlet logic
-			throw new BadRequestException("Bad request");
-		}
-		return serializedGraph;
+		return GraphUtil.serializeGraph(entry.getGraph(), mediaType);
 	}
 
 	public Entry getEntryByContextIdAndEntryId(String contextId, String entryId) {
@@ -487,18 +482,7 @@ public class EntryService {
 	public Entry createLinkEntry(Context context, String entryId, GraphType graphType, URI resourceUri, URI listUri, CreateEntryRequestBody body) {
 
 		Entry entry = context.createLink(entryId, resourceUri, listUri);
-
-		if (entry != null) {
-			setLocalMetadataGraph(entry, body);
-			setEntryGraph(entry, body);
-			if (graphType != null) {
-				entry.setGraphType(graphType);
-			}
-			if (listUri != null) {
-				((ContextImpl) context).copyACL(listUri, entry);
-			}
-		}
-		return entry;
+		return finishEntry(context, entry, graphType, listUri, body);
 	}
 
 	/**
@@ -513,20 +497,7 @@ public class EntryService {
 				cachedExternalMetadataUri != null) {
 
 			Entry entry = context.createReference(entryId, resourceUri, cachedExternalMetadataUri, listUri);
-
-			if (entry != null) {
-				setCachedMetadataGraph(entry, body);
-				setEntryGraph(entry, body);
-				if (graphType != null) {
-					entry.setGraphType(graphType);
-				}
-
-				if (listUri != null) {
-					((ContextImpl) context).copyACL(listUri, entry);
-				}
-			}
-
-			return entry;
+			return finishEntry(context, entry, graphType, listUri, body);
 		}
 
 		return null;
@@ -544,25 +515,30 @@ public class EntryService {
 		if (resourceUri != null) {
 
 			Entry entry = context.createLinkReference(entryId, resourceUri, cachedExternalMetadataUri, listUri);
-
-			if (entry != null) {
-				setLocalMetadataGraph(entry, body);
-				setCachedMetadataGraph(entry, body);
-				setEntryGraph(entry, body);
-
-				if (graphType != null) {
-					entry.setGraphType(graphType);
-				}
-
-				if (listUri != null) {
-					((ContextImpl) context).copyACL(listUri, entry);
-				}
-			}
-
-			return entry;
+			return finishEntry(context, entry, graphType, listUri, body);
 		}
 
 		return null;
+	}
+
+	/**
+	 * Shared tail of the link/reference/link-reference create pipelines: applies the request body's
+	 * graphs (each setter no-ops for entry types it does not apply to), the optional graph type, and
+	 * copies the parent list's ACL.
+	 */
+	private Entry finishEntry(Context context, Entry entry, GraphType graphType, URI listUri, CreateEntryRequestBody body) {
+		if (entry != null) {
+			setLocalMetadataGraph(entry, body);
+			setCachedMetadataGraph(entry, body);
+			setEntryGraph(entry, body);
+			if (graphType != null) {
+				entry.setGraphType(graphType);
+			}
+			if (listUri != null) {
+				((ContextImpl) context).copyACL(listUri, entry);
+			}
+		}
+		return entry;
 	}
 
 	public Entry modifyEntry(String contextId, String entryId, String body, String mediaType, boolean applyACLtoChildren) throws AuthorizationException {
@@ -800,15 +776,7 @@ public class EntryService {
 			return;
 		}
 
-		try {
-			JSONObject mdObj = new JSONObject(requestBody.metadata().replaceAll("_newId", entry.getId()));
-			Model graph = RDFJSON.rdfJsonToGraph(mdObj);
-			if (graph != null) {
-				entry.getLocalMetadata().setGraph(graph);
-			}
-		} catch (JSONException e) {
-			log.info("Failed to parse local metadata for entry {}: {}", entry.getEntryURI(), e.getMessage());
-		}
+		applyGraph(entry, requestBody.metadata(), "local metadata", graph -> entry.getLocalMetadata().setGraph(graph));
 	}
 
 	/**
@@ -824,21 +792,13 @@ public class EntryService {
 
 		if (EntryType.Reference.equals(entry.getEntryType()) ||
 				EntryType.LinkReference.equals(entry.getEntryType())) {
-			try {
-				JSONObject mdObj = new JSONObject(requestBody.cachedExternalMetadata().replaceAll("_newId", entry.getId()));
-				Model graph = RDFJSON.rdfJsonToGraph(mdObj);
-				if (graph != null) {
-					entry.getCachedExternalMetadata().setGraph(graph);
-				}
-			} catch (JSONException e) {
-				log.info("Failed to parse cached external metadata for entry {}: {}", entry.getEntryURI(), e.getMessage());
-			}
+			applyGraph(entry, requestBody.cachedExternalMetadata(), "cached external metadata",
+					graph -> entry.getCachedExternalMetadata().setGraph(graph));
 		}
 	}
 
-
 	/**
-	 * Extracts entry info from the request body and sets it as the entry's local metadata graph.
+	 * Extracts entry info from the request body and sets it as the entry's graph.
 	 * Since it assumes this is the creation step, the Entries URIs was not available
 	 * on the client, hence the special "_newId" entryId has been used.
 	 * Make sure this is replaced with the new entryId first.
@@ -851,14 +811,25 @@ public class EntryService {
 			return;
 		}
 
+		applyGraph(entry, requestBody.info(), "entry info", entry::setGraph);
+	}
+
+	/**
+	 * Parses an RDF/JSON string (with the client-side "_newId" placeholder replaced by the entry's
+	 * id) and hands the resulting graph to {@code target}; a malformed body is logged at INFO and
+	 * ignored, matching the graph setters' log-and-continue contract.
+	 */
+	private void applyGraph(Entry entry, String rawRdfJson, String description, Consumer<Model> target) {
 		try {
-			JSONObject infoJsonObj = new JSONObject(requestBody.info().replaceAll("_newId", entry.getId()));
-			Model graph = RDFJSON.rdfJsonToGraph(infoJsonObj);
+			JSONObject jsonObj = new JSONObject(rawRdfJson.replaceAll("_newId", entry.getId()));
+			Model graph = RDFJSON.rdfJsonToGraph(jsonObj);
 			if (graph != null) {
-				entry.setGraph(graph);
+				target.accept(graph);
+			} else {
+				log.info("Could not convert {} to a graph for entry {}", description, entry.getEntryURI());
 			}
 		} catch (JSONException e) {
-			log.info("Failed to parse entry info for entry {}: {}", entry.getEntryURI(), e.getMessage());
+			log.info("Failed to parse {} for entry {}: {}", description, entry.getEntryURI(), e.getMessage());
 		}
 	}
 

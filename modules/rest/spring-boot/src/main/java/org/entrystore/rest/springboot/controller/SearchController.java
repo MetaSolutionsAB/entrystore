@@ -17,15 +17,12 @@
 package org.entrystore.rest.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
-import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.Entry;
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.model.api.FacetSettingsRequestParams;
 import org.entrystore.rest.springboot.model.dto.QueryResultsDto;
@@ -59,13 +56,9 @@ public class SearchController {
 
 	private static final int DEFAULT_FACET_LIMIT = 100;
 
-	private static int MAX_LIMIT;
-	private static int MAX_FACET_LIMIT;
-
 	private final SearchService searchService;
 	private final SolrSearchInputValidator solrSearchInputValidator;
 	private final SearchRateLimiter searchRateLimiter;
-	private final Config esConfig;
 
 	// Bound via the same Spring @Value channel as AuthService so both rate limiters agree on whether to
 	// honour X-Forwarded-For. Reading it here via the legacy Config.getBoolean instead would diverge:
@@ -73,12 +66,11 @@ public class SearchController {
 	@Value("${entrystore.trust.x-forwarded-for:false}")
 	private boolean trustForwardedFor;
 
-	@PostConstruct
-	public void init() {
-		// Runs after class constructor
-		MAX_LIMIT = esConfig.getInt(Settings.SOLR_MAX_LIMIT, 100);
-		MAX_FACET_LIMIT = esConfig.getInt(Settings.SOLR_FACET_MAX_LIMIT, 1000);
-	}
+	@Value("${entrystore.solr.max-limit:100}")
+	private int solrMaxLimit;
+
+	@Value("${entrystore.solr.facet-max-limit:1000}")
+	private int solrMaxFacetLimit;
 
 	@Operation(summary = "Searches the repository and returns entries")
 	@GetMapping(
@@ -97,27 +89,13 @@ public class SearchController {
 
 		searchRateLimiter.acquirePermit(HttpUtil.getClientIpAddress(request, trustForwardedFor));
 
-		if (limit > MAX_LIMIT) {
-			limit = MAX_LIMIT;
-		} else if (limit < 0) {
-			// we allow 0 on purpose, this enables requests for the purpose of getting a result count only
-			limit = 50;
-		}
+		limit = clampLimit(limit);
 
 		List<Entry> foundEntries = searchService.findEntriesSparql(query);
 
-		String responseBody;
-		MediaType responseMediaType;
-		if (StringUtils.isNotEmpty(syndication)) {
-			responseBody = searchService.generateSyndication(request, foundEntries, syndication, lang, limit, urlTemplate, feedTitle);
-			responseMediaType = Syndication.convertFeedTypeToMediaType(syndication);
-		} else {
-			// In Restlet's SPARQL search logic, the "offset" param is accepted from the user but not used
-			responseBody = searchService.generateJson(0, limit, new QueryResultsDto(foundEntries), rdfFormat);
-			responseMediaType = MediaType.APPLICATION_JSON;
-		}
-
-		return ResponseEntity.ok().contentType(responseMediaType).body(responseBody);
+		// In Restlet's SPARQL search logic, the "offset" param is accepted from the user but not used
+		return buildSearchResponse(request, new QueryResultsDto(foundEntries), syndication, lang, 0, limit,
+				urlTemplate, feedTitle, rdfFormat);
 	}
 
 	@Operation(summary = "Searches the repository and returns entries")
@@ -153,12 +131,7 @@ public class SearchController {
 		}
 
 		// Query parameter: limit
-		if (limit > MAX_LIMIT) {
-			limit = MAX_LIMIT;
-		} else if (limit < 0) {
-			// we allow 0 on purpose, this enables requests for the purpose of getting a result count only
-			limit = 50;
-		}
+		limit = clampLimit(limit);
 
 		// Query parameter: filterQuery
 		List<String> filterQueries = new ArrayList<>();
@@ -171,10 +144,27 @@ public class SearchController {
 		}
 		solrSearchInputValidator.validateFilterQueries(filterQueries, filterQuery);
 
-		SolrSearchIndex.FacetSettings facetSettings = facetRequest.toSolrFacetSettings(MAX_FACET_LIMIT, DEFAULT_FACET_LIMIT);
+		SolrSearchIndex.FacetSettings facetSettings = facetRequest.toSolrFacetSettings(solrMaxFacetLimit, DEFAULT_FACET_LIMIT);
 
 		QueryResultsDto queryResults = searchService.findEntriesSolr(query, sort, offset, limit, filterQueries, facetSettings);
 
+		return buildSearchResponse(request, queryResults, syndication, lang, offset, limit, urlTemplate, feedTitle, rdfFormat);
+	}
+
+	int clampLimit(int limit) {
+		if (limit > solrMaxLimit) {
+			return solrMaxLimit;
+		}
+		if (limit < 0) {
+			// we allow 0 on purpose, this enables requests for the purpose of getting a result count only
+			return 50;
+		}
+		return limit;
+	}
+
+	private ResponseEntity<String> buildSearchResponse(HttpServletRequest request, QueryResultsDto queryResults,
+													   String syndication, String lang, int offset, int limit,
+													   String urlTemplate, String feedTitle, String rdfFormat) {
 		String responseBody;
 		MediaType responseMediaType;
 		if (StringUtils.isNotEmpty(syndication)) {

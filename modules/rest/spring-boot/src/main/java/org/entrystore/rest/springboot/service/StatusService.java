@@ -18,15 +18,16 @@ package org.entrystore.rest.springboot.service;
 
 import lombok.RequiredArgsConstructor;
 import org.entrystore.PrincipalManager;
-import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.backup.BackupScheduler;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.configuration.AppStartedListener;
-import org.entrystore.rest.springboot.configuration.CorsConfig;
+import org.entrystore.rest.springboot.configuration.CorsProperties;
+import org.entrystore.rest.springboot.configuration.EchoProperties;
 import org.entrystore.rest.springboot.configuration.InfoAppPropertiesConfiguration;
+import org.entrystore.rest.springboot.configuration.SignupWhitelistProperties;
+import org.entrystore.rest.springboot.configuration.StatusReportProperties;
 import org.entrystore.rest.springboot.model.api.StatusExtendedIncludeEnum;
 import org.entrystore.rest.springboot.model.api.StatusExtendedResponse;
 import org.entrystore.rest.springboot.model.api.StatusResponse;
@@ -36,24 +37,24 @@ import org.springframework.util.CollectionUtils;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryManagerMXBean;
-import java.net.URI;
 import java.time.ZoneId;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static org.entrystore.rest.springboot.configuration.StatusReportProperties.UNCONFIGURED;
 
 @Service
 @RequiredArgsConstructor
 public class StatusService {
 
-	private final static String DEFAULT_VALUE_FOR_NOT_CONFIGURED = "unconfigured";
-
 	private final InfoAppPropertiesConfiguration appConfig;
-	private final Config esConfig;
-	private final CorsConfig corsConfig;
+	private final StatusReportProperties statusProperties;
+	private final SignupWhitelistProperties signupWhitelistProperties;
+	private final CorsProperties corsProperties;
+	private final EchoProperties echoProperties;
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final AppStartedListener appStartedListener;
@@ -78,18 +79,19 @@ public class StatusService {
 		StatusExtendedResponse.StatusExtendedResponseBuilder builder = StatusExtendedResponse
 			.fromStatusResponse(getStatus())
 			.baseURI(repositoryManager.getRepositoryURL().toString())
-			.rowstoreURL(esConfig.getString(Settings.ROWSTORE_URL, DEFAULT_VALUE_FOR_NOT_CONFIGURED))
+			.rowstoreURL(statusProperties.rowstoreUrl())
 			.startupTime(appStartedListener.getStartupTime().atZone(ZoneId.systemDefault()).toString())
-			.repositoryType(esConfig.getString(Settings.STORE_TYPE, DEFAULT_VALUE_FOR_NOT_CONFIGURED))
-			.repositoryIndices(esConfig.getString(Settings.STORE_INDEXES, DEFAULT_VALUE_FOR_NOT_CONFIGURED))
-			.quota(esConfig.getBoolean(Settings.DATA_QUOTA, false))
-			.quotaDefault(esConfig.getString(Settings.DATA_QUOTA_DEFAULT, DEFAULT_VALUE_FOR_NOT_CONFIGURED))
-			// TODO: Fix below when migrating EchoResource
-			.echoMaxEntitySize(-1)
+			.repositoryType(statusProperties.repositoryType())
+			.repositoryIndices(statusProperties.repositoryIndices())
+			.quota(statusProperties.quota())
+			.quotaDefault(statusProperties.quotaDefault())
+			// Reported from the same bean EchoService enforces, so the report cannot disagree with the
+			// cap actually applied.
+			.echoMaxEntitySize(echoProperties.maxFileSize().toBytes())
 			.cors(buildCorsInfo())
-			.oaiHarvester(esConfig.getBoolean(Settings.HARVESTER_OAI, false))
-			.oaiHarvesterMultiThreaded(esConfig.getBoolean(Settings.HARVESTER_OAI_MULTITHREADED, false))
-			.provenance(esConfig.getBoolean(Settings.REPOSITORY_PROVENANCE, false))
+			.oaiHarvester(statusProperties.oaiHarvester())
+			.oaiHarvesterMultiThreaded(statusProperties.oaiHarvesterMultiThreaded())
+			.provenance(statusProperties.provenance())
 			.auth(buildAuthenticationInfo())
 			.solr(buildSolrInfo())
 			.jvm(buildJvmInfo())
@@ -109,25 +111,35 @@ public class StatusService {
 		return builder.build();
 	}
 
+	// Every value comes from CorsProperties, the same bean EntryStoreCorsConfigurationSource builds its
+	// policies from, so the report cannot disagree with the installed policy. Note that
+	// entrystore.cors.origins defaults to "*": an unset key reports that effective wildcard rather
+	// than claiming nothing is configured.
 	private Map<String, Object> buildCorsInfo() {
 		return Map.of(
-			"enabled", corsConfig.isCorsEnabled(),
-			"headers", esConfig.getString(Settings.CORS_HEADERS, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
-			"maxAge", esConfig.getString(Settings.CORS_MAX_AGE, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
-			"origins", esConfig.getString(Settings.CORS_ORIGINS, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
-			"originsAllowCredentials", esConfig.getString(Settings.CORS_ORIGINS_ALLOW_CREDENTIALS, DEFAULT_VALUE_FOR_NOT_CONFIGURED)
+			"enabled", corsProperties.enabled(),
+			"headers", valueOrUnconfigured(corsProperties.headers()),
+			"maxAge", corsProperties.maxAge() > -1
+				? String.valueOf(corsProperties.maxAge())
+				: UNCONFIGURED,
+			"origins", valueOrUnconfigured(corsProperties.origins()),
+			"originsAllowCredentials", valueOrUnconfigured(corsProperties.originsAllowCredentials())
 		);
+	}
+
+	private static String valueOrUnconfigured(String value) {
+		return value.isBlank() ? UNCONFIGURED : value;
 	}
 
 	private Map<String, Object> buildAuthenticationInfo() {
 		return Map.of(
-			"signup", esConfig.getBoolean(Settings.SIGNUP, false),
-			"signupWhitelist", esConfig.getStringList(Settings.SIGNUP_WHITELIST, Collections.emptyList())
+			"signup", statusProperties.signup(),
+			// No null filter needed: SignupWhitelistProperties copies through Map.copyOf, which rejects nulls.
+			"signupWhitelist", signupWhitelistProperties.whitelist().values()
 				.stream()
-				.filter(Objects::nonNull)
 				.map(String::toLowerCase)
 				.collect(Collectors.toList()),
-			"passwordReset", esConfig.getBoolean(Settings.AUTH_PASSWORD_RESET, false),
+			"passwordReset", statusProperties.passwordReset(),
 			"passwordMaxLength", Password.PASSWORD_MAX_LENGTH
 			//"authTokenCount", loginTokenCache.size() // not sure how to get this info in Spring-boot default in-memory session storage
 		);
@@ -136,8 +148,8 @@ public class StatusService {
 	private Map<String, Object> buildSolrInfo() {
 		SolrSearchIndex searchIndex = (SolrSearchIndex) repositoryManager.getIndex();
 		return Map.of(
-			"enabled", esConfig.getBoolean(Settings.SOLR, false),
-			"reindexOnStartup", esConfig.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false),
+			"enabled", statusProperties.solrEnabled(),
+			"reindexOnStartup", statusProperties.solrReindexOnStartup(),
 			"status", searchIndex.isUp() ? "online" : "offline",
 			"postQueueSize", searchIndex.getPostQueueSize(),
 			"deleteQueueSize", searchIndex.getDeleteQueueSize(),
@@ -148,13 +160,13 @@ public class StatusService {
 	private Map<String, Object> buildBackupInfo() {
 		return Map.of(
 			"active", backupScheduler.isPresent(),
-			"format", esConfig.getString(Settings.BACKUP_FORMAT, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
-			"maintenance", esConfig.getBoolean(Settings.BACKUP_MAINTENANCE, false),
-			"cronExpression", esConfig.getString(Settings.BACKUP_CRONEXP, esConfig.getString(Settings.BACKUP_TIMEREGEXP_DEPRECATED, DEFAULT_VALUE_FOR_NOT_CONFIGURED)),
+			"format", statusProperties.backupFormat(),
+			"maintenance", statusProperties.backupMaintenance(),
+			"cronExpression", statusProperties.backupCronExpression(),
 			"cronExpressionResolved", backupScheduler.map(BackupScheduler::getCronExpression).orElse(""),
-			"maintenanceExpiresAfterDays", esConfig.getString(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
-			"maintenanceLowerLimit", esConfig.getString(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
-			"maintenanceUpperLimit", esConfig.getString(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, DEFAULT_VALUE_FOR_NOT_CONFIGURED)
+			"maintenanceExpiresAfterDays", statusProperties.backupMaintenanceExpiresAfterDays(),
+			"maintenanceLowerLimit", statusProperties.backupMaintenanceLowerLimit(),
+			"maintenanceUpperLimit", statusProperties.backupMaintenanceUpperLimit()
 		);
 	}
 
@@ -178,10 +190,7 @@ public class StatusService {
 
 	private Map<String, Object> buildCountStats() {
 		PrincipalManager pm = repositoryManager.getPrincipalManager();
-		URI currentUser = pm.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		return PrincipalManagerUtil.runAsAdmin(pm, () -> {
 			return Map.of(
 				"contextCount", repositoryManager.getContextManager().getEntries().size(),
 				"groupCount", pm.getGroupUris().size(),
@@ -189,12 +198,7 @@ public class StatusService {
 				"namedGraphCount", repositoryManager.getNamedGraphCount(),
 				"tripleCount", repositoryManager.getTripleCount()
 			);
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
-		}
+		});
 	}
 
 	private Map<String, Object> buildRelationStats(boolean verbose) {

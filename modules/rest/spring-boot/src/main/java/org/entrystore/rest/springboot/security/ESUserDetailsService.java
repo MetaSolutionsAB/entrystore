@@ -67,10 +67,7 @@ public class ESUserDetailsService implements UserDetailsService {
 	@Override
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
 
-		final URI currentUser = pm.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		return PrincipalManagerUtil.runAsAdmin(pm, () -> {
 			Entry userEntry;
 			if (username.contains("/resource/")) {
 				userEntry = pm.getPrincipalEntry(pm.getPrincipalName(URI.create(username)));
@@ -89,14 +86,8 @@ public class ESUserDetailsService implements UserDetailsService {
 			} else {
 				log.info("User Entry not found for username: '{}'", username);
 			}
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
-		}
-
-		throw new UsernameNotFoundException("User not found " + username);
+			throw new UsernameNotFoundException("User not found " + username);
+		});
 	}
 
 	/**
@@ -107,24 +98,14 @@ public class ESUserDetailsService implements UserDetailsService {
 	 */
 	public User loadUser(String username) {
 
-		final URI currentUser = pm.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		return PrincipalManagerUtil.runAsAdmin(pm, () -> {
 			Entry userEntry = pm.getPrincipalEntry(username);
 			if (userEntry != null && GraphType.User.equals(userEntry.getGraphType())) {
 				return ((User) userEntry.getResource());
-			} else {
-				log.info("User Entry not found for username: '{}'", username);
 			}
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
-		}
-
-		return null;
+			log.info("User Entry not found for username: '{}'", username);
+			return null;
+		});
 	}
 
 	/**
@@ -136,37 +117,32 @@ public class ESUserDetailsService implements UserDetailsService {
 	 * @throws IllegalStateException if the entry cannot be created or the principal name is already in use
 	 */
 	public User createUser(String username) {
-		final URI currentUser = pm.getAuthenticatedUserURI();
-		Entry entry = null;
-		Throwable primary = null;
-		try {
-			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-
-			entry = pm.createResource(null, GraphType.User, null, null);
-			if (entry == null) {
-				throw new IllegalStateException("createResource returned null when provisioning user '%s'".formatted(username));
+		return PrincipalManagerUtil.runAsAdmin(pm, () -> {
+			Entry entry = null;
+			try {
+				entry = pm.createResource(null, GraphType.User, null, null);
+				if (entry == null) {
+					throw new IllegalStateException("createResource returned null when provisioning user '%s'".formatted(username));
+				}
+				boolean nameSet = pm.setPrincipalName(entry.getResourceURI(), username);
+				if (!nameSet) {
+					log.warn("Principal name '{}' already in use — removing orphaned entry to prevent account takeover", username);
+					removeOrphanedEntry(entry, username);
+					entry = null; // prevent double-removal in the catch block
+					throw new IllegalStateException("Principal name '%s' already in use".formatted(username));
+				}
+				User u = (User) entry.getResource();
+				log.info("Created user '{}'", u.getURI());
+				return u;
+			} catch (Throwable t) {
+				// Any failure after createResource succeeded leaves an orphaned nameless User entry.
+				// Remove it unless it was already removed (name-collision branch above).
+				if (entry != null) {
+					removeOrphanedEntry(entry, username);
+				}
+				throw t;
 			}
-			boolean nameSet = pm.setPrincipalName(entry.getResourceURI(), username);
-			if (!nameSet) {
-				log.warn("Principal name '{}' already in use — removing orphaned entry to prevent account takeover", username);
-				removeOrphanedEntry(entry, username);
-				entry = null; // prevent double-removal in the catch block
-				throw new IllegalStateException("Principal name '%s' already in use".formatted(username));
-			}
-			User u = (User) entry.getResource();
-			log.info("Created user '{}'", u.getURI());
-			return u;
-		} catch (Throwable t) {
-			primary = t;
-			// Any failure after createResource succeeded leaves an orphaned nameless User entry.
-			// Remove it unless it was already removed (name-collision branch above).
-			if (entry != null) {
-				removeOrphanedEntry(entry, username);
-			}
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
-		}
+		});
 	}
 
 	private void removeOrphanedEntry(Entry entry, String username) {

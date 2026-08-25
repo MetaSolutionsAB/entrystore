@@ -25,6 +25,7 @@ import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration.Prov
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.service.OidcAuthService;
 import org.entrystore.rest.springboot.service.auth.OidcAuthStateCache;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +42,7 @@ import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.web.RedirectStrategy;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.net.URI;
 import java.time.Instant;
@@ -109,7 +111,7 @@ class OidcLoginSuccessHandlerTest {
 				new OidcCustomConfiguration.RedirectUrl(SUCCESS_URL),
 				new OidcCustomConfiguration.RedirectUrl(FAILURE_URL));
 		handler = new OidcLoginSuccessHandler(userService, oidcAuthService, oidcAuthStateCache,
-				principalManager, oidcConfiguration);
+				principalManager, new ErrorResponseWriter(JsonMapper.builder().build()), oidcConfiguration);
 		// Custom-success redirects route through the RedirectStrategy; the failure path writes the
 		// redirect directly to the response. Mocking the strategy keeps the success-path assertions
 		// independent of the default strategy's encodeRedirectURL handling.

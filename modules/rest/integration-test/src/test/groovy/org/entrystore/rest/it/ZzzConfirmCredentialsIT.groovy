@@ -20,8 +20,6 @@ import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
-import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
-import org.springframework.boot.SpringApplication
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -46,8 +44,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		stopPreexistingAppIfRunning()
 		greenMail.start()
 
-		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+		startOwnedApp([
 			'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
 			'--entrystore.auth.confirmation.legacy=false',
 			'--entrystore.auth.confirmation.max-attempts=3',
@@ -55,9 +52,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 			// throttling, is what the assertions observe.
 			'--entrystore.auth.signup.rate.limit.max=100',
 			'--entrystore.auth.password-reset.rate.limit.max=100'
-		] as String[]
-		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
-		appStarted = true
+		])
 	}
 
 	def cleanupSpec() {
@@ -68,12 +63,6 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 
 	def cleanup() {
 		greenMail.purgeEmailFromAllMailboxes()
-	}
-
-	private static String extractToken(int index = 0) {
-		def content = greenMail.getReceivedMessages()[index].getContent().toString()
-		def start = content.indexOf('?confirm') + 9
-		return content.substring(start, start + 16)
 	}
 
 	// Setup helper: performs the sign-up request that mints a confirmation token and returns it.
@@ -87,7 +76,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/signup', body).getResponseCode() == HTTP_OK
-		return extractToken()
+		return extractConfirmationToken(greenMail)
 	}
 
 	// Setup helper: starts a password-reset flow for an existing user and returns the token.
@@ -95,7 +84,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def body = JsonOutput.toJson([email: email, grecaptcharesponse: grecaptcharesponse])
 		assert EntryStoreClient.postRequest('/auth/pwreset', body).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		return extractToken()
+		return extractConfirmationToken(greenMail)
 	}
 
 	// ---------- sign-up ----------
@@ -130,7 +119,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		conn.inputStream.text.contains('Sign-up successful.')
 
 		and: "the user can now log in"
-		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
+		def loginBody = createFormBody([auth_username: username, auth_password: newPassword])
 		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
 		loginConn.getResponseCode() == HTTP_OK
 	}
@@ -147,9 +136,40 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
 		conn.errorStream.text.contains('2 attempt(s) remaining')
-		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
+		def loginBody = createFormBody([auth_username: username, auth_password: newPassword])
 		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
 		loginConn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "the confirmation form carries no inline style at either path depth it renders at (ENTRYSTORE-1100)"() {
+		given: "a signup token, so confirm_form.html can be rendered from both of its routes"
+		def username = 'cspConfirmDepth@test.com'
+		def token = startSignup(username)
+
+		when: "the form renders one segment deep, from GET /auth/signup"
+		def shallow = EntryStoreClient.getRequest('/auth/signup?confirm=' + token, '', 'text/html')
+		def shallowBody = shallow.inputStream.text
+
+		then:
+		shallow.getResponseCode() == HTTP_OK
+		!shallowBody.contains('style="')
+
+		when: "the same template renders two segments deep, from a failed POST /auth/signup/confirm"
+		def body = 'confirm=' + token + '&email=' + username + '&password=totallyWrong123'
+		def deep = EntryStoreClient.postRequest('/auth/signup/confirm', body, null, formUrlEncoded)
+		// getResponseCode() first: errorStream is null until the response has been read.
+		def deepStatus = deep.getResponseCode()
+		def deepBody = deep.errorStream.text
+
+		then:
+		deepStatus == HTTP_UNAUTHORIZED
+		!deepBody.contains('style="')
+
+		// A page-relative href could not be correct at both depths at once; a root-relative one is.
+		and: "both depths link the identical stylesheet"
+		def link = '<link rel="stylesheet" href="' + CspInlineStyleIT.STYLESHEET_HREF + '">'
+		shallowBody.contains(link)
+		deepBody.contains(link)
 	}
 
 	def "POST /auth/signup/confirm invalidates the token after three failed attempts"() {
@@ -173,7 +193,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		third.getResponseCode() == HTTP_BAD_REQUEST
 		third.errorStream.text.contains('invalidated')
 		fourth.getResponseCode() == HTTP_BAD_REQUEST
-		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
+		def loginBody = createFormBody([auth_username: username, auth_password: newPassword])
 		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
 		loginConn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
@@ -242,7 +262,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def retryBody = 'confirm=' + token + '&email=' + username + '&password=' + newPassword
 		def retryConn = EntryStoreClient.postRequest('/auth/signup/confirm', retryBody, null, formUrlEncoded)
 		retryConn.getResponseCode() == HTTP_CREATED
-		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
+		def loginBody = createFormBody([auth_username: username, auth_password: newPassword])
 		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
 		loginConn.getResponseCode() == HTTP_OK
 	}
@@ -326,7 +346,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		conn.inputStream.text.contains('Password reset was successful.')
 
 		and: "the password chosen on the confirmation form works"
-		def loginBody = 'auth_username=' + username + '&auth_password=' + chosenNewPassword
+		def loginBody = createFormBody([auth_username: username, auth_password: chosenNewPassword])
 		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
 		loginConn.getResponseCode() == HTTP_OK
 	}

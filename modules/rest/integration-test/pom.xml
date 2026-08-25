@@ -42,7 +42,7 @@
 			<plugin>
 				<groupId>org.codehaus.gmavenplus</groupId>
 				<artifactId>gmavenplus-plugin</artifactId>
-				<version>5.0.0</version>
+				<version>5.1.0</version>
 				<configuration>
 					<!-- Groovy 5 rejects the plugin's legacy 1.8 default target; compile to the
 					     project's Java release like the rest of the build. -->
@@ -69,6 +69,10 @@
 					</execution>
 				</executions>
 				<configuration>
+					<!-- Failsafe defaults failIfNoTests to false: without this, a change to the
+					     Groovy/gmavenplus setup that compiles zero specs would report a green build
+					     with the whole IT suite silently skipped. -->
+					<failIfNoTests>true</failIfNoTests>
 					<!-- Alphabetical ordering runs all shared-app ITs before the Zzz*-prefixed
 						 lifecycle-owning ITs. See ENTRYSTORE-1019. -->
 					<runOrder>alphabetical</runOrder>
@@ -156,6 +160,15 @@
 			<scope>test</scope>
 		</dependency>
 
+		<!--
+			Pinned: KeycloakBaseSpec uses the no-arg KeycloakContainer(), so this version decides
+			the Keycloak server image, and that image must match the CAS protocol extension jar
+			checked in at src/test/resources/libs/keycloak-protocol-cas-26.5.6.jar. 4.3.1 pulls a
+			newer server whose org.keycloak.protocol.oidc.utils.OAuth2Code constructor changed,
+			making ZzzCasLoginIT fail with a NoSuchMethodError raised inside Keycloak.
+			To upgrade, bump the bundled keycloak-protocol-cas jar to the same Keycloak version
+			in the same commit.
+		-->
 		<dependency>
 			<groupId>com.github.dasniko</groupId>
 			<artifactId>testcontainers-keycloak</artifactId>
@@ -178,7 +191,7 @@
 		<dependency>
 			<groupId>com.icegreen</groupId>
 			<artifactId>greenmail</artifactId>
-			<version>2.1.9</version>
+			<version>2.1.12</version>
 			<scope>test</scope>
 		</dependency>
 

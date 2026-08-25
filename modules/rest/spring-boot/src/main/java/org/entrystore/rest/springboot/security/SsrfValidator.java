@@ -17,12 +17,12 @@
 package org.entrystore.rest.springboot.security;
 
 import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.springboot.configuration.ProxyProperties;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.net.ssl.HostnameVerifier;
@@ -39,7 +39,7 @@ import java.net.Socket;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
-import java.util.HashSet;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -49,19 +49,18 @@ import java.util.regex.Pattern;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class SsrfValidator {
 
-	private final RepositoryManagerImpl repositoryManager;
+	// Provides the whitelists and the timeouts applied per hop on both outbound paths that use
+	// openPinnedConnection: GET /proxy and DELETE /{context-id}/resource/{entry-id}?proxy=true.
+	private final ProxyProperties proxyProperties;
+	private final String rowstoreUrl;
 
 	private Set<String> proxyHostWhitelist;
 	private Set<Origin> deleteOriginWhitelist;
 	private Origin rowstoreOrigin;
 
 	private static final Set<String> ALLOWED_SCHEMES = Set.of("http", "https");
-
-	private static final int CONNECT_TIMEOUT_MS = 30_000;
-	private static final int READ_TIMEOUT_MS = 60_000;
 
 	private static final List<Pattern> BLACKLIST_REGEX = List.of(
 			Pattern.compile("^localhost$"),                                   // localhost
@@ -100,20 +99,25 @@ public class SsrfValidator {
 		}
 	}
 
+	public SsrfValidator(ProxyProperties proxyProperties,
+			@Value("${entrystore.rowstore.url:#{null}}") String rowstoreUrl) {
+		this.proxyProperties = proxyProperties;
+		this.rowstoreUrl = rowstoreUrl;
+	}
+
 	@PostConstruct
 	void init() {
-		proxyHostWhitelist = loadHostSet(Settings.PROXY_WHITELIST_LOCAL);
+		proxyHostWhitelist = proxyProperties.localWhitelist();
 		if (!proxyHostWhitelist.isEmpty()) {
 			log.info("Proxy GET local whitelist (host-only) initialized with: {}", String.join(", ", proxyHostWhitelist));
 		}
 
-		deleteOriginWhitelist = loadOriginSet(Settings.PROXY_REMOTE_RESOURCE_DELETE_WHITELIST);
+		deleteOriginWhitelist = toOriginSet(proxyProperties.deleteWhitelist(), Settings.PROXY_REMOTE_RESOURCE_DELETE_WHITELIST);
 		if (!deleteOriginWhitelist.isEmpty()) {
 			log.info("Resource DELETE origin whitelist initialized with: {}",
 					deleteOriginWhitelist.stream().map(Origin::toString).toList());
 		}
 
-		String rowstoreUrl = repositoryManager.getConfiguration().getString(Settings.ROWSTORE_URL);
 		rowstoreOrigin = parseOrigin(rowstoreUrl);
 		if (rowstoreOrigin != null) {
 			log.info("Resource DELETE auto-trusts RowStore origin: {}", rowstoreOrigin);
@@ -125,32 +129,14 @@ public class SsrfValidator {
 		log.info("SSRF blacklist consists of following regular expressions: {}", BLACKLIST_REGEX);
 	}
 
-	/**
-	 * Lower-cases (Locale.ROOT) each non-blank entry from the named multi-valued setting and
-	 * collects them into a host set. Blank entries are skipped with a warn log.
-	 */
-	public Set<String> loadHostSet(String settingsKey) {
-		Set<String> result = new HashSet<>();
-		for (String entry : repositoryManager.getConfiguration().getStringList(settingsKey)) {
-			if (entry == null || entry.isBlank()) {
-				if (entry != null) {
-					log.warn("Skipping blank entry in {}", settingsKey);
-				}
-				continue;
-			}
-			result.add(entry.toLowerCase(Locale.ROOT));
-		}
-		return result;
-	}
-
-	private Set<Origin> loadOriginSet(String settingsKey) {
+	private static Set<Origin> toOriginSet(Collection<String> values, String settingKeyForLog) {
 		Set<Origin> result = new LinkedHashSet<>();
-		for (String entry : repositoryManager.getConfiguration().getStringList(settingsKey)) {
+		for (String entry : values) {
 			Origin origin = parseOrigin(entry);
 			if (origin != null) {
 				result.add(origin);
-			} else if (entry != null && !entry.isBlank()) {
-				log.warn("Skipping malformed origin in {}: {}", settingsKey, entry);
+			} else if (!entry.isBlank()) {
+				log.warn("Skipping malformed origin in {}: {}", settingKeyForLog, entry);
 			}
 		}
 		return result;
@@ -330,8 +316,8 @@ public class SsrfValidator {
 		URI pinnedUri = buildPinnedUri(originalUri, resolved);
 		HttpURLConnection conn = (HttpURLConnection) pinnedUri.toURL().openConnection();
 		conn.setInstanceFollowRedirects(false);
-		conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
-		conn.setReadTimeout(READ_TIMEOUT_MS);
+		conn.setConnectTimeout(proxyProperties.connectTimeoutMillis());
+		conn.setReadTimeout(proxyProperties.readTimeoutMillis());
 		conn.setRequestProperty("Host", buildHostHeader(originalUri));
 		if (conn instanceof HttpsURLConnection httpsConn) {
 			configureSsl(httpsConn, originalUri.getHost());

@@ -46,6 +46,7 @@ import org.entrystore.repository.security.DisallowedException;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -151,14 +152,18 @@ public class ListImpl extends RDFResource implements List {
 	}
 
 	private void saveChildren(RepositoryConnection rc) throws RepositoryException {
+		saveChildren(children, rc);
+	}
+
+	private void saveChildren(Vector<URI> childrenToSave, RepositoryConnection rc) throws RepositoryException {
 		ValueFactory vf = entry.repository.getValueFactory();
-		children.trimToSize();
+		childrenToSave.trimToSize();
 		rc.clear(this.resourceURI);
-		if (!children.isEmpty()) {
+		if (!childrenToSave.isEmpty()) {
 			rc.add(this.resourceURI, RDF.TYPE, RDF.SEQ, this.resourceURI);
-			for (int i = 0; i < children.size(); i++) {
+			for (int i = 0; i < childrenToSave.size(); i++) {
 				IRI li = vf.createIRI(RDF.NAMESPACE + "_" + (i + 1));
-				IRI child = vf.createIRI(children.get(i).toString());
+				IRI child = vf.createIRI(childrenToSave.get(i).toString());
 				rc.add(this.resourceURI, li, child, this.resourceURI);
 			}
 			entry.registerEntryModified(rc, rc.getValueFactory());
@@ -657,6 +662,25 @@ public class ListImpl extends RDFResource implements List {
 				return true;
 			}
 			return false;
+		}
+	}
+
+	/**
+	 * Removes several children from this list as part of the supplied transaction — one graph read and one
+	 * rewrite for the whole batch — without firing repository events or checking for orphans. Reads and
+	 * writes go through the supplied connection only, so earlier uncommitted removals in the same transaction
+	 * are seen and nothing uncommitted is published to concurrent readers; the in-memory children are cleared
+	 * so they are reloaded on next access whatever the transaction outcome. The list entry's modification date
+	 * and contributors are updated in memory, so after a rollback the caller must refresh it.
+	 */
+	protected void removeChildrenInTransaction(Collection<URI> childrenToRemove, RepositoryConnection rc) throws RepositoryException {
+		synchronized (this.entry.repository) {
+			Model graph = new LinkedHashModel(Iterations.asList(rc.getStatements(this.resourceURI, null, null, false, this.resourceURI)));
+			Vector<URI> inTransactionChildren = loadChildren(graph);
+			if (inTransactionChildren.removeAll(childrenToRemove)) {
+				saveChildren(inTransactionChildren, rc);
+			}
+			children = null;
 		}
 	}
 

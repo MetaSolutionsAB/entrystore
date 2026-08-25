@@ -51,9 +51,10 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.URISplit;
@@ -375,47 +376,18 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			throw new org.entrystore.repository.RepositoryException("Failed to parse RDF data from the import file", e);
 		}
 
-		// remove entries from context
-		// NOTE: removal happens outside the add transaction below, so a failure during the add
-		// (after this point) still leaves the context emptied, and the Solr index stale until the
-		// next reindex. Parsing first only guards against malformed RDF; making removal+add fully
-		// atomic (and keeping Solr consistent on failure) is tracked in ENTRYSTORE-1064.
-
-		log.info("Removing old entries from context...");
-		Context cont = getContext(contextEntry.getId());
-		Set<URI> entries = cont.getEntries();
-		for (URI entryURI : entries) {
-			String eId = cont.getByEntryURI(entryURI).getId();
-			if (!eId.startsWith("_")) {
-				log.info("Removing {}", entryURI);
-				try {
-					cont.remove(entryURI);
-				} catch (DisallowedException de) {
-					log.warn(de.getMessage());
-				}
-			}
-		}
-
-		// copy resources/files to data dir of context
-
-		File dstDir = new File(entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER), contextEntry.getId());
-		if (!dstDir.exists()) {
-			dstDir.mkdirs();
-		}
-		File resourceDir = new File(unzippedDir, "resources");
-		if (resourceDir != null && resourceDir.exists() && resourceDir.isDirectory()) {
-			for (File src : resourceDir.listFiles()) {
-				File dst = new File(dstDir, src.getName());
-				log.info("Copying {} to {}", src, dst);
-				FileOperations.copyFile(src, dst);
-			}
-		}
-
-		// add the parsed statements to the repository
+		// remove the old entries and add the parsed statements in one transaction, so a failure restores
+		// the previous content of the context (ENTRYSTORE-1064); disk side effects cannot be rolled back
+		// and therefore happen only after a successful commit
 
 		long amountTriples = 0;
 		long importedTriples = 0;
 		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
+
+		ContextImpl cont = (ContextImpl) getContext(contextEntry.getId());
+		List<EntryImpl> removedEntries = new ArrayList<>();
+		List<DataImpl> deferredFileDeletions = new ArrayList<>();
+		List<EntryImpl> prunedSurvivingLists = new ArrayList<>();
 
 		synchronized (this.entry.repository) {
 			log.info("Importing context from stream");
@@ -423,6 +395,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			try {
 				rc = entry.getRepository().getConnection();
 				rc.begin();
+
+				log.info("Removing old entries from context...");
+				cont.removeNonSystemEntries(rc, removedEntries, deferredFileDeletions, prunedSurvivingLists);
 
 				String oldBaseURI = srcBaseURI;
 				if (!oldBaseURI.endsWith("/")) {
@@ -572,7 +547,21 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					} catch (Exception rollbackEx) {
 						log.error("Failed to roll back import transaction", rollbackEx);
 					}
+					try {
+						((EntryImpl) cont.getEntry()).refreshFromRepository(rc);
+					} catch (Exception refreshEx) {
+						log.error("Failed to refresh context entry after rollback, in-memory modification date may be stale", refreshEx);
+					}
+					for (EntryImpl prunedList : prunedSurvivingLists) {
+						try {
+							prunedList.refreshFromRepository(rc);
+						} catch (Exception refreshEx) {
+							log.error("Failed to refresh pruned list entry {} after rollback, in-memory state may be stale",
+									prunedList.getEntryURI(), refreshEx);
+						}
+					}
 				}
+				cont.recoverFromFailedRemoval(removedEntries);
 				throw new org.entrystore.repository.RepositoryException("Failed to import context data", e);
 			} finally {
 				if (rc != null) {
@@ -581,10 +570,71 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			}
 		}
 
+		// committed, so the import can no longer be reported as failed: evict stale objects, update Solr
+		// and delete the removed entries' files before new ones with the same names are copied; each of
+		// the steps below is failure-isolated and only logged
+
+		cont.evictFromCaches(removedEntries);
+		for (EntryImpl removedEntry : removedEntries) {
+			try {
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(removedEntry, RepositoryEvent.EntryDeleted));
+			} catch (Exception e) {
+				log.error("Failed to fire EntryDeleted event for {}, search index may be stale until reindex", removedEntry.getEntryURI(), e);
+			}
+		}
+		for (DataImpl removedData : deferredFileDeletions) {
+			try {
+				if (!removedData.deleteFile()) {
+					log.warn("Failed to delete data file of removed entry {}, truncating it instead",
+							removedData.getEntry().getEntryURI());
+					removedData.truncateFile();
+				}
+			} catch (Exception e) {
+				log.error("Failed to delete data file of removed entry {}", removedData.getEntry().getEntryURI(), e);
+			}
+		}
+
+		// copy resources/files to data dir of context
+
+		List<String> failedResourceCopies = new ArrayList<>();
+		try {
+			File dstDir = new File(entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER), contextEntry.getId());
+			if (!dstDir.exists() && !dstDir.mkdirs()) {
+				log.error("Could not create data directory {}, skipping copying of imported resource files", dstDir);
+			} else {
+				File resourceDir = new File(unzippedDir, "resources");
+				File[] resourceFiles = resourceDir.isDirectory() ? resourceDir.listFiles() : null;
+				if (resourceFiles != null) {
+					for (File src : resourceFiles) {
+						File dst = new File(dstDir, src.getName());
+						log.info("Copying {} to {}", src, dst);
+						try {
+							FileOperations.copyFile(src, dst);
+						} catch (Exception e) {
+							failedResourceCopies.add(src.getName());
+							log.error("Failed to copy imported resource file {} to {}, the corresponding entry will have no data",
+									src, dst, e);
+						}
+					}
+				}
+			}
+		} catch (Exception e) {
+			log.error("Failed to copy imported resource files to the data directory", e);
+		}
+		if (!failedResourceCopies.isEmpty()) {
+			log.error("Import of context {} committed, but {} resource file(s) could not be copied "
+							+ "and the entries with the following ids have no data: {}",
+					contextEntry.getId(), failedResourceCopies.size(), failedResourceCopies);
+		}
+
 		// reindex the context to get everything reloaded
 
-		log.info("Reindexing {}", cont.getEntry().getEntryURI());
-		cont.reIndex();
+		try {
+			log.info("Reindexing {}", cont.getEntry().getEntryURI());
+			cont.reIndex();
+		} catch (Exception e) {
+			log.error("Failed to reindex context {} after import", cont.getEntry().getEntryURI(), e);
+		}
 
 		log.info("Import finished in {} ms", new Date().getTime() - before.getTime());
 		log.info("Imported {} triples", importedTriples);

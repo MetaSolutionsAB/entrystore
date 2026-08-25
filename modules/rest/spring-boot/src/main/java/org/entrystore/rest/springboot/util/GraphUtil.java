@@ -51,6 +51,7 @@ import org.eclipse.rdf4j.rio.turtle.TurtleWriter;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
+import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.json.JSONObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.InvalidMediaTypeException;
@@ -78,6 +79,9 @@ import java.util.Set;
  */
 @Slf4j
 public class GraphUtil {
+
+	/** Default media type for RDF responses when neither a format parameter nor an Accept header selects one. */
+	public static final String DEFAULT_RDF_MEDIA_TYPE = "application/rdf+xml";
 
 	private static final String LEGACY_N3_MEDIA_TYPE = "text/rdf+n3";
 
@@ -125,10 +129,12 @@ public class GraphUtil {
 
 	/**
 	 * @param graph  The Graph to be serialized.
-	 * @param writer One of the following: N3Writer, NTriplesWriter,
-	 *               RDFXMLPrettyWriter, RDFXMLWriter, TriGWriter, TriXWriter,
-	 *               TurtleWriter
-	 * @return A String representation of the serialized Graph.
+	 * @param writer An {@link RDFWriter} subclass with a public {@code (Writer)} constructor; the writers
+	 *               used by the REST layer are the values of {@code MEDIATYPE_TO_RDFWRITER_MAP}
+	 * @return A String representation of the serialized Graph, never {@code null} and never partial.
+	 * @throws IllegalArgumentException     if either parameter is {@code null}
+	 * @throws InternalServerErrorException if the writer cannot be instantiated or the graph cannot be
+	 *                                      written in full
 	 */
 	public static String serializeGraph(Model graph, Class<? extends RDFWriter> writer) {
 		if (graph == null || writer == null) {
@@ -136,74 +142,83 @@ public class GraphUtil {
 		}
 
 		StringWriter stringWriter = new StringWriter();
-		Map<String, String> namespaces = NS.getMap();
-		RDFWriter rdfWriter = null;
+		RDFWriter rdfWriter;
 		try {
 			Constructor<? extends RDFWriter> constructor = writer.getConstructor(Writer.class);
 			rdfWriter = constructor.newInstance(stringWriter);
-
-			if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.rdf10_plain_literals")) {
-				rdfWriter.getWriterConfig().set(BasicWriterSettings.XSD_STRING_TO_PLAIN_LITERAL, true);
-			}
-			if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.rdf10_language_literals")) {
-				rdfWriter.getWriterConfig().set(BasicWriterSettings.RDF_LANGSTRING_TO_LANG_LITERAL, true);
-			}
-			if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.jsonld.optimize")) {
-				rdfWriter.getWriterConfig().set(JSONLDSettings.OPTIMIZE, true);
-			}
-			if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.jsonld.use_native_types")) {
-				rdfWriter.getWriterConfig().set(JSONLDSettings.USE_NATIVE_TYPES, true);
-			}
-			rdfWriter.getWriterConfig().set(JSONLDSettings.JSONLD_MODE, JSONLDMode.COMPACT);
-
-			if (rdfWriter instanceof JSONLDWriter) {
-				// we optimize to include only the used namespaces as contexts in JSON-LD
-				namespaces = new HashMap<>();
-				for (Statement s : graph) {
-					namespaces.putAll(findNS(s.getSubject()));
-					namespaces.putAll(findNS(s.getPredicate()));
-					namespaces.putAll(findNS(s.getObject()));
-				}
-			}
-		} catch (Exception e) {
-			log.error(e.getMessage());
+		} catch (ReflectiveOperationException e) {
+			throw new InternalServerErrorException("Failed to instantiate RDF writer " + writer.getName(), e);
 		}
 
-		if (rdfWriter == null) {
-			return null;
+		if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.rdf10_plain_literals")) {
+			rdfWriter.getWriterConfig().set(BasicWriterSettings.XSD_STRING_TO_PLAIN_LITERAL, true);
+		}
+		if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.rdf10_language_literals")) {
+			rdfWriter.getWriterConfig().set(BasicWriterSettings.RDF_LANGSTRING_TO_LANG_LITERAL, true);
+		}
+		if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.jsonld.optimize")) {
+			rdfWriter.getWriterConfig().set(JSONLDSettings.OPTIMIZE, true);
+		}
+		if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.jsonld.use_native_types")) {
+			rdfWriter.getWriterConfig().set(JSONLDSettings.USE_NATIVE_TYPES, true);
+		}
+		rdfWriter.getWriterConfig().set(JSONLDSettings.JSONLD_MODE, JSONLDMode.COMPACT);
+
+		Map<String, String> namespaces = NS.getMap();
+		if (rdfWriter instanceof JSONLDWriter) {
+			// we optimize to include only the used namespaces as contexts in JSON-LD
+			namespaces = new HashMap<>();
+			for (Statement s : graph) {
+				namespaces.putAll(findNS(s.getSubject()));
+				namespaces.putAll(findNS(s.getPredicate()));
+				namespaces.putAll(findNS(s.getObject()));
+			}
 		}
 
-		try {
-			rdfWriter.startRDF();
-			for (String nsName : namespaces.keySet()) {
-				rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
-			}
-			for (Statement statement : graph) {
-				rdfWriter.handleStatement(statement);
-			}
-			rdfWriter.endRDF();
-		} catch (RDFHandlerException rdfe) {
-			log.error(rdfe.getMessage());
-		}
+		writeGraph(graph, rdfWriter, namespaces);
 		return stringWriter.toString();
 	}
 
-	public static void serializeGraph(Model graph, RDFWriter rdfWriter) {
+	/**
+	 * Writes the graph to a caller-supplied writer.
+	 * <p>
+	 * A write failure aborts with an {@link InternalServerErrorException} after an arbitrary prefix of the
+	 * document has already reached the writer, so the writer must never be bound to an HTTP response stream:
+	 * the response commits as soon as the container's output buffer fills, and the status can then no longer
+	 * be changed to 5xx. Serialize into a buffer first (see {@link #serializeGraph(Model, String)}) and write
+	 * the result to the response only after this method has returned normally.
+	 * <p>
+	 * Deliberately package-private: that precondition is not expressible in the type system, so the overload
+	 * is kept out of reach of the service layer, which lives in another package and always needs a buffered
+	 * {@code String} anyway.
+	 *
+	 * @throws IllegalArgumentException     if either parameter is {@code null}
+	 * @throws InternalServerErrorException if the graph cannot be written in full
+	 */
+	static void serializeGraph(Model graph, RDFWriter rdfWriter) {
 		if (graph == null || rdfWriter == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
+		writeGraph(graph, rdfWriter, NS.getMap());
+	}
+
+	private static void writeGraph(Model graph, RDFWriter rdfWriter, Map<String, String> namespaces) {
 		try {
 			rdfWriter.startRDF();
-			Map<String, String> namespaces = NS.getMap();
-			for (String nsName : namespaces.keySet()) {
-				rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
-			}
+			namespaces.forEach(rdfWriter::handleNamespace);
 			for (Statement statement : graph) {
 				rdfWriter.handleStatement(statement);
 			}
 			rdfWriter.endRDF();
-		} catch (RDFHandlerException rdfe) {
-			log.error(rdfe.getMessage());
+		} catch (RuntimeException e) {
+			// Catches RuntimeException, not just RDFHandlerException: RDF4J writers signal write failures
+			// with more than their own exception type. RDFXMLPrettyWriter — the writer for the default
+			// application/rdf+xml — throws StringIndexOutOfBoundsException for a predicate IRI it cannot
+			// namespace-qualify (XMLUtil.findURISplitIndex returns -1 for e.g. <urn:987>), and such a
+			// triple is storable through a perfectly valid Turtle PUT.
+			// Must not be downgraded to a log-and-return: the caller would serve whatever was written
+			// before the failure as a complete document with status 200 (ENTRYSTORE-1091).
+			throw new InternalServerErrorException("Failed to serialize RDF graph", e);
 		}
 	}
 
@@ -325,10 +340,41 @@ public class GraphUtil {
 		throw new CustomResponseException("Unsupported media type", HttpStatus.NOT_ACCEPTABLE);
 	}
 
+	/**
+	 * Resolves the effective RDF media type for a request: an explicit format parameter wins (validated
+	 * and normalized — lowercased, legacy {@code text/rdf+n3} mapped to {@code text/n3}), otherwise
+	 * content negotiation over the Accept header with the RDF default.
+	 *
+	 * @throws CustomResponseException with status 406 (Not Acceptable) if the format parameter is not a
+	 *         supported RDF media type, or if the Accept header is malformed or matches no supported type
+	 */
+	public static String resolveRdfMediaType(MediaType format, String acceptHeader) {
+		if (format != null) {
+			return validateRdfMediaType(format.toString());
+		}
+		return resolveAcceptedMediaType(acceptHeader, DEFAULT_RDF_MEDIA_TYPE);
+	}
+
+	/**
+	 * Serializes a graph into the given media type. JSON ({@code application/json}) and RDF/JSON
+	 * ({@code application/rdf+json}) are routed through {@link RDFJSON}, all other supported types through
+	 * the matching RDF4J {@link RDFWriter}.
+	 *
+	 * @return the serialized graph, never {@code null} and never partial
+	 * @throws IllegalArgumentException     if the graph is {@code null} or the media type has no known writer
+	 * @throws InternalServerErrorException if the graph cannot be serialized in full
+	 */
 	public static String serializeGraph(Model graph, String mediaType) {
+		if (graph == null) {
+			throw new IllegalArgumentException("Graph must not be null");
+		}
 		mediaType = normalizeLegacyMediaType(mediaType);
 		if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(mediaType)) {
-			return RDFJSON.graphToRdfJson(graph);
+			String rdfJson = RDFJSON.graphToRdfJson(graph);
+			if (rdfJson == null) {
+				throw new InternalServerErrorException("Failed to serialize RDF graph as RDF/JSON");
+			}
+			return rdfJson;
 		}
 
 		Class<? extends RDFWriter> writerClass = getRDFWriterClassForMediaType(mediaType);

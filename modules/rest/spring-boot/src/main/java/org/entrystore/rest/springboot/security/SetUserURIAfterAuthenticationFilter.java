@@ -25,6 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.http.HttpStatus;
@@ -50,6 +51,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 
 	private final PrincipalManager pm;
 	private final ESUserDetailsService userDetailsService;
+	private final ErrorResponseWriter errorResponseWriter;
 
 	@Override
 	protected void doFilterInternal(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response, @NotNull FilterChain filterChain)
@@ -63,7 +65,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 			// Servlet filters run before the DispatcherServlet, so AppExceptionHandler
 			// cannot see anything thrown from here — write the 500 directly.
 			log.error("PrincipalManager has no guest user URI; cannot reset request principal");
-			HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+			errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 					.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
 					.path(request.getRequestURI())
 					.error("PrincipalManager is not initialized")
@@ -96,7 +98,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 					log.warn("User lookup failed for authenticated {} user '{}', denying access",
 							externalAuthType, HttpUtil.sanitizeForLog(username), e);
 					HttpUtil.clearAuthenticatedSession(request);
-					HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+					errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 							.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
 							.path(request.getRequestURI())
 							.error("Authenticated " + externalAuthType + " user lookup failed")
@@ -152,7 +154,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 	}
 
 	private void setForbiddenResponse(HttpServletRequest request, HttpServletResponse response, String message) throws IOException {
-		HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+		errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 				.status(HttpStatus.FORBIDDEN.value())
 				.path(request.getRequestURI())
 				.error(message)

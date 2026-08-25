@@ -28,12 +28,12 @@ import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 class ProxyIT extends BaseSpec {
 
 	static HttpServer mockServer
-	static int mockPort
+	static String mockOrigin
 
 	def setupSpec() {
 		// Start a lightweight mock HTTP server for proxy target
 		mockServer = HttpServer.create(new InetSocketAddress('localhost', 0), 0)
-		mockPort = mockServer.address.port
+		mockOrigin = 'http://localhost:' + mockServer.address.port
 
 		mockServer.createContext('/api/data') { exchange ->
 			def body = '{"key":"value"}'
@@ -52,7 +52,7 @@ class ProxyIT extends BaseSpec {
 		}
 
 		mockServer.createContext('/redirect') { exchange ->
-			exchange.responseHeaders.set('Location', "http://localhost:${mockPort}/api/data")
+			exchange.responseHeaders.set('Location', mockOrigin + '/api/data')
 			exchange.sendResponseHeaders(302, -1)
 			exchange.close()
 		}
@@ -84,17 +84,13 @@ class ProxyIT extends BaseSpec {
 		}
 
 		mockServer.start()
-		log.info('Mock HTTP server started on port {}', mockPort)
+		log.info('Mock HTTP server started on {}', mockOrigin)
 	}
 
 	def cleanupSpec() {
 		if (mockServer != null) {
 			mockServer.stop(0)
 		}
-	}
-
-	private static String mockUrl(String path) {
-		return URLEncoder.encode("http://localhost:${mockPort}${path}", 'UTF-8')
 	}
 
 	// --- Global /proxy - parameter validation ---
@@ -107,9 +103,30 @@ class ProxyIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
+	// The four tests below cover one SsrfValidator.parseAndValidateUrl rejection branch each:
+	// unparseable URI, absent scheme, disallowed scheme, and absent host.
+
 	def 'GET /proxy with malformed URL should return 400'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('not-a-url', 'UTF-8'))
+		// Unterminated IPv6 literal — the only input here that URI's constructor rejects outright
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: 'http://[::1']))
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
+	def 'GET /proxy with scheme-less URL should return 400'() {
+		when:
+		// Parses as a valid relative URI, so it is the absent-scheme branch rather than malformed
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: 'not-a-url']))
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
+	def 'GET /proxy with file:// URL should return 400'() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: 'file:///etc/passwd']))
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
@@ -117,7 +134,8 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy with URL missing host should return 400'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('file:///etc/passwd', 'UTF-8'))
+		// Allowed scheme with an empty authority, so validation reaches the host check
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: 'http:///etc/passwd']))
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
@@ -127,7 +145,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy as guest to non-whitelisted host should return 401'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + mockUrl('/api/data'), '')
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: mockOrigin + '/api/data']), '')
 
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
@@ -135,7 +153,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy as non-admin user should return proxied content'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + mockUrl('/api/data'), 'user')
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: mockOrigin + '/api/data']), 'user')
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -145,7 +163,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy as admin should return proxied content'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + mockUrl('/api/data'))
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: mockOrigin + '/api/data']))
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -157,7 +175,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy to bare IPv4 address should return 403'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('http://192.168.1.1/test', 'UTF-8'))
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: 'http://192.168.1.1/test']))
 
 		then:
 		conn.getResponseCode() == HTTP_FORBIDDEN
@@ -165,7 +183,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy to .local domain should return 403'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('http://myhost.local/test', 'UTF-8'))
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: 'http://myhost.local/test']))
 
 		then:
 		conn.getResponseCode() == HTTP_FORBIDDEN
@@ -173,7 +191,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy to IPv6 address should return 403'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('http://[::1]/test', 'UTF-8'))
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: 'http://[::1]/test']))
 
 		then:
 		conn.getResponseCode() == HTTP_FORBIDDEN
@@ -181,7 +199,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy to numeric IPv4 representation should return 403'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('http://2130706433/test', 'UTF-8'))
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: 'http://2130706433/test']))
 
 		then:
 		conn.getResponseCode() == HTTP_FORBIDDEN
@@ -189,7 +207,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy to unresolvable host should return 403'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('http://definitely-not-a-real-host-xyz123.invalid/test', 'UTF-8'))
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: 'http://definitely-not-a-real-host-xyz123.invalid/test']))
 
 		then:
 		conn.getResponseCode() == HTTP_FORBIDDEN
@@ -199,7 +217,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy should include Content-Security-Policy header'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + mockUrl('/api/data'))
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: mockOrigin + '/api/data']))
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -208,7 +226,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy should forward Accept header to upstream'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + mockUrl('/echo-accept'), 'admin', 'text/html')
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: mockOrigin + '/echo-accept']), 'admin', 'text/html')
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -217,7 +235,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy should follow redirects'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + mockUrl('/redirect'))
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: mockOrigin + '/redirect']))
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -229,7 +247,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /{context-id}/proxy with non-existent context should return 404'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/999/proxy?url=' + mockUrl('/api/data'))
+		def conn = EntryStoreClient.getRequest('/999/proxy' + convertMapToQueryParams([url: mockOrigin + '/api/data']))
 
 		then:
 		conn.getResponseCode() == HTTP_NOT_FOUND
@@ -240,7 +258,7 @@ class ProxyIT extends BaseSpec {
 		getOrCreateContext([contextId: 'proxy-guest'])
 
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy-guest/proxy?url=' + mockUrl('/api/data'), '')
+		def conn = EntryStoreClient.getRequest('/proxy-guest/proxy' + convertMapToQueryParams([url: mockOrigin + '/api/data']), '')
 
 		then:
 		// Guests get 404 (not 401) so they cannot distinguish "context exists but is private" from "context does not exist"
@@ -252,7 +270,7 @@ class ProxyIT extends BaseSpec {
 		getOrCreateContext([contextId: 'proxy-nonadmin'])
 
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy-nonadmin/proxy?url=' + mockUrl('/api/data'), 'user')
+		def conn = EntryStoreClient.getRequest('/proxy-nonadmin/proxy' + convertMapToQueryParams([url: mockOrigin + '/api/data']), 'user')
 
 		then:
 		conn.getResponseCode() == HTTP_FORBIDDEN
@@ -263,7 +281,7 @@ class ProxyIT extends BaseSpec {
 		getOrCreateContext([contextId: 'proxy-admin'])
 
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy-admin/proxy?url=' + mockUrl('/api/data'))
+		def conn = EntryStoreClient.getRequest('/proxy-admin/proxy' + convertMapToQueryParams([url: mockOrigin + '/api/data']))
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -275,7 +293,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy with ftp:// URL should return 400'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('ftp://files.example.com/data', 'UTF-8'))
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: 'ftp://files.example.com/data']))
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
@@ -283,7 +301,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy with gopher:// URL should return 400'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('gopher://example.com/1', 'UTF-8'))
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: 'gopher://example.com/1']))
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
@@ -291,7 +309,8 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy with data: URL should return 400'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('data:text/html,<h1>test</h1>', 'UTF-8'))
+		// Kept free of URI-illegal characters so this exercises scheme rejection, not malformed-URI
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: 'data:text/plain,test']))
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
@@ -301,7 +320,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy with URL containing userinfo should return 400'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('http://user:pass@example.com/', 'UTF-8'))
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: 'http://user:pass@example.com/']))
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
@@ -311,7 +330,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy with redirect to blacklisted host should return 403'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + mockUrl('/redirect-blacklisted'))
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: mockOrigin + '/redirect-blacklisted']))
 
 		then:
 		conn.getResponseCode() == HTTP_FORBIDDEN
@@ -319,7 +338,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy with redirect to disallowed scheme should return 400'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + mockUrl('/redirect-ftp'))
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: mockOrigin + '/redirect-ftp']))
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
@@ -327,7 +346,7 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /proxy should follow relative redirects'() {
 		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + mockUrl('/redirect-relative'))
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: mockOrigin + '/redirect-relative']))
 
 		then:
 		conn.getResponseCode() == HTTP_OK

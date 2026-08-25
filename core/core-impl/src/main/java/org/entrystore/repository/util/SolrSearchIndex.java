@@ -662,7 +662,14 @@ public class SolrSearchIndex implements SearchIndex {
 
 		Entry contextEntry = rm.getContextManager().getByEntryURI(contextURI);
 
-		if (purgeAllBeforeReindex) {
+		// Both purges below delete Solr documents for entries this reindex did not repost, and what it
+		// reposts comes from context.getEntries(). An incomplete index makes that listing short, so
+		// purging would delete the unlisted entries from the search index — data loss driven by a triple
+		// nobody can parse. Reindex without purging instead: a stale document is recoverable, a deleted
+		// one is not (ENTRYSTORE-1095).
+		boolean purgeIsSafe = indexIsComplete(contextURI);
+
+		if (purgeAllBeforeReindex && purgeIsSafe) {
 			if (!clearSolrIndex(solrServer, null, contextEntry)) {
 				log.warn("Pre-reindex purge of context {} failed; proceeding with reindex against potentially dirty index", contextURI);
 			}
@@ -676,7 +683,7 @@ public class SolrSearchIndex implements SearchIndex {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			URI lastIndexedEntryURI = postContextEntriesToQueue(contextURI);
 			if (lastIndexedEntryURI != null) {
-				if (!purgeAllBeforeReindex) {
+				if (!purgeAllBeforeReindex && purgeIsSafe) {
 					purgeExecutor.submit(() -> {
 						long deadline = System.nanoTime() + MAX_PURGE_WAIT_NANOS;
 						try {
@@ -818,6 +825,27 @@ public class SolrSearchIndex implements SearchIndex {
 				delayedReindex.put(contextURI, info);
 			}
 		}
+	}
+
+	/**
+	 * Whether the context's URI index carries every entry, so a purge keyed on "not reposted by this
+	 * reindex" is safe. Answers false rather than propagating if the context cannot be resolved at all,
+	 * since a purge is not safe in that case either.
+	 */
+	private boolean indexIsComplete(URI contextURI) {
+		String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
+		Context context = rm.getContextManager().getContext(id);
+		if (context == null) {
+			log.warn("Context {} could not be resolved; skipping the reindex purge", contextURI);
+			return false;
+		}
+		if (context.isIndexComplete()) {
+			return true;
+		}
+		log.error("Context {} has an incomplete URI index, so entries missing from its listing would be "
+				+ "deleted from the Solr index by the post-reindex purge. Reindexing without purging; "
+				+ "expired documents may remain until the underlying data is repaired", contextURI);
+		return false;
 	}
 
 	private URI postContextEntriesToQueue(URI contextURI) {

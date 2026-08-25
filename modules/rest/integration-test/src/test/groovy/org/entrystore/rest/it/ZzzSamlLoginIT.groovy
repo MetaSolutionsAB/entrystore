@@ -18,8 +18,6 @@ package org.entrystore.rest.it
 
 import org.apache.commons.text.StringEscapeUtils
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
-import org.springframework.boot.SpringApplication
 import spock.lang.Shared
 import spock.lang.Stepwise
 
@@ -33,7 +31,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 	// below username and password must match the creds configured in Keycloak - "test-realm-keycloak.json"
 	static def testUsername = 'testuserrr'
 	static def testUserPassword = 'passworded'
-	static def successLoginUrl = 'http://localhost:8181/GREAT-SUCCESS/'
+	static def successLoginUrl = EntryStoreClient.origin + '/GREAT-SUCCESS/'
 
 	static def keycloakTestRealmUrl = ''
 
@@ -54,23 +52,22 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		keycloakTestRealmUrl = getKeycloakSamlRealmUrl()
 
 		log.info('Starting EntryStoreApp with SAML')
-		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+		startOwnedApp([
 			'--entrystore.auth.saml.enabled=true',
 			'--spring.profiles.active=saml',
 			'--spring.security.saml2.relyingparty.registration.keycloak.assertingparty.metadata-uri=' + keycloakTestRealmUrl + '/descriptor'
-		] as String[]
-		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
-		appStarted = true
+		])
 	}
 
 	def '1. GET /auth/saml should start SAML authentication flow - redirect to IDP with SAMLRequest'() {
 		when:
 		def connection = EntryStoreClient.getRequest('/auth/saml' + convertMapToQueryParams([successurl: successLoginUrl]),
 			null, null)
+		// The client disables redirect-following; re-enabling it here still works because
+		// HttpURLConnection applies redirects lazily, on the first response read below.
 		connection.setInstanceFollowRedirects(true)
 
-		then: 'SP should redirect to IDP: 302 response code and location header set'
+		then: 'following the SP redirect chain ends on the self-submitting SAMLRequest form page'
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('text/html')
 		def response = connection.inputStream.text
@@ -118,7 +115,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 
 		when: 'Follow redirect to get login page'
 		// remove additional attributes of cookies
-		def cookieHeader = idpCookies.collect { it.split(';')[0] }.join('; ')
+		def cookieHeader = EntryStoreClient.toCookieHeader(idpCookies)
 		def loginPageConn = EntryStoreClient.getRequest(loginPageUrl, null, null,
 			[Cookie: cookieHeader])
 
@@ -141,12 +138,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		assert this.loginPageHtmlSaved: 'Login page HTML not available, did the previous test step execute correctly?'
 		assert this.idpCookieHeaderSaved: 'IDP cookies not available, did the previous test step execute correctly?'
 
-		// Extract form action URL
-		def formActionMatcher = this.loginPageHtmlSaved =~ /action="([^"]+)"/
-		String formActionUrl = formActionMatcher ? formActionMatcher[0][1] : null
-		assert formActionUrl: 'Form action URL not found in login page'
-		// Unescape HTML entities in the URL (Keycloak escapes &amp;)
-		formActionUrl = StringEscapeUtils.unescapeHtml4(formActionUrl)
+		def formActionUrl = extractFormActionUrl(this.loginPageHtmlSaved)
 
 		def loginFormData = createFormBody([username: testUsername, password: testUserPassword])
 
@@ -200,7 +192,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		spCallbackConn.getResponseCode() in [302, 303, 307]
 		def successloginRedirUrl = spCallbackConn.getHeaderField('Location')
 		successloginRedirUrl != null
-		successloginRedirUrl == 'http://localhost:8181/GREAT-SUCCESS/'
+		successloginRedirUrl == successLoginUrl
 		// Check if we got an auth cookie from EntryStore
 		def spCookies = spCallbackConn.getHeaderFields()['Set-Cookie']
 		spCookies != null
@@ -222,6 +214,5 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		userJson['id'] != null
 		userJson['user'] == testUsername
 		(userJson['uri'] as String).startsWith(EntryStoreClient.baseUrl + '/_principals/entry/')
-//		userJson['authTokenExpires'] != null
 	}
 }

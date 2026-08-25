@@ -19,7 +19,6 @@ package org.entrystore.rest.springboot.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
-import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.rest.springboot.model.api.SendMessageRequestBody;
 import org.entrystore.rest.springboot.model.api.TransportType;
@@ -27,8 +26,9 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
-import org.entrystore.rest.springboot.util.Email;
+import org.entrystore.rest.springboot.util.EmailSender;
 import org.entrystore.rest.springboot.util.HtmlSanitizer;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -38,8 +38,8 @@ import org.springframework.stereotype.Service;
 public class MessageService {
 
 	private final PrincipalManager principalManager;
-	private final RepositoryManagerImpl repositoryManager;
 	private final MessageRateLimiter messageRateLimiter;
+	private final EmailSender emailSender;
 
 	public void sendMessage(SendMessageRequestBody request) {
 		if (principalManager.currentUserIsGuest()) {
@@ -51,11 +51,13 @@ public class MessageService {
 
 		try {
 			if (principalManager.getPrincipalEntry(request.recipient()) == null) {
-				log.info("User tried to send message to unknown recipient [{}]", request.recipient());
+				log.info("User tried to send message to unknown recipient [{}]",
+						HttpUtil.sanitizeForLog(request.recipient()));
 				throw new ForbiddenException("Unknown recipient");
 			}
 		} catch (RepositoryException e) {
-			log.warn("Recipient lookup failed for [{}]: {}", request.recipient(), e.getMessage());
+			log.warn("Recipient lookup failed for [{}]: {}",
+					HttpUtil.sanitizeForLog(request.recipient()), e.getMessage());
 			throw new ForbiddenException("Unknown recipient");
 		}
 
@@ -81,11 +83,13 @@ public class MessageService {
 				throw new BadRequestException("Message body is empty after sanitization");
 			}
 
-			boolean sent = Email.sendMessage(
-					repositoryManager.getConfiguration(),
+			boolean sent = emailSender.sendMessage(
 					request.recipient(), sanitizedSubject, sanitizedBody, null, replyTo);
 			if (!sent) {
-				log.error("Failed to send email to [{}] with subject [{}]", request.recipient(), sanitizedSubject);
+				// Both values are caller-supplied, and sanitizeToPlainText HTML-unescapes after stripping
+				// markup, so a subject reaching here can still hold a real CRLF and forge a log line.
+				log.error("Failed to send email to [{}] with subject [{}]",
+						HttpUtil.sanitizeForLog(request.recipient()), HttpUtil.sanitizeForLog(sanitizedSubject));
 				throw new CustomResponseException("Failed to send email message", HttpStatus.SERVICE_UNAVAILABLE);
 			}
 		}

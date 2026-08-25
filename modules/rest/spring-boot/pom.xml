@@ -120,6 +120,17 @@
 			<artifactId>spring-boot-starter-restclient</artifactId>
 		</dependency>
 
+		<!-- Provides the JavaMailSender abstraction (spring-context-support) plus the Angus Jakarta Mail
+		     implementation, in the module that actually sends mail. Declared here rather than relying on
+		     core-impl's transitive angus-mail, which was the only mail artifact before ENTRYSTORE-1054
+		     even though no core class imports jakarta.mail. MailSenderAutoConfiguration stays inert:
+		     its SMTP branch is conditional on spring.mail.host, and EntryStore binds entrystore.smtp.*
+		     instead — see MailConfiguration for why the sender is built by hand. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-thymeleaf</artifactId>
@@ -135,6 +146,9 @@
 			<artifactId>json</artifactId>
 		</dependency>
 
+		<!-- Held at 3.0.3: 3.1.0 pulls swagger-core-jakarta 2.2.52+, which requires the Jackson 2
+		     line at 2.22.x while the Boot 4.1 BOM manages 2.21.4 — requireUpperBoundDeps fails.
+		     Upgrade together with the Jackson 2 bump tracked in ENTRYSTORE-1068. -->
 		<dependency>
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
@@ -142,20 +156,38 @@
 		</dependency>
 
 		<dependency>
-			<groupId>org.projectlombok</groupId>
-			<artifactId>lombok</artifactId>
-			<scope>provided</scope>
-		</dependency>
-
-		<dependency>
 			<groupId>commons-validator</groupId>
 			<artifactId>commons-validator</artifactId>
-			<version>1.10.1</version>
+			<version>1.11.0</version>
 		</dependency>
 
 		<dependency>
 			<groupId>com.googlecode.owasp-java-html-sanitizer</groupId>
 			<artifactId>owasp-java-html-sanitizer</artifactId>
+		</dependency>
+
+		<!-- Imported directly by this module's own sources, but until now only reached
+		     transitively through entrystore-core-impl. Declared so this module's classpath
+		     does not silently break when core-impl's dependencies change. -->
+		<dependency>
+			<groupId>com.google.guava</groupId>
+			<artifactId>guava</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+		</dependency>
+
+		<!-- Syndication (feed) endpoint. -->
+		<dependency>
+			<groupId>com.rometools</groupId>
+			<artifactId>rome</artifactId>
 		</dependency>
 
 		<dependency>
@@ -189,13 +221,14 @@
 			<scope>test</scope>
 		</dependency>
 
-		<!-- Generates self-signed certificates in RefreshableRelyingPartyRegistrationRepositoryTest's
-		     in-memory SAML metadata fixtures. Present transitively via OpenSAML, declared explicitly
-		     since the test uses it directly. Version managed by the parent. -->
+		<!-- Required at runtime by OpenSAML (X.509/PKCS operations behind the SAML relying-party
+		     registration) and used directly by RefreshableRelyingPartyRegistrationRepositoryTest's
+		     in-memory SAML metadata fixtures. Must NOT be test-scoped: a direct declaration
+		     overrides the transitive compile scope from OpenSAML and would drop bcpkix (and
+		     bcutil) from the runtime classpath. Version managed by the parent. -->
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcpkix-jdk18on</artifactId>
-			<scope>test</scope>
 		</dependency>
 
 	</dependencies>
@@ -242,6 +275,19 @@
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<configuration>
 					<classifier>exec</classifier>
+					<!-- repackage bundles provided-scope dependencies by default. Both of these are
+					     compile-time only (annotation processor / CLASS-retention annotations) and
+					     are never loaded at runtime, so keep them out of the shipped jar. -->
+					<excludes>
+						<exclude>
+							<groupId>org.projectlombok</groupId>
+							<artifactId>lombok</artifactId>
+						</exclude>
+						<exclude>
+							<groupId>org.jetbrains</groupId>
+							<artifactId>annotations</artifactId>
+						</exclude>
+					</excludes>
 				</configuration>
 			</plugin>
 		</plugins>

@@ -17,8 +17,6 @@
 package org.entrystore.rest.springboot.controller;
 
 import com.rometools.rome.feed.synd.SyndFeed;
-import com.rometools.rome.io.FeedException;
-import com.rometools.rome.io.SyndFeedOutput;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
@@ -27,8 +25,6 @@ import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.impl.DataImpl;
-import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.api.ModifyListResourceResponse;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
@@ -36,6 +32,8 @@ import org.entrystore.rest.springboot.service.EntryService;
 import org.entrystore.rest.springboot.service.ResourceService;
 import org.entrystore.rest.springboot.service.SyndicationService;
 import org.entrystore.rest.springboot.util.GraphUtil;
+import org.entrystore.rest.springboot.util.Syndication;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -68,7 +66,8 @@ public class ResourceController {
 	private final ResourceService resourceService;
 	private final SyndicationService syndicationService;
 
-	private final RepositoryManagerImpl repositoryManager;
+	@Value("${entrystore.http.allow-content-disposition-inline:true}")
+	private boolean allowContentDispositionInline;
 
 	@Operation(
 			summary = "Returns a resource.",
@@ -77,23 +76,15 @@ public class ResourceController {
 	public ResponseEntity<Object> getResource(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
-			@RequestParam(required = false) String rdfFormat,
+			@RequestParam(required = false) MediaType rdfFormat,
 			@RequestParam(required = false) String syndication,
 			@RequestParam(required = false, defaultValue = "50") Integer feedSize,
 			@RequestParam(name = "lang", required = false, defaultValue = "en") String language,
 			@RequestParam(required = false) String download,
 			@ModelAttribute ListFilter listFilter,
-			@RequestHeader(value = "Accept", required = false, defaultValue = "application/rdf+xml") String acceptHeader
+			@RequestHeader(value = "Accept", required = false, defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
 	) {
-		String mediaType;
-		// for 'rdfFormat' param data should be sent properly - i.e. HTML encoded '+' as %2B
-		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
-		// (+ is replaced with a space) we need to replace the space back to '+'
-		if (rdfFormat != null) {
-			mediaType = rdfFormat.trim().replace(' ', '+');
-		} else {
-			mediaType = acceptHeader;
-		}
+		String mediaType = rdfFormat != null ? rdfFormat.toString() : acceptHeader;
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 
@@ -102,8 +93,9 @@ public class ResourceController {
 
 		if (syndication != null) {
 			SyndFeed feed = syndicationService.getSyndicationFeedSolr(entry, syndication, language, feedSize);
-			responseBody = convertSyndFeedToXml(feed);
-			responseMediaType = mapFeedTypeToMediaType(feed.getFeedType(), mediaType);
+			responseBody = Syndication.convertSyndFeedToXml(feed);
+			MediaType feedMediaType = Syndication.convertFeedTypeToMediaType(feed.getFeedType());
+			responseMediaType = feedMediaType != null ? feedMediaType : MediaType.parseMediaType(mediaType);
 
 		} else if (entry.getEntryType() == EntryType.Local && entry.getGraphType() == GraphType.None) {
 
@@ -130,11 +122,7 @@ public class ResourceController {
 		} else {
 			GraphType graphType = entry.getGraphType();
 			if (graphType == GraphType.Graph || graphType == GraphType.List) {
-				if (rdfFormat != null) {
-					mediaType = GraphUtil.validateRdfMediaType(mediaType);
-				} else {
-					mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, "application/rdf+xml");
-				}
+				mediaType = GraphUtil.resolveRdfMediaType(rdfFormat, acceptHeader);
 				responseMediaType = MediaType.parseMediaType(mediaType);
 			} else {
 				responseMediaType = MediaType.APPLICATION_JSON;
@@ -285,30 +273,6 @@ public class ResourceController {
 		return ResponseEntity.noContent().build();
 	}
 
-	private static String convertSyndFeedToXml(SyndFeed feed) {
-		try {
-			// TODO: SyndFeedOutput seems thread-safe, hence should be fine to instantiate it only once per application, instead of per request?
-			return new SyndFeedOutput().outputString(feed, true);
-		} catch (FeedException fe) {
-			throw new IllegalStateException("Exception serializing the syndication feed with title: " + feed.getTitle());
-		}
-	}
-
-	private static MediaType mapFeedTypeToMediaType(String feedType, String requestMediaType) {
-
-		String feedMediaType = null;
-		if (feedType != null) {
-			if (feedType.startsWith("rss_")) {
-				feedMediaType = MediaType.APPLICATION_RSS_XML_VALUE;
-			} else if (feedType.startsWith("atom_")) {
-				feedMediaType = MediaType.APPLICATION_ATOM_XML_VALUE;
-			}
-		}
-
-		String responseMediaType = (feedMediaType != null) ? feedMediaType : requestMediaType;
-		return MediaType.parseMediaType(responseMediaType);
-	}
-
 	private HttpHeaders buildFileDownloadResponseHeaders(Entry entry, String mediaType, boolean isDownload) {
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.parseMediaType(mediaType));
@@ -320,8 +284,7 @@ public class ResourceController {
 		}
 
 		ContentDisposition contentDisposition;
-		if (!repositoryManager.getConfiguration().getBoolean(Settings.HTTP_ALLOW_CONTENT_DISPOSITION_INLINE, true)
-				|| isDownload) {
+		if (!allowContentDispositionInline || isDownload) {
 			contentDisposition = ContentDisposition.attachment().filename(fileName).build();
 		} else {
 			contentDisposition = ContentDisposition.inline().filename(fileName).build();

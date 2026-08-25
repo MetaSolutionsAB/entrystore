@@ -24,10 +24,9 @@ class UserResourceIT extends BaseSpec {
 		.toFormatter()
 	static def newPassword = 'newPass12345'
 	static def greenMail = new GreenMail(SMTP)
-	static def genericCredsClone = [:]
 
 	def setupSpec() {
-		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.snapshotCreds()
 		EntryStoreClient.creds.put('userForInfo@test.com', newPassword)
 		EntryStoreClient.creds.put('userForInfoContext@test.com', newPassword)
 		greenMail.start()
@@ -38,7 +37,7 @@ class UserResourceIT extends BaseSpec {
 	}
 
 	def cleanupSpec() {
-		EntryStoreClient.creds = genericCredsClone
+		EntryStoreClient.restoreCreds()
 		greenMail.stop()
 	}
 
@@ -119,9 +118,7 @@ class UserResourceIT extends BaseSpec {
 			grecaptcharesponse: 'anything'
 		])
 		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf("?confirm") + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 		assert EntryStoreClient.getRequest('/auth/signup?confirm=' + token).getResponseCode() == HTTP_CREATED
 
 		when:

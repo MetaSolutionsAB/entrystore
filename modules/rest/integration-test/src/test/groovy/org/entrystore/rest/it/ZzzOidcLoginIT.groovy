@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.it
 
-import org.apache.commons.text.StringEscapeUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
 import org.springframework.boot.SpringApplication
@@ -130,11 +129,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		assert this.loginPageHtmlSaved: 'Login page HTML not available, did the previous test step execute correctly?'
 		assert this.idpCookieHeaderSaved: 'IDP cookies not available, did the previous test step execute correctly?'
 
-		def formActionMatcher = this.loginPageHtmlSaved =~ /action="([^"]+)"/
-		String formActionUrl = formActionMatcher ? formActionMatcher[0][1] : null
-		assert formActionUrl: 'Form action URL not found in login page'
-		// Unescape HTML entities in the URL (Keycloak escapes &amp;)
-		formActionUrl = StringEscapeUtils.unescapeHtml4(formActionUrl)
+		def formActionUrl = extractFormActionUrl(this.loginPageHtmlSaved)
 
 		def loginFormData = createFormBody([username: testUsername, password: testUserPassword])
 
@@ -263,8 +258,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		def loginPageHtml = loginPageConn.inputStream.text
 		def idpCookies = loginPageConn.getHeaderFields()['Set-Cookie']
 		def cookieHeader = idpCookies.collect { it.split(';')[0] }.join('; ')
-		def formActionMatcher = loginPageHtml =~ /action="([^"]+)"/
-		def formActionUrl = StringEscapeUtils.unescapeHtml4(formActionMatcher[0][1] as String)
+		def formActionUrl = extractFormActionUrl(loginPageHtml)
 
 		when: 'authenticating at Keycloak as the reserved admin user'
 		def submitConn = EntryStoreClient.postRequest(formActionUrl,

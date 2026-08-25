@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.util;
 
 import lombok.RequiredArgsConstructor;
@@ -21,6 +37,7 @@ import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.springboot.model.api.ListFilter;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -35,6 +52,7 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -43,11 +61,6 @@ import static org.entrystore.EntryType.LinkReference;
 import static org.entrystore.EntryType.Local;
 import static org.entrystore.EntryType.Reference;
 import static org.entrystore.GraphType.SystemContext;
-import static org.entrystore.PrincipalManager.AccessProperty.Administer;
-import static org.entrystore.PrincipalManager.AccessProperty.ReadMetadata;
-import static org.entrystore.PrincipalManager.AccessProperty.ReadResource;
-import static org.entrystore.PrincipalManager.AccessProperty.WriteMetadata;
-import static org.entrystore.PrincipalManager.AccessProperty.WriteResource;
 
 @Slf4j
 @Component
@@ -183,23 +196,7 @@ public class ResourceJsonSerializer {
 				}
 
 				if (params.sort() != null && (childrenEntries.size() < 501)) {
-					Date before = new Date();
-					GraphType prioritizedGraphType = null;
-					if (params.prio() != null) {
-						prioritizedGraphType = GraphType.valueOf(params.prio());
-					}
-					String sortType = params.sort();
-					if ("title".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterTitle(childrenEntries, params.lang(), params.ascendingOrder(), prioritizedGraphType);
-					} else if ("modified".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterModificationDate(childrenEntries, params.ascendingOrder(), prioritizedGraphType);
-					} else if ("created".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterCreationDate(childrenEntries, params.ascendingOrder(), prioritizedGraphType);
-					} else if ("size".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterFileSize(childrenEntries, params.ascendingOrder(), prioritizedGraphType);
-					}
-					long sortDuration = new Date().getTime() - before.getTime();
-					log.debug("List resource sorting took " + sortDuration + " ms");
+					sortChildrenEntries(childrenEntries, params);
 				} else if (params.sort() != null) {
 					log.warn("Ignoring sort parameter for performance reasons because list has more than 500 children");
 				}
@@ -212,7 +209,6 @@ public class ResourceJsonSerializer {
 					/*
 					 * Children-rights
 					 */
-//					this.accumulateRights(childEntry, childJSON);
 					JSONArray rights = this.serializeRights(childEntry);
 					childJSON.put("rights", rights);
 
@@ -240,44 +236,7 @@ public class ResourceJsonSerializer {
 						childJSON.put("name", ((Group) childEntry.getResource()).getName());
 					}
 
-					try {
-						EntryType entryType = childEntry.getEntryType();
-						if (entryType == Reference || entryType == LinkReference) {
-							Metadata cachedExternalMetaData = childEntry.getCachedExternalMetadata();
-							if (cachedExternalMetaData != null) {
-								Model cachedExternalMetaDataGraph = cachedExternalMetaData.getGraph();
-								if (cachedExternalMetaDataGraph != null) {
-									JSONObject childCachedExternalMetaDataJSON = GraphUtil.serializeGraphToJson(cachedExternalMetaDataGraph, rdfFormat);
-									childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, childCachedExternalMetaDataJSON);
-								}
-							}
-						}
-
-						if (entryType == Local || entryType == Link || entryType == LinkReference) {
-							Metadata localMetadata = childEntry.getLocalMetadata();
-							if (localMetadata != null) {
-								Model localMetadataGraph = localMetadata.getGraph();
-								if (localMetadataGraph != null) {
-									JSONObject localMDJSON = GraphUtil.serializeGraphToJson(localMetadataGraph, rdfFormat);
-									childJSON.accumulate(RepositoryProperties.MD_PATH, localMDJSON);
-								}
-							}
-						}
-					} catch (AuthorizationException e) {
-						//childJSON.accumulate("noAccessToMetadata", true);
-						//ODO: Replaced by using "rights" in json, do something else in this catch-clause
-						// childJSON.accumulate(RepositoryProperties.MD_PATH_STUB, new JSONObject());
-					}
-
-					Model childEntryGraph = childEntry.getGraph();
-					JSONObject childInfo = GraphUtil.serializeGraphToJson(childEntryGraph, rdfFormat);
-					childJSON.accumulate("info", childInfo);
-
-					Model childRelationsGraph = childEntry.getRelations();
-					if (childRelationsGraph != null) {
-						JSONObject childRelationObj = GraphUtil.serializeGraphToJson(childRelationsGraph, rdfFormat);
-						childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
-					}
+					appendMetadataInfoAndRelations(childEntry, childJSON, rdfFormat, false);
 
 					childrenArray.put(childJSON);
 				}
@@ -300,6 +259,103 @@ public class ResourceJsonSerializer {
 			throw new IllegalArgumentException("Resource not instance of List");
 		}
 		return resourceObj;
+	}
+
+	/**
+	 * Appends the cached-external-metadata, local-metadata, entry-info and relations sections of an
+	 * entry to {@code childJSON}. With {@code flagNoAccess=true} (search behavior) the two metadata
+	 * sections share one guard that records a {@code noAccessToMetadata} flag (an
+	 * {@link AuthorizationException} on external metadata also skips local metadata), while the
+	 * entry-info and relations sections each record {@code noAccessToEntryInfo} /
+	 * {@code noAccessToRelations}. With {@code flagNoAccess=false} (list behavior) a metadata
+	 * {@link AuthorizationException} is swallowed silently and the info/relations sections are left
+	 * unguarded so the exception propagates to the caller.
+	 */
+	public void appendMetadataInfoAndRelations(Entry entry, JSONObject childJSON, String rdfFormat, boolean flagNoAccess) {
+		try {
+			EntryType entryType = entry.getEntryType();
+			if (entryType == Reference || entryType == LinkReference) {
+				Metadata cachedExternalMetadata = entry.getCachedExternalMetadata();
+				if (cachedExternalMetadata != null) {
+					Model cachedExternalMetadataGraph = cachedExternalMetadata.getGraph();
+					if (cachedExternalMetadataGraph != null) {
+						childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH,
+								GraphUtil.serializeGraphToJson(cachedExternalMetadataGraph, rdfFormat));
+					}
+				}
+			}
+
+			if (entryType == Local || entryType == Link || entryType == LinkReference) {
+				Metadata localMetadata = entry.getLocalMetadata();
+				if (localMetadata != null) {
+					Model localMetadataGraph = localMetadata.getGraph();
+					if (localMetadataGraph != null) {
+						childJSON.accumulate(RepositoryProperties.MD_PATH,
+								GraphUtil.serializeGraphToJson(localMetadataGraph, rdfFormat));
+					}
+				}
+			}
+		} catch (AuthorizationException ae) {
+			if (flagNoAccess) {
+				childJSON.accumulate("noAccessToMetadata", true);
+			}
+		}
+
+		if (flagNoAccess) {
+			try {
+				JSONObject info = GraphUtil.serializeGraphToJson(entry.getGraph(), rdfFormat);
+				childJSON.accumulate("info", Objects.requireNonNullElseGet(info, JSONObject::new));
+			} catch (AuthorizationException ae) {
+				childJSON.accumulate("noAccessToEntryInfo", true);
+			}
+
+			try {
+				Model relationsGraph = entry.getRelations();
+				if (relationsGraph != null) {
+					childJSON.accumulate(RepositoryProperties.RELATION,
+							GraphUtil.serializeGraphToJson(relationsGraph, rdfFormat));
+				}
+			} catch (AuthorizationException ae) {
+				childJSON.accumulate("noAccessToRelations", true);
+			}
+		} else {
+			childJSON.accumulate("info", GraphUtil.serializeGraphToJson(entry.getGraph(), rdfFormat));
+
+			Model relationsGraph = entry.getRelations();
+			if (relationsGraph != null) {
+				childJSON.accumulate(RepositoryProperties.RELATION,
+						GraphUtil.serializeGraphToJson(relationsGraph, rdfFormat));
+			}
+		}
+	}
+
+	/**
+	 * Sorts {@code children} in place according to the sort/lang/prio/order list parameters.
+	 * Applying the &gt;500-children performance cap is the caller's decision — the two list
+	 * serializers count children differently.
+	 */
+	public static void sortChildrenEntries(List<Entry> children, ListParams params) {
+		Date before = new Date();
+		GraphType prioritizedGraphType = null;
+		if (params.prio() != null) {
+			try {
+				prioritizedGraphType = GraphType.valueOf(params.prio());
+			} catch (IllegalArgumentException e) {
+				throw new BadRequestException("Invalid value for parameter 'prio': " + params.prio());
+			}
+		}
+		String sortType = params.sort();
+		if ("title".equalsIgnoreCase(sortType)) {
+			EntryUtil.sortAfterTitle(children, params.lang(), params.ascendingOrder(), prioritizedGraphType);
+		} else if ("modified".equalsIgnoreCase(sortType)) {
+			EntryUtil.sortAfterModificationDate(children, params.ascendingOrder(), prioritizedGraphType);
+		} else if ("created".equalsIgnoreCase(sortType)) {
+			EntryUtil.sortAfterCreationDate(children, params.ascendingOrder(), prioritizedGraphType);
+		} else if ("size".equalsIgnoreCase(sortType)) {
+			EntryUtil.sortAfterFileSize(children, params.ascendingOrder(), prioritizedGraphType);
+		}
+		long sortDuration = new Date().getTime() - before.getTime();
+		log.debug("List sorting took {} ms", sortDuration);
 	}
 
 	public JSONObject serializeResourceGraph(Resource resource, String rdfFormat) {
@@ -356,24 +412,6 @@ public class ResourceJsonSerializer {
 		return serializeResourceContext(resource);
 	}
 
-	public void accumulateRights(Entry entry, JSONObject jdilObj) throws JSONException {
-		Set<PrincipalManager.AccessProperty> rights = pm.getRights(entry);
-		if (!rights.isEmpty()) {
-			for (PrincipalManager.AccessProperty ap : rights) {
-				if (ap == Administer)
-					jdilObj.append("rights", "administer");
-				else if (ap == WriteMetadata)
-					jdilObj.append("rights", "writemetadata");
-				else if (ap == WriteResource)
-					jdilObj.append("rights", "writeresource");
-				else if (ap == ReadMetadata)
-					jdilObj.append("rights", "readmetadata");
-				else if (ap == ReadResource)
-					jdilObj.append("rights", "readresource");
-			}
-		}
-	}
-
 	public JSONArray serializeRights(Entry entry) throws JSONException {
 		JSONArray resourceObj = new JSONArray();
 		Set<PrincipalManager.AccessProperty> rights = pm.getRights(entry);
@@ -398,18 +436,6 @@ public class ResourceJsonSerializer {
 		int offset,
 		int limit) {
 
-		public ListParams(Map<String, String> params) {
-			this(
-				params.get("sort"),
-				params.get("lang"),
-				params.get("prio"),
-				params.get("desc"),
-				!"desc".equalsIgnoreCase(params.get("order")),
-				Integer.parseInt(params.getOrDefault("offset", "0")),
-				Integer.parseInt(params.getOrDefault("limit", "0"))
-			);
-		}
-
 		public ListParams(ListFilter filter) {
 			this(
 				filter.sort(),
@@ -420,6 +446,12 @@ public class ResourceJsonSerializer {
 				Integer.parseInt(Optional.ofNullable(filter.offset()).orElse("0")),
 				Integer.parseInt(Optional.ofNullable(filter.limit()).orElse("0"))
 			);
+		}
+
+		/** Params with offset/limit left unparsed (defaulted to 0) — for callers that ignore pagination. */
+		public static ListParams withoutPagination(ListFilter filter) {
+			return new ListParams(filter.sort(), filter.lang(), filter.prio(), filter.desc(),
+					!"desc".equalsIgnoreCase(filter.order()), 0, 0);
 		}
 	}
 }

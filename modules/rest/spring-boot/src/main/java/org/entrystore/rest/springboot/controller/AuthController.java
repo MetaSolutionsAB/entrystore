@@ -33,6 +33,8 @@ import org.entrystore.rest.springboot.service.AuthService;
 import org.entrystore.rest.springboot.service.OidcAuthService;
 import org.entrystore.rest.springboot.service.SamlAuthService;
 import org.entrystore.rest.springboot.util.HttpUtil;
+import org.entrystore.rest.springboot.util.RequestBodyValidator;
+import org.entrystore.rest.springboot.util.WebResourceUrls;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -42,6 +44,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -57,6 +60,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class AuthController {
 
+	private final WebResourceUrls webResourceUrls;
+
 	private static final int MAX_REQUEST_SIZE = 32 * 1024;
 	private static final String SIGNUP_TITLE = "Sign-up";
 	private static final String PASSWORD_RESET_TITLE = "Password reset";
@@ -69,6 +74,16 @@ public class AuthController {
 			"To confirm your sign-up, re-enter the email address and the password you chose.");
 	private static final ConfirmForm PWRESET_FORM = new ConfirmForm(PASSWORD_RESET_TITLE, "/auth/pwreset/confirm", "New password",
 			"To reset your password, enter your email address and choose a new password.");
+
+	/**
+	 * Exposed to every view this controller renders. A bean reference cannot be used from the
+	 * templates directly: Thymeleaf forbids SpEL bean access in the restricted context that
+	 * attribute expressions are evaluated in.
+	 */
+	@ModelAttribute("stylesheetPath")
+	String stylesheetPath() {
+		return webResourceUrls.getStylesheetPath();
+	}
 
 	@Value("${entrystore.auth.saml.enabled:false}")
 	private boolean isSamlAuthEnabled;
@@ -83,6 +98,7 @@ public class AuthController {
 	private final Optional<ServiceProperties> casServiceProperties;
 	// Optional: the bean exists only when spring.security.oauth2.client registrations are configured.
 	private final Optional<ClientRegistrationRepository> clientRegistrationRepository;
+	private final RequestBodyValidator requestBodyValidator;
 
 	@GetMapping("/auth/cas")
 	public void startCasLogin(HttpServletResponse response) throws IOException {
@@ -263,29 +279,19 @@ public class AuthController {
 			HttpServletRequest request,
 			HttpServletResponse response,
 			Model model,
-			@RequestBody HashMap<String, String> parameters) {
+			@RequestBody SignupRequestBody signupRequestBody) {
 
 		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
 
 		response.setContentType(MediaType.TEXT_HTML_VALUE);
 
-		SignupRequestBody signupRequestBody = new SignupRequestBody(
-				parameters.get("email"),
-				parameters.get("password"),
-				parameters.get("firstname"),
-				parameters.get("lastname"),
-				parameters.get("urlsuccess"),
-				parameters.get("urlfailure"),
-				parameters.get("grecaptcharesponse"));
+		// Validated here rather than with @Valid so the size limit above still decides first. @Valid runs
+		// during argument resolution, which precedes the method body, so an oversized body whose fields
+		// are also invalid would answer 400 instead of 413 — and an oversized sign-up body almost always
+		// is invalid, since the bulk has to go in one of these fields.
+		requestBodyValidator.assertValid(signupRequestBody, SIGNUP_TITLE);
 
-		parameters.remove("email");
-		parameters.remove("password");
-		parameters.remove("firstname");
-		parameters.remove("lastname");
-		parameters.remove("urlsuccess");
-		parameters.remove("urlfailure");
-		parameters.remove("grecaptcharesponse");
-		String message = authService.signup(request, signupRequestBody, parameters, SIGNUP_TITLE);
+		String message = authService.signup(request, signupRequestBody, SIGNUP_TITLE);
 		model.addAttribute("title", SIGNUP_TITLE);
 		model.addAttribute("message", message);
 		return "auth";
@@ -302,24 +308,13 @@ public class AuthController {
 
 		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
 
-		SignupRequestBody signupRequestBody = new SignupRequestBody(
-				parameters.get("email"),
-				parameters.get("password"),
-				parameters.get("firstname"),
-				parameters.get("lastname"),
-				parameters.get("urlsuccess"),
-				parameters.get("urlfailure"),
-				parameters.get("g-recaptcha-response"));
+		// Not @Valid @ModelAttribute: the form spells the captcha field g-recaptcha-response, which is
+		// not a legal record component name, so Spring cannot bind it. The body is assembled here and
+		// validated against the same constraints, so both content types answer with the same message.
+		SignupRequestBody signupRequestBody = SignupRequestBody.fromFormParameters(parameters);
+		requestBodyValidator.assertValid(signupRequestBody, SIGNUP_TITLE);
 
-		parameters.remove("email");
-		parameters.remove("password");
-		parameters.remove("firstname");
-		parameters.remove("lastname");
-		parameters.remove("urlsuccess");
-		parameters.remove("urlfailure");
-		parameters.remove("g-recaptcha-response");
-
-		String message = authService.signup(request, signupRequestBody, parameters, SIGNUP_TITLE);
+		String message = authService.signup(request, signupRequestBody, SIGNUP_TITLE);
 		model.addAttribute("title", SIGNUP_TITLE);
 		model.addAttribute("message", message);
 		return "auth";

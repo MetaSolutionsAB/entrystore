@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.it
 
+import org.entrystore.repository.util.HashType
+import org.entrystore.repository.util.Hashing
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.springframework.http.HttpMethod
 
@@ -24,6 +26,7 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
@@ -36,6 +39,13 @@ class ContextImportIT extends BaseSpec {
 	def static entryIdInExportOriginally = 'export-entry-id'
 	def static entryId2InImportOriginally = 'import-entry-id-should-be-overridden'
 	def static resourceUrl = 'https://bbc.co.uk'
+
+	// Test-only predicate with a unique literal so the entry removed by the import can be located in
+	// Solr via the generic literal_s dynamic field; the field name is derived from the predicate IRI
+	// with the same MD5 truncation the indexer uses (SolrSearchIndex.addGenericMetadataFields), cf. SearchIT.
+	static final String PURGE_MARKER_IRI = 'http://example.org/ns/contextImportIT-purge-marker'
+	static final String PURGE_MARKER_VALUE = 'contextimportpurgemarker'
+	static final String PURGE_MARKER_FIELD = 'metadata.predicate.literal_s.' + Hashing.hash(PURGE_MARKER_IRI, HashType.MD5).substring(0, 8)
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextExportId, name: 'context for Export'])
@@ -294,6 +304,89 @@ class ContextImportIT extends BaseSpec {
 		def nameConn = EntryStoreClient.getRequest('/_contexts/entry/' + missingTriplesImportId + '/name')
 		nameConn.getResponseCode() == HTTP_OK
 		JSON_PARSER.parseText(nameConn.inputStream.text) == [name: 'context for missing-triples import']
+	}
+
+	def "POST /{context-id}/import should purge the overridden entries from the Solr index"() {
+		given: 'a context holding an indexed entry that the import will remove'
+		def solrImportId = 'context-import-solr-purge'
+		def purgedEntryId = 'solr-purge-entry-id'
+		getOrCreateContext([contextId: solrImportId, name: 'context for Solr purge import'])
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + solrImportId + '/resource/_newId'
+		def body = [resource: 'purge text',
+					metadata: [(newResourceIri): [
+						(PURGE_MARKER_IRI): [
+							[type: 'literal', value: PURGE_MARKER_VALUE]
+						]
+					]]]
+		getOrCreateEntry(solrImportId, [id: purgedEntryId, graphtype: 'string'], body)
+		waitForSolrProcessing()
+		// Solr needs even more time to finish processing, cf. SearchIT
+		Thread.sleep(1500)
+
+		and: 'the entry is searchable before the import'
+		def searchQuery = URLEncoder.encode(PURGE_MARKER_FIELD + ':' + PURGE_MARKER_VALUE, 'UTF-8')
+		def beforeConn = EntryStoreClient.getRequest('/search?type=solr&query=' + searchQuery)
+		assert beforeConn.getResponseCode() == HTTP_OK
+		assert JSON_PARSER.parseText(beforeConn.inputStream.text)['results'] == 1
+
+		and: 'a valid export ZIP of another context'
+		def exportConn = EntryStoreClient.getRequest('/' + contextExportId + '/export')
+		assert exportConn.getResponseCode() == HTTP_OK
+
+		when: 'importing the ZIP over the context'
+		def connection = EntryStoreClient.sendRequestAsStream(HttpMethod.POST, '/' + solrImportId + '/import',
+			exportConn.getInputStream(), 'admin', 'application/zip')
+
+		then: 'the import succeeds'
+		connection.getResponseCode() == HTTP_OK
+
+		and: 'the removed entry is no longer searchable - the deferred EntryDeleted events must reach Solr'
+		waitForSolrProcessing()
+		Thread.sleep(1500)
+		def afterConn = EntryStoreClient.getRequest('/search?type=solr&query=' + searchQuery)
+		afterConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(afterConn.inputStream.text)['results'] == 0
+	}
+
+	def "POST /{context-id}/import with file entries should replace the old data file with the imported one"() {
+		given: 'an export context holding a file entry with content'
+		def fileExportId = 'context-export-files'
+		def fileImportId = 'context-import-files'
+		getOrCreateContext([contextId: fileExportId, name: 'context for file export'])
+		def exportedFileEntryId = getOrCreateEntry(fileExportId, [id: 'exported-file-entry'], [resource: [name: 'exported file']])
+		def exportedFile = File.createTempFile('entrystore-import-it-exported', '.bin')
+		exportedFile.text = 'imported file content'
+		def uploadExportedConn = EntryStoreClient.putRequestFile('/' + fileExportId + '/resource/' + exportedFileEntryId,
+			exportedFile, 'admin', 'application/octet-stream')
+		assert uploadExportedConn.getResponseCode() == HTTP_CREATED
+
+		and: 'a target context holding its own file entry that the import will remove'
+		getOrCreateContext([contextId: fileImportId, name: 'context for file import'])
+		def oldFileEntryId = getOrCreateEntry(fileImportId, [id: 'old-file-entry'], [resource: [name: 'old file']])
+		def oldFile = File.createTempFile('entrystore-import-it-old', '.bin')
+		oldFile.text = 'old file content'
+		def uploadOldConn = EntryStoreClient.putRequestFile('/' + fileImportId + '/resource/' + oldFileEntryId,
+			oldFile, 'admin', 'application/octet-stream')
+		assert uploadOldConn.getResponseCode() == HTTP_CREATED
+
+		and: 'the export ZIP of the file-holding context'
+		def exportConn = EntryStoreClient.getRequest('/' + fileExportId + '/export')
+		assert exportConn.getResponseCode() == HTTP_OK
+
+		when: 'importing the ZIP over the target context'
+		def connection = EntryStoreClient.sendRequestAsStream(HttpMethod.POST, '/' + fileImportId + '/import',
+			exportConn.getInputStream(), 'admin', 'application/zip')
+
+		then: 'the import succeeds'
+		connection.getResponseCode() == HTTP_OK
+
+		and: 'the old file entry and its data are gone'
+		EntryStoreClient.getRequest('/' + fileImportId + '/resource/' + oldFileEntryId).getResponseCode() == HTTP_NOT_FOUND
+
+		and: 'the imported file entry serves the content copied from the export'
+		def importedFileConn = EntryStoreClient.getRequest('/' + fileImportId + '/resource/' + exportedFileEntryId)
+		importedFileConn.getResponseCode() == HTTP_OK
+		importedFileConn.inputStream.text == 'imported file content'
 	}
 
 	// Copies a context-export ZIP while overwriting the triples.rdf entry with invalid RDF, leaving

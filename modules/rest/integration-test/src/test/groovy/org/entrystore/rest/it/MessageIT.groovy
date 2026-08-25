@@ -1,7 +1,24 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
 
@@ -11,17 +28,16 @@ import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
-// 429 is not in HttpURLConnection constants
-
 class MessageIT extends BaseSpec {
 
-	static final int HTTP_TOO_MANY_REQUESTS = 429
 	static def newPassword = 'newPass12345'
 	static def greenMail = new GreenMail(SMTP)
-	static def genericCredsClone = [:]
+
+	// The shared app caps /message at entrystore.message.rate.limit.max=3 per sender per hour.
+	// Admin-sent messages in this spec share one budget — send from a dedicated user when adding tests.
 
 	def setupSpec() {
-		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.snapshotCreds()
 		EntryStoreClient.creds.put('sender@test.com', newPassword)
 		EntryStoreClient.creds.put('msgReplyTo@test.com', newPassword)
 		EntryStoreClient.creds.put('rateLimitSender@test.com', newPassword)
@@ -33,7 +49,7 @@ class MessageIT extends BaseSpec {
 	}
 
 	def cleanupSpec() {
-		EntryStoreClient.creds = genericCredsClone
+		EntryStoreClient.restoreCreds()
 		greenMail.stop()
 	}
 
@@ -131,16 +147,10 @@ class MessageIT extends BaseSpec {
 	def "POST /message should set Reply-To when sender has email-format username"() {
 		given:
 		def senderUsername = 'sender@test.com'
-		def sender = UserUtil.createUser(senderUsername)
-		UserUtil.setUserPassword(sender['resourceUri'].toString(), newPassword)
+		def sender = UserUtil.createUserWithPassword(senderUsername, newPassword)
 		greenMail.purgeEmailFromAllMailboxes()
 		def recipientUsername = 'msgReplyTo@test.com'
 		UserUtil.createUser(recipientUsername)
-
-		// Authorize the sender
-		def authConn = EntryStoreClient.postRequest('/auth/cookie',
-			'auth_username=' + senderUsername + '&auth_password=' + newPassword, '', 'application/x-www-form-urlencoded')
-		assert authConn.getResponseCode() == HTTP_OK
 
 		def requestBody = JsonOutput.toJson([
 			transport: 'email',
@@ -191,14 +201,9 @@ class MessageIT extends BaseSpec {
 	def "POST /message should return 429 when rate limit is exceeded"() {
 		given:
 		def senderUsername = 'rateLimitSender@test.com'
-		def sender = UserUtil.createUser(senderUsername)
-		UserUtil.setUserPassword(sender['resourceUri'].toString(), newPassword)
+		def sender = UserUtil.createUserWithPassword(senderUsername, newPassword)
 		def recipientUsername = 'rateLimitRecipient@test.com'
 		UserUtil.createUser(recipientUsername)
-
-		def authConn = EntryStoreClient.postRequest('/auth/cookie',
-			'auth_username=' + senderUsername + '&auth_password=' + newPassword, '', 'application/x-www-form-urlencoded')
-		assert authConn.getResponseCode() == HTTP_OK
 
 		// Send messages up to the configured limit (3 in IT config)
 		for (int i = 0; i < 3; i++) {
@@ -232,6 +237,31 @@ class MessageIT extends BaseSpec {
 		def conn = EntryStoreClient.postRequest('/message', requestBody)
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
+		greenMail.getReceivedMessages().length == 0
+	}
+
+	def "POST /message should report a failed constraint without leaking internals"() {
+		given: 'a body missing the required subject and recipient'
+		def requestBody = JsonOutput.toJson([transport: 'email', body: 'Hello'])
+
+		when:
+		def conn = EntryStoreClient.postRequest('/message', requestBody)
+		// getResponseCode() first: getErrorStream() does not itself read the response, so it answers
+		// null until the status line has been consumed.
+		def status = conn.getResponseCode()
+		def error = new JsonSlurper().parseText(conn.errorStream.text).error as String
+
+		then: 'the constraint message, not the Java signature Spring builds for this exception'
+		status == HTTP_BAD_REQUEST
+		!error.contains('Validation failed for argument')
+		!error.contains('org.entrystore')
+		!error.contains('SendMessageRequestBody')
+		!error.contains('codes [')
+		!error.contains('rejected value')
+		// The exact winner, not merely "something non-empty": the handler falls back to the bare reason
+		// phrase when no message resolves, and that fallback would satisfy a length check while telling
+		// the caller nothing.
+		error == 'must not be blank'
 		greenMail.getReceivedMessages().length == 0
 	}
 }

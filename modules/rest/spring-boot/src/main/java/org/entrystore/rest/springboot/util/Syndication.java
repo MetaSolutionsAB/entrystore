@@ -29,9 +29,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.springframework.http.MediaType;
 
@@ -39,6 +38,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Function;
 
 import static java.lang.String.format;
 import static java.net.URLEncoder.encode;
@@ -55,12 +55,16 @@ public class Syndication {
 
 	private static final String VAR_RESOURCEURI = "\\{resourceuri}";
 
+	// SyndFeedOutput is stateless (WireFeedOutput holds no instance state; generators are statically cached)
+	private static final SyndFeedOutput SYND_FEED_OUTPUT = new SyndFeedOutput();
+
 	public static String convertSyndFeedToXml(SyndFeed feed) {
 		try {
-			// TODO: SyndFeedOutput seems thread-safe, hence should be fine to instantiate it only once?
-			return new SyndFeedOutput().outputString(feed, true);
+			return SYND_FEED_OUTPUT.outputString(feed, true);
+		} catch (IllegalArgumentException e) {
+			throw new BadRequestException("Invalid syndication feed type: '" + feed.getFeedType() + "'");
 		} catch (FeedException fe) {
-			throw new InternalServerErrorException("Error serializing the syndication feed", fe);
+			throw new InternalServerErrorException("Error serializing the syndication feed with title: " + feed.getTitle(), fe);
 		}
 	}
 
@@ -75,12 +79,28 @@ public class Syndication {
 		return null;
 	}
 
+	/**
+	 * Creates a feed whose entry links are built from the given URL template. The template is the
+	 * already-resolved value, not the name a client asked for — resolve it through
+	 * {@code SyndicationProperties#template(String)} first. A null template falls back to each entry's
+	 * resource URI.
+	 */
 	public static SyndFeed createFeedFromEntries(PrincipalManager principalManager,
-												 Config esConfig,
+												 String resolvedUrlTemplate,
+												 List<Entry> entries,
+												 String language,
+												 int limit) {
+		return createFeedFromEntries(principalManager, entries, language, limit, entry -> {
+			String link = constructSyndLinkFromUrlTemplate(resolvedUrlTemplate, entry);
+			return link != null ? link : entry.getResourceURI().toString();
+		});
+	}
+
+	public static SyndFeed createFeedFromEntries(PrincipalManager principalManager,
 												 List<Entry> entries,
 												 String language,
 												 int limit,
-												 String urlTemplate) {
+												 Function<Entry, String> linkBuilder) {
 
 		SyndFeed feed = new SyndFeedImpl();
 		feed.setDescription(format("Syndication feed containing max %d items", limit));
@@ -109,12 +129,7 @@ public class Syndication {
 
 				syndEntry.setPublishedDate(entry.getCreationDate());
 				syndEntry.setUpdatedDate(entry.getModifiedDate());
-
-				String link = constructSyndLinkFromUrlTemplate(esConfig, Objects.requireNonNullElse(urlTemplate, "default"), entry);
-				if (link == null) {
-					link = entry.getResourceURI().toString();
-				}
-				syndEntry.setLink(link);
+				syndEntry.setLink(linkBuilder.apply(entry));
 
 				URI creator = entry.getCreator();
 				if (creator != null) {
@@ -145,8 +160,7 @@ public class Syndication {
 		return feed;
 	}
 
-	private static String constructSyndLinkFromUrlTemplate(Config config, String templateName, Entry entry) {
-		String template = config.getString(Settings.SYNDICATION_URL_TEMPLATE + "." + templateName);
+	private static String constructSyndLinkFromUrlTemplate(String template, Entry entry) {
 		if (template != null) {
 			return template.replaceAll(VAR_ENTRYID, encode(entry.getId(), UTF_8)).
 					replaceAll(VAR_CONTEXTID, encode(entry.getContext().getEntry().getId(), UTF_8)).

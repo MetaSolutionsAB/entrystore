@@ -16,26 +16,40 @@
 
 package org.entrystore.rest.springboot.service;
 
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.User;
+import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.rest.springboot.model.api.ListFilter;
+import org.entrystore.rest.springboot.model.dto.CompletionState;
+import org.entrystore.rest.springboot.util.EmailSender;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.json.JSONArray;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
+import org.entrystore.rest.springboot.security.SsrfSafeHttpClient;
 import org.entrystore.rest.springboot.security.SsrfValidator;
+import org.entrystore.rest.springboot.util.RDFJSON;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
+import org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.core.session.SessionRegistry;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -43,6 +57,10 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
@@ -51,9 +69,12 @@ import java.util.zip.ZipOutputStream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -78,20 +99,77 @@ class ResourceServiceTest {
 	private SsrfValidator ssrfValidator;
 
 	@Mock
-	private SessionRegistry sessionRegistry;
+	private AuthService authService;
 
 	@Mock
 	private Entry entry;
+
+	@Mock
+	private EmailSender emailSender;
 
 	private ResourceService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, ssrfValidator, sessionRegistry);
+		// The mapper is real, since the user-settings body is parsed with it and a mock would not
+		// exercise the parsing these cases depend on.
+		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, ssrfValidator,
+				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()), authService, emailSender,
+				JsonMapper.builder().build());
 		// Point importTmpDir at the JUnit-managed isolated directory so the
 		// temp-file cleanup assertions are scoped to this test and cannot be
 		// polluted by other processes or orphan files in the shared system temp.
 		service.setImportTmpDir(isolatedTmpDir.toFile());
+	}
+
+	@Test
+	void setEntryResource_userPasswordChange_sendsTheConfirmationEmail() {
+		// The only place ResourceService sends mail. It was previously unreachable in this test class,
+		// because EmailSender was a literal null, so nothing pinned that a password change notifies the
+		// user at all — or that it does so only after the change actually took.
+		URI userUri = URI.create("http://example.com/_principals/resource/3");
+		User resourceUser = userWithPasswordChangeAllowed(userUri, "Sup3rSecret!", true);
+		when(principalManager.getAuthenticatedUserURI()).thenReturn(userUri);
+
+		CompletionState state = service.setEntryResource(entry, passwordBody("Sup3rSecret!"),
+				"application/json", "application/json", false, null, "session-1");
+
+		assertEquals(CompletionState.UPDATED, state);
+		verify(resourceUser).setSecret("Sup3rSecret!");
+		// Own password change, so only the other sessions of this user are expired.
+		verify(authService).expireUserSessions(resourceUser, "session-1");
+		verify(emailSender).sendPasswordChangeConfirmation(entry);
+	}
+
+	@Test
+	void setEntryResource_rejectedPassword_sendsNoConfirmationEmail() {
+		// setSecret returning false means the password did not change, so a confirmation would tell the
+		// user something untrue.
+		// No getAuthenticatedUserURI stub: a rejected password throws before session expiry is considered,
+		// which is itself worth knowing — nothing is expired and nothing is mailed.
+		userWithPasswordChangeAllowed(URI.create("http://example.com/_principals/resource/3"), "weak", false);
+
+		assertThrows(BadRequestException.class, () -> service.setEntryResource(entry, passwordBody("weak"),
+				"application/json", "application/json", false, null, "session-1"));
+
+		verifyNoInteractions(emailSender);
+		verifyNoInteractions(authService);
+	}
+
+	private User userWithPasswordChangeAllowed(URI userUri, String newPassword, boolean accepted) {
+		User resourceUser = mock(User.class);
+		lenient().when(resourceUser.getURI()).thenReturn(userUri);
+		lenient().when(resourceUser.setSecret(newPassword)).thenReturn(accepted);
+		when(entry.getGraphType()).thenReturn(GraphType.User);
+		when(entry.getResource()).thenReturn(resourceUser);
+		// Skips the current-password challenge, which is a separate branch with its own coverage.
+		service.setRequireCurrentPassword(false);
+		when(repositoryManager.getPrincipalManager()).thenReturn(principalManager);
+		return resourceUser;
+	}
+
+	private static byte[] passwordBody(String password) {
+		return ("{\"password\":\"" + password + "\"}").getBytes(StandardCharsets.UTF_8);
 	}
 
 	@Test
@@ -150,7 +228,6 @@ class ResourceServiceTest {
 	void deleteResource_proxyTrue_blacklistedOrigin_throwsForbidden() throws Exception {
 		when(entry.getEntryType()).thenReturn(EntryType.Link);
 		when(entry.getResourceURI()).thenReturn(URI.create("http://127.0.0.1:1/x"));
-		when(entry.getEntryURI()).thenReturn(URI.create("http://example.com/1/entry/2"));
 		doThrow(new ForbiddenException("Access denied: host is blacklisted"))
 				.when(ssrfValidator).validateForDelete(anyString());
 
@@ -164,7 +241,6 @@ class ResourceServiceTest {
 	void deleteResource_proxyTrue_badScheme_throwsBadRequest() throws Exception {
 		when(entry.getEntryType()).thenReturn(EntryType.Reference);
 		when(entry.getResourceURI()).thenReturn(URI.create("ftp://example.org/x"));
-		when(entry.getEntryURI()).thenReturn(URI.create("http://example.com/1/entry/2"));
 		doThrow(new BadRequestException("Only http and https URLs are supported"))
 				.when(ssrfValidator).validateForDelete(anyString());
 
@@ -178,7 +254,6 @@ class ResourceServiceTest {
 	void deleteResource_proxyTrue_userinfoInUrl_throwsBadRequest() throws Exception {
 		when(entry.getEntryType()).thenReturn(EntryType.LinkReference);
 		when(entry.getResourceURI()).thenReturn(URI.create("http://user:pass@example.org/x"));
-		when(entry.getEntryURI()).thenReturn(URI.create("http://example.com/1/entry/2"));
 		doThrow(new BadRequestException("URLs with embedded credentials are not allowed"))
 				.when(ssrfValidator).validateForDelete(anyString());
 
@@ -200,6 +275,139 @@ class ResourceServiceTest {
 		assertInstanceOf(ZipException.class, ex.getCause());
 
 		assertIsolatedTmpDirIsEmpty("exception path from ZipFile constructor");
+	}
+
+	// The isList && application/json short-circuit must not swallow a non-list Graph resource: that case goes
+	// to GraphUtil.serializeGraph, which routes application/json through RDFJSON. Before ENTRYSTORE-1091 the
+	// service called RDFJSON.graphToRdfJson directly here, so nothing pinned the rerouted arm.
+	@Test
+	void serializeResourceAsJson_graphResourceAsJson_returnsRdfJsonNotIdArray() {
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		Model graph = new LinkedHashModel();
+		graph.add(vf.createIRI("http://example.com/s"), vf.createIRI("http://purl.org/dc/terms/title"),
+				vf.createLiteral("Sample"));
+		RDFResource resource = mock(RDFResource.class);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.Graph);
+		when(entry.getResource()).thenReturn(resource);
+		when(resource.getGraph()).thenReturn(graph);
+
+		String result = service.serializeResourceAsJson(entry, "application/json", new ListFilter(null, null, null, null, null, null, null));
+
+		// Routing: RDF/JSON, not the id array the isList branch would have produced.
+		assertEquals(RDFJSON.graphToRdfJson(graph), result);
+		// Content, asserted independently of RDFJSON: were graphToRdfJson to regress to an empty object,
+		// both sides of the equality above would move together and still match.
+		assertTrue(result.contains("http://purl.org/dc/terms/title"),
+				"Expected the predicate IRI in the RDF/JSON output");
+		assertTrue(result.contains("Sample"), "Expected the literal value in the RDF/JSON output");
+	}
+
+	@Test
+	void serializeResourceAsJson_listWithSort_returnsSortedIdArray() {
+		Context context = mockListEntry(List.of("a", "b", "c"));
+		mockResolvableChild(context, "a", new Date(3000));
+		mockResolvableChild(context, "b", new Date(1000));
+		mockResolvableChild(context, "c", new Date(2000));
+		var filter = new ListFilter("modified", null, null, null, null, null, null);
+
+		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+
+		assertEquals(List.of("b", "c", "a"), jsonArrayToList(result));
+	}
+
+	@Test
+	void serializeResourceAsJson_listSortDescending_returnsReversedIdArray() {
+		// Pins the !"desc".equalsIgnoreCase(order) mapping in ListParams.withoutPagination.
+		Context context = mockListEntry(List.of("a", "b", "c"));
+		mockResolvableChild(context, "a", new Date(3000));
+		mockResolvableChild(context, "b", new Date(1000));
+		mockResolvableChild(context, "c", new Date(2000));
+		var filter = new ListFilter("modified", null, null, null, "desc", null, null);
+
+		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+
+		assertEquals(List.of("a", "c", "b"), jsonArrayToList(result));
+	}
+
+	@Test
+	void serializeResourceAsJson_listOver500Children_returnsUnsortedIds() {
+		// Above 500 children the sort branch is skipped entirely: the raw (HashSet-ordered,
+		// nondeterministic) ID set is returned and no child entry is resolved.
+		List<String> ids = new ArrayList<>();
+		for (int i = 0; i < 501; i++) {
+			ids.add("id" + i);
+		}
+		mockListEntry(ids);
+		var filter = new ListFilter("modified", null, null, null, null, null, null);
+
+		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+
+		List<String> returned = jsonArrayToList(result);
+		assertEquals(501, returned.size());
+		assertEquals(new HashSet<>(ids), new HashSet<>(returned));
+	}
+
+	@Test
+	void serializeResourceAsJson_listSortedBranch_missingChildSkipped() {
+		// "b" is referenced by the list but does not resolve in the context — it is logged
+		// and dropped from the sorted output (unlike the unsorted branch, which keeps raw IDs).
+		Context context = mockListEntry(List.of("a", "b", "c"));
+		mockResolvableChild(context, "a", new Date(1000));
+		when(context.get("b")).thenReturn(null);
+		mockResolvableChild(context, "c", new Date(2000));
+		var filter = new ListFilter("modified", null, null, null, null, null, null);
+
+		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+
+		assertEquals(List.of("a", "c"), jsonArrayToList(result));
+	}
+
+	@Test
+	void serializeResourceAsJson_listWithSort_ignoresNonNumericOffsetAndLimit() {
+		// The sorting path ignores offset/limit, so malformed values must not fail the request
+		// (ListParams.withoutPagination skips the Integer.parseInt done by ListParams(ListFilter)).
+		Context context = mockListEntry(List.of("a", "b"));
+		mockResolvableChild(context, "a", new Date(2000));
+		mockResolvableChild(context, "b", new Date(1000));
+		var filter = new ListFilter("modified", null, null, null, null, "abc", "xyz");
+
+		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+
+		assertEquals(List.of("b", "a"), jsonArrayToList(result));
+	}
+
+	/** Stubs {@code entry} as a List-type entry whose list resource references the given child IDs. */
+	private Context mockListEntry(List<String> childIds) {
+		Context context = mock(Context.class);
+		org.entrystore.List list = mock(org.entrystore.List.class);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.List);
+		when(entry.getResource()).thenReturn(list);
+		when(list.getGraph()).thenReturn(new LinkedHashModel());
+		lenient().when(entry.getContext()).thenReturn(context);
+		List<URI> childUris = new ArrayList<>();
+		for (String id : childIds) {
+			childUris.add(URI.create("http://example.com/ctx/entry/" + id));
+		}
+		when(list.getChildren()).thenReturn(childUris);
+		return context;
+	}
+
+	private void mockResolvableChild(Context context, String id, Date modified) {
+		Entry child = mock(Entry.class);
+		lenient().when(child.getEntryURI()).thenReturn(URI.create("http://example.com/ctx/entry/" + id));
+		lenient().when(child.getModifiedDate()).thenReturn(modified);
+		lenient().when(context.get(id)).thenReturn(child);
+	}
+
+	private static List<String> jsonArrayToList(String json) {
+		JSONArray array = new JSONArray(json);
+		List<String> values = new ArrayList<>();
+		for (int i = 0; i < array.length(); i++) {
+			values.add(array.getString(i));
+		}
+		return values;
 	}
 
 	private void assertIsolatedTmpDirIsEmpty(String pathDescription) throws IOException {

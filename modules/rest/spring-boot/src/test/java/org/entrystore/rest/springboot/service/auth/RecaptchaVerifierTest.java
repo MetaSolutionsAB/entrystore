@@ -128,4 +128,81 @@ class RecaptchaVerifierTest {
 
 		assertFalse(verifier.verify("token", null));
 	}
+
+	/**
+	 * The response shape is Google's to change — it already carries {@code challenge_ts} and
+	 * {@code hostname}, and reCaptcha Enterprise adds more. Failing on an unread member would turn an
+	 * upstream addition into a sign-up outage.
+	 */
+	@Test
+	void verify_responseWithUnreadMembers_stillReadsSuccess() {
+		expectSiteverifyPost().andRespond(withSuccess("""
+			{"success": true, "challenge_ts": "2026-08-03T12:00:00Z", "hostname": "example.com",
+			 "score": 0.9, "action": "signup"}""", MediaType.APPLICATION_JSON));
+
+		assertTrue(verifier.verify("token", null));
+	}
+
+	@Test
+	void verify_rejectionWithErrorCodes_returnsFalse() {
+		expectSiteverifyPost().andRespond(withSuccess(
+			"{\"success\": false, \"error-codes\": [\"invalid-input-secret\"]}", MediaType.APPLICATION_JSON));
+
+		assertFalse(verifier.verify("token", null));
+	}
+
+	/**
+	 * A body with no {@code success} member is a rejection, not a pass. Also pins the reason the component
+	 * is a boxed {@code Boolean}: a creator parameter is handed null for an absent member, and Jackson 3
+	 * enables {@code FAIL_ON_NULL_FOR_PRIMITIVES}, so a primitive here would throw while reading the body
+	 * instead of resolving to "not verified".
+	 */
+	@Test
+	void verify_responseWithoutSuccessMember_returnsFalse() {
+		expectSiteverifyPost().andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+		assertFalse(verifier.verify("token", null));
+	}
+
+	@Test
+	void verify_responseWithExplicitNullSuccess_returnsFalse() {
+		expectSiteverifyPost().andRespond(
+			withSuccess("{\"success\": null}", MediaType.APPLICATION_JSON));
+
+		assertFalse(verifier.verify("token", null));
+	}
+
+	/**
+	 * Decoding happens inside {@code toEntity}, so a 2xx whose body is not this record raises a
+	 * {@code RestClientException} rather than the {@code JSONException} the previous implementation
+	 * caught. Uncaught, that answers 500 on an unauthenticated endpoint; it must fail the captcha closed.
+	 */
+	@Test
+	void verify_nonJsonBody_returnsFalseRatherThanPropagating() {
+		expectSiteverifyPost().andRespond(
+			withSuccess("<html>blocked by proxy</html>", MediaType.TEXT_HTML));
+
+		assertFalse(verifier.verify("token", null));
+	}
+
+	@Test
+	void verify_truncatedJsonBody_returnsFalseRatherThanPropagating() {
+		expectSiteverifyPost().andRespond(
+			withSuccess("{\"success\":", MediaType.APPLICATION_JSON));
+
+		assertFalse(verifier.verify("token", null));
+	}
+
+	/**
+	 * {@code List.copyOf} rejects null elements, so a null inside {@code error-codes} would throw during
+	 * body conversion — the same shape as an unreadable body, and so the same 500 if not handled.
+	 */
+	@Test
+	void verify_errorCodesContainingNull_returnsFalseRatherThanPropagating() {
+		expectSiteverifyPost().andRespond(withSuccess(
+			"{\"success\": false, \"error-codes\": [null, \"invalid-input-secret\"]}",
+			MediaType.APPLICATION_JSON));
+
+		assertFalse(verifier.verify("token", null));
+	}
 }

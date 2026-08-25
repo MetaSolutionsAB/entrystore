@@ -20,8 +20,6 @@ import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
-import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
-import org.springframework.boot.SpringApplication
 import spock.lang.Stepwise
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
@@ -30,8 +28,6 @@ import static java.net.HttpURLConnection.HTTP_OK
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 @Stepwise
 class ZzzPasswordResetRateLimiterIT extends BaseSpec {
-
-	static final int HTTP_TOO_MANY_REQUESTS = 429
 
 	static def newPassword = 'newPass12345'
 	static def grecaptcharesponse = 'anything'
@@ -42,15 +38,12 @@ class ZzzPasswordResetRateLimiterIT extends BaseSpec {
 		stopPreexistingAppIfRunning()
 		greenMail.start()
 
-		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+		startOwnedApp([
 			'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
 			'--entrystore.auth.password-reset.rate.limit.max=2',
 			'--entrystore.auth.password-reset.rate.limit.window=1h',
 			'--entrystore.trust.x-forwarded-for=true'
-		] as String[]
-		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
-		appStarted = true
+		])
 
 		// pwReset only sends an email when the user exists; create the targets up-front.
 		(1..5).each { i -> UserUtil.createUser("pwResetRateLimit${i}@test.com") }
@@ -58,7 +51,7 @@ class ZzzPasswordResetRateLimiterIT extends BaseSpec {
 
 	def cleanupSpec() {
 		// Only release the SMTP port. Closing appInstance or resetting appStarted/appInstance
-		// would violate BaseSpec invariant #2 (see BaseSpec.groovy:64-72) — the next lifecycle-
+		// would violate BaseSpec invariant #2 (see the invariant comment above appStarted in BaseSpec) — the next lifecycle-
 		// owning IT's stopPreexistingAppIfRunning() is what closes our appInstance, and an extra
 		// shared-app re-init between Zzz ITs makes the Jetty rebind to port 8181 racy with the
 		// OS socket-release timer.

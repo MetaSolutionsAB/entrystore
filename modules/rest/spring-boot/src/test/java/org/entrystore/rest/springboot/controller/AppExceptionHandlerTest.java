@@ -29,9 +29,14 @@ import org.entrystore.Entry;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
+import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
+import org.entrystore.rest.springboot.util.WebResourceUrls;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.InvalidMediaTypeException;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -40,6 +45,11 @@ import org.springframework.security.authorization.AuthorizationResult;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.validation.BeanPropertyBindingResult;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -52,7 +62,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class AppExceptionHandlerTest {
 
-	private final AppExceptionHandler handler = new AppExceptionHandler();
+	private final AppExceptionHandler handler = new AppExceptionHandler(new WebResourceUrls("http://localhost:8181/store/"));
 
 	@Test
 	void handleRejectedExecution_returns503WithRetryMessage() {
@@ -311,5 +321,176 @@ class AppExceptionHandlerTest {
 		ErrorResponse body = response.getBody();
 		assertNotNull(body, "Expected non-null ErrorResponse body");
 		assertEquals(500, body.status());
+		assertEquals("Internal Server Error", body.error(), "The generic 500 must not echo the exception message");
 	}
+
+	@Test
+	void handleGenericException_internalServerErrorException_bodyCarriesReasonPhraseNotMessage() {
+		// InternalServerErrorException's javadoc promises the response "error" is the bare reason phrase and
+		// never the exception message — which is precisely what lets call sites name internal details in the
+		// message, e.g. GraphUtil.serializeGraph reporting the RDF writer class it failed to instantiate.
+		// Nothing enforced that promise: the exception reaches this handler only because it has no dedicated
+		// @ExceptionHandler, while eight sibling handlers in AppExceptionHandler do echo ex.getMessage(). A
+		// future handler written in that prevailing style would leak the internal name with no failing test.
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/1/entry/2");
+
+		ResponseEntity<ErrorResponse> response = handler.handleGenericException(
+				new InternalServerErrorException("Failed to instantiate RDF writer org.example.SecretWriter"), req);
+
+		assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertEquals(500, body.status());
+		assertEquals("Internal Server Error", body.error());
+		assertFalse(body.error().contains("SecretWriter"),
+				"The internal writer class name must not reach the client");
+	}
+
+	@Test
+	void handleSpringBadRequestException_typeMismatch_craftsParameterSpecificMessage() throws Exception {
+		// Pins the converter-binding path: an exception thrown by a Converter (e.g. MediaTypeConverter)
+		// never survives binding — TypeConverterDelegate swallows it and falls back to spring-web's
+		// MediaTypeEditor — so this handler is the only place that can tell the client which parameter
+		// was invalid, using the parameter name and offending value from the exception itself.
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/ctx/metadata/42");
+		MethodArgumentTypeMismatchException ex = new MethodArgumentTypeMismatchException(
+				"notamediatype", MediaType.class, "format", formatParameter(),
+				new InvalidMediaTypeException("notamediatype", "does not contain '/'"));
+
+		ResponseEntity<ErrorResponse> response = handler.handleSpringBadRequestException(ex, req);
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertEquals(400, body.status());
+		assertEquals("Invalid value 'notamediatype' for parameter 'format'", body.error());
+		assertEquals("/ctx/metadata/42", body.path());
+	}
+
+	@Test
+	void handleSpringBadRequestException_typeMismatchWithControlCharacters_sanitizesEchoedValue() throws Exception {
+		// The offending value is client input echoed into the response; mid-string CR/LF must not
+		// survive (CWE-117 log forging via the handler's log line and the JSON body).
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/ctx/metadata/42");
+		MethodArgumentTypeMismatchException ex = new MethodArgumentTypeMismatchException(
+				"text\nforged log line", MediaType.class, "format", formatParameter(),
+				new InvalidMediaTypeException("text\nforged log line", "does not contain '/'"));
+
+		ResponseEntity<ErrorResponse> response = handler.handleSpringBadRequestException(ex, req);
+
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertFalse(body.error().contains("\n"));
+		assertEquals("Invalid value 'text?forged log line' for parameter 'format'", body.error());
+	}
+
+	@Test
+	void handleSpringBadRequestException_nonTypeMismatch_staysGeneric() {
+		// The generic-body contract must hold for the other handled types: Spring/Jackson internals in
+		// ex.getMessage() must not leak just because type mismatches get a crafted message.
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/search");
+
+		ResponseEntity<ErrorResponse> response = handler.handleSpringBadRequestException(
+				new MissingServletRequestParameterException("query", "String"), req);
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertEquals(400, body.status());
+		assertEquals("Bad Request", body.error());
+	}
+
+	private MethodParameter formatParameter() throws NoSuchMethodException {
+		return new MethodParameter(
+				AppExceptionHandlerTest.class.getDeclaredMethod("bindingTarget", MediaType.class), 0);
+	}
+
+	@SuppressWarnings("unused")
+	private void bindingTarget(MediaType format) {
+	}
+
+	/**
+	 * Without a dedicated handler, MethodArgumentNotValidException reaches handleGenericException, which
+	 * echoes {@code ex.getMessage()} because the exception implements Spring's ErrorResponse. That
+	 * message is assembled from the failing method's {@code toGenericString()} and every
+	 * {@code ObjectError.toString()}, so the client would receive the Java signature, the DTO class name
+	 * and Spring's constraint codes. This asserts the message the client sees carries none of that.
+	 */
+	@Test
+	void handleValidationFailure_reportsOnlyTheConstraintMessage() throws Exception {
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/message");
+
+		ResponseEntity<ErrorResponse> response = handler.handleValidationFailure(
+				validationFailure(jsonTarget(), "subject", "must not be blank"), req);
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertEquals("must not be blank", body.error());
+		assertEquals("/message", body.path());
+		assertFalse(body.error().contains("jsonTarget"), "must not name the failing method");
+		assertFalse(body.error().contains("ValidatedBody"), "must not name the body class");
+		assertFalse(body.error().contains("codes ["), "must not expose Spring constraint codes");
+	}
+
+	/**
+	 * Two fields failing at once must resolve to the field declared first, not to whichever the
+	 * validator happened to return first — the sequential checks this replaced always reported the
+	 * earlier field.
+	 */
+	@Test
+	void handleValidationFailure_severalFields_reportsTheFirstDeclaredOne() throws Exception {
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/message");
+
+		ResponseEntity<ErrorResponse> response = handler.handleValidationFailure(
+				validationFailure(jsonTarget(), "password", "password message", "email", "email message"), req);
+
+		assertNotNull(response.getBody());
+		assertEquals("email message", response.getBody().error());
+	}
+
+	/** Nothing usable in the binding result still has to reject the request, not pass it. */
+	@Test
+	void handleValidationFailure_noFieldErrors_fallsBackToTheReasonPhrase() throws Exception {
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/message");
+
+		ResponseEntity<ErrorResponse> response = handler.handleValidationFailure(
+				validationFailure(jsonTarget()), req);
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		assertNotNull(response.getBody());
+		assertEquals("Bad Request", response.getBody().error());
+	}
+
+	/** field/message pairs, in the order Spring would hand them over. */
+	private static MethodArgumentNotValidException validationFailure(MethodParameter parameter,
+																	 String... fieldsAndMessages) {
+		BeanPropertyBindingResult binding =
+				new BeanPropertyBindingResult(null, parameter.getParameterType().getSimpleName());
+		for (int i = 0; i < fieldsAndMessages.length; i += 2) {
+			binding.addError(new FieldError(binding.getObjectName(), fieldsAndMessages[i],
+					null, false, null, null, fieldsAndMessages[i + 1]));
+		}
+		return new MethodArgumentNotValidException(parameter, binding);
+	}
+
+	private MethodParameter jsonTarget() throws NoSuchMethodException {
+		return new MethodParameter(
+				AppExceptionHandlerTest.class.getDeclaredMethod("jsonTargetMethod", ValidatedBody.class), 0);
+	}
+
+	private record ValidatedBody(String email, String password, String subject) {
+	}
+
+	@SuppressWarnings("unused")
+	private void jsonTargetMethod(ValidatedBody body) {
+	}
+
 }

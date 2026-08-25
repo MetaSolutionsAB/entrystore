@@ -39,8 +39,6 @@ import java.net.URI;
 @RequiredArgsConstructor
 public class LookupController {
 
-	private static final String DEFAULT_MEDIA_TYPE = "application/rdf+xml";
-
 	private final LookupService lookupService;
 
 	@Operation(summary = "Performs a global lookup by resource URI and returns metadata")
@@ -56,10 +54,10 @@ public class LookupController {
 	public ResponseEntity<String> globalLookup(
 			@RequestParam URI uri,
 			@RequestParam(required = false, defaultValue = "all") LookupScope scope,
-			@RequestParam(required = false) String format,
-			@RequestHeader(value = "Accept", defaultValue = DEFAULT_MEDIA_TYPE) String acceptHeader
+			@RequestParam(required = false) MediaType format,
+			@RequestHeader(value = "Accept", defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
 	) {
-		String mediaType = resolveMediaType(format, acceptHeader);
+		String mediaType = GraphUtil.resolveRdfMediaType(format, acceptHeader);
 		Entry entry = lookupService.lookupGlobal(uri);
 		return buildResponse(entry, scope, mediaType);
 	}
@@ -78,22 +76,12 @@ public class LookupController {
 			@PathVariable("context-id") String contextId,
 			@RequestParam URI uri,
 			@RequestParam(required = false, defaultValue = "all") LookupScope scope,
-			@RequestParam(required = false) String format,
-			@RequestHeader(value = "Accept", defaultValue = DEFAULT_MEDIA_TYPE) String acceptHeader
+			@RequestParam(required = false) MediaType format,
+			@RequestHeader(value = "Accept", defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
 	) {
-		String mediaType = resolveMediaType(format, acceptHeader);
+		String mediaType = GraphUtil.resolveRdfMediaType(format, acceptHeader);
 		Entry entry = lookupService.lookupInContext(contextId, uri);
 		return buildResponse(entry, scope, mediaType);
-	}
-
-	private String resolveMediaType(String format, String acceptHeader) {
-		if (format != null) {
-			// for 'format' param data should be sent properly - i.e. html encoded '+' as %2B
-			// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
-			// (+ is replaced with a space) we need to manually replace the space back to '+' here
-			return GraphUtil.validateRdfMediaType(format.trim().replace(' ', '+'));
-		}
-		return GraphUtil.resolveAcceptedMediaType(acceptHeader, DEFAULT_MEDIA_TYPE);
 	}
 
 	private ResponseEntity<String> buildResponse(Entry entry, LookupScope scope, String mediaType) {

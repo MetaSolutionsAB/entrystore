@@ -40,6 +40,14 @@ class PasswordResetResourceIT extends BaseSpec {
 	static def grecaptcharesponse = 'anything'
 	static def greenMail = new GreenMail(SMTP)
 
+	private static String createPwResetBody(String email, String password = newPassword) {
+		JsonOutput.toJson([
+			email             : email,
+			password          : password,
+			grecaptcharesponse: grecaptcharesponse
+		])
+	}
+
 	def setupSpec() {
 		greenMail.start()
 	}
@@ -66,11 +74,7 @@ class PasswordResetResourceIT extends BaseSpec {
 	def "POST /auth/pwreset should fail if the data sent to server is larger then 32KB or unknown"() {
 		given:
 		def username = RandomStringUtils.secure().nextAlphabetic(32769)
-		def requestBody = JsonOutput.toJson([
-			email             : username,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def requestBody = createPwResetBody(username)
 
 		when:
 		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
@@ -83,11 +87,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def username = 'user@test.com'
 		UserUtil.createUser(username)
-		def requestBody = JsonOutput.toJson([
-			email             : username,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def requestBody = createPwResetBody(username)
 
 		when:
 		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
@@ -105,17 +105,15 @@ class PasswordResetResourceIT extends BaseSpec {
 		message.getFrom().contains(new InternetAddress('info@meta.se'))
 		message.getSubject() == 'Password reset request'
 		message.getAllRecipients().contains(new InternetAddress(username))
-		def messageContent = message.getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
-		token.length() == 16
+		def token = extractConfirmationToken(greenMail)
+		token ==~ /[a-zA-Z0-9]{16}/
 	}
 
 	def "POST /auth/pwreset should send an email with generated token to an existing user when posted as an html form"() {
 		given:
 		def username = 'userForm@test.com'
 		UserUtil.createUser(username)
-		def bodyParams = 'email=' + username + '&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
+		def bodyParams = createFormBody([email: username, password: newPassword, 'g-recaptcha-response': grecaptcharesponse])
 
 		when:
 		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', bodyParams, null, 'application/x-www-form-urlencoded')
@@ -133,20 +131,14 @@ class PasswordResetResourceIT extends BaseSpec {
 		message.getFrom().contains(new InternetAddress('info@meta.se'))
 		message.getSubject() == 'Password reset request'
 		message.getAllRecipients().contains(new InternetAddress(username.toLowerCase()))
-		def messageContent = message.getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
-		token.length() == 16
+		def token = extractConfirmationToken(greenMail)
+		token ==~ /[a-zA-Z0-9]{16}/
 	}
 
 	def "POST /auth/pwreset should not send an email to a non-existing user"() {
 		given:
 		def username = 'userDoesNotExist@test.com'
-		def requestBody = JsonOutput.toJson([
-			email             : username,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def requestBody = createPwResetBody(username)
 
 		when:
 		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
@@ -155,17 +147,13 @@ class PasswordResetResourceIT extends BaseSpec {
 		resetPasswordConn.getResponseCode() == HTTP_OK
 		resetPasswordConn.getContentType().contains('text/html')
 		resetPasswordConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
-		greenMail.getReceivedMessages().size() == 0
+		!greenMail.waitForIncomingEmail(500, 1)
 	}
 
 	def "POST /auth/pwreset should not send an email with generated token when the password does not meet requirements"() {
 		given:
 		def username = 'userResetBadPassword@test.com'
-		def requestBody = JsonOutput.toJson([
-			email             : username,
-			password          : 'badPass',
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def requestBody = createPwResetBody(username, 'badPass')
 
 		when:
 		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
@@ -180,11 +168,7 @@ class PasswordResetResourceIT extends BaseSpec {
 	def "POST /auth/pwreset should not send an email with generated token to an user with invalid email"() {
 		given:
 		def username = 'userResetBadEmail@'
-		def requestBody = JsonOutput.toJson([
-			email             : username,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def requestBody = createPwResetBody(username)
 
 		when:
 		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
@@ -305,13 +289,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		// fetch resource details again
 		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn2.getResponseCode() == HTTP_OK
-		JSON_PARSER.parseText(resourceConn2.inputStream.text)['disabled'] == true
+		assert JSON_PARSER.parseText(resourceConn2.inputStream.text)['disabled'] == true
 
-		def requestBody = JsonOutput.toJson([
-			email             : username,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def requestBody = createPwResetBody(username)
 
 		when:
 		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
@@ -321,7 +301,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		resetPasswordConn.getResponseCode() == HTTP_OK
 		resetPasswordConn.getContentType().contains('text/html')
 		resetPasswordConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
-		greenMail.getReceivedMessages().size() == 0
+		!greenMail.waitForIncomingEmail(500, 1)
 	}
 
 	def "GET /auth/pwreset should not confirm password reset without providing a token"() {
@@ -340,16 +320,10 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetConfirm@test.com'
 		UserUtil.createUser(username)
-		def requestBody = JsonOutput.toJson([
-			email             : username,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def requestBody = createPwResetBody(username)
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 
 		when:
 		def confirmConn = EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token)
@@ -371,11 +345,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetInvalidToken@test.com'
 		UserUtil.createUser(username)
-		def requestBody = JsonOutput.toJson([
-			email             : username,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def requestBody = createPwResetBody(username)
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		// Even though this test ignores the real token, we must wait for the async dispatch to
 		// deliver its email before continuing, otherwise the delayed email would land in the next
@@ -397,16 +367,10 @@ class PasswordResetResourceIT extends BaseSpec {
 		def username = 'userResetNotExisting@test.com'
 		def user = UserUtil.createUser(username)
 		def entryId = user['entryId'].toString()
-		def requestBody = JsonOutput.toJson([
-			email             : username,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def requestBody = createPwResetBody(username)
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 
 		assert EntryStoreClient.deleteRequest('/_principals/entry/' + entryId).getResponseCode() == HTTP_NO_CONTENT
 		assert EntryStoreClient.getRequest('/_principals/entry/' + entryId).getResponseCode() == HTTP_NOT_FOUND
@@ -424,16 +388,10 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetAlreadyUsedToken@test.com'
 		UserUtil.createUser(username)
-		def requestBody = JsonOutput.toJson([
-			email             : username,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def requestBody = createPwResetBody(username)
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 		assert EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token).getResponseCode() == HTTP_OK
 
 		when:
@@ -449,21 +407,13 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetOldToken@test.com'
 		UserUtil.createUser(username)
-		def requestBody = JsonOutput.toJson([
-			email             : username,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def requestBody = createPwResetBody(username)
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def oldMessageContent = greenMail.getReceivedMessages()[0].getContent()
-		def oldStartIndex = oldMessageContent.toString().indexOf('?confirm') + 9
-		def oldToken = oldMessageContent.toString().substring(oldStartIndex, oldStartIndex + 16)
+		def oldToken = extractConfirmationToken(greenMail)
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 2)
-		def newMessageContent = greenMail.getReceivedMessages()[1].getContent()
-		def newStartIndex = newMessageContent.toString().indexOf('?confirm') + 9
-		def newToken = newMessageContent.toString().substring(newStartIndex, newStartIndex + 16)
+		def newToken = extractConfirmationToken(greenMail, 1)
 		assert EntryStoreClient.getRequest('/auth/pwreset?confirm=' + newToken).getResponseCode() == HTTP_OK
 
 		when:
@@ -479,30 +429,18 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def username1 = 'user1ResetOldToken@test.com'
 		UserUtil.createUser(username1)
-		def request1Body = JsonOutput.toJson([
-			email             : username1,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def request1Body = createPwResetBody(username1)
 
 		def username2 = 'user2ResetOldToken@test.com'
 		UserUtil.createUser(username2)
-		def request2Body = JsonOutput.toJson([
-			email             : username2,
-			password          : 'newPass22345',
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def request2Body = createPwResetBody(username2, 'newPass22345')
 
 		assert EntryStoreClient.postRequest('/auth/pwreset', request1Body).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def user1MessageContent = greenMail.getReceivedMessages()[0].getContent()
-		def user1StartIndex = user1MessageContent.toString().indexOf('?confirm') + 9
-		def user1Token = user1MessageContent.toString().substring(user1StartIndex, user1StartIndex + 16)
+		def user1Token = extractConfirmationToken(greenMail)
 		assert EntryStoreClient.postRequest('/auth/pwreset', request2Body).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 2)
-		def user2MessageContent = greenMail.getReceivedMessages()[1].getContent()
-		def user2StartIndex = user2MessageContent.toString().indexOf('?confirm') + 9
-		def user2Token = user2MessageContent.toString().substring(user2StartIndex, user2StartIndex + 16)
+		def user2Token = extractConfirmationToken(greenMail, 1)
 		assert EntryStoreClient.getRequest('/auth/pwreset?confirm=' + user1Token).getResponseCode() == HTTP_OK
 
 		when:
@@ -518,7 +456,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetSuccessUrlPermitted@test.com'
 		UserUtil.createUser(username)
-		def urlSuccess = "http://localhost:8181/123"
+		def urlSuccess = EntryStoreClient.origin + '/123'
 		def requestBody = JsonOutput.toJson([
 			email             : username,
 			password          : newPassword,
@@ -527,9 +465,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 
 		when:
 		def confirmConn = EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token)
@@ -551,16 +487,14 @@ class PasswordResetResourceIT extends BaseSpec {
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 
 		when:
 		def confirmConn = EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token)
 
 		then:
 		confirmConn.getResponseCode() == HTTP_OK
-		confirmConn.getURL().toString() == 'http://localhost:8181/auth/pwreset?confirm=' + token
+		confirmConn.getHeaderField('Location') == null
 	}
 
 	def "GET /auth/pwreset should not confirm password reset for a non-existing user and redirect to failure url"() {
@@ -568,7 +502,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		def username = 'userResetNotExistingFailureUrl@test.com'
 		def user = UserUtil.createUser(username)
 		def entryId = user['entryId']
-		def urlfailure = "http://localhost:8181/123"
+		def urlfailure = EntryStoreClient.origin + '/123'
 		def requestBody = JsonOutput.toJson([
 			email             : 'userResetNotExistingFailureUrl@test.com',
 			password          : newPassword,
@@ -577,9 +511,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf('?confirm') + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		def token = extractConfirmationToken(greenMail)
 
 		assert EntryStoreClient.deleteRequest('/_principals/entry/' + entryId).getResponseCode() == HTTP_NO_CONTENT
 		assert EntryStoreClient.getRequest('/_principals/entry/' + entryId).getResponseCode() == HTTP_NOT_FOUND
@@ -594,11 +526,7 @@ class PasswordResetResourceIT extends BaseSpec {
 	def "POST /auth/pwreset should escape HTML in error messages to prevent injection"() {
 		given:
 		def maliciousEmail = '<script>alert(1)</script>'
-		def requestBody = JsonOutput.toJson([
-			email             : maliciousEmail,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def requestBody = createPwResetBody(maliciousEmail)
 
 		when:
 		def conn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
@@ -621,11 +549,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		UserUtil.createUser(username)
 		greenMail.stop()
 
-		def requestBody = JsonOutput.toJson([
-			email             : username,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def requestBody = createPwResetBody(username)
 
 		when:
 		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
@@ -660,16 +584,8 @@ class PasswordResetResourceIT extends BaseSpec {
 
 		def nonexistentEmail = 'userResetEqualityNonexistent@test.com'
 
-		def disabledBody = JsonOutput.toJson([
-			email             : disabledEmail,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
-		def nonexistentBody = JsonOutput.toJson([
-			email             : nonexistentEmail,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def disabledBody = createPwResetBody(disabledEmail)
+		def nonexistentBody = createPwResetBody(nonexistentEmail)
 
 		when:
 		def disabledConn = EntryStoreClient.postRequest('/auth/pwreset', disabledBody)
@@ -683,7 +599,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		def disabledBodyText = disabledConn.inputStream.text.replace(disabledEmail.toLowerCase(), '<EMAIL>')
 		def nonexistentBodyText = nonexistentConn.inputStream.text.replace(nonexistentEmail.toLowerCase(), '<EMAIL>')
 		disabledBodyText == nonexistentBodyText
-		greenMail.getReceivedMessages().size() == 0
+		!greenMail.waitForIncomingEmail(500, 1)
 	}
 
 	def "POST /auth/pwreset should return 503 when the reCaptcha verifier returns an upstream 5xx"() {
@@ -692,11 +608,7 @@ class PasswordResetResourceIT extends BaseSpec {
 
 		def username = 'userPwResetVerifierDown@test.com'
 		UserUtil.createUser(username)
-		def requestBody = JsonOutput.toJson([
-			email             : username,
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
+		def requestBody = createPwResetBody(username)
 
 		when:
 		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)

@@ -25,6 +25,7 @@ import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration.Prov
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.service.OidcAuthService;
 import org.entrystore.rest.springboot.service.auth.OidcAuthStateCache;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Condition;
 import org.springframework.context.annotation.ConditionContext;
@@ -49,8 +50,9 @@ public class OidcLoginSuccessHandler
 
 	public OidcLoginSuccessHandler(ESUserDetailsService userService, OidcAuthService oidcAuthService,
 								   OidcAuthStateCache oidcAuthStateCache, PrincipalManager principalManager,
+								   ErrorResponseWriter errorResponseWriter,
 								   OidcCustomConfiguration oidcConfiguration) {
-		super(userService, principalManager);
+		super(userService, principalManager, errorResponseWriter);
 		this.oidcAuthService = oidcAuthService;
 		this.oidcAuthStateCache = oidcAuthStateCache;
 		this.oidcConfiguration = oidcConfiguration;

@@ -18,7 +18,9 @@ package org.entrystore.rest.springboot.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.ValidationException;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.AuthorizationException;
@@ -36,6 +38,9 @@ import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException;
 import org.entrystore.rest.springboot.model.exception.TextareaHtmlResponseException;
 import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
+import org.entrystore.rest.springboot.util.HttpUtil;
+import org.entrystore.rest.springboot.util.ValidationErrorMessages;
+import org.entrystore.rest.springboot.util.WebResourceUrls;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -47,6 +52,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.ui.Model;
+import org.springframework.validation.ObjectError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -64,7 +71,10 @@ import java.util.concurrent.RejectedExecutionException;
  */
 @Slf4j
 @ControllerAdvice
+@RequiredArgsConstructor
 public class AppExceptionHandler {
+
+	private final WebResourceUrls webResourceUrls;
 
 	@ExceptionHandler(RedirectTemporaryException.class)
 	public ResponseEntity<Void> handleUrlRedirectException(RedirectTemporaryException ex) {
@@ -101,15 +111,24 @@ public class AppExceptionHandler {
 	}
 
 	// Separate BadRequest handler for HttpMessageNotReadableException and MethodArgumentTypeMismatchException since those leak Spring/Jackson internals
-	// Those now respond with a generic "Bad Request" error
+	// Those now respond with a generic "Bad Request" error. For MethodArgumentTypeMismatchException a
+	// parameter-specific message is crafted here from the parameter name and the (sanitized) offending
+	// value — both client-known, nothing internal. It cannot be crafted anywhere earlier: an exception
+	// thrown by a Converter never survives binding, since TypeConverterDelegate swallows it and falls
+	// back to a by-convention PropertyEditor (spring-web's MediaTypeEditor for MediaType params).
 	@ExceptionHandler({MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class, MissingServletRequestParameterException.class})
 	public ResponseEntity<ErrorResponse> handleSpringBadRequestException(Exception ex,
 																		 HttpServletRequest request) {
 		log.debug("BadRequestException of type '{}': {}", ex.getClass().getName(), ex.getMessage());
+		String error = HttpStatus.BAD_REQUEST.getReasonPhrase();
+		if (ex instanceof MethodArgumentTypeMismatchException typeMismatch) {
+			error = "Invalid value '%s' for parameter '%s'".formatted(
+					HttpUtil.sanitizeForLog(String.valueOf(typeMismatch.getValue())), typeMismatch.getName());
+		}
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.BAD_REQUEST.value())
 				.path(request.getRequestURI())
-				.error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+				.error(error)
 				.build();
 		return jsonResponse(responseBody);
 	}
@@ -275,7 +294,7 @@ public class AppExceptionHandler {
 			log.debug("EntityTooLargeException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
 		}
 		ErrorResponse responseBody = ErrorResponse.builder()
-				.status(HttpStatus.PAYLOAD_TOO_LARGE.value())
+				.status(HttpStatus.CONTENT_TOO_LARGE.value())
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();
@@ -307,6 +326,63 @@ public class AppExceptionHandler {
 				.error("Server temporarily overloaded; retry later")
 				.build();
 		return jsonResponse(responseBody);
+	}
+
+	// Both Bean Validation failures land here so that neither echoes an internal identifier.
+	//
+	// MethodArgumentNotValidException (an invalid @Valid request body) used to fall through to
+	// handleGenericException, which surfaces ex.getMessage() because the exception implements Spring's
+	// ErrorResponse; that message is built from the failing method's toGenericString() plus every
+	// ObjectError's toString(), so the caller received the Java signature, the request-body class name,
+	// the rejected value and Spring's constraint codes. POST /message is among the affected endpoints and
+	// anonymous callers reach it: validation fails during argument resolution, before MessageService's
+	// guest check runs.
+	//
+	// ConstraintViolationException (an invalid @Validated method parameter, as on SearchController's
+	// @RequestParam @Size) reached handleBadRequestException instead, since it extends ValidationException
+	// — and that handler also echoes ex.getMessage(), which for this type is
+	// "<methodName>.<paramName>: <message>". Anonymous callers of GET /search were therefore handed the
+	// controller method name. Reporting the violation's own message drops the prefix and keeps only what
+	// the caller told us.
+	//
+	// The browser-facing auth endpoints do not arrive here: they validate through RequestBodyValidator so
+	// their HTML rendering and their request-size limit both keep working, so there is no HTML branch to
+	// maintain. Putting @Valid on a view-rendering endpoint would answer JSON where the flow answers
+	// HTML — validate it through RequestBodyValidator instead.
+	@ExceptionHandler({MethodArgumentNotValidException.class, ConstraintViolationException.class})
+	public ResponseEntity<ErrorResponse> handleValidationFailure(Exception ex,
+																 HttpServletRequest request) {
+
+		String target;
+		String message;
+		if (ex instanceof MethodArgumentNotValidException bodyFailure) {
+			Class<?> bodyType = bodyFailure.getParameter().getParameterType();
+			target = bodyType.getSimpleName();
+			// Global errors as a fallback: SpringValidatorAdapter routes any violation with an empty
+			// property path — a class-level or cross-field constraint — to getGlobalErrors(), which
+			// getFieldErrors() never contains, so without this such a failure reports only "Bad Request"
+			// and its message is recorded nowhere.
+			message = ValidationErrorMessages.firstFromFieldErrors(bodyType, bodyFailure.getFieldErrors())
+					.or(() -> bodyFailure.getGlobalErrors().stream()
+							.map(ObjectError::getDefaultMessage)
+							.filter(StringUtils::isNotBlank)
+							.findFirst())
+					.orElse(HttpStatus.BAD_REQUEST.getReasonPhrase());
+		} else {
+			ConstraintViolationException parameterFailure = (ConstraintViolationException) ex;
+			target = "request parameters";
+			message = ValidationErrorMessages
+					.firstFromViolations(Object.class, parameterFailure.getConstraintViolations())
+					.orElse(HttpStatus.BAD_REQUEST.getReasonPhrase());
+		}
+		log.debug("Validation failed for {} at endpoint '{}': {}",
+				target, request.getRequestURI(), message);
+
+		return jsonResponse(ErrorResponse.builder()
+				.status(HttpStatus.BAD_REQUEST.value())
+				.path(request.getRequestURI())
+				.error(message)
+				.build());
 	}
 
 	@ExceptionHandler(Exception.class)
@@ -358,6 +434,9 @@ public class AppExceptionHandler {
 		} else {
 			log.debug("HtmlResponseException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
 		}
+		// @ModelAttribute methods are not invoked for @ExceptionHandler views, so the path the
+		// controller would normally contribute has to be set here as well.
+		model.addAttribute("stylesheetPath", webResourceUrls.getStylesheetPath());
 		model.addAttribute("title", ex.getTitle());
 		model.addAttribute("message", ex.getMessage());
 		String linkUrl = ex.getLinkUrl();

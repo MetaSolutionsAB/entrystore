@@ -20,10 +20,9 @@ class TokenResourceIT extends BaseSpec {
 		.appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
 		.toFormatter()
 	static def password = 'newPass12345'
-	static def genericCredsClone = [:]
 
 	def setupSpec() {
-		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.snapshotCreds()
 		EntryStoreClient.creds.put('userForTokenManagement@test.com', password)
 		EntryStoreClient.creds.put('userForTokenManagementDelete@test.com', password)
 		EntryStoreClient.creds.put('userForTokenManagementDeleteCurrent@test.com', password)
@@ -31,7 +30,18 @@ class TokenResourceIT extends BaseSpec {
 	}
 
 	def cleanupSpec() {
-		EntryStoreClient.creds = genericCredsClone
+		EntryStoreClient.restoreCreds()
+	}
+
+	/** Token value from an auth_token Set-Cookie line, up to but excluding the '.node' suffix. */
+	private static String tokenPart(String authCookieLine) {
+		// Without both markers the split below silently returns the whole remainder — token plus the
+		// cookie attributes — so fail here instead of querying /auth/tokens with a bogus key. The
+		// '.node' check must look at the cookie value alone, not at attributes that could carry it.
+		assert authCookieLine.startsWith('auth_token='): 'not an auth_token Set-Cookie line: ' + authCookieLine
+		def value = authCookieLine.substring('auth_token='.length()).split(';')[0]
+		assert value.contains('.node'): 'auth_token cookie carries no .node suffix: ' + authCookieLine
+		return value.split(/\.node/)[0]
 	}
 
 	def "GET /auth/tokens should get unauthorized for a non-authenticated user"() {
@@ -45,25 +55,18 @@ class TokenResourceIT extends BaseSpec {
 	def "GET /auth/tokens should get a list of all currently active logins for of an authenticated user"() {
 		given:
 		def username = 'userForTokenManagement@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams1 = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=100'
+		UserUtil.createUserWithPassword(username, password)
+		// raw login ritual kept: loginIsolated does not support auth_maxage
+		def bodyParams1 = createFormBody([auth_username: username, auth_password: password, auth_maxage: '100'])
 		def loginConnection1 = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
 		assert loginConnection1.getResponseCode() == HTTP_OK
 		def cookie1 = EntryStoreClient.findSetCookie(loginConnection1, 'auth_token')
-		def tokenPart1 = cookie1.substring(cookie1.indexOf('auth_token=') + 11, cookie1.indexOf('.node'))
-		if (tokenPart1.contains(';')) {
-			tokenPart1 = tokenPart1.substring(0, tokenPart1.indexOf(';'))
-		}
-		def bodyParams2 = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=50'
+		def tokenPart1 = tokenPart(cookie1)
+		def bodyParams2 = createFormBody([auth_username: username, auth_password: password, auth_maxage: '50'])
 		def loginConnection2 = EntryStoreClient.postRequest('/auth/cookie', bodyParams2, '', 'application/x-www-form-urlencoded')
 		assert loginConnection2.getResponseCode() == HTTP_OK
 		def cookie2 = EntryStoreClient.findSetCookie(loginConnection2, 'auth_token')
-		def tokenPart2 = cookie2.substring(cookie2.indexOf('auth_token=') + 11, cookie2.indexOf('.node'))
-		if (tokenPart2.contains(';')) {
-			tokenPart2 = tokenPart2.substring(0, tokenPart2.indexOf(';'))
-		}
+		def tokenPart2 = tokenPart(cookie2)
 
 		when:
 		def tokensConnection = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: cookie1])
@@ -88,35 +91,30 @@ class TokenResourceIT extends BaseSpec {
 	def "GET /auth/tokens should get a list of all currently active logins of an authenticated user with updated timestamps"() {
 		given:
 		def username = 'userForTokenManagementUpdate@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams1 = 'auth_username=' + username + '&auth_password=' + password
-		def loginConnection1 = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
-		assert loginConnection1.getResponseCode() == HTTP_OK
-		def cookie = EntryStoreClient.findSetCookie(loginConnection1, 'auth_token')
-		def tokenPart = cookie.substring(cookie.indexOf('auth_token=') + 11, cookie.indexOf('.node'))
-		if (tokenPart.contains(';')) {
-			tokenPart = tokenPart.substring(0, tokenPart.indexOf(';'))
-		}
-		def tokensConnection = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: cookie])
+		UserUtil.createUserWithPassword(username, password)
+		def login = EntryStoreClient.loginIsolated(username)
+		def token = tokenPart(login.authCookie)
+		def tokensConnection = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: login.authCookie])
 		assert tokensConnection.getResponseCode() == HTTP_OK
 		def tokensRespJson = JSON_PARSER.parseText(tokensConnection.inputStream.text)
-		def oldLastAccessTime = LocalDateTime.parse(tokensRespJson[tokenPart]['lastAccessTime'].toString(), dtf)
-		def oldLoginExpiration = LocalDateTime.parse(tokensRespJson[tokenPart]['loginExpiration'].toString(), dtf)
-		def oldLoginTime = tokensRespJson[tokenPart]['loginTime']
+		def oldLastAccessTime = LocalDateTime.parse(tokensRespJson[token]['lastAccessTime'].toString(), dtf)
+		def oldLoginExpiration = LocalDateTime.parse(tokensRespJson[token]['loginExpiration'].toString(), dtf)
+		def oldLoginTime = tokensRespJson[token]['loginTime']
 
 		when:
-		def tokensNewConnection = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: cookie])
+		// the assertions below truncate to whole milliseconds (ChronoUnit.MILLIS.between(...) > 0),
+		// so the second request has to land in a strictly later millisecond to be observable
+		Thread.sleep(5)
+		def tokensNewConnection = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: login.authCookie])
 
 		then:
 		tokensNewConnection.getResponseCode() == HTTP_OK
 		def tokensNewRespJson = JSON_PARSER.parseText(tokensNewConnection.inputStream.text)
-		def newLastAccessTime = LocalDateTime.parse(tokensNewRespJson[tokenPart]['lastAccessTime'].toString(), dtf)
+		def newLastAccessTime = LocalDateTime.parse(tokensNewRespJson[token]['lastAccessTime'].toString(), dtf)
 		ChronoUnit.MILLIS.between(oldLastAccessTime, newLastAccessTime) > 0
-		def newLoginExpiration = LocalDateTime.parse(tokensNewRespJson[tokenPart]['loginExpiration'].toString(), dtf)
+		def newLoginExpiration = LocalDateTime.parse(tokensNewRespJson[token]['loginExpiration'].toString(), dtf)
 		ChronoUnit.MILLIS.between(oldLoginExpiration, newLoginExpiration) > 0
-		oldLoginTime == tokensNewRespJson[tokenPart]['loginTime']
+		oldLoginTime == tokensNewRespJson[token]['loginTime']
 	}
 
 	def "DELETE /auth/tokens should get unauthorized for a non-authenticated user"() {
@@ -130,66 +128,41 @@ class TokenResourceIT extends BaseSpec {
 	def "DELETE /auth/tokens should delete a specified token of the authenticated user"() {
 		given:
 		def username = 'userForTokenManagementDelete@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams1 = 'auth_username=' + username + '&auth_password=' + password
-		def loginConnection1 = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
-		assert loginConnection1.getResponseCode() == HTTP_OK
-		def cookie1 = EntryStoreClient.findSetCookie(loginConnection1, 'auth_token')
-		def csrf1 = EntryStoreClient.findCookieValue(loginConnection1, 'XSRF-TOKEN')
-		def tokenPart1 = cookie1.substring(cookie1.indexOf('auth_token=') + 11, cookie1.indexOf('.node'))
-		if (tokenPart1.contains(';')) {
-			tokenPart1 = tokenPart1.substring(0, tokenPart1.indexOf(';'))
-		}
-		def bodyParams2 = 'auth_username=' + username + '&auth_password=' + password
-		def loginConnection2 = EntryStoreClient.postRequest('/auth/cookie', bodyParams2, '', 'application/x-www-form-urlencoded')
-		assert loginConnection2.getResponseCode() == HTTP_OK
-		def cookie2 = EntryStoreClient.findSetCookie(loginConnection2, 'auth_token')
-		def tokenPart2 = cookie2.substring(cookie2.indexOf('auth_token=') + 11, cookie2.indexOf('.node'))
-		if (tokenPart2.contains(';')) {
-			tokenPart2 = tokenPart2.substring(0, tokenPart2.indexOf(';'))
-		}
+		UserUtil.createUserWithPassword(username, password)
+		def login1 = EntryStoreClient.loginIsolated(username)
+		def tokenPart1 = tokenPart(login1.authCookie)
+		def login2 = EntryStoreClient.loginIsolated(username)
+		def tokenPart2 = tokenPart(login2.authCookie)
 		def body = JsonOutput.toJson([token: tokenPart2])
 
 		when:
 		def tokensDeleteConnection = EntryStoreClient.deleteRequest('/auth/tokens', body, '', 'application/json',
-				EntryStoreClient.csrfHeaders(cookie1, csrf1))
+				EntryStoreClient.csrfHeaders(login1.authCookie, login1.csrf))
 
 		then:
 		tokensDeleteConnection.getResponseCode() == HTTP_NO_CONTENT
-		def token1Connection = EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: cookie1])
+		def token1Connection = EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: login1.authCookie])
 		token1Connection.getResponseCode() == HTTP_OK
 		def tokensRespJson = JSON_PARSER.parseText(token1Connection.inputStream.text)
 		(tokensRespJson as Map).keySet().size() == 1
 		tokensRespJson[tokenPart1] != null
-		EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: cookie2]).getResponseCode() == HTTP_UNAUTHORIZED
+		EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: login2.authCookie]).getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	def "DELETE /auth/tokens should delete current login token of the authenticated user and log him out"() {
 		given:
 		def username = 'userForTokenManagementDeleteCurrent@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams1 = 'auth_username=' + username + '&auth_password=' + password
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
-		assert loginConnection.getResponseCode() == HTTP_OK
-		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
-		def csrf = EntryStoreClient.findCookieValue(loginConnection, 'XSRF-TOKEN')
-		def tokenPart = cookie.substring(cookie.indexOf('auth_token=') + 11, cookie.indexOf('.node'))
-		if (tokenPart.contains(';')) {
-			tokenPart = tokenPart.substring(0, tokenPart.indexOf(';'))
-		}
-		def body = JsonOutput.toJson([token: tokenPart])
-		assert EntryStoreClient.getRequest('/auth/user', '', '', [Cookie: cookie]).getResponseCode() == HTTP_OK
+		UserUtil.createUserWithPassword(username, password)
+		def login = EntryStoreClient.loginIsolated(username)
+		def body = JsonOutput.toJson([token: tokenPart(login.authCookie)])
+		assert EntryStoreClient.getRequest('/auth/user', '', '', [Cookie: login.authCookie]).getResponseCode() == HTTP_OK
 
 		when:
 		def tokensDeleteConnection = EntryStoreClient.deleteRequest('/auth/tokens', body, '', 'application/json',
-				EntryStoreClient.csrfHeaders(cookie, csrf))
+				EntryStoreClient.csrfHeaders(login.authCookie, login.csrf))
 
 		then:
 		tokensDeleteConnection.getResponseCode() == HTTP_NO_CONTENT
-		EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: cookie]).getResponseCode() == HTTP_UNAUTHORIZED
+		EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: login.authCookie]).getResponseCode() == HTTP_UNAUTHORIZED
 	}
 }

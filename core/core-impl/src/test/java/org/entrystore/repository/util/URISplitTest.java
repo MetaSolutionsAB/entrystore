@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import java.net.MalformedURLException;
 import java.net.URI;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -87,6 +88,25 @@ public class URISplitTest {
 	public void constructor_resource() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(resourceURIString), URI.create(anyURIStringBase).toURL());
 		assertEquals(URIType.Resource, uriSplit.getUriType());
+	}
+
+	/**
+	 * ENTRYSTORE-1095. {@code ContextImpl.clearUnresolvableChild} rebuilds these names to clean up an
+	 * entry it cannot load, so the set has to match what {@code EntryImpl.remove} clears — all five
+	 * graphs, and the resource graph in particular, whose omission left a {@code List} child's member
+	 * list behind after the graph naming it was destroyed.
+	 */
+	@Test
+	public void getEntryGraphURIs_namesEveryGraphAnEntryOccupies() throws MalformedURLException {
+		URISplit uriSplit = new URISplit(URI.create(entryURIString), URI.create(anyURIStringBase).toURL());
+
+		assertEquals(Set.of(
+				URI.create("https://slashdot.org/12/entry/13"),
+				URI.create("https://slashdot.org/12/metadata/13"),
+				URI.create("https://slashdot.org/12/cached-external-metadata/13"),
+				URI.create("https://slashdot.org/12/relations/13"),
+				URI.create("https://slashdot.org/12/resource/13")),
+			uriSplit.getEntryGraphURIs());
 	}
 
 	@Test

@@ -88,6 +88,27 @@ class ErrorResponseIT extends BaseSpec {
 		resp['path'] != null
 	}
 
+	def "GET /{context-id}/metadata/{entry-id} with unparseable format should return 400 with parameter-specific message"() {
+		given:
+		// a syntactically unparseable format (no slash) fails MediaType binding; AppExceptionHandler
+		// crafts the message from the MethodArgumentTypeMismatchException (converter exceptions are
+		// swallowed by Spring's binding fallback and cannot carry a message to the client)
+		getOrCreateContext([contextId: 'err400ctx'])
+		def entryId = createEntry('err400ctx', [entrytype: 'link', resource: 'http://example.org/err400format'])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/err400ctx/metadata/' + entryId + '?format=notamediatype')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('application/json')
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
+		resp['status'] == 400
+		resp['error'] == "Invalid value 'notamediatype' for parameter 'format'"
+		resp['timestamp'] != null
+		resp['path'] != null
+	}
+
 	// ========================
 	// 401 Unauthorized (anonymous/guest)
 	// ========================

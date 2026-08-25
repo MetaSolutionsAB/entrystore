@@ -13,11 +13,7 @@ class EchoIT extends BaseSpec {
 	def 'POST /echo as guest should respond with FORBIDDEN 403'() {
 		given:
 		// create a test binary file with some data
-		def testBinFile = File.createTempFile('echoTest', '.bin')
-		testBinFile.deleteOnExit()
-		testBinFile.withOutputStream { out ->
-			out.write('Hello, its me! Mario!'.bytes)
-		}
+		def testBinFile = createTempBinaryFile('echoTest', '.bin', 'Hello, its me! Mario!'.bytes)
 
 		when:
 		def echoConn = EntryStoreClient.postRequestMultiPart('/echo', testBinFile, '')
@@ -32,11 +28,7 @@ class EchoIT extends BaseSpec {
 	def 'POST /echo as "#user" with multi-part file should respond with the file contents as string in html textarea'() {
 		given:
 		// create a test binary file with some data
-		def testBinFile = File.createTempFile('echoTest', '.bin')
-		testBinFile.deleteOnExit()
-		testBinFile.withOutputStream { out ->
-			out.write('Hello, its me! Mario!'.bytes)
-		}
+		def testBinFile = createTempBinaryFile('echoTest', '.bin', 'Hello, its me! Mario!'.bytes)
 
 		when:
 		def echoConn = EntryStoreClient.postRequestMultiPart('/echo', testBinFile, user)
@@ -53,11 +45,7 @@ class EchoIT extends BaseSpec {
 	def 'POST /echo as admin with multi-part file should return the file contents as string with escaped html chars'() {
 		given:
 		// create a test binary file with some data
-		def testBinFile = File.createTempFile('echoTest', '.bin')
-		testBinFile.deleteOnExit()
-		testBinFile.withOutputStream { out ->
-			out.write('Hello, its me! <b>bold</b> Mario and a hash tag # & !'.bytes)
-		}
+		def testBinFile = createTempBinaryFile('echoTest', '.bin', 'Hello, its me! <b>bold</b> Mario and a hash tag # & !'.bytes)
 
 		when:
 		def echoConn = EntryStoreClient.postRequestMultiPart('/echo', testBinFile)

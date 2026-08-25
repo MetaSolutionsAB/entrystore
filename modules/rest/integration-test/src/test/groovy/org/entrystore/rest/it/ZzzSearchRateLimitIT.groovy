@@ -17,8 +17,6 @@
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
-import org.springframework.boot.SpringApplication
 import spock.lang.Stepwise
 
 import static java.net.HttpURLConnection.HTTP_OK
@@ -27,28 +25,24 @@ import static java.net.HttpURLConnection.HTTP_OK
 @Stepwise
 class ZzzSearchRateLimitIT extends BaseSpec {
 
-	static final int HTTP_TOO_MANY_REQUESTS = 429
 	static final String QUERY = '/search?type=solr&query=description.pl:opissearch'
 
 	def setupSpec() {
 		stopPreexistingAppIfRunning()
 
-		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+		startOwnedApp([
 			'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
 			'--entrystore.solr.search.rate.limit.max=3',
 			'--entrystore.solr.search.rate.limit.window=10m',
 			'--entrystore.trust.x-forwarded-for=true'
-		] as String[]
-		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
-		appStarted = true
+		])
 	}
 
 	// Intentionally no cleanupSpec — matches the canonical pattern of ZzzCasLoginIT,
 	// ZzzSamlLoginIT, ZzzMultipartSizeLimitIT, and ZzzServerHeader*IT. The next
 	// lifecycle-owning IT's stopPreexistingAppIfRunning() closes our appInstance;
 	// resetting appInstance=null or appStarted=false here would violate BaseSpec
-	// invariant #2 (see BaseSpec.groovy:64-72) and force an unnecessary re-init of
+	// invariant #2 (see the invariant comment above appStarted in BaseSpec) and force an unnecessary re-init of
 	// the shared application, whose Jetty rebind to port 8181 is racy with the OS
 	// socket-release timer (the cause of ZzzPasswordResetRateLimiterIT flakiness
 	// before this fix).

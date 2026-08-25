@@ -77,7 +77,8 @@ springboot/
 - Spring Boot **4.1** (`spring-boot-starter-parent` version in root `pom.xml`) on embedded Jetty 12 (`spring-boot-starter-jetty`), not Tomcat. Verify APIs against Boot 4.1, not Boot 3.x — 4.x relocated/renamed packages. Prefer `RestClient` over the deprecated `RestTemplate`.
 - Controllers: `@RestController` + `@RequiredArgsConstructor` (Lombok) + `@Operation` (Swagger)
 - Services: `@Slf4j` + `@Service` + `@RequiredArgsConstructor`
-- For new services, read config via Spring Boot mechanisms (`@Value("${prop:default}")` or `@ConfigurationProperties`). Some services still call `repositoryManager.getConfiguration().get*` directly — migrate when touching them.
+- Read config via Spring Boot mechanisms (`@Value("${prop:default}")` or `@ConfigurationProperties`). The REST layer must not inject the legacy `Config` bean or read `repositoryManager.getConfiguration()`; that bean exists only for core.
+- Indexed list settings (`key.1`, `key.2`, …) bind as `Map<String, String>`, which differs from the legacy `Config.getStringList`: a gap no longer truncates the list, and a bare un-indexed value no longer wins over the indexed entries. Register new such keys in `IndexedListConfigValidator` so both shapes are reported at startup.
 - `@ConfigurationProperties` records must declare only the canonical constructor — a second constructor silently makes nested binding return empty values (no error).
 - Config: `application.yaml` imports `entrystore.properties` via `spring.config.import` — every `entrystore.*` key is bound to the Spring `Environment` and is readable via `@Value`, `@ConfigurationProperties`, and `@ConditionalOnProperty`, not only via the legacy `Config` wrapper
 - JSON: Jackson 3 — use `tools.jackson.*` (not `com.fasterxml.jackson.*`); annotations stay in `com.fasterxml.jackson.annotation.*` **except** `@JsonSerialize`/`@JsonDeserialize` (`tools.jackson.databind.annotation.*`). Custom serializers extend `ValueSerializer`/`ValueDeserializer`; mappers are immutable (`JsonMapper.builder()...build()`).
@@ -94,6 +95,8 @@ springboot/
 
 **Prefer Lombok annotations over hand-written boilerplate.**
 Reach for the annotation first; only write the expansion manually when Lombok can't express the intent.
+
+**Comments explain why, not what.** Put the explanation in the class or method Javadoc — contract, caller obligations, non-obvious constraints. Inline line comments only where the code itself is controversial (a deliberate fail-open, a lock/transaction subtlety, a workaround), and then 1 line, 2 at most. Decision history, alternatives rejected, and issue background belong in the commit message or the JIRA issue, not in the source.
 
 Formatting is IntelliJ-based, defined in `.editorconfig` (with `ij_*` properties) and `.idea/codeStyles/`. No Eclipse formatter is used.
 

@@ -40,11 +40,10 @@ import org.entrystore.GraphEntity;
 import org.entrystore.Metadata;
 import org.entrystore.Provenance;
 import org.entrystore.ProvenanceType;
-import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.NS;
+import org.entrystore.rest.springboot.configuration.TraversalProperties;
 import org.entrystore.rest.springboot.model.api.MetadataType;
 import org.entrystore.rest.springboot.model.dto.MetadataResult;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
@@ -55,11 +54,9 @@ import org.entrystore.rest.springboot.util.GraphUtil;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -69,7 +66,7 @@ import java.util.Set;
 public class MetadataService {
 
 	private final RepositoryManagerImpl repositoryManager;
-	private final Config esConfig;
+	private final TraversalProperties traversalProperties;
 
 	public MetadataResult getMetadata(Entry entry, MetadataType metadataType, String format, String graphQuery, Integer depth, String recursive, String scope, String revision) {
 
@@ -107,12 +104,8 @@ public class MetadataService {
 			throw new EntityNotFoundException("Metadata graph not found");
 		}
 
-		if (graphQuery != null) {
-			Model graphQueryResult = applyGraphQuery(graphQuery, metadataGraph);
-			return new MetadataResult(serializeGraph(graphQueryResult, format), null);
-		} else {
-			return new MetadataResult(serializeGraph(metadataGraph, format), null);
-		}
+		Model graphToSerialize = graphQuery != null ? applyGraphQuery(graphQuery, metadataGraph) : metadataGraph;
+		return new MetadataResult(GraphUtil.serializeGraph(graphToSerialize, format), null);
 	}
 
 	/**
@@ -171,21 +164,21 @@ public class MetadataService {
 
 		Map<String, String> blacklist = loadBlacklist(recursive);
 
-		int depthMax = firstDetectedProfile != null ? esConfig.getInt(
-				traversalSetting(Settings.TRAVERSAL_PROFILE_MAX_DEPTH, firstDetectedProfile),
-				depth
-		) : depth;
+		int depthMax = depth;
+		int limit = 1000;
+		boolean repositoryScope = true;
+		if (firstDetectedProfile != null) {
+			depthMax = traversalProperties.maxDepth(firstDetectedProfile).orElse(depthMax);
+			limit = traversalProperties.limit(firstDetectedProfile).orElse(limit);
+			repositoryScope = traversalProperties.repositoryScope(firstDetectedProfile).orElse(repositoryScope);
+		}
+
 		if (depth > depthMax) {
 			depth = depthMax;
 		} else if (depth < 0) {
 			depth = 10;
 		}
 
-		int limit = 1000; // default
-		limit = firstDetectedProfile != null ? esConfig.getInt(traversalSetting(Settings.TRAVERSAL_PROFILE_LIMIT, firstDetectedProfile), limit) : limit;
-
-		boolean repositoryScope = true; // default
-		repositoryScope = firstDetectedProfile != null ? esConfig.getBoolean(traversalSetting(Settings.TRAVERSAL_PROFILE_REPOSITORY_SCOPE, firstDetectedProfile), repositoryScope) : repositoryScope;
 		if (StringUtils.isNotEmpty(scope)) {
 			// we allow an override by parameter
 			repositoryScope = !"context".equalsIgnoreCase(scope);
@@ -193,12 +186,10 @@ public class MetadataService {
 
 		EntryUtil.TraversalResult travResult = traverse(entry, predicatesToFollow, blacklist, repositoryScope, depth, limit);
 		Date latestModified = travResult.getLatestModified();
-		if (graphQuery != null) {
-			Model graphQueryResult = applyGraphQuery(graphQuery, travResult.getGraph());
-			return new MetadataResult(serializeGraph(graphQueryResult, format), latestModified);
-		} else {
-			return new MetadataResult(serializeGraph(travResult.getGraph(), format), latestModified);
-		}
+		Model graphToSerialize = graphQuery != null
+				? applyGraphQuery(graphQuery, travResult.getGraph())
+				: travResult.getGraph();
+		return new MetadataResult(GraphUtil.serializeGraph(graphToSerialize, format), latestModified);
 	}
 
 	private String getFirstProfile(String predCSV) {
@@ -208,20 +199,6 @@ public class MetadataService {
 			}
 		}
 		return null;
-	}
-
-	/**
-	 * @return Metadata in the requested format.
-	 */
-	private String serializeGraph(Model graph, String mediaType) {
-		if (graph != null) {
-			String serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
-			if (serializedGraph != null) {
-				return serializedGraph;
-			}
-		}
-
-		throw new BadRequestException("Unable to serialize graph");
 	}
 
 	/**
@@ -325,14 +302,8 @@ public class MetadataService {
 	 * @return A set of URIs.
 	 */
 	private Set<URI> loadTraversalProfile(String profileName) {
-
-		List<String> predicates = esConfig.getStringList(
-				traversalSetting(Settings.TRAVERSAL_PROFILE, profileName),
-				new ArrayList<>()
-		);
-
 		Set<URI> result = new HashSet<>();
-		for (String s : predicates) {
+		for (String s : traversalProperties.predicates(profileName)) {
 			result.add(URI.create(s));
 		}
 		return result;
@@ -353,13 +324,8 @@ public class MetadataService {
 	 * @return A map containing the tuples of the blacklist.
 	 */
 	private Map<String, String> loadTraversalBlacklistForProfile(String profileName) {
-		List<String> blacklist = esConfig.getStringList(
-				traversalSetting(Settings.TRAVERSAL_PROFILE_BLACKLIST, profileName),
-				new ArrayList<>()
-		);
-
 		Map<String, String> result = new HashMap<>();
-		for (String tuple : blacklist) {
+		for (String tuple : traversalProperties.blacklistTuples(profileName)) {
 			String[] tupleArr = tuple.split(",");
 			if (tupleArr.length != 2) {
 				log.warn("Invalid blacklist configuration in traversal profile {}: {}", profileName, tuple);
@@ -368,10 +334,6 @@ public class MetadataService {
 			result.put(NS.expand(tupleArr[0]).toString(), NS.expand(tupleArr[1]).toString());
 		}
 		return result;
-	}
-
-	private String traversalSetting(String configKey, String profile) {
-		return String.format(configKey, profile);
 	}
 
 }

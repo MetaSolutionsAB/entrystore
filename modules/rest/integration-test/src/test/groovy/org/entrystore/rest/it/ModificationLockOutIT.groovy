@@ -113,7 +113,7 @@ class ModificationLockOutIT extends BaseSpec {
 		setLockOut(true)
 
 		when: 'Post invalid credentials so we can observe that the request reached the login handler'
-		def body = 'auth_username=admin&auth_password=wrongpass'
+		def body = createFormBody([auth_username: 'admin', auth_password: 'wrongpass'])
 		def connection = EntryStoreClient.postRequest('/auth/cookie', body, '', 'application/x-www-form-urlencoded')
 
 		then: 'login handler runs and rejects bad creds with 401 — proves lockout filter did not short-circuit'
@@ -122,9 +122,7 @@ class ModificationLockOutIT extends BaseSpec {
 
 	def "POST /auth/logout is allowed while modification lockout is active"() {
 		given:
-		def isolatedAuth = EntryStoreClient.authorize('user').toString()
-		def isolatedCsrf = EntryStoreClient.csrfTokens['user']
-		def userCookies = EntryStoreClient.csrfHeaders(isolatedAuth, isolatedCsrf.toString())
+		def userCookies = EntryStoreClient.isolatedCsrfHeaders('user')
 		setLockOut(true)
 
 		when:

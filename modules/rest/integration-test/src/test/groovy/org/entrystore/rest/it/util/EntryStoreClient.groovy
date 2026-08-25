@@ -1,6 +1,23 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it.util
 
 import groovy.json.JsonOutput
+import org.entrystore.rest.it.BaseSpec
 import org.springframework.http.HttpMethod
 
 import static java.net.HttpURLConnection.HTTP_OK
@@ -21,7 +38,7 @@ class EntryStoreClient {
 			HttpMethod.POST, HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE)
 
 	static String host = 'localhost'
-	static int port = 8181 // Math.abs(new Random().nextInt() % 50000) + 10000
+	static int port = 8181
 	static String origin = 'http://' + host + ':' + port
 	static String baseUrl = origin + '/store'
 	static String adminsGroupUri = baseUrl + '/_principals/resource/_admins'
@@ -43,6 +60,9 @@ class EntryStoreClient {
 		'userInAdminGroup'
 	]
 
+	// Non-null only while a snapshotCreds/restoreCreds pair is in flight; the asserts below enforce pairing.
+	private static Map credsSnapshot = null
+
 	static def cookies = [:].withDefault { userName ->
 		authorize(userName.toString())
 	}
@@ -55,6 +75,22 @@ class EntryStoreClient {
 	static def cleanCookies() {
 		cookies.clear()
 		csrfTokens.clear()
+	}
+
+	/**
+	 * Snapshots the shared {@code creds} map so a spec can add temporary users in setupSpec.
+	 * Pair with {@link #restoreCreds} in cleanupSpec.
+	 */
+	static def snapshotCreds() {
+		assert credsSnapshot == null: 'snapshotCreds called twice without restoreCreds — overlapping spec snapshots'
+		credsSnapshot = creds.clone() as Map
+	}
+
+	/** Restores the {@code creds} map captured by {@link #snapshotCreds}. */
+	static def restoreCreds() {
+		assert credsSnapshot != null: 'restoreCreds called without a prior snapshotCreds'
+		creds = credsSnapshot
+		credsSnapshot = null
 	}
 
 	static def isAnAdmin(String username) {
@@ -70,7 +106,7 @@ class EntryStoreClient {
 
 	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin',
 						   String contentType = 'application/json', Map<String, String> extraHeaders = [:]) {
-		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes(UTF_8))
+		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes())
 		return sendRequestAsStream(HttpMethod.POST, path, contentStream, asUser, contentType, extraHeaders)
 	}
 
@@ -115,7 +151,7 @@ class EntryStoreClient {
 
 	def static deleteRequest(String path, String body = emptyJsonBody, String asUser = 'admin',
 							 String contentType = 'application/json', Map<String, String> extraHeaders = [:]) {
-		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes(UTF_8))
+		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes())
 		return sendRequestAsStream(HttpMethod.DELETE, path, contentStream, asUser, contentType, extraHeaders)
 	}
 
@@ -172,18 +208,48 @@ class EntryStoreClient {
 	}
 
 	def static authorize(String asUser) {
-		def bodyParams = 'auth_username=' + asUser + '&auth_password=' + creds[asUser]
+		def login = loginIsolated(asUser)
+		csrfTokens[asUser] = login.csrf
+		return login.authCookie
+	}
+
+	/**
+	 * Logs the user in via POST /auth/cookie without touching the shared {@code cookies}/
+	 * {@code csrfTokens} maps, so a test can exercise a session it owns (logout, CSRF) without
+	 * invalidating the shared session other ITs reuse. The user must be present in {@code creds}.
+	 *
+	 * @return map with the auth_token Set-Cookie line ({@code authCookie}) and the XSRF-TOKEN
+	 * value ({@code csrf}; null when the app under test runs with CSRF protection disabled)
+	 */
+	def static loginIsolated(String user) {
+		assert creds.containsKey(user): "user '" + user + "' is not present in EntryStoreClient.creds — add it in setupSpec"
+		def bodyParams = 'auth_username=' + URLEncoder.encode(user, UTF_8) +
+			'&auth_password=' + URLEncoder.encode(creds[user].toString(), UTF_8)
 		def conn = postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		assert conn.getResponseCode() == HTTP_OK
 		def authCookie = findSetCookie(conn, 'auth_token')
 		assert authCookie != null
-		// Fail fast here rather than letting downstream mutation ITs see opaque 401s if a regression
-		// stops emitting XSRF-TOKEN on /auth/cookie — the missing token is the real root cause.
 		def csrfValue = findCookieValue(conn, 'XSRF-TOKEN')
-		assert csrfValue != null: '/auth/cookie response must carry XSRF-TOKEN cookie'
-		csrfTokens[asUser] = csrfValue
-		return authCookie
+		if (isCsrfEnabled()) {
+			// Fail fast here rather than letting downstream mutation ITs see opaque 401s if a regression
+			// stops emitting XSRF-TOKEN on /auth/cookie — the missing token is the real root cause.
+			assert csrfValue != null: '/auth/cookie response must carry XSRF-TOKEN cookie when CSRF protection is enabled'
+		} else {
+			// Inverse fail-fast: a CSRF-disabled app must not issue a token cookie either.
+			assert csrfValue == null: '/auth/cookie response must not carry XSRF-TOKEN cookie when CSRF protection is disabled'
+		}
+		return [authCookie: authCookie, csrf: csrfValue]
+	}
+
+	/**
+	 * Reads the effective CSRF setting from the running app under test, so this client adapts to
+	 * both the shared app (started by BaseSpec with {@code --entrystore.csrf.enabled=true}) and
+	 * lifecycle-owning Zzz ITs whose apps run with the default (disabled, ENTRYSTORE-1096).
+	 */
+	private static boolean isCsrfEnabled() {
+		return BaseSpec.appInstance != null &&
+			BaseSpec.appInstance.getEnvironment().getProperty('entrystore.csrf.enabled', Boolean, false)
 	}
 
 	/**
@@ -241,11 +307,30 @@ class EntryStoreClient {
 	 * does not flow through {@code asUser}-based auto-injection (e.g. isolated-session tests that
 	 * captured their own auth_token/XSRF-TOKEN pair from a fresh login).
 	 */
-	def static Map<String, String> csrfHeaders(String authCookie, String csrf) {
+	def static csrfHeaders(String authCookie, String csrf) {
 		return [
 				Cookie        : authCookie + '; XSRF-TOKEN=' + csrf,
 				'X-XSRF-TOKEN': csrf
 		]
+	}
+
+	/**
+	 * Logs the user into a session the test owns (via {@link #loginIsolated}, so the shared
+	 * cookies/csrfTokens maps stay untouched) and returns the Cookie + X-XSRF-TOKEN header pair
+	 * for cookie-authenticated mutations on that session.
+	 */
+	static Map<String, String> isolatedCsrfHeaders(String user) {
+		def login = loginIsolated(user)
+		return csrfHeaders(login.authCookie.toString(), login.csrf.toString())
+	}
+
+	/**
+	 * Converts Set-Cookie response-header lines into a Cookie request-header value, stripping the
+	 * cookie attributes (Path, HttpOnly, ...) each line carries.
+	 */
+	static String toCookieHeader(List<String> setCookieLines) {
+		assert setCookieLines: 'response carries no Set-Cookie header'
+		return setCookieLines.collect { it.split(';')[0] }.join('; ')
 	}
 
 	def static buildMultipartContent(File file, Map<String, String> formData, String boundary,

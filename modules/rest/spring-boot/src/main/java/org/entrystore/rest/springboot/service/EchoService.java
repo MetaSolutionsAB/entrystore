@@ -1,5 +1,23 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.service;
 
+import lombok.RequiredArgsConstructor;
+import org.entrystore.rest.springboot.configuration.EchoProperties;
 import org.entrystore.rest.springboot.model.exception.TextareaHtmlResponseException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -9,16 +27,18 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 @Service
+@RequiredArgsConstructor
 public class EchoService {
 
-	private final static long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+	private final EchoProperties echoProperties;
 
 	public String readFileContentsAsString(MultipartFile file) {
 
-		// We don't echo payloads bigger than MAX_FILE_SIZE
-		if (file.getSize() > MAX_FILE_SIZE) {
+		// We don't echo payloads bigger than the configured cap
+		long maxFileSize = echoProperties.maxFileSize().toBytes();
+		if (file.getSize() > maxFileSize) {
 			throw new TextareaHtmlResponseException("Received file size (of " + file.getSize()
-					+ "B) exceeds maximum allowed size of: " + MAX_FILE_SIZE + "B", HttpStatus.PAYLOAD_TOO_LARGE);
+					+ "B) exceeds maximum allowed size of: " + maxFileSize + "B", HttpStatus.PAYLOAD_TOO_LARGE);
 		}
 
 		try {

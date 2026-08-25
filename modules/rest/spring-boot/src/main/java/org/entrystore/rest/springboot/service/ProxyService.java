@@ -21,10 +21,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Context;
 import org.entrystore.PrincipalManager;
-import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.springboot.configuration.ProxyProperties;
 import org.entrystore.rest.springboot.model.dto.ProxyResponse;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
+import org.entrystore.rest.springboot.security.SsrfSafeHttpClient;
 import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -32,11 +33,7 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.ConnectException;
-import java.net.HttpURLConnection;
-import java.net.SocketTimeoutException;
-import java.net.URI;
-import java.net.URISyntaxException;
+import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -47,15 +44,14 @@ public class ProxyService {
 	private final PrincipalManager principalManager;
 	private final ContextService contextService;
 	private final SsrfValidator ssrfValidator;
+	private final SsrfSafeHttpClient ssrfSafeHttpClient;
+	private final ProxyProperties proxyProperties;
 
 	private Set<String> whitelistAnon;
 
-	private static final int MAX_REDIRECTS = 15;
-	private static final int MAX_RESPONSE_BYTES = 10 * 1024 * 1024; // 10 MB
-
 	@PostConstruct
 	void init() {
-		whitelistAnon = ssrfValidator.loadHostSet(Settings.PROXY_WHITELIST_ANONYMOUS);
+		whitelistAnon = proxyProperties.anonymousWhitelist();
 		if (!whitelistAnon.isEmpty()) {
 			log.info("Proxy whitelist for guest users initialized with following domains: {}; Requests to other domains require authentication",
 					String.join(", ", whitelistAnon));
@@ -83,69 +79,29 @@ public class ProxyService {
 	}
 
 	public ProxyResponse fetchUrl(SsrfValidator.ValidatedTarget target, String acceptHeader, boolean enforceAnonWhitelist) {
-		return fetchUrl(target, acceptHeader, enforceAnonWhitelist, 0);
-	}
-
-	private ProxyResponse fetchUrl(SsrfValidator.ValidatedTarget target, String acceptHeader, boolean enforceAnonWhitelist, int redirectCount) {
-		if (redirectCount > MAX_REDIRECTS) {
-			log.warn("More than {} redirect loops detected, aborting", MAX_REDIRECTS);
-			throw new CustomResponseException("Too many redirects", HttpStatus.BAD_GATEWAY);
-		}
-
-		HttpURLConnection conn = null;
-		try {
-			conn = ssrfValidator.openPinnedConnection(target.uri(), target.resolved());
-			conn.setRequestMethod("GET");
-
-			if (acceptHeader != null) {
-				conn.setRequestProperty("Accept", acceptHeader);
-			}
-
-			int status = conn.getResponseCode();
-
-			if (status >= 300 && status < 400) {
-				String location = conn.getHeaderField("Location");
-				if (location != null) {
-					SsrfValidator.ValidatedTarget next = validateRedirectTarget(target.uri(), location, enforceAnonWhitelist);
-					return fetchUrl(next, acceptHeader, enforceAnonWhitelist, redirectCount + 1);
-				}
-				log.warn("Upstream returned {} redirect without Location header for URL: {}", status, target.uri());
-				throw new CustomResponseException("Upstream returned redirect without Location header", HttpStatus.BAD_GATEWAY);
-			}
-
-			String contentType = conn.getContentType();
-			byte[] body;
-			try (InputStream is = (status >= 400) ? conn.getErrorStream() : conn.getInputStream()) {
-				body = (is != null) ? readWithLimit(is) : new byte[0];
-			}
-
-			return new ProxyResponse(status, contentType, body);
-
-		} catch (SocketTimeoutException | ConnectException e) {
-			log.debug("Proxy request to {} timed out", target.uri());
-			throw new CustomResponseException("Gateway timeout", HttpStatus.GATEWAY_TIMEOUT);
-		} catch (IOException | URISyntaxException | IllegalArgumentException e) {
-			// IllegalArgumentException: URI.resolve(location) on a malformed upstream Location header.
-			log.debug("Proxy request to {} failed: {}", target.uri(), e.getMessage());
-			throw new CustomResponseException("Proxy request failed", HttpStatus.BAD_GATEWAY);
-		} finally {
-			if (conn != null) {
-				conn.disconnect();
-			}
-		}
+		Map<String, String> requestHeaders = acceptHeader != null ? Map.of("Accept", acceptHeader) : Map.of();
+		return ssrfSafeHttpClient.execute(target, "GET", requestHeaders,
+				location -> validateRedirectTarget(location, enforceAnonWhitelist),
+				(status, conn) -> {
+					String contentType = conn.getContentType();
+					byte[] body;
+					try (InputStream is = (status >= 400) ? conn.getErrorStream() : conn.getInputStream()) {
+						body = (is != null) ? readWithLimit(is) : new byte[0];
+					}
+					return new ProxyResponse(status, contentType, body);
+				});
 	}
 
 	/**
-	 * Resolves a redirect {@code Location} against the current request URI and re-validates the
-	 * target. SSRF re-validation ({@link SsrfValidator#validateForProxy(String)}) runs on every
-	 * hop because the redirect target may differ from the origin. When {@code enforceAnonWhitelist}
-	 * is set (global {@code /proxy} path), the guest anon-whitelist check is re-applied to the
-	 * redirect host as well, so a whitelisted upstream cannot redirect a guest to a non-whitelisted
-	 * host. The context-scoped path passes {@code false} — it is gated by a one-time context ACL
-	 * check, not the anon whitelist.
+	 * Re-validates a resolved redirect location. SSRF re-validation
+	 * ({@link SsrfValidator#validateForProxy(String)}) runs on every hop because the redirect
+	 * target may differ from the origin. When {@code enforceAnonWhitelist} is set (global
+	 * {@code /proxy} path), the guest anon-whitelist check is re-applied to the redirect host as
+	 * well, so a whitelisted upstream cannot redirect a guest to a non-whitelisted host. The
+	 * context-scoped path passes {@code false} — it is gated by a one-time context ACL check, not
+	 * the anon whitelist.
 	 */
-	SsrfValidator.ValidatedTarget validateRedirectTarget(URI base, String location, boolean enforceAnonWhitelist) {
-		String resolvedLocation = base.resolve(location).toString();
+	SsrfValidator.ValidatedTarget validateRedirectTarget(String resolvedLocation, boolean enforceAnonWhitelist) {
 		log.debug("Request redirected to {}", resolvedLocation);
 		SsrfValidator.ValidatedTarget next = ssrfValidator.validateForProxy(resolvedLocation);
 		if (enforceAnonWhitelist) {
@@ -155,14 +111,18 @@ public class ProxyService {
 	}
 
 	private byte[] readWithLimit(InputStream is) throws IOException {
+		// long rather than int to match DataSize.toBytes(), and as defence in depth: an int accumulator
+		// would overflow negative and stop enforcing the limit at all. ProxyProperties caps the setting
+		// well below that point, since this buffers into an int-indexed array — see MAX_RESPONSE_SIZE_CEILING.
+		long maxResponseBytes = proxyProperties.maxResponseSize().toBytes();
 		byte[] buf = new byte[8192];
-		int totalRead = 0;
+		long totalRead = 0;
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		int bytesRead;
 		while ((bytesRead = is.read(buf)) != -1) {
 			totalRead += bytesRead;
-			if (totalRead > MAX_RESPONSE_BYTES) {
-				throw new CustomResponseException("Upstream response exceeds maximum allowed size of " + MAX_RESPONSE_BYTES + " bytes",
+			if (totalRead > maxResponseBytes) {
+				throw new CustomResponseException("Upstream response exceeds maximum allowed size of " + maxResponseBytes + " bytes",
 						HttpStatus.BAD_GATEWAY);
 			}
 			out.write(buf, 0, bytesRead);

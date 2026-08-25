@@ -23,13 +23,12 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
-import org.entrystore.config.Config;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
 import org.entrystore.rest.springboot.util.HttpUtil;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -37,13 +36,8 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.Map;
 
-import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_ADMIN;
-import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_DURATION;
-import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS;
-
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class LoginAttemptService implements CaffeineCacheSource {
 
 	// Caps both the per-username key size and the total number of tracked entries (counters and
@@ -52,9 +46,12 @@ public class LoginAttemptService implements CaffeineCacheSource {
 	private static final int MAX_USERNAME_LENGTH = 256;
 	private static final long MAX_TRACKED_USERNAMES = 100_000L;
 
-	private final Config config;
 	private final PrincipalManager pm;
 	private final MeterRegistry meterRegistry;
+
+	private final int maxAttempts;
+	private final Duration lockoutDuration;
+	private final boolean includeAdmin;
 
 	// Pre-lockout counters live in a bounded, evictable Caffeine cache. expireAfterWrite caps the
 	// lifetime relative to the last failure rather than the last read, so a probe that only reads
@@ -74,10 +71,6 @@ public class LoginAttemptService implements CaffeineCacheSource {
 	// lockedUntil instant.
 	private Cache<String, Instant> lockoutCache;
 
-	private int maxAttempts;
-	private Duration lockoutDuration;
-	private boolean includeAdmin;
-
 	// Increments whenever a call site's try/catch around recordFailure swallows a RuntimeException
 	// (currently Caffeine misuse / cache faults). Exposed so operators can alert on degraded
 	// lockout tracking via `rate(auth_loginattempt_record_failure_error_total[5m]) > 0` — without
@@ -86,12 +79,19 @@ public class LoginAttemptService implements CaffeineCacheSource {
 	@Getter
 	private Counter recordFailureErrorCounter;
 
+	public LoginAttemptService(PrincipalManager pm, MeterRegistry meterRegistry,
+			@Value("${entrystore.auth.temp.lockout.max.attempts:5}") int maxAttempts,
+			@Value("${entrystore.auth.temp.lockout.duration:5m}") Duration lockoutDuration,
+			@Value("${entrystore.auth.temp.lockout.admin:true}") boolean includeAdmin) {
+		this.pm = pm;
+		this.meterRegistry = meterRegistry;
+		this.maxAttempts = maxAttempts;
+		this.lockoutDuration = lockoutDuration;
+		this.includeAdmin = includeAdmin;
+	}
+
 	@PostConstruct
 	public void init() {
-		this.maxAttempts = config.getInt(AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS, 5);
-		this.lockoutDuration = config.getDuration(AUTH_TEMP_LOCKOUT_DURATION, Duration.ofMinutes(5));
-		this.includeAdmin = config.getBoolean(AUTH_TEMP_LOCKOUT_ADMIN, true);
-
 		Duration ttl = lockoutDuration.isZero() ? Duration.ofMinutes(5) : lockoutDuration.multipliedBy(2);
 		this.counterCache = Caffeine.newBuilder()
 				.expireAfterWrite(ttl)

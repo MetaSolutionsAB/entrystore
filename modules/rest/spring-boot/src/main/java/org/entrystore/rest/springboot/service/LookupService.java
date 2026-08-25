@@ -121,11 +121,7 @@ public class LookupService {
 					scope, entryType, entry.getResourceURI());
 		}
 
-		String serialized = GraphUtil.serializeGraph(graph, mediaType);
-		if (serialized == null) {
-			throw new BadRequestException("Unable to serialize metadata in the requested format: " + mediaType);
-		}
-		return serialized;
+		return GraphUtil.serializeGraph(graph, mediaType);
 	}
 
 	private Entry extractSingleEntry(Set<Entry> entries, URI resourceURI) {

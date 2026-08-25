@@ -16,27 +16,20 @@
 
 package org.entrystore.rest.springboot.util;
 
-import tools.jackson.databind.MapperFeature;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
 import com.google.common.net.InetAddresses;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.io.IOException;
 import java.util.Date;
 import java.util.regex.Pattern;
 
@@ -47,29 +40,21 @@ import static com.google.common.base.Preconditions.checkArgument;
 public class HttpUtil {
 
 	private static final String HEADER_X_FORWARDED_FOR = "X-Forwarded-For";
-	// Jackson 3 already serializes dates as ISO-8601 by default (WRITE_DATES_AS_TIMESTAMPS is now off);
-	// only the property-ordering default changed (now alphabetical), so keep declaration order.
-	private static final ObjectMapper OBJECT_MAPPER = JsonMapper.builder()
-			.disable(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY)
-			.build();
 
 	/**
 	 * Determines the media type based on the provided format parameter or content type header.
 	 *
-	 * @param format The format parameter from the request, which might have '+' replaced with spaces by Spring Boot.
+	 * @param format The format parameter from the request, bound via {@code MediaTypeConverter}.
 	 * @param contentType The raw content-type header string from the request.
-	 * @return The determined and normalized media type string, or null if neither can be determined.
+	 * @return The format parameter's string form if present (parameters preserved), otherwise the
+	 *         normalized content type (type/subtype only), or null if neither can be determined.
 	 */
-	public static String determineMediaType(String format, String contentType) {
-		// for 'format' param data should be sent properly - i.e. html encoded '+' as %2B
-		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
-		// (+ is replaced with a space) we need to replace the space back to '+'
+	public static String determineMediaType(MediaType format, String contentType) {
 		if (format != null) {
-			return format.trim().replace(' ', '+');
-		} else {
-			// content-type header often includes other data like character encoding, e.g.: 'application/json; charset=UTF-8'
-			return normalizeMediaType(contentType);
+			return format.toString();
 		}
+		// content-type header often includes other data like character encoding, e.g.: 'application/json; charset=UTF-8'
+		return normalizeMediaType(contentType);
 	}
 
 	/**
@@ -90,14 +75,6 @@ public class HttpUtil {
 			}
 		}
 		return null;
-	}
-
-	/**
-	 * Creates a weak ETag string.
-	 * Example: W/"1686594567200"
-	 */
-	public static String createWeakETag(String tag) {
-		return "W/" + createStrongETag(tag);
 	}
 
 	/**
@@ -184,42 +161,6 @@ public class HttpUtil {
 		return request.getRemoteAddr();
 	}
 
-	/**
-	 * Writes a JSON error response directly to the servlet response.
-	 * Use this in servlet filters where {@code AppExceptionHandler} ({@code @ControllerAdvice})
-	 * is not available.
-	 */
-	public static void writeErrorResponseAsJson(HttpServletResponse response, ErrorResponse errorResponse) throws IOException {
-		if (response.isCommitted()) {
-			log.warn("Cannot write error response — response already committed (status={})", errorResponse.status());
-			return;
-		}
-		response.setStatus(errorResponse.status());
-		response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-		var writer = response.getWriter();
-		writer.write(OBJECT_MAPPER.writeValueAsString(errorResponse));
-		writer.flush();
-	}
-
-	/**
-	 * Redirects to the given URL if non-null, otherwise writes a 401 JSON error response.
-	 * Safe to call from servlet filter context (no exceptions thrown to the filter chain).
-	 *
-	 * @param failureMessage message for the JSON fallback body (e.g. "CAS login failed")
-	 */
-	public static void redirectOrWriteUnauthorized(HttpServletResponse response, String requestUri,
-												   String redirectUrl, String failureMessage) throws IOException {
-		if (redirectUrl != null) {
-			response.sendRedirect(redirectUrl);
-		} else {
-			writeErrorResponseAsJson(response, ErrorResponse.builder()
-					.status(HttpStatus.UNAUTHORIZED.value())
-					.path(requestUri)
-					.error(failureMessage != null ? failureMessage : "SSO login failed")
-					.build());
-		}
-	}
-
 	public static void checkRequestSize(HttpServletRequest request, int maxRequestSize) {
 		if (HttpUtil.isLargerThan(request, maxRequestSize)) {
 			throw new EntityTooLargeException("The size of the representation is larger than " + maxRequestSize + "bytes or unknown, request blocked.");
@@ -228,24 +169,6 @@ public class HttpUtil {
 
 	private static final int LOG_VALUE_MAX_LENGTH = 128;
 	private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
-
-	/**
-	 * Writes the unified 401 JSON envelope used for every authentication failure
-	 * (bad credentials, unknown user, disabled account, blacklisted user). Centralised
-	 * here so the body stays identical across all call sites for a given request URI
-	 * and no caller can accidentally introduce a discriminator. The timestamp field
-	 * is explicitly nulled so the wall-clock delta between branches (immediate
-	 * blacklist short-circuit vs. post-bcrypt bad-credentials path) does not leak
-	 * through {@code body.timestamp − client.sentAt}; only the request URI varies.
-	 */
-	public static void writeUnauthorizedAsJson(HttpServletResponse response, HttpServletRequest request) throws IOException {
-		writeErrorResponseAsJson(response, ErrorResponse.builder()
-				.timestamp(null)
-				.status(HttpStatus.UNAUTHORIZED.value())
-				.path(request.getRequestURI())
-				.error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
-				.build());
-	}
 
 	/**
 	 * Returns a representation of {@code value} that is safe to embed in a log line:

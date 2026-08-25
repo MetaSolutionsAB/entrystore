@@ -32,7 +32,7 @@ entrystore.cors.max-age=7200
 ## SMTP settings, required for e.g. sign-up
 # entrystore.smtp.host=smtp.host.tld
 # entrystore.smtp.port=587
-# entrystore.smtp.ssl=starttls|ssl|off
+# entrystore.smtp.security=starttls|ssl|off (entrystore.smtp.ssl is the deprecated spelling)
 # entrystore.smtp.username=smtp-user
 # entrystore.smtp.password=smtp-password
 ## Generic settings for user-initiated sign-up and password reset

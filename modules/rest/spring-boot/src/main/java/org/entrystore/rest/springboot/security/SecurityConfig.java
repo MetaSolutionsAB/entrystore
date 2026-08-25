@@ -25,7 +25,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
-import org.entrystore.rest.springboot.configuration.CorsConfig;
+import org.entrystore.rest.springboot.configuration.CorsProperties;
 import org.entrystore.rest.springboot.configuration.HttpBasicAuthConfiguration;
 import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
@@ -33,7 +33,7 @@ import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.springboot.service.OidcAuthService;
 import org.entrystore.rest.springboot.service.auth.OidcAuthStateCache;
-import org.entrystore.rest.springboot.util.HttpUtil;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.boot.context.properties.bind.BindException;
@@ -95,7 +95,8 @@ public class SecurityConfig {
 	private final FormLoginAuthenticationFailureHandler formLoginAuthenticationFailureHandler;
 	private final FormLoginAuthenticationSuccessHandler formLoginAuthenticationSuccessHandler;
 
-	private final CorsConfig corsConfig;
+	private final CorsProperties corsProperties;
+	private final ErrorResponseWriter errorResponseWriter;
 
 	private final CsrfRequestMatcher csrfRequestMatcher;
 	private final CsrfCookieFilter csrfCookieFilter;
@@ -129,6 +130,11 @@ public class SecurityConfig {
 	@Value("${entrystore.csrf.cookie-name:XSRF-TOKEN}")
 	private String csrfCookieName;
 
+	// Default is false until the common EntryStore clients echo the XSRF-TOKEN cookie as an
+	// X-XSRF-TOKEN header on mutations — see ENTRYSTORE-1008 for the compatibility discussion.
+	@Value("${entrystore.csrf.enabled:false}")
+	private boolean csrfEnabled;
+
 	private Cookie.SameSite sessionCookieSameSite;
 
 	@PostConstruct
@@ -141,10 +147,27 @@ public class SecurityConfig {
 												   AuthenticationEntryPoint customEntryPoint,
 												   AccessDeniedHandler customAccessDeniedHandler) throws Exception {
 
-		if (corsConfig.isCorsEnabled()) {
+		if (corsProperties.enabled()) {
 			http.cors(Customizer.withDefaults());
 		} else {
 			http.cors(AbstractHttpConfigurer::disable);
+		}
+
+		if (csrfEnabled) {
+			http
+					.csrf(csrf -> csrf
+							.csrfTokenRepository(csrfTokenRepository())
+							.csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+							.requireCsrfProtectionMatcher(csrfRequestMatcher))
+					.addFilterAfter(csrfCookieFilter, CsrfFilter.class);
+		} else {
+			// Migration escape hatch for clients that do not yet echo the XSRF-TOKEN cookie as
+			// X-XSRF-TOKEN. CsrfCookieFilter is deliberately not registered either, so no
+			// XSRF-TOKEN cookie is issued while enforcement is off.
+			log.warn("CSRF protection is DISABLED (entrystore.csrf.enabled=false). Cookie-authenticated "
+					+ "sessions are exposed to cross-site request forgery; use only as a temporary measure "
+					+ "until all clients send the X-XSRF-TOKEN header.");
+			http.csrf(AbstractHttpConfigurer::disable);
 		}
 
 		var entryPoint = httpBasicConfig.enabled() ? authChallengeAwareEntryPoint(customEntryPoint) : customEntryPoint;
@@ -157,23 +180,18 @@ public class SecurityConfig {
 				// needs (private,no-store for authenticated; no header for anonymous so static and
 				// controller-set values can pass through unchanged).
 				.headers(headers -> headers.cacheControl(HeadersConfigurer.CacheControlConfig::disable))
-				.csrf(csrf -> csrf
-						.csrfTokenRepository(csrfTokenRepository())
-						.csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-						.requireCsrfProtectionMatcher(csrfRequestMatcher))
-				.addFilterAfter(csrfCookieFilter, CsrfFilter.class)
 				.sessionManagement(session -> session
 						.sessionConcurrency(concurrency -> concurrency
 								.maximumSessions(-1)
 								.sessionRegistry(sessionRegistry)
 								.expiredSessionStrategy(event ->
-										HttpUtil.writeErrorResponseAsJson(event.getResponse(), ErrorResponse.builder()
+										errorResponseWriter.writeErrorResponseAsJson(event.getResponse(), ErrorResponse.builder()
 											.status(HttpStatus.UNAUTHORIZED.value())
 											.path(event.getRequest().getRequestURI())
 											.error("Session expired")
 											.build())))
 						.invalidSessionStrategy((request, response) ->
-								HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+								errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 										.status(HttpStatus.UNAUTHORIZED.value())
 										.path(request.getRequestURI())
 										.error("Session expired or invalid")
@@ -358,7 +376,7 @@ public class SecurityConfig {
 			var mv = handlerExceptionResolver.resolveException(request, response, null, authException);
 			if (mv == null && !response.isCommitted()) {
 				log.warn("AuthenticationEntryPoint: exception resolver did not handle {}", authException.getClass().getName());
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.UNAUTHORIZED.value())
 						.path(request.getRequestURI())
 						.error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
@@ -375,7 +393,7 @@ public class SecurityConfig {
 			var mv = handlerExceptionResolver.resolveException(request, response, null, accessDeniedException);
 			if (mv == null && !response.isCommitted()) {
 				log.warn("AccessDeniedHandler: exception resolver did not handle {}", accessDeniedException.getClass().getName());
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.FORBIDDEN.value())
 						.path(request.getRequestURI())
 						.error(HttpStatus.FORBIDDEN.getReasonPhrase())

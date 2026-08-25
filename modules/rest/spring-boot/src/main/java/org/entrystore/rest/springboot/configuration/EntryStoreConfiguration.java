@@ -17,9 +17,7 @@
 package org.entrystore.rest.springboot.configuration;
 
 import com.github.benmanes.caffeine.cache.Ticker;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.entrystore.ContextManager;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
@@ -42,10 +40,8 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.env.PropertySource;
 import org.springframework.web.client.RestClient;
 
-import java.net.URI;
 import java.time.Duration;
 
-@Slf4j
 @Configuration
 @RequiredArgsConstructor
 public class EntryStoreConfiguration {
@@ -54,16 +50,15 @@ public class EntryStoreConfiguration {
 
 	private final Environment environment;
 
-	@PostConstruct
-	public void logBeanStatus() {
-		if (!"on".equalsIgnoreCase(environment.getProperty(Settings.BACKUP_SCHEDULER))) {
-			log.warn("Backup is disabled in configuration");
-		}
-	}
-
 	/**
 	 * Creates a bean with Entrystore configuration needed for core.
 	 * Properties (key and value pairs) are read from property files (*.yml and *.properties) that were loaded on init by Spring-boot
+	 *
+	 * <p>This bean exists solely for the core layer ({@code RepositoryManagerImpl} requires it, and
+	 * {@code RepositoryManager.getConfiguration()} exposes the same instance to core-internal code).
+	 * The REST layer must not inject it or read via {@code getConfiguration()} — REST-layer config is
+	 * read through Spring mechanisms ({@code @Value} / {@code @ConfigurationProperties}) instead
+	 * (ENTRYSTORE-1052).
 	 *
 	 * @return a Config class (essentially a wrapper around java.util.Properties) needed for Entrystore core to work
 	 */
@@ -94,8 +89,7 @@ public class EntryStoreConfiguration {
 	public RepositoryManagerImpl createRepositoryManager(Config config) {
 		String baseURI = config.getString(Settings.BASE_URL);
 		if (baseURI == null) {
-			log.error("No Base URI specified, exiting");
-			System.exit(1);
+			throw new IllegalStateException("No base URL specified, set " + Settings.BASE_URL);
 		}
 		return new RepositoryManagerImpl(baseURI, config);
 	}
@@ -110,26 +104,16 @@ public class EntryStoreConfiguration {
 		return repositoryManager.getContextManager();
 	}
 
+	/**
+	 * Constructs the scheduler only — {@code BackupSchedulerStarter} arms the Quartz schedule once the
+	 * application is ready. Returns {@code null} when no cron expression is configured, which leaves
+	 * the {@code Optional<BackupScheduler>} injection points empty.
+	 */
 	@Bean
 	@ConditionalOnProperty(name = Settings.BACKUP_SCHEDULER, havingValue = "on")
 	public BackupScheduler backupScheduler(RepositoryManagerImpl repositoryManager) {
-		log.info("Starting backup scheduler");
 		PrincipalManager pm = repositoryManager.getPrincipalManager();
-		URI currentUser = pm.getAuthenticatedUserURI();
-		Throwable primary = null;
-		try {
-			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			BackupScheduler bs = BackupScheduler.createInstance(repositoryManager);
-			if (bs != null) {
-				bs.run();
-			}
-			return bs;
-		} catch (Throwable t) {
-			primary = t;
-			throw t;
-		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
-		}
+		return PrincipalManagerUtil.runAsAdmin(pm, () -> BackupScheduler.createInstance(repositoryManager));
 	}
 
 	/**

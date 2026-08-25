@@ -100,18 +100,12 @@ public class ContextController {
 	public ResponseEntity<InputStreamResource> createContextExport(
 			@PathVariable("context-id") String contextId,
 			@RequestParam(required = false) String metadataOnly,
-			@RequestParam(required = false) String rdfFormat
+			@RequestParam(required = false) MediaType rdfFormat
 	) throws FileNotFoundException {
 
-		// for 'rdfFormat' param data should be sent properly - i.e. html encoded '+' as %2B
-		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
-		// (+ is replaced with a space) we need to replace the space back to '+'
-		if (rdfFormat != null) {
-			rdfFormat = rdfFormat.trim().replace(' ', '+');
-		}
-
 		Context context = contextService.getContextOrThrow(contextId);
-		File zipFile = contextService.exportContextToAZipFile(context, metadataOnly != null, rdfFormat);
+		File zipFile = contextService.exportContextToAZipFile(context, metadataOnly != null,
+				rdfFormat != null ? rdfFormat.toString() : null);
 
 		InputStreamResource fileStream = new InputStreamResource(new FileInputStream(zipFile));
 

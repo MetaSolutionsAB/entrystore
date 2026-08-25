@@ -20,6 +20,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -97,6 +98,35 @@ class HttpUtilTest {
 		String controlTail = "\r\n".repeat(50); // 200 control chars
 		assertEquals(HttpUtil.sanitizeForLog(prefix + plainTail),
 				HttpUtil.sanitizeForLog(prefix + controlTail));
+	}
+
+	@Test
+	void determineMediaType_formatTakesPrecedenceOverContentType() {
+		assertEquals("text/turtle", HttpUtil.determineMediaType(
+				MediaType.parseMediaType("text/turtle"), "application/json; charset=UTF-8"));
+	}
+
+	@Test
+	void determineMediaType_formatWithParameters_preservedVerbatim() {
+		// Pins the Javadoc contract: the format branch keeps media-type parameters, unlike the
+		// content-type branch which strips them.
+		assertEquals("text/turtle;charset=UTF-8", HttpUtil.determineMediaType(
+				MediaType.parseMediaType("text/turtle;charset=UTF-8"), "application/json"));
+	}
+
+	@Test
+	void determineMediaType_nullFormat_fallsBackToNormalizedContentType() {
+		assertEquals("application/json", HttpUtil.determineMediaType(null, "application/json; charset=UTF-8"));
+	}
+
+	@Test
+	void determineMediaType_nullFormatAndUnparseableContentType_returnsNull() {
+		assertNull(HttpUtil.determineMediaType(null, "not a media type"));
+	}
+
+	@Test
+	void determineMediaType_nullFormatAndNullContentType_returnsNull() {
+		assertNull(HttpUtil.determineMediaType(null, null));
 	}
 
 	@Test

@@ -16,15 +16,32 @@
 
 package org.entrystore.rest.springboot.util;
 
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.rio.RDFHandlerException;
+import org.eclipse.rdf4j.rio.jsonld.JSONLDWriter;
+import org.eclipse.rdf4j.rio.turtle.TurtleWriter;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
+import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.StringWriter;
+import java.io.Writer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GraphUtilTest {
 
@@ -233,5 +250,166 @@ class GraphUtilTest {
 	@Test
 	void normalizeLegacyMediaType_shouldReturnNullForNullInput() {
 		assertNull(GraphUtil.normalizeLegacyMediaType(null));
+	}
+
+	@Test
+	void resolveRdfMediaType_formatParameterWinsOverAcceptHeader() {
+		assertEquals("text/turtle",
+				GraphUtil.resolveRdfMediaType(MediaType.parseMediaType("text/turtle"), "application/json"));
+	}
+
+	@Test
+	void resolveRdfMediaType_unsupportedFormat_rejectedWith406() {
+		CustomResponseException exception = assertThrows(
+				CustomResponseException.class,
+				() -> GraphUtil.resolveRdfMediaType(MediaType.TEXT_HTML, "application/json"));
+		assertEquals(HttpStatus.NOT_ACCEPTABLE, exception.getStatus());
+	}
+
+	@Test
+	void resolveRdfMediaType_nullFormat_negotiatesAcceptHeader() {
+		assertEquals("application/json",
+				GraphUtil.resolveRdfMediaType(null, "text/html, application/json"));
+	}
+
+	@Test
+	void resolveRdfMediaType_formatWithParameters_rejectedWith406() {
+		// Pins current behavior: the format parameter is matched with its parameters intact, so a
+		// supported base type with a charset parameter is rejected — unlike the Accept-header path,
+		// which strips parameters before the lookup.
+		CustomResponseException exception = assertThrows(
+				CustomResponseException.class,
+				() -> GraphUtil.resolveRdfMediaType(MediaType.parseMediaType("text/turtle;charset=UTF-8"), null));
+		assertEquals(HttpStatus.NOT_ACCEPTABLE, exception.getStatus());
+	}
+
+	@Test
+	void serializeGraph_classOverloadAndWriterOverload_produceSameTurtle() {
+		Model graph = sampleGraph();
+
+		String viaClassOverload = GraphUtil.serializeGraph(graph, TurtleWriter.class);
+		StringWriter stringWriter = new StringWriter();
+		GraphUtil.serializeGraph(graph, new TurtleWriter(stringWriter));
+
+		assertEquals(viaClassOverload, stringWriter.toString());
+	}
+
+	@Test
+	void serializeGraph_jsonld_limitsNamespacesToUsedOnes() {
+		String jsonld = GraphUtil.serializeGraph(sampleGraph(), JSONLDWriter.class);
+
+		assertTrue(jsonld.contains("http://purl.org/dc/terms/"),
+				"the namespace used by the graph must appear in the JSON-LD context");
+		assertFalse(jsonld.contains("http://xmlns.com/foaf/0.1/"),
+				"unused namespaces must not appear in the JSON-LD context");
+	}
+
+	// Both JSON media types must route to RDFJSON. application/json is the arm ResourceService relies on for
+	// a non-list Graph resource, which used to call RDFJSON.graphToRdfJson directly.
+	@ParameterizedTest(name = "{0}")
+	@ValueSource(strings = {"application/json", "application/rdf+json"})
+	void serializeGraph_stringDispatcher_jsonTypesMatchRdfJsonUtil(String mediaType) {
+		Model graph = sampleGraph();
+		assertEquals(RDFJSON.graphToRdfJson(graph), GraphUtil.serializeGraph(graph, mediaType));
+	}
+
+	@Test
+	void serializeGraph_stringDispatcher_turtleMatchesClassOverload() {
+		Model graph = sampleGraph();
+		assertEquals(GraphUtil.serializeGraph(graph, TurtleWriter.class), GraphUtil.serializeGraph(graph, "text/turtle"));
+	}
+
+	@Test
+	void serializeGraph_stringDispatcher_unknownMediaType_throwsIllegalArgument() {
+		assertThrows(IllegalArgumentException.class, () -> GraphUtil.serializeGraph(sampleGraph(), "image/png"));
+	}
+
+	@Test
+	void serializeGraph_stringDispatcher_nullGraph_throwsIllegalArgument() {
+		assertThrows(IllegalArgumentException.class, () -> GraphUtil.serializeGraph(null, "text/turtle"));
+	}
+
+	// The writer throws after the namespace prefixes are already in the buffer, so a log-and-return would
+	// serve that truncated document to the client with status 200.
+	@Test
+	void serializeGraph_writerFailsMidStream_throwsInsteadOfReturningTruncatedRdf() {
+		assertThrows(InternalServerErrorException.class,
+				() -> GraphUtil.serializeGraph(sampleGraph(), FailsMidStreamWriter.class));
+	}
+
+	// The realistic failure mode for the caller-supplied-writer overload: the sink breaks and RDF4J surfaces
+	// the IOException as an RDFHandlerException.
+	@Test
+	void serializeGraph_writerOverload_brokenSink_throws() {
+		TurtleWriter writerOverBrokenSink = new TurtleWriter(new Writer() {
+			@Override
+			public void write(char[] cbuf, int off, int len) throws IOException {
+				throw new IOException("simulated sink failure");
+			}
+
+			@Override
+			public void flush() throws IOException {
+				throw new IOException("simulated sink failure");
+			}
+
+			@Override
+			public void close() {
+				// nothing to release
+			}
+		});
+
+		assertThrows(InternalServerErrorException.class,
+				() -> GraphUtil.serializeGraph(sampleGraph(), writerOverBrokenSink));
+	}
+
+	@Test
+	void serializeGraph_writerWithoutWriterConstructor_throwsInsteadOfReturningNull() {
+		assertThrows(InternalServerErrorException.class,
+				() -> GraphUtil.serializeGraph(sampleGraph(), NoWriterConstructorWriter.class));
+	}
+
+	// Pins the contract against a real writer on realistic data rather than a synthetic one: RDFXMLPrettyWriter
+	// cannot namespace-qualify <urn:987> and fails with StringIndexOutOfBoundsException, which is not an
+	// RDFHandlerException. Such a triple is storable through a valid Turtle PUT.
+	@Test
+	void serializeGraph_rdfXmlWithUnqualifiablePredicate_throwsInternalServerError() {
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		Model graph = new LinkedHashModel();
+		graph.add(vf.createIRI("http://example.com/s"), vf.createIRI("urn:987"), vf.createLiteral("x"));
+
+		assertThrows(InternalServerErrorException.class,
+				() -> GraphUtil.serializeGraph(graph, GraphUtil.DEFAULT_RDF_MEDIA_TYPE));
+	}
+
+	/**
+	 * Fails on the first statement, after {@code handleNamespace} has written the Turtle prefix declarations
+	 * into the buffer.
+	 */
+	public static class FailsMidStreamWriter extends TurtleWriter {
+
+		public FailsMidStreamWriter(Writer writer) {
+			super(writer);
+		}
+
+		@Override
+		public void handleStatement(Statement st) {
+			throw new RDFHandlerException("simulated mid-stream writer failure");
+		}
+	}
+
+	/** Reflective instantiation fails: {@code GraphUtil} looks up a {@code (Writer)} constructor. */
+	public static class NoWriterConstructorWriter extends TurtleWriter {
+
+		public NoWriterConstructorWriter(OutputStream outputStream) {
+			super(outputStream);
+		}
+	}
+
+	private static Model sampleGraph() {
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		Model model = new LinkedHashModel();
+		model.add(vf.createIRI("http://example.com/s"), vf.createIRI("http://purl.org/dc/terms/title"),
+				vf.createLiteral("Sample"));
+		return model;
 	}
 }

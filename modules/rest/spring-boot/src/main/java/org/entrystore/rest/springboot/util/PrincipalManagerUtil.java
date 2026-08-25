@@ -21,9 +21,53 @@ import lombok.NoArgsConstructor;
 import org.entrystore.PrincipalManager;
 
 import java.net.URI;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PrincipalManagerUtil {
+
+	/**
+	 * Runs {@code action} with the per-thread authenticated user elevated to the admin user, restoring
+	 * the previous user in all cases (including when {@code action} throws) via
+	 * {@link #restoreAuthenticatedUserSafely(PrincipalManager, URI, Throwable)}.
+	 * <p>
+	 * The action receives the pre-elevation user URI — inside the action,
+	 * {@code pm.getAuthenticatedUserURI()} returns the admin URI, so use the parameter whenever the
+	 * body needs the requesting user (e.g. to set a creator or grant ACLs).
+	 */
+	public static <T> T runAsAdmin(PrincipalManager pm, Function<URI, T> action) {
+		URI previous = pm.getAuthenticatedUserURI();
+		Throwable primary = null;
+		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+			return action.apply(previous);
+		} catch (Throwable t) {
+			primary = t;
+			throw t;
+		} finally {
+			restoreAuthenticatedUserSafely(pm, previous, primary);
+		}
+	}
+
+	/**
+	 * Runs {@code action} as the admin user; see {@link #runAsAdmin(PrincipalManager, Function)}.
+	 * Use the {@link Function} overload instead when the action's body needs the pre-elevation user
+	 * URI — inside the action, {@code pm.getAuthenticatedUserURI()} returns the admin URI.
+	 */
+	public static <T> T runAsAdmin(PrincipalManager pm, Supplier<T> action) {
+		return runAsAdmin(pm, _ -> action.get());
+	}
+
+	/**
+	 * Runs {@code action} as the admin user; see {@link #runAsAdmin(PrincipalManager, Function)}.
+	 */
+	public static void runAsAdmin(PrincipalManager pm, Runnable action) {
+		runAsAdmin(pm, () -> {
+			action.run();
+			return null;
+		});
+	}
 
 	/**
 	 * Restore the per-thread authenticated user URI to {@code previous} from inside a {@code finally}

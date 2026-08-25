@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import groovy.xml.XmlParser
@@ -5,8 +21,11 @@ import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
 import java.time.Year
+import java.util.concurrent.TimeUnit
 
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_OK
+import static org.awaitility.Awaitility.await
 
 class ResourceSyndicationIT extends BaseSpec {
 
@@ -57,10 +76,16 @@ class ResourceSyndicationIT extends BaseSpec {
 
 		entryId = getOrCreateEntry(contextId, params, body)
 		assert entryId.length() > 0
-		Thread.sleep(1000)
 		waitForSolrProcessing()
-		// Solr needs even more time to finish processing
-		Thread.sleep(1500)
+		// waitForSolrProcessing only proves the Solr post queue drained; commitWithin(1s) means the
+		// searcher can lag behind it. Poll the feed until the commit makes the entry visible.
+		await()
+			.pollInterval(200, TimeUnit.MILLISECONDS)
+			.atMost(15, TimeUnit.SECONDS)
+			.until {
+				def probe = EntryStoreClient.getRequest('/_contexts/resource/' + contextId + '?syndication=rss_2.0')
+				probe.getResponseCode() == HTTP_OK && probe.inputStream.text.contains('local metadata title')
+			}
 	}
 
 	def "GET /{context-id}/resource/{entry-id}?syndication=rss_2.0 as guest should return empty feed"() {
@@ -71,7 +96,8 @@ class ResourceSyndicationIT extends BaseSpec {
 
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
-		resourceConn.getContentType().contains('application/rss+xml')
+		// charset pinned deliberately: unified with the /search syndication Content-Type
+		resourceConn.getContentType().contains('application/rss+xml;charset=UTF-8')
 		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes()['xmlns:dc'] == null
 		respXml.attributes()['version'] != null
@@ -290,7 +316,8 @@ class ResourceSyndicationIT extends BaseSpec {
 
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
-		resourceConn.getContentType().contains('application/atom+xml')
+		// charset pinned deliberately: unified with the /search syndication Content-Type
+		resourceConn.getContentType().contains('application/atom+xml;charset=UTF-8')
 		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes().size() > 0
 		respXml.attributes()['xmlns'] == 'http://www.w3.org/2005/Atom'
@@ -515,5 +542,16 @@ class ResourceSyndicationIT extends BaseSpec {
 		itemDateNode.attributes().size() == 0
 		itemDateNode.value().size() == 1
 		(itemDateNode.value()[0] as String).contains(Year.now().toString())
+	}
+
+	def "GET /{context-id}/resource/{entry-id}?syndication=random-string should return BAD-REQUEST 400 due to invalid syndication format"() {
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + contextId + '?syndication=random-string')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_BAD_REQUEST
+		resourceConn.getContentType().contains('application/json')
+		def resp = JSON_PARSER.parseText(resourceConn.errorStream.text)
+		resp['error'] == 'Invalid syndication feed type: \'random-string\''
 	}
 }

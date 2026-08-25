@@ -55,7 +55,6 @@ class EntryIT extends BaseSpec {
 		entryId.length() > 0
 
 		// fetch entries under the context
-		// extract to separate test?
 		def contextConn = EntryStoreClient.getRequest('/' + contextId)
 		contextConn.getResponseCode() == HTTP_OK
 		contextConn.getContentType().contains('application/json')
@@ -109,12 +108,7 @@ class EntryIT extends BaseSpec {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'Cool entry'
-											 ]],
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'Cool entry')
 
 		when:
 		def entryId = createEntry(contextId, params, body)
@@ -390,12 +384,7 @@ class EntryIT extends BaseSpec {
 		def metadataUrl = 'https://bbc.co.uk/metadata'
 		def params = [entrytype: 'linkreference', resource: resourceUrl, 'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'Cool entry 2'
-											 ]],
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'Cool entry 2')
 
 		when:
 		def entryId = createEntry(contextId, params, body)
@@ -559,12 +548,7 @@ class EntryIT extends BaseSpec {
 		def metadataUrl = 'https://bbc.co.uk/metadata'
 		def params = [entrytype: 'reference', resource: resourceUrl, 'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'Cool entry 3'
-											 ]],
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'Cool entry 3')
 
 		when:
 		def entryId = createEntry(contextId, params, body)
@@ -883,12 +867,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -918,12 +897,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -950,12 +924,7 @@ class EntryIT extends BaseSpec {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'Cool entry 20'
-											 ]],
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'Cool entry 20')
 		def entryId = createEntry(contextId, params, body)
 		assert entryId.length() > 0
 
@@ -1028,12 +997,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -1129,12 +1093,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -1211,12 +1170,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -1290,15 +1244,12 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
+		// TODO: no coverage for rdfFormat without an explicit Accept header — getRequest(path, user, null)
+		// still sends HttpURLConnection's default Accept, so add a case pinning which of the two wins.
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?rdfFormat=application/ld+json&includeAll')
 
 		then:
@@ -1382,18 +1333,10 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
-		// TODO: just weird behaviour - below GET (a request for an entry with param "rdfFormat=application/ld+json" and empty Accept header) returns RDF+XML (the default type, and rdfFormat param value is ignored)
-//		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + convertMapToQueryParams([rdfFormat: 'application/ld+json']), 'admin', null)
-
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'application/rdf+xml')
 
 		then:
@@ -1404,7 +1347,7 @@ class EntryIT extends BaseSpec {
 		def entryLinkRefXml = entryRespXml['es:LinkReference'][0] as Node
 		// es:LinkReference has one attribute and 9 children
 		entryLinkRefXml.attributes().size() == 1
-		entryLinkRefXml['@rdf:about'] == 'http://localhost:8181/store/10/entry/' + entryId
+		entryLinkRefXml['@rdf:about'] == EntryStoreClient.origin + '/store/10/entry/' + entryId
 		entryLinkRefXml.value().size() == 9
 
 		//   es:resource child should have: 1 attr, 0 children
@@ -1475,12 +1418,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -1494,7 +1432,7 @@ class EntryIT extends BaseSpec {
 		def entryLinkRefXml = entryRespXml['es:LinkReference'][0] as Node
 		// es:LinkReference has one attribute and 9 children
 		entryLinkRefXml.attributes().size() == 1
-		entryLinkRefXml['@rdf:about'] == 'http://localhost:8181/store/10/entry/' + entryId
+		entryLinkRefXml['@rdf:about'] == EntryStoreClient.origin + '/store/10/entry/' + entryId
 		entryLinkRefXml.value().size() == 9
 
 		//   es:resource child should have: 1 attr, 0 children
@@ -1566,12 +1504,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -1590,12 +1523,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -1621,12 +1549,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -1649,12 +1572,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -1680,12 +1598,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 		def expectedEntryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
 
@@ -1739,12 +1652,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 		def expectedEntryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
 
@@ -1786,12 +1694,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -1818,12 +1721,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -1850,12 +1748,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -1894,12 +1787,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		def putBody = [(EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId): [
@@ -1984,18 +1872,13 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		def putBody = """
 @prefix es: <http://entrystore.org/terms/> .
 
-<http://localhost:8181/store/10/entry/entryForGetTests> a es:LinkReference;
+<${EntryStoreClient.origin}/store/10/entry/entryForGetTests> a es:LinkReference;
   es:resource <https://bbc.co.uk/v2> .
 """
 
@@ -2060,18 +1943,13 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl + '/v2',
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		def putBody = """
 @prefix es: <http://entrystore.org/terms/> .
 
-<http://localhost:8181/store/10/entry/entryForGetTests> a es:LinkReference;
+<${EntryStoreClient.origin}/store/10/entry/entryForGetTests> a es:LinkReference;
   es:resource <https://bbc.co.uk/v3> .
 """
 
@@ -2137,18 +2015,13 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl + '/v2',
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		def putBody = """
 @prefix es: <http://entrystore.org/terms/> .
 
-<http://localhost:8181/store/10/entry/entryForGetTests> a es:LinkReference;
+<${EntryStoreClient.origin}/store/10/entry/entryForGetTests> a es:LinkReference;
   es:resource <https://bbc.co.uk/v3> .
 """
 
@@ -2213,12 +2086,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -2241,12 +2109,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -2273,12 +2136,7 @@ class EntryIT extends BaseSpec {
 					  resource                  : resourceUrl,
 					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'local metadata title'
-											 ]]
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'local metadata title')
 		getOrCreateEntry(contextId, params, body)
 
 		when:
@@ -2345,12 +2203,7 @@ class EntryIT extends BaseSpec {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [[
-												 type : 'literal',
-												 value: 'Cool entry'
-											 ]],
-		]]]
+		def body = createTitleMetadataBody(newResourceIri, 'Cool entry')
 		def entryId = createEntry(contextId, params, body)
 
 		def putBody = [(EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId): [

@@ -23,28 +23,23 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.solr.client.solrj.request.SolrQuery;
 import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.common.SolrException;
-import org.eclipse.rdf4j.model.Model;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.Group;
-import org.entrystore.Metadata;
-import org.entrystore.PrincipalManager;
-import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.Resource;
 import org.entrystore.User;
-import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.rest.springboot.configuration.SyndicationProperties;
 import org.entrystore.rest.springboot.model.dto.QueryResultsDto;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
-import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.HttpQueryRedactor;
+import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.entrystore.rest.springboot.util.Syndication;
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONArray;
@@ -58,8 +53,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Objects;
-import java.util.Set;
 
 @Slf4j
 @Service
@@ -67,8 +60,8 @@ import java.util.Set;
 public class SearchService {
 
 	private final RepositoryManagerImpl repositoryManager;
-	private final PrincipalManager principalManager;
-	private final Config esConfig;
+	private final SyndicationProperties syndicationProperties;
+	private final ResourceJsonSerializer resourceJsonSerializer;
 
 
 	/**
@@ -180,17 +173,13 @@ public class SearchService {
 	public String generateSyndication(HttpServletRequest request, List<Entry> entries, String feedType, String language,
 									  int limit, String urlTemplate, String feedTitle) {
 
-		SyndFeed feed = Syndication.createFeedFromEntries(repositoryManager.getPrincipalManager(), esConfig, entries,
-				language, limit, urlTemplate);
+		SyndFeed feed = Syndication.createFeedFromEntries(repositoryManager.getPrincipalManager(),
+				syndicationProperties.template(urlTemplate), entries, language, limit);
 		feed.setTitle(Syndication.sanitizeFeedTitle(feedTitle));
 		feed.setLink(buildRequestUri(request));
 		feed.setFeedType(feedType);
 
-		try {
-			return Syndication.convertSyndFeedToXml(feed);
-		} catch (IllegalArgumentException e) {
-			throw new BadRequestException("Invalid syndication feed type: '" + feedType + "'");
-		}
+		return Syndication.convertSyndFeedToXml(feed);
 	}
 
 	public String generateJson(int offset, int limit, QueryResultsDto queryResults, String rdfFormat) {
@@ -222,66 +211,14 @@ public class SearchService {
 							childJSON.put("name", ((Group) groupResource).getName());
 						}
 					}
-					Set<AccessProperty> rights = principalManager.getRights(e);
-					for (AccessProperty ap : rights) {
-						if (ap == AccessProperty.Administer) {
-							childJSON.append("rights", "administer");
-						} else if (ap == AccessProperty.WriteMetadata) {
-							childJSON.append("rights", "writemetadata");
-						} else if (ap == AccessProperty.WriteResource) {
-							childJSON.append("rights", "writeresource");
-						} else if (ap == AccessProperty.ReadMetadata) {
-							childJSON.append("rights", "readmetadata");
-						} else if (ap == AccessProperty.ReadResource) {
-							childJSON.append("rights", "readresource");
-						}
+					JSONArray rights = resourceJsonSerializer.serializeRights(e);
+					if (!rights.isEmpty()) {
+						// unlike list serialization, search children only carry a "rights" key when
+						// at least one right exists
+						childJSON.put("rights", rights);
 					}
 
-					try {
-						EntryType ltC = e.getEntryType();
-						if (EntryType.Reference.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
-							// get the external metadata
-							Metadata cachedExternalMD = e.getCachedExternalMetadata();
-							if (cachedExternalMD != null) {
-								Model cachedExternalMDGraph = cachedExternalMD.getGraph();
-								if (cachedExternalMDGraph != null) {
-									JSONObject childCachedExternalMDJSON = GraphUtil.serializeGraphToJson(cachedExternalMDGraph, rdfFormat);
-									childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, childCachedExternalMDJSON);
-								}
-							}
-						}
-
-						if (EntryType.Link.equals(ltC) || EntryType.Local.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
-							// get the local metadata
-							Metadata localMD = e.getLocalMetadata();
-							if (localMD != null) {
-								Model localMDGraph = localMD.getGraph();
-								if (localMDGraph != null) {
-									JSONObject localMDJSON = GraphUtil.serializeGraphToJson(localMDGraph, rdfFormat);
-									childJSON.accumulate(RepositoryProperties.MD_PATH, localMDJSON);
-								}
-							}
-						}
-					} catch (AuthorizationException ae) {
-						childJSON.accumulate("noAccessToMetadata", true);
-					}
-
-					try {
-						JSONObject childInfo = GraphUtil.serializeGraphToJson(e.getGraph(), rdfFormat);
-						childJSON.accumulate("info", Objects.requireNonNullElseGet(childInfo, JSONObject::new));
-					} catch (AuthorizationException ae) {
-						childJSON.accumulate("noAccessToEntryInfo", true);
-					}
-
-					try {
-						Model childRelationsGraph = e.getRelations();
-						if (childRelationsGraph != null) {
-							JSONObject childRelationObj = GraphUtil.serializeGraphToJson(childRelationsGraph, rdfFormat);
-							childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
-						}
-					} catch (AuthorizationException ae) {
-						childJSON.accumulate("noAccessToRelations", true);
-					}
+					resourceJsonSerializer.appendMetadataInfoAndRelations(e, childJSON, rdfFormat, true);
 
 					children.put(childJSON);
 				}

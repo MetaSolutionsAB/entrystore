@@ -20,5 +20,18 @@
 			<artifactId>entrystore-transforms-common</artifactId>
 			<version>${project.version}</version>
 		</dependency>
+		<!-- org.eclipse.rdf4j.model and model.impl (LinkedHashModel, SimpleValueFactory) are used
+		     directly by EmptyTransform; declared rather than inherited transitively from
+		     entrystore-transforms-common. -->
+		<dependency>
+			<groupId>org.eclipse.rdf4j</groupId>
+			<artifactId>rdf4j-model-api</artifactId>
+			<version>${rdf4j.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.eclipse.rdf4j</groupId>
+			<artifactId>rdf4j-model</artifactId>
+			<version>${rdf4j.version}</version>
+		</dependency>
 	</dependencies>
 </project>

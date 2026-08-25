@@ -41,6 +41,17 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.cors.headers=X-Custom-Header
 # entrystore.cors.max-age=7200
 
+## Cross-site request forgery (CSRF) protection.
+## When enabled, cookie-authenticated mutating requests (POST/PUT/PATCH/DELETE) must echo the
+## XSRF-TOKEN cookie value in the X-XSRF-TOKEN request header. When disabled, no token is
+## required and no XSRF-TOKEN cookie is issued. SECURITY: the default is off because common
+## EntryStore clients do not send the token header yet (ENTRYSTORE-1008); enable this once all
+## cookie-authenticated clients of the installation send X-XSRF-TOKEN, since without it cookie
+## sessions are open to CSRF attacks.
+# entrystore.csrf.enabled=true|false (default: false)
+## Name of the CSRF token cookie.
+# entrystore.csrf.cookie-name=XSRF-TOKEN
+
 ## HTTP Server response header.
 ## Default: EntryStore/<version-from-VERSION.txt>.
 ## A non-blank string here wins over the auto-computed default. Blank or unset falls through.
@@ -60,11 +71,81 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.jsonp=true
 
 ## SMTP settings, required for e.g. sign-up
+## Transport security is `entrystore.smtp.security`. This file documented it as `entrystore.smtp.ssl`,
+## a key the code never read, up to and including 5.6.2 — deployments configured from one of those
+## copies were therefore sending plaintext. 5.7.0 through 5.8.0 documented the canonical key
+## correctly. As of 6.1 both spellings are honoured: `entrystore.smtp.security` is read whenever it
+## resolves, and `entrystore.smtp.ssl` only as a fallback. Setting both is allowed; if they disagree,
+## `security` applies and the deprecated key is reported at WARN. Values are matched on letters and
+## digits only, case-insensitively, so `STARTTLS`, `start-tls` and the `START_TLS` form an environment
+## variable naturally carries all resolve alike.
+## Neither key was validated before 6.1 — `ssl` was never read, and `security` was compared with
+## equalsIgnoreCase — so a value outside starttls|ssl|off silently meant plaintext. Such a value is now
+## reported at ERROR and NO MAIL IS SENT while it stays set: sending in the clear under a configuration
+## meant to be encrypted is not a safe default. Startup is never aborted over it — a mail
+## misconfiguration must not take the REST API down. A configured host that ends up on plaintext
+## without `security` being set at all is warned about at startup, so a missing setting is loud rather
+## than silent; setting `entrystore.smtp.security=off` declares plaintext and silences that warning.
+## `entrystore.smtp.ssl` is deprecated and will be removed in a future major version.
+##
+## UPGRADE NOTE: because `entrystore.smtp.ssl` is now honoured and an unresolvable value now refuses to
+## send, transport security is enforced rather than downgraded, and a deployment carrying a stale value
+## in either key will see sends start FAILING rather than continuing insecurely:
+##   - `entrystore.smtp.ssl=ssl` with the `entrystore.smtp.port=587` this file documented alongside it
+##     means implicit TLS on a submission port, so every send fails.
+##   - `entrystore.smtp.ssl=starttls` against a relay that does not advertise STARTTLS now throws
+##     instead of silently downgrading.
+##   - a value neither key can resolve — `security=tls`, `=none`, `=true` — refuses to send at all.
+## Sign-up, password reset, POST /message and the password-change confirmations stop working in each of
+## those cases. Verify your MTA supports the implied mode before upgrading, and declare a deliberately
+## plaintext relay explicitly with `entrystore.smtp.security=off`.
 # entrystore.smtp.host=smtp.host.tld
-# entrystore.smtp.port=587
-# entrystore.smtp.ssl=starttls|ssl|off
+# entrystore.smtp.port=587 (default: 25)
+# entrystore.smtp.security=starttls|ssl|off (default: off)
+## Both credential keys must be set. If only one is, that is reported at ERROR and SMTP
+## authentication is disabled — the session stays anonymous, as before 6.1 — rather than failing
+## startup.
 # entrystore.smtp.username=smtp-user
 # entrystore.smtp.password=smtp-password
+## Envelope addresses. These supersede entrystore.auth.email.from|bcc, which are still read as a
+## fallback and log a deprecation warning at startup when used. A value that is not a valid address is
+## reported at ERROR at startup, naming the key. bcc and reply-to may each be a comma-separated list —
+## legal for Reply-To under RFC 5322 and accepted here since 2019 — while from must be exactly one
+## mailbox. The recipient and the Reply-To of POST /message are caller-supplied rather than configured
+## here, and must each be exactly one mailbox: no list, no RFC822 group address and no CR or LF.
+# entrystore.smtp.email.from=signup@yourdomain.tld
+# entrystore.smtp.email.bcc=info+signup@yourdomain.tld
+# entrystore.smtp.email.reply-to=support@yourdomain.tld
+## Socket timeouts and TLS server-identity checking, hardcoded before 6.1. The defaults below are the
+## values that were previously compiled in; lower them only if your MTA is reliably fast.
+## Disabling check-server-identity makes TLS vulnerable to an active man-in-the-middle — it exists for
+## test MTAs with self-signed certificates, not for production.
+# entrystore.smtp.connection-timeout=5s
+# entrystore.smtp.read-timeout=5s
+# entrystore.smtp.write-timeout=5s
+# entrystore.smtp.check-server-identity=true
+## TOTAL number of send attempts before giving up, not the number of retries: 3 means two retries and
+## 1 disables retrying. Must be between 1 and 10. Attempts are immediate (no backoff), so a single send
+## can occupy its thread for this many times the whole SMTP exchange. Note that read-timeout above
+## bounds each individual read, not the exchange, and one exchange makes seven or so blocking reads
+## (greeting, EHLO, MAIL FROM, RCPT TO, DATA, end-of-data, QUIT) — plus DNS resolution, which no
+## timeout covers. Which thread depends on the path: sign-up, POST /message, the /auth/pwreset
+## confirmation and a user password change all send on the request thread, while password-reset mail
+## runs on the passwordResetExecutor (2 threads, queue of 100, abort policy), so raising this value
+## there fills that queue until dispatches are rejected rather than slowing individual requests.
+## A permanent failure is not retried at all — a message that will not parse, an address the server
+## rejected, or an authentication failure the server did not report with a 4xx code. A message the
+## transport reports as partially delivered is never re-sent, so that path cannot produce a duplicate
+## password-reset link; a failure that reports no delivered addresses at all, such as a read timeout
+## after DATA, is still retried and can. The startup log warns when the timeouts and this value multiply
+## out to a long block.
+# entrystore.smtp.max-send-attempts=3
+##
+## Note: the spring.mail.* keys are not used; EntryStore builds its mail sender from the
+## entrystore.smtp.* keys above. spring.mail.test-connection currently has no effect, because Spring
+## Boot's validator requires a single JavaMailSenderImpl bean and EntryStore declares the bean as the
+## JavaMailSender interface. Keep that declared type — narrowing it would make the flag open an SMTP
+## connection during startup.
 
 ## Rate limiting for POST /message (0 to disable)
 # entrystore.message.rate.limit.max=10
@@ -96,6 +177,8 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.solr.search.facet-fields.max-count=16
 
 ## Generic settings for user-initiated sign-up and password reset
+## Deprecated: use entrystore.smtp.email.from / .bcc instead. Still honoured as a fallback when the
+## entrystore.smtp.email.* equivalent is unset, with a deprecation warning logged at startup.
 # entrystore.auth.email.from=signup@yourdomain.tld
 # entrystore.auth.email.bcc=info+signup@yourdomain.tld
 # entrystore.auth.recaptcha=on (default: off)
@@ -138,6 +221,29 @@ entrystore.data.folder=/srv/entrystore/files/
 ## Temporary user lockout
 entrystore.auth.temp.lockout.max.attempts=0
 entrystore.auth.temp.lockout.duration=0ms
+
+## Local password login (default: on)
+## on / off  - identical today: password login stays enabled and only the blacklist is applied.
+##             "off" is accepted for legacy compatibility but is NOT yet honoured — setting it
+##             does not disable local password login.
+## whitelist - only the usernames listed below may log in with a password. An empty or missing
+##             whitelist in this mode denies every password login, and is currently the only way
+##             to disable local password login entirely.
+## The blacklist is applied in all three modes.
+## Use the indexed form (.1, .2, ...); a bare "whitelist=user" value is not supported.
+# entrystore.auth.password=on|off|whitelist
+# entrystore.auth.password.whitelist.1=admin
+# entrystore.auth.password.whitelist.2=user@yourdomain.tld
+# entrystore.auth.password.blacklist.1=blocked@yourdomain.tld
+## Require the current password when a user changes their own password (default: true)
+# entrystore.auth.password.require-current-password=false
+
+## Additional base URLs accepted as a post-login redirect target. The repository base URL
+## is always permitted; anything else must be listed here or the redirect is dropped
+## (open-redirect protection).
+## Use the indexed form (.1, .2, ...); a bare "redirects=url" value is not supported.
+# entrystore.auth.permitted.redirects.1=https://app.yourdomain.tld/
+# entrystore.auth.permitted.redirects.2=https://portal.yourdomain.tld/
 
 ## HTTP Basic authentication (default: false)
 ## Renamed in 6.0 — previously `entrystore.auth.http-basic`. The legacy key is
@@ -221,6 +327,10 @@ entrystore.auth.temp.lockout.duration=0ms
 # spring.security.oauth2.client.provider.myProvider.issuer-uri=https://idp.example.com/realms/myrealm
 
 ## Solr
+## Maximum number of rows a search or a syndication feed returns.
+## When unset the two consumers differ: search caps at 100, syndication at 50.
+## Setting this applies one cap to both.
+# entrystore.solr.max-limit=200
 entrystore.solr=on
 entrystore.solr.reindex-on-startup=off
 entrystore.solr.url=http://localhost:8080/solr/entrystore-core1
@@ -249,7 +359,7 @@ entrystore.solr.extract-fulltext=off
 
 ## Multipart upload limits at the Spring servlet layer (defaults: 100MB).
 ## Application-level caps that DO exist: entrystore.data.max-file-size
-## (resource uploads), 10 MB hardcoded in /echo. POST /{context-id}/import
+## (resource uploads), entrystore.echo.max-file-size for /echo. POST /{context-id}/import
 ## (multipart variant) has NO application-level cap, so its upper bound is
 ## whatever you set here. The non-multipart byte[] variant of /import
 ## currently has no enforced server-side size cap (Spring's multipart caps
@@ -289,8 +399,54 @@ entrystore.solr.extract-fulltext=off
 ## http://x normalizes to http://x:80 and https://x to https://x:443. The origin of
 ## entrystore.rowstore.url above (when set) is implicitly trusted for the DELETE path,
 ## so single-host RowStore deployments need no additional configuration here.
+## Use the indexed form (.1, .2, ...); a bare "whitelist=origin" value is not supported.
 # entrystore.proxy.remote-resource.delete.whitelist.1=http://rowstore.internal:8282
 # entrystore.proxy.remote-resource.delete.whitelist.2=https://other-rowstore.example.com
+
+## SSRF whitelist for the proxy-GET path. Entries are bare hostnames, not origin URLs.
+## A listed host is exempt from the SSRF hostname blacklist AND from the loopback,
+## site-local and link-local checks on the address it resolves to, so list only hosts
+## that are meant to be reachable from the server.
+## Use the indexed form (.1, .2, ...); a bare "local=host" value is not supported.
+# entrystore.proxy.whitelist.local.1=cache.internal
+# entrystore.proxy.whitelist.local.2=metadata.internal
+
+## Hosts that guest (unauthenticated) users may proxy to. Requests to any other host
+## require authentication. Bare hostnames, matched case-insensitively.
+## Use the indexed form (.1, .2, ...); a bare "anonymous=host" value is not supported.
+# entrystore.proxy.whitelist.anonymous.1=public.example.com
+
+## Outbound-fetch limits, hardcoded before 6.1. The defaults below are the values that were
+## previously compiled in. max-redirects, connect-timeout and read-timeout apply to BOTH outbound
+## paths: GET /proxy (and its context-scoped form) and the resource-DELETE proxy path above.
+## max-response-size applies to GET /proxy only — the resource-DELETE path never reads a response body.
+##
+## max-redirects is a cap on redirect hops, so a value of N opens up to N+1 connections (the initial
+## request plus N hops); 0 disables redirect following entirely. Exceeding it is answered 502.
+##
+## The timeouts apply per hop. Establishing all hops costs at worst roughly
+## (max-redirects + 1) x connect-timeout. read-timeout is a per-socket-read deadline that resets on
+## every successful read, NOT a deadline for the response, so it does not bound total wall time: an
+## upstream that trickles bytes just under the timeout holds a request thread until max-response-size
+## is reached. DNS resolution is covered by no timeout here at all. The proxy runs on the request
+## thread, so if the concern is threads held by a slow upstream, lower max-response-size — lowering
+## the timeouts alone does not create a bound.
+##
+## max-response-size caps the upstream body that GET /proxy will buffer; exceeding it is answered 502.
+## The body is accumulated in memory, so this bounds heap per concurrent proxy request. Capped at
+## 512MB, because the buffer is an int-indexed array: without that ceiling a large enough value would
+## exhaust the heap before the size check could fire.
+# entrystore.proxy.max-response-size=10MB
+# entrystore.proxy.max-redirects=15
+# entrystore.proxy.connect-timeout=30s
+# entrystore.proxy.read-timeout=60s
+
+## Maximum payload POST /echo will reflect back; exceeding it is answered 413. Reported as
+## echoMaxEntitySize by GET /management/status/extended. Keep
+## spring.servlet.multipart.max-file-size at or above this value, otherwise Jetty rejects the upload
+## with a 400 before /echo ever sees it. Capped at 64MB: the payload is read back as a string and
+## HTML-escaped, so peak heap is a multiple of this value on an endpoint that needs no authentication.
+# entrystore.echo.max-file-size=10MB
 
 ## Enable creation of groups with linked contexts for normal non-admin users
 # entrystore.nonadmin.group-context-creation=on|off (default: off)

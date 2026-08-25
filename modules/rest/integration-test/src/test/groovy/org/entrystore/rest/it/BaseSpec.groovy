@@ -18,11 +18,13 @@ package org.entrystore.rest.it
 
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.stubbing.StubMapping
+import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import groovy.transform.PackageScope
 import org.awaitility.core.ConditionEvaluationLogger
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.entrystore.rest.it.util.NameSpaceConst
 import org.entrystore.rest.it.util.UserUtil
 import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
 import org.slf4j.LoggerFactory
@@ -62,12 +64,15 @@ abstract class BaseSpec extends Specification {
 	static def log = LoggerFactory.getLogger(this.class)
 	static def JSON_PARSER = new JsonSlurper()
 
+	// Not in java.net.HttpURLConnection's HTTP_* constants (RFC 6585)
+	static final int HTTP_TOO_MANY_REQUESTS = 429
+
 	// Invariant for lifecycle-owning ITs (those that close this shared app and start their own
 	// with non-default args, e.g. ZzzSamlLoginIT, ZzzCasLoginIT):
 	//   1. Their class name MUST sort alphabetically AFTER all shared-app ITs (Zzz* prefix today),
 	//      enforced by Failsafe runOrder=alphabetical in the integration-test pom.
-	//   2. They MUST set appStarted=true in setupSpec after starting their own app, and MUST NOT
-	//      reset it to false anywhere. If appStarted leaks back to false, the guard below re-runs
+	//   2. They MUST set appStarted=true in setupSpec after starting their own app (startOwnedApp
+	//      does this), and MUST NOT reset it to false anywhere. If appStarted leaks back to false, the guard below re-runs
 	//      the full init block (Solr + a shared app) between lifecycle-owning ITs, adding an
 	//      extra Spring Boot start per CI run. The asserts in setupSpec catch the two invalid
 	//      (appStarted, appInstance) state pairs.
@@ -136,7 +141,11 @@ abstract class BaseSpec extends Specification {
 				'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
 				'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
 				// Inject the dynamic WireMock origin into the DELETE whitelist; the port is only known at runtime.
-				'--entrystore.proxy.remote-resource.delete.whitelist.1=http://localhost:' + wireMockServer.port()
+				'--entrystore.proxy.remote-resource.delete.whitelist.1=http://localhost:' + wireMockServer.port(),
+				// CSRF protection defaults to off (ENTRYSTORE-1096) but the shared app runs with it ON so
+				// CsrfIT and every token-forwarding mutation IT keep exercising the enabled contract.
+				// The default (off) is covered by ZzzCsrfDisabledIT.
+				'--entrystore.csrf.enabled=true'
 			] as String[]
 			appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
 			// Verify the folder we guarded/armed before startup is the one the running app actually uses,
@@ -272,9 +281,7 @@ abstract class BaseSpec extends Specification {
 				if (username != 'admin') {
 					def isAdmin = EntryStoreClient.isAnAdmin(username)
 					log.info('Creating ES user: {} (Admin: {})', username, isAdmin)
-					def user = UserUtil.createUser(username, null, isAdmin)
-					UserUtil.setUserPassword(user['resourceUri'].toString(), password)
-					EntryStoreClient.createdEsUsers[username] = user
+					EntryStoreClient.createdEsUsers[username] = UserUtil.createUserWithPassword(username, password, null, isAdmin)
 				}
 			}
 		}
@@ -328,6 +335,32 @@ abstract class BaseSpec extends Specification {
 			.join('&')
 	}
 
+	/** Builds the request-body map for an entry whose local metadata is a single dcterms:title literal. */
+	def static createTitleMetadataBody(String resourceIri, String title) {
+		return [metadata: [(resourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: title]]]]]
+	}
+
+	/**
+	 * Extracts the 16-character confirmation token following the '?confirm=' marker in a received
+	 * email (sign-up and password-reset confirmation mails share this link format).
+	 *
+	 * @param mail the GreenMail instance holding the message
+	 * @param index index into the received-messages array (defaults to the first message)
+	 */
+	protected static String extractConfirmationToken(GreenMail mail, int index = 0) {
+		def content = mail.getReceivedMessages()[index].getContent().toString()
+		def marker = '?confirm='
+		def markerIndex = content.indexOf(marker)
+		assert markerIndex != -1: 'confirmation mail carries no ?confirm= link'
+		def start = markerIndex + marker.length()
+		// Match the whole alphanumeric run rather than a fixed-length slice, so a token that grew
+		// or shrank fails here instead of as an opaque 400 from the confirmation endpoint
+		// (AuthService generates it via RandomStringUtils.random(16, 0, 0, true, true, ...)).
+		def token = content.substring(start).find(/[A-Za-z0-9]+/)
+		assert token?.length() == 16: 'unexpected confirmation-token shape: ' + token
+		return token
+	}
+
 	/**
 	 * Fetches requested entry by given ID, if it does not exist then creates a new entry with that ID.
 	 * Expects "id" key to be present in the `params` argument.
@@ -343,9 +376,9 @@ abstract class BaseSpec extends Specification {
 		assert entryId.toString().length() > 0
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		if (entryConn.getResponseCode() == HTTP_OK) {
-			entryConn.getContentType().contains('application/json')
+			assert entryConn.getContentType().contains('application/json')
 			def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
-			entryRespJson['entryId'] != null
+			assert entryRespJson['entryId'] != null
 			return entryRespJson['entryId'].toString()
 		} else if (entryConn.getResponseCode() == HTTP_NOT_FOUND) {
 			return createEntry(contextId, params, body)
@@ -372,6 +405,14 @@ abstract class BaseSpec extends Specification {
 		return responseJson['entryId'].toString()
 	}
 
+	/** Creates a self-deleting temp file with the given binary content. */
+	protected static File createTempBinaryFile(String prefix, String suffix, byte[] content) {
+		def file = File.createTempFile(prefix, suffix)
+		file.deleteOnExit()
+		file.withOutputStream { it.write(content) }
+		return file
+	}
+
 	Map getSolrStatus() {
 		def connection = EntryStoreClient.getRequest('/management/status/extended')
 		assert connection.getResponseCode() == HTTP_OK
@@ -391,6 +432,20 @@ abstract class BaseSpec extends Specification {
 			.atMost(30, TimeUnit.SECONDS)
 			// separate supplier and predicate for better await logging
 			.until({ getSolrStatus() }, SOLR_IDLE)
+	}
+
+	/**
+	 * Starts a lifecycle-owned EntryStore app for specs that need non-default args, prepending the
+	 * shared Solr URL and upholding invariant #2 (sets appStarted=true, see the comment on it).
+	 * Callers stop the shared app via stopPreexistingAppIfRunning() first; per-spec infrastructure
+	 * (GreenMail, Keycloak) stays in the callers.
+	 */
+	protected static void startOwnedApp(List<String> extraArgs) {
+		assert appInstance == null: 'call stopPreexistingAppIfRunning() before startOwnedApp'
+		def args = (['--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core']
+			+ extraArgs) as String[]
+		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
+		appStarted = true
 	}
 
 	protected static void stopPreexistingAppIfRunning() {

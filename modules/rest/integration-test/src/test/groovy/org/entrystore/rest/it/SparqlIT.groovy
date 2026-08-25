@@ -71,15 +71,11 @@ class SparqlIT extends BaseSpec {
 		def newMetadataIri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/_newId'
 
 		def params = [entrytype: 'link', resource: 'https://example.org/' + title]
-		def metadataBlock = [
-			(newResourceIri): [
-				(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: title]]
-			]
-		]
-		def body = (guestUriOrNull != null)
-			? [metadata: metadataBlock,
-			   info: [(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUriOrNull]]]]]
-			: [metadata: metadataBlock]
+		def body = createTitleMetadataBody(newResourceIri, title)
+		if (guestUriOrNull != null) {
+			// Grant guest ReadMetadata so the entry is indexed with public:true in Solr
+			body.info = [(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUriOrNull]]]]
+		}
 		createEntry(contextId, params, body)
 	}
 
