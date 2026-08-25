@@ -60,6 +60,7 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1328,6 +1329,132 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
+	/**
+	 * Removes all non-system entries as part of the supplied transaction, so that a caller performing a
+	 * larger operation (e.g. context import) can roll back the removals together with the rest of the
+	 * transaction. Entries that are named in the index graph but cannot be loaded are skipped, not removed.
+	 *
+	 * <p>The children come from the store through the supplied connection, not from {@link #getEntries()}:
+	 * a statement the in-memory index could not parse makes that listing short, and an entry missing from it
+	 * would survive a replace-import and coexist with the imported data (ENTRYSTORE-1095).
+	 *
+	 * <p>The three accumulators are filled as the removal runs, so they reflect the progress made even if
+	 * this method throws: {@code removedEntries} every entry whose removal has started,
+	 * {@code deferredFileDeletions} the file resources whose disk files must be deleted after a successful
+	 * commit, and {@code prunedSurvivingLists} the entries of surviving lists whose membership was pruned.
+	 * After a commit the caller must invoke {@link #evictFromCaches(List)} with the removed entries, fire
+	 * {@link RepositoryEvent#EntryDeleted} for each of them and delete the deferred files; after a rollback
+	 * it must invoke {@link #recoverFromFailedRemoval(List)} instead and refresh this context's entry and the
+	 * pruned list entries from the repository, whose modification dates (and the lists' contributors) are
+	 * updated in memory as part of the removal.
+	 */
+	protected void removeNonSystemEntries(RepositoryConnection rc, List<EntryImpl> removedEntries,
+			List<DataImpl> deferredFileDeletions, List<EntryImpl> prunedSurvivingLists) throws Exception {
+		synchronized (this.entry.repository) {
+			Map<URI, SurvivingListPrune> survivingListPrunes = new LinkedHashMap<>();
+			// Collected and then discarded: both required follow-ups unpublish the two indexes, so the
+			// next read rebuilds them from the store. Applying an op instead would buffer a pop into
+			// pendingIndexOps while they are unpublished, and a rolled-back removal would have that pop
+			// replayed onto the freshly loaded index, hiding a live entry from every listing.
+			List<IndexOp> discardedOps = new ArrayList<>();
+			for (URI entryURI : childEntryURIsFromStore(rc)) {
+				EntryImpl removeEntry = (EntryImpl) getByEntryURI(entryURI);
+				if (removeEntry == null) {
+					log.warn("Entry {} is named by the context index graph but could not be loaded, "
+							+ "skipping removal and removing the stale index reference", entryURI);
+					removeStaleIndexReference(entryURI, rc);
+					continue;
+				}
+				if (removeEntry.getId().startsWith("_") || systemEntries.contains(entryURI)) {
+					continue;
+				}
+				checkAccess(removeEntry, AccessProperty.Administer);
+				log.info("Removing {}", entryURI);
+				collectSurvivingListPrunes(removeEntry, survivingListPrunes);
+				removedEntries.add(removeEntry);
+				removeFromIndex(removeEntry, rc, discardedOps);
+				removeEntry.remove(rc, deferredFileDeletions);
+			}
+			// prune each surviving list once for all of its removed members: one graph read and rewrite
+			// per list instead of one per member
+			for (SurvivingListPrune prune : survivingListPrunes.values()) {
+				EntryImpl listEntry = (EntryImpl) prune.list().getEntry();
+				if (!prunedSurvivingLists.contains(listEntry)) {
+					prunedSurvivingLists.add(listEntry);
+				}
+				prune.list().removeChildrenInTransaction(prune.memberURIsToRemove(), rc);
+			}
+			this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
+		}
+	}
+
+	private void removeStaleIndexReference(URI entryURI, RepositoryConnection rc) throws RepositoryException {
+		IRI entryIRI = rc.getValueFactory().createIRI(entryURI.toString());
+		rc.remove((Resource) null, RepositoryProperties.resHasEntry, entryIRI, this.resourceURI);
+		rc.remove((Resource) null, RepositoryProperties.mdHasEntry, entryIRI, this.resourceURI);
+	}
+
+	/** The members to prune from one surviving list after the bulk-removal loop has finished. */
+	private record SurvivingListPrune(ListImpl list, List<URI> memberURIsToRemove) {}
+
+	/**
+	 * Collects the prunes needed for referring lists that survive the bulk removal (system entries and
+	 * entries with an id starting with "_"), so no dangling member references remain after the transaction
+	 * commits. Keyed by list entry URI, so each surviving list is pruned exactly once. Lists that are
+	 * themselves being removed are left alone — their graphs are cleared by their own removal.
+	 */
+	private void collectSurvivingListPrunes(EntryImpl removeEntry, Map<URI, SurvivingListPrune> survivingListPrunes) {
+		for (URI listURI : removeEntry.getReferringListsInSameContext()) {
+			boolean handled = false;
+			for (Entry referringEntry : getByResourceURI(listURI)) {
+				EntryImpl listEntry = (EntryImpl) referringEntry;
+				boolean listSurvives = listEntry.getId().startsWith("_") || systemEntries.contains(listEntry.getEntryURI());
+				if (!listSurvives) {
+					// the list is removed itself, its graph is cleared by its own removal
+					handled = true;
+					continue;
+				}
+				if (listEntry.getResource() instanceof ListImpl list) {
+					survivingListPrunes
+							.computeIfAbsent(listEntry.getEntryURI(), uri -> new SurvivingListPrune(list, new ArrayList<>()))
+							.memberURIsToRemove().add(removeEntry.getEntryURI());
+					handled = true;
+				}
+			}
+			if (!handled) {
+				log.warn("Referring list {} of removed entry {} could not be resolved to a list, "
+						+ "a dangling member reference may remain", listURI, removeEntry.getEntryURI());
+			}
+		}
+	}
+
+	/**
+	 * Restores in-memory state after a rolled-back removal: clears the entries' deleted flag (the repository
+	 * still contains them) and evicts them from the caches.
+	 */
+	protected void recoverFromFailedRemoval(List<EntryImpl> entries) {
+		for (EntryImpl entryToRecover : entries) {
+			entryToRecover.resetDeleted();
+		}
+		evictFromCaches(entries);
+	}
+
+	/**
+	 * Evicts the given entries from the soft cache and resets the in-memory URI index, so both are reloaded
+	 * from the repository on next access. Must be called once a transaction that removed entries has
+	 * finished: after a commit the cached objects are stale, after a rollback the index and the entry objects
+	 * have already been mutated.
+	 */
+	protected void evictFromCaches(List<EntryImpl> entries) {
+		synchronized (this.entry.repository) {
+			for (EntryImpl entryToEvict : entries) {
+				softCache.remove(entryToEvict);
+			}
+			res2entry = null;
+			extMdUri2entry = null;
+		}
+	}
+
 	public void remove(RepositoryConnection rc) throws Exception {
 		synchronized (this.entry.repository) {
 			// The child list comes from the transaction, not from the in-memory index. That index is
@@ -1407,19 +1534,29 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * a foreign child by getting null back from {@code getByEntryURI}: a cached one comes back live. See
 	 * {@link #childSplitIfOwned}.
 	 *
-	 * <p>Holds no monitor. It is a read-only enumeration on its own connection, the lock protocol on
-	 * {@link #res2entry} already has scans holding nothing, and {@code importContext} calls this from
-	 * outside its own repository block, so taking the store-wide monitor here would stall every write in
-	 * every context for the length of the enumeration without being reentrant with the caller.
+	 * <p>Holds no monitor. It is a read-only enumeration on its own connection and the lock protocol on
+	 * {@link #res2entry} already has scans holding nothing, so taking the store-wide monitor here would
+	 * stall every write in every context for the length of the enumeration without being reentrant with
+	 * the caller.
 	 */
 	public Set<URI> getChildEntryURIsFromStore() {
+		try (RepositoryConnection rc = entry.repository.getConnection()) {
+			return childEntryURIsFromStore(rc);
+		} catch (RepositoryException e) {
+			log.error(e.getMessage(), e);
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
+		}
+	}
+
+	/**
+	 * {@link #getChildEntryURIsFromStore()} on a caller-supplied connection, for
+	 * {@link #removeNonSystemEntries} which must see its own transaction's view of the index graph.
+	 * Materialised rather than iterated lazily, since that caller mutates the graph this walks.
+	 */
+	private Set<URI> childEntryURIsFromStore(RepositoryConnection rc) {
 		Set<URI> children = new HashSet<>();
-		try (RepositoryConnection rc = entry.repository.getConnection();
-				// Iterated lazily rather than collected first: nothing is mutated during the walk, so
-				// unlike remove(RepositoryConnection) there is no reason to materialise every statement of
-				// a context that may hold hundreds of thousands.
-				RepositoryResult<Statement> statements = rc
-						.getStatements(null, RepositoryProperties.resHasEntry, null, false, this.resourceURI)) {
+		try (RepositoryResult<Statement> statements = rc
+				.getStatements(null, RepositoryProperties.resHasEntry, null, false, this.resourceURI)) {
 			for (Statement statement : statements) {
 				if (!(statement.getObject() instanceof IRI childEntryIRI)) {
 					log.error("Index statement {} in context {} names a child that is not an IRI; it cannot "
@@ -1431,9 +1568,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 				}
 				children.add(URI.create(childEntryIRI.toString()));
 			}
-		} catch (RepositoryException e) {
-			log.error(e.getMessage(), e);
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
 		}
 		return children;
 	}

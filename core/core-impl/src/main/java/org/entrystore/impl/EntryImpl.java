@@ -1557,6 +1557,24 @@ public class EntryImpl implements Entry {
 	}
 
 	public void remove(RepositoryConnection rc) throws Exception {
+		remove(rc, null);
+	}
+
+	/**
+	 * Clears the deleted flag set by {@link #remove(RepositoryConnection)} after the surrounding transaction
+	 * was rolled back, so references held across the failed removal stop reporting the entry as deleted while
+	 * the repository still contains it.
+	 */
+	protected void resetDeleted() {
+		deleted = false;
+	}
+
+	/**
+	 * Removes the entry as part of the supplied transaction. If {@code deferredFileDeletions} is non-null,
+	 * file resources are collected there instead of being deleted from disk here, so the caller can delete
+	 * them after a successful commit — a disk deletion cannot be rolled back with the transaction.
+	 */
+	protected void remove(RepositoryConnection rc, List<DataImpl> deferredFileDeletions) throws Exception {
 		// TODO the handling of removal is non-atomic and should be rewritten to take
 		//  failures (i.e. rollbacks of the ongoing transaction) into consideration
 		deleted = true;
@@ -1584,7 +1602,13 @@ public class EntryImpl implements Entry {
 		cachedExternalMetadata = null;
 
 		if (resource != null && resource.isRemovable()) {
-			resource.remove(rc);
+			if (deferredFileDeletions != null && resource instanceof DataImpl data) {
+				if (data.hasFile()) {
+					deferredFileDeletions.add(data);
+				}
+			} else {
+				resource.remove(rc);
+			}
 			resource = null;
 		}
 	}

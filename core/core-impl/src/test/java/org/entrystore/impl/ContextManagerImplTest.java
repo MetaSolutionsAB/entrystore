@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,22 +22,38 @@ import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.query.MalformedQueryException;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.Context;
+import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.ResourceType;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.CommonQueries;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -53,7 +69,7 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 
 	@Disabled("FIXME - does not do any sensible testing now")
 	@Test
-	public void sparqlSearch() throws Exception {
+	public void sparqlSearch() {
 		Entry entry = cm.createResource(null, GraphType.Context, null, null);
 		Context context = (Context) entry.getResource();
 
@@ -174,6 +190,90 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		assertEquals(cm.getNames().size(), nrOfAliases + 1);
 	}
 
+
+	@Test
+	public void importContext_failureDuringRemoval_restoresPreviousContext(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		rm.setCheckForAuthorization(true);
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		List<Entry> grantedEntries = new ArrayList<>();
+		for (int i = 0; i < 5; i++) {
+			grantedEntries.add(context.createLink(null, URI.create("http://slashdot.org/" + i), null));
+		}
+		Entry deniedEntry = context.createResource(null, GraphType.None, ResourceType.InformationResource, null);
+		((Data) deniedEntry.getResource()).setData(new ByteArrayInputStream("file content".getBytes(StandardCharsets.UTF_8)));
+		File dataFile = new File(new File(tempDataDir.toFile(), contextEntry.getId()), deniedEntry.getId());
+		assertTrue(dataFile.exists());
+		Date modifiedBefore = contextEntry.getModifiedDate();
+
+		// Mickey may administer the granted entries but not the file entry (and not the context), so the
+		// removal inside the import transaction fails partway; iteration order of getEntries() is hash-based,
+		// so several granted entries make it very likely that at least one removal starts before the denial
+		Entry mickey = pm.getPrincipalEntry("Mickey");
+		for (Entry grantedEntry : grantedEntries) {
+			grantedEntry.addAllowedPrincipalsFor(AccessProperty.Administer, mickey.getResourceURI());
+		}
+		File importZip = createMinimalImportZip(tempDataDir);
+
+		pm.setAuthenticatedUserURI(mickey.getResourceURI());
+		var thrown = assertThrows(org.entrystore.repository.RepositoryException.class,
+				() -> cm.importContext(contextEntry, importZip));
+		assertEquals("Failed to import context data", thrown.getMessage());
+
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		List<URI> allEntryURIs = new ArrayList<>(grantedEntries.stream().map(Entry::getEntryURI).toList());
+		allEntryURIs.add(deniedEntry.getEntryURI());
+		assertTrue(context.getEntries().containsAll(allEntryURIs));
+		for (URI entryURI : allEntryURIs) {
+			Entry restoredEntry = context.getByEntryURI(entryURI);
+			assertNotNull(restoredEntry);
+			assertFalse(restoredEntry.isDeleted());
+		}
+		assertTrue(dataFile.exists(), "A failed import must not delete data files from disk");
+		assertEquals(modifiedBefore, contextEntry.getModifiedDate());
+	}
+
+	@Test
+	public void importContext_success_removesOldEntriesAndDataFiles(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		Entry dataEntry = context.createResource(null, GraphType.None, ResourceType.InformationResource, null);
+		((Data) dataEntry.getResource()).setData(new ByteArrayInputStream("file content".getBytes(StandardCharsets.UTF_8)));
+		File dataFile = new File(new File(tempDataDir.toFile(), contextEntry.getId()), dataEntry.getId());
+		assertTrue(dataFile.exists());
+
+		// the minimal ZIP contains no entries, so a successful import empties the context
+		cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+
+		assertNull(context.getByEntryURI(dataEntry.getEntryURI()));
+		assertFalse(dataFile.exists(), "the deferred file deletions must run after a successful import");
+	}
+
+	// Builds the smallest ZIP that passes importContext's property and RDF validation, so the import
+	// only fails later, inside the removal/add transaction.
+	private static File createMinimalImportZip(Path dir) throws IOException {
+		File zipFile = dir.resolve("entrystore-import-test.zip").toFile();
+		try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(zipFile.toPath()))) {
+			zos.putNextEntry(new ZipEntry("export.properties"));
+			String properties = """
+					baseURI=http://localhost:8181/
+					contextEntryURI=http://localhost:8181/_contexts/entry/99
+					contextResourceURI=http://localhost:8181/99
+					containedUsers=x
+					""";
+			zos.write(properties.getBytes(StandardCharsets.UTF_8));
+			zos.closeEntry();
+			zos.putNextEntry(new ZipEntry("triples.rdf"));
+			zos.closeEntry();
+		}
+		return zipFile;
+	}
 
 	@Test
 	public void entryAccess() {
