@@ -18,8 +18,10 @@ package org.entrystore.rest.springboot.security;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
 import org.springframework.security.oauth2.client.web.AuthorizationRequestRepository;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
@@ -36,6 +38,7 @@ import java.util.concurrent.TimeUnit;
  * back to the {@code /login/oauth2/code/{registrationId}} callback — the OIDC counterpart of
  * {@link CacheSaml2AuthenticationRequestRepository}.
  */
+@Slf4j
 @Component
 public class CacheOAuth2AuthorizationRequestRepository
 		implements AuthorizationRequestRepository<OAuth2AuthorizationRequest>, CaffeineCacheSource {
@@ -49,6 +52,16 @@ public class CacheOAuth2AuthorizationRequestRepository
 			Caffeine.newBuilder()
 					.expireAfterWrite(2, TimeUnit.MINUTES)
 					.maximumSize(MAX_ENTRIES)
+					// Capacity evictions only happen under the flood the cap defends against (or a
+					// severe overload) — make that diagnosable, since expiry and replay-consumption
+					// look identical from the outside. evictionListener runs synchronously at
+					// eviction; removalListener would also fire for ordinary expiry.
+					.evictionListener((String state, OAuth2AuthorizationRequest value, RemovalCause cause) -> {
+						if (cause == RemovalCause.SIZE) {
+							log.warn("OAuth2 authorization-request cache evicted an entry at capacity ({}) — "
+									+ "possible login-initiation flood", MAX_ENTRIES);
+						}
+					})
 					.recordStats()
 					.build();
 

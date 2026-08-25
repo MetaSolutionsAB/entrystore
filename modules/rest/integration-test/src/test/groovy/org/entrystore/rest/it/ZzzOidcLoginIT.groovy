@@ -22,6 +22,7 @@ import org.springframework.boot.SpringApplication
 import spock.lang.Shared
 import spock.lang.Stepwise
 
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static org.entrystore.rest.springboot.configuration.CacheControlFilter.CACHE_CONTROL_AUTHENTICATED
@@ -212,14 +213,16 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 			userConn = EntryStoreClient.getRequest('/auth/user', '')
 		}
 
-		then: 'Caller is not authenticated as the OIDC user (401, or 200 resolving to a different user)'
+		then: 'Caller is not authenticated as the OIDC user (401, or 200 resolving to guest)'
 		// A Set-Cookie for auth_token may appear on the rejected response — the failure handler's
 		// saveException() creates a session for the error attribute. That session carries no
 		// authentication, so the replay signal is the session contents, not the presence of the
-		// cookie header (same rationale as ZzzCasLoginIT step 4).
+		// cookie header (same rationale as ZzzCasLoginIT step 4). Only the guest identity is
+		// acceptable on a 200 — accepting any non-target user would let a leak under a derived
+		// identity ship green.
 		def responseCode = userConn.getResponseCode()
 		def responseUser = responseCode == HTTP_OK ? JSON_PARSER.parseText(userConn.inputStream.text)['user'] : null
-		responseCode == HTTP_UNAUTHORIZED || (responseCode == HTTP_OK && responseUser != testUserEmail)
+		responseCode == HTTP_UNAUTHORIZED || (responseCode == HTTP_OK && responseUser == 'guest')
 	}
 
 	def '6. Non-whitelisted successurl must be dropped at initiation (open-redirect guard)'() {
@@ -285,7 +288,17 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		}
 		def responseCode = userConn.getResponseCode()
 		def responseUser = responseCode == HTTP_OK ? JSON_PARSER.parseText(userConn.inputStream.text)['user'] : null
-		responseCode == HTTP_UNAUTHORIZED ||
-			(responseCode == HTTP_OK && responseUser != null && !responseUser.toString().equalsIgnoreCase('admin'))
+		// Only the guest identity is acceptable on a 200 — accepting any non-admin user would let a
+		// leak under a derived identity (e.g. the email claim admin@test.com) ship green.
+		responseCode == HTTP_UNAUTHORIZED || (responseCode == HTTP_OK && responseUser == 'guest')
+	}
+
+	def '8. Unknown ?provider= parameter must fail with 400, not a filter-level HTML 500'() {
+		when: 'OIDC login is initiated with a provider id that has no client registration'
+		def initConn = EntryStoreClient.getRequest('/auth/oidc'
+			+ convertMapToQueryParams([provider: 'no-such-registration']), '')
+
+		then: 'AuthController rejects it before Spring Security\'s redirect filter can throw'
+		initConn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 }

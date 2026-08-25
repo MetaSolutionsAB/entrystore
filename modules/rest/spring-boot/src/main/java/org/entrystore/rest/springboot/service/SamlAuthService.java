@@ -22,6 +22,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration.Idp;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.util.CaseFolding;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -79,7 +80,7 @@ public class SamlAuthService {
 			if (domains.contains("*")) {
 				wildcardIdp = entry.getKey();
 			}
-			if (domains.contains(domain.toLowerCase())) {
+			if (domains.contains(CaseFolding.toLowerCase(domain))) {
 				return entry.getKey();
 			}
 		}

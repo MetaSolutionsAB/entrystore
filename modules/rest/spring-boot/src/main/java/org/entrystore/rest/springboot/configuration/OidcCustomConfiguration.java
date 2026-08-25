@@ -16,11 +16,12 @@
 
 package org.entrystore.rest.springboot.configuration;
 
+import org.entrystore.rest.springboot.util.CaseFolding;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
+import java.net.URI;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -46,7 +47,7 @@ public record OidcCustomConfiguration(
 		// OidcAuthService compares against the lowercased request-side host — an uppercase config
 		// entry would otherwise silently reject legitimate redirect URLs.
 		redirectDomainWhitelist = redirectDomainWhitelist == null ? List.of()
-				: redirectDomainWhitelist.stream().map(host -> host.toLowerCase(Locale.ROOT)).toList();
+				: redirectDomainWhitelist.stream().map(CaseFolding::toLowerCase).toList();
 		provider = provider == null ? Map.of() : Map.copyOf(provider);
 	}
 
@@ -65,7 +66,7 @@ public record OidcCustomConfiguration(
 			// (OidcAuthService.findProviderIdForDomain) compares against a lowercased request domain —
 			// an uppercase config entry would otherwise silently misroute to the wildcard/default.
 			domains = domains == null ? List.of("*")
-					: domains.stream().map(domain -> domain.toLowerCase(Locale.ROOT)).toList();
+					: domains.stream().map(CaseFolding::toLowerCase).toList();
 			// Blank covers programmatic construction; property binding applies the @DefaultValue on null.
 			usernameClaim = usernameClaim == null || usernameClaim.isBlank() ? DEFAULT_USERNAME_CLAIM : usernameClaim;
 		}
@@ -74,11 +75,20 @@ public record OidcCustomConfiguration(
 	public record RedirectUrl(String url) {
 		public RedirectUrl {
 			// A blank binding (e.g. `entrystore.auth.oidc.redirect-success.url=`) would bypass the
-			// null-only defaulting in the outer constructor and produce an empty Location header on
-			// every post-login redirect — fail fast at startup instead.
+			// null-only defaulting in the outer constructor; sendRedirect("") then resolves against
+			// the current request URI, looping every post-login redirect back to the OAuth callback —
+			// fail fast at startup instead.
 			if (url == null || url.isBlank()) {
 				throw new IllegalArgumentException(
 						"entrystore.auth.oidc redirect-success.url/redirect-failure.url must not be blank when configured");
+			}
+			// Complete the fail-fast intent: a syntactically invalid URL would otherwise defer
+			// failure to the first post-login redirect at runtime.
+			try {
+				URI.create(url);
+			} catch (IllegalArgumentException e) {
+				throw new IllegalArgumentException(
+						"entrystore.auth.oidc redirect-success.url/redirect-failure.url is not a valid URI: " + url, e);
 			}
 		}
 	}

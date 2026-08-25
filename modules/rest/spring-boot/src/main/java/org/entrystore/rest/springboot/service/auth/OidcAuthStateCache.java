@@ -18,6 +18,8 @@ package org.entrystore.rest.springboot.service.auth;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
+import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.springframework.stereotype.Service;
@@ -31,6 +33,7 @@ import java.util.concurrent.TimeUnit;
  * the whitelist-validated success/failure redirect URLs through the provider round-trip and
  * expire after a fixed duration.
  */
+@Slf4j
 @Service
 public class OidcAuthStateCache implements CaffeineCacheSource {
 
@@ -42,6 +45,15 @@ public class OidcAuthStateCache implements CaffeineCacheSource {
 	private final Cache<String, AuthState> requestCache = Caffeine.newBuilder()
 			.expireAfterWrite(2, TimeUnit.MINUTES)
 			.maximumSize(MAX_ENTRIES)
+			// Capacity evictions only happen under the flood the cap defends against (or a severe
+			// overload) — make that diagnosable, since ordinary expiry looks identical from the
+			// outside (mirrors CacheOAuth2AuthorizationRequestRepository).
+			.evictionListener((String state, AuthState value, RemovalCause cause) -> {
+				if (cause == RemovalCause.SIZE) {
+					log.warn("OIDC auth-state cache evicted an entry at capacity ({}) — "
+							+ "possible login-initiation flood", MAX_ENTRIES);
+				}
+			})
 			.recordStats()
 			.build();
 

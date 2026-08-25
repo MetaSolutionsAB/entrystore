@@ -108,11 +108,20 @@ class OidcCustomConfigurationTest {
 	}
 
 	// A blank binding (`entrystore.auth.oidc.redirect-success.url=`) bypasses the null-only
-	// defaulting and would produce an empty Location header on every post-login redirect.
+	// defaulting; sendRedirect("") then resolves against the current request URI, looping every
+	// post-login redirect back to the OAuth callback.
 	@Test
 	void blankRedirectUrlFailsFast() {
 		assertThrows(IllegalArgumentException.class, () -> new OidcCustomConfiguration.RedirectUrl("  "));
 		assertThrows(IllegalArgumentException.class, () -> new OidcCustomConfiguration.RedirectUrl(null));
+	}
+
+	// A syntactically invalid configured URL must fail at startup, not at the first post-login
+	// redirect.
+	@Test
+	void malformedRedirectUrlFailsFast() {
+		assertThrows(IllegalArgumentException.class,
+				() -> new OidcCustomConfiguration.RedirectUrl("http://example.com/a b"));
 	}
 
 	// The default Map.of()/Map.copyOf() results must be usable with the routing lookups in

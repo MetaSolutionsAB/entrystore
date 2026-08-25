@@ -21,10 +21,11 @@ import org.entrystore.rest.it.util.EntryStoreClient
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 
 /**
- * The shared-app environment runs with all SSO mechanisms disabled (entrystore-it.properties), so
- * the initiation endpoints must answer 404 — guarding the enabled-property binding against
- * regressions (e.g. a renamed key silently defaulting to enabled, or a controller losing its
- * enabled-guard).
+ * The shared-app environment runs with all SSO mechanisms disabled — SAML and OIDC via explicit
+ * {@code enabled=false} keys in entrystore-it.properties, CAS by its {@code @DefaultValue("false")}
+ * in {@code CasCustomConfiguration} (no CAS key exists in the properties file) — so the initiation
+ * endpoints must answer 404, guarding the enabled-property binding against regressions (e.g. a
+ * renamed key silently defaulting to enabled, or a controller losing its enabled-guard).
  */
 class SsoDisabledIT extends BaseSpec {
 

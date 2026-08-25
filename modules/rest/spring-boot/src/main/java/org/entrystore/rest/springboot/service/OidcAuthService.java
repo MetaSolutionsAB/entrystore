@@ -22,10 +22,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration.Provider;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.util.CaseFolding;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
-import java.util.Locale;
 
 /**
  * OIDC counterpart of {@link SamlAuthService}: redirect-URL whitelist validation, email-domain
@@ -53,7 +53,7 @@ public class OidcAuthService {
 			// Hostnames are case-insensitive: normalize the request side; the configured whitelist
 			// is lowercased at binding time (OidcCustomConfiguration).
 			var host = uri.getHost();
-			return host != null && oidcConfiguration.redirectDomainWhitelist().contains(host.toLowerCase(Locale.ROOT));
+			return host != null && oidcConfiguration.redirectDomainWhitelist().contains(CaseFolding.toLowerCase(host));
 		} catch (IllegalArgumentException e) {
 			return false;
 		}
@@ -92,7 +92,7 @@ public class OidcAuthService {
 			if (domains.contains("*")) {
 				wildcardProvider = entry.getKey();
 			}
-			if (domains.contains(domain.toLowerCase())) {
+			if (domains.contains(CaseFolding.toLowerCase(domain))) {
 				return entry.getKey();
 			}
 		}

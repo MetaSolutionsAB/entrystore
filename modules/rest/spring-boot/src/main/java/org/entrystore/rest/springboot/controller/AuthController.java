@@ -164,12 +164,20 @@ public class AuthController {
 		String providerId = oidcAuthService.findProviderIdForRequest(username, provider);
 		// An unknown registration id would otherwise surface deep inside Spring Security's
 		// OAuth2AuthorizationRequestRedirectFilter as an HTML 500 that bypasses AppExceptionHandler —
-		// fail early with a 400 (covers both a bogus ?provider= parameter and a default-provider typo).
+		// fail early instead. A bogus ?provider= parameter is the caller's fault (400); an id derived
+		// from configuration (default-provider typo, or a provider.{id}.domains entry naming a
+		// nonexistent registration) is a server misconfiguration that breaks every affected login —
+		// surface it as a 500, which AppExceptionHandler logs at error, instead of a silent 400.
 		boolean knownProvider = clientRegistrationRepository
 				.map(registrations -> registrations.findByRegistrationId(providerId) != null)
 				.orElse(false);
 		if (!knownProvider) {
-			throw new BadRequestException("Unknown OIDC provider: " + providerId);
+			if (providerId.equals(provider)) {
+				throw new BadRequestException("Unknown OIDC provider: " + providerId);
+			}
+			throw new IllegalStateException("Configured OIDC provider id '" + providerId
+					+ "' has no matching spring.security.oauth2.client.registration entry — check "
+					+ "entrystore.auth.oidc.default-provider and entrystore.auth.oidc.provider.*.domains");
 		}
 		redirectAttributes.addAttribute("providerId", providerId);
 
