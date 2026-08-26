@@ -16,12 +16,14 @@
 
 package org.entrystore.rest.springboot.service.auth;
 
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import org.apache.logging.log4j.Level;
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -52,9 +54,21 @@ class OidcAuthStateCacheTest {
 			var caffeine = cache.caffeineCaches().get("oidc-auth-state");
 			caffeine.cleanUp();
 
+			// Bounded from both sides — see the CacheOAuth2AuthorizationRequestRepository test.
 			assertTrue(caffeine.estimatedSize() <= OidcAuthStateCache.MAX_ENTRIES);
+			assertTrue(caffeine.estimatedSize() >= OidcAuthStateCache.MAX_ENTRIES - 100);
 			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
 		}
+	}
+
+	// The throttle caps the WARN count at 1 whether or not the cause filter exists, so the capacity
+	// test above cannot detect its removal — without it, ordinary expiry would warn forever.
+	@Test
+	void onlySizeEvictionsWarn() {
+		assertTrue(OidcAuthStateCache.shouldWarnFor(RemovalCause.SIZE));
+		assertFalse(OidcAuthStateCache.shouldWarnFor(RemovalCause.EXPIRED));
+		assertFalse(OidcAuthStateCache.shouldWarnFor(RemovalCause.EXPLICIT));
+		assertFalse(OidcAuthStateCache.shouldWarnFor(RemovalCause.REPLACED));
 	}
 }

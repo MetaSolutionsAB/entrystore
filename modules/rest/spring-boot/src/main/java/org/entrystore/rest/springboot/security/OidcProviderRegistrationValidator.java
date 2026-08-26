@@ -48,6 +48,14 @@ public class OidcProviderRegistrationValidator implements InitializingBean {
 
 	@Override
 	public void afterPropertiesSet() {
+		// An absent repository bean is not an ordinary miss: OIDC is enabled but no registration
+		// exists at all (e.g. a mistyped spring.security.oauth2.client.registration prefix), so no
+		// login can ever complete — abort rather than let the app report healthy.
+		if (clientRegistrationRepository.isEmpty()) {
+			throw new IllegalStateException("EntryStore startup aborted: entrystore.auth.oidc.enabled=true but "
+					+ "no spring.security.oauth2.client.registration entries are configured — no OIDC provider "
+					+ "can complete a login. Add at least one client registration or disable OIDC.");
+		}
 		List<String> unknown = new ArrayList<>();
 		String defaultProvider = oidcConfiguration.defaultProvider();
 		if (StringUtils.isNotBlank(defaultProvider) && !isRegistered(defaultProvider)) {

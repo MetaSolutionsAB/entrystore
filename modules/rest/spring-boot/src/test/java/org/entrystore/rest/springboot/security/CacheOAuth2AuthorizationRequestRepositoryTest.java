@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.security;
 
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import org.apache.logging.log4j.Level;
 import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -101,10 +103,25 @@ class CacheOAuth2AuthorizationRequestRepositoryTest {
 			var cache = repository.caffeineCaches().get("oauth2-authz-requests");
 			cache.cleanUp();
 
+			// Bounded from both sides: the upper bound pins the DoS cap, the lower bound catches an
+			// accidentally shrunken MAX_ENTRIES (at which point legitimate in-flight logins would be
+			// evicted and callbacks would fail with authorization_request_not_found).
 			assertTrue(cache.estimatedSize() <= CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES);
+			assertTrue(cache.estimatedSize() >= CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES - 100);
 			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
 		}
+	}
+
+	// The throttle caps the WARN count at 1 whether or not the cause filter exists, so the capacity
+	// test above cannot detect its removal — without it, ordinary 2-minute expiry on an idle
+	// instance would log "possible login-initiation flood" once a minute forever.
+	@Test
+	void onlySizeEvictionsWarn() {
+		assertTrue(CacheOAuth2AuthorizationRequestRepository.shouldWarnFor(RemovalCause.SIZE));
+		assertFalse(CacheOAuth2AuthorizationRequestRepository.shouldWarnFor(RemovalCause.EXPIRED));
+		assertFalse(CacheOAuth2AuthorizationRequestRepository.shouldWarnFor(RemovalCause.EXPLICIT));
+		assertFalse(CacheOAuth2AuthorizationRequestRepository.shouldWarnFor(RemovalCause.REPLACED));
 	}
 
 	@Test

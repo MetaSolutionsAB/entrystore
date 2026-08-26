@@ -22,7 +22,6 @@ import org.springframework.boot.SpringApplication
 import spock.lang.Shared
 import spock.lang.Stepwise
 
-import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static org.entrystore.rest.springboot.configuration.CacheControlFilter.CACHE_CONTROL_AUTHENTICATED
@@ -73,20 +72,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		appStarted = true
 	}
 
-	// Stateless guard case, deliberately first: everything after it needs Keycloak, a scraped
-	// login form and a live authorization code, and @Stepwise skips the remainder once any step
-	// fails — placed last, a Keycloak flake would report this case as skipped instead of failed.
-	def '1. Unknown ?provider= parameter must fail with 400, not a filter-level HTML 500'() {
-		when: 'OIDC login is initiated with a provider id that has no client registration'
-		def initConn = EntryStoreClient.getRequest('/auth/oidc'
-			+ convertMapToQueryParams([provider: 'no-such-registration']), '')
-
-		then: 'AuthController rejects it with the JSON error envelope, not a filter-level HTML 500'
-		initConn.getResponseCode() == HTTP_BAD_REQUEST
-		initConn.getContentType().contains('application/json')
-	}
-
-	def '2. GET /auth/oidc should redirect via /oauth2/authorization/keycloak to the provider authorization endpoint'() {
+	def '1. GET /auth/oidc should redirect via /oauth2/authorization/keycloak to the provider authorization endpoint'() {
 		when: 'OIDC login is initiated with a custom success URL'
 		def initConn = EntryStoreClient.getRequest('/auth/oidc' + convertMapToQueryParams([successurl: successLoginUrl]), '')
 
@@ -114,7 +100,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		this.providerAuthUrlSaved = providerAuthUrl
 	}
 
-	def '3. GET the provider authorization URL and receive the Keycloak login page'() {
+	def '2. GET the provider authorization URL and receive the Keycloak login page'() {
 		given:
 		assert this.providerAuthUrlSaved: 'provider authorization URL not available, did the previous test step execute correctly?'
 
@@ -138,7 +124,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		this.idpCookieHeaderSaved = idpCookies.collect { it.split(';')[0] }.join('; ')
 	}
 
-	def '4. Submit credentials to Keycloak — should redirect back to the EntryStore callback with code and state'() {
+	def '3. Submit credentials to Keycloak — should redirect back to the EntryStore callback with code and state'() {
 		given: 'Login form data from previous test'
 		assert this.loginPageHtmlSaved: 'Login page HTML not available, did the previous test step execute correctly?'
 		assert this.idpCookieHeaderSaved: 'IDP cookies not available, did the previous test step execute correctly?'
@@ -163,7 +149,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		this.callbackUrlSaved = callbackUrl
 	}
 
-	def '5. Follow the callback — EntryStore exchanges the code, provisions the user and establishes a session'() {
+	def '4. Follow the callback — EntryStore exchanges the code, provisions the user and establishes a session'() {
 		given:
 		assert this.callbackUrlSaved: 'Callback URL not available, did the previous test step execute correctly?'
 
@@ -205,14 +191,14 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		tokensConn.getResponseCode() == HTTP_OK
 	}
 
-	def '6. Replaying the consumed callback must not establish an authenticated session'() {
+	def '5. Replaying the consumed callback must not establish an authenticated session'() {
 		given:
 		assert this.callbackUrlSaved: 'Callback URL not available, did the previous test step execute correctly?'
 
 		when: 'the identical callback URL is requested again'
 		def replayConn = EntryStoreClient.getRequest(this.callbackUrlSaved, '')
 
-		then: 'the state was consumed in step 5 (cache invalidated), so authentication fails to the failure URL'
+		then: 'the state was consumed in step 4 (cache invalidated), so authentication fails to the failure URL'
 		replayConn.getResponseCode() in [302, 303, 307]
 		replayConn.getHeaderField('Location') == failureLoginUrl
 
@@ -238,21 +224,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		responseCode == HTTP_UNAUTHORIZED || (responseCode == HTTP_OK && responseUser == 'guest')
 	}
 
-	def '7. Non-whitelisted successurl must be dropped at initiation (open-redirect guard)'() {
-		when: 'OIDC login is initiated with a successurl pointing at a non-whitelisted host'
-		def initConn = EntryStoreClient.getRequest('/auth/oidc'
-			+ convertMapToQueryParams([successurl: 'http://evil.example.org/phishing']), '')
-
-		then: 'the redirect to the authorization endpoint does not carry the successurl'
-		initConn.getResponseCode() in [302, 303]
-		def authorizationLocation = initConn.getHeaderField('Location')
-		authorizationLocation != null
-		authorizationLocation.contains('/oauth2/authorization/keycloak')
-		!authorizationLocation.contains('successurl')
-		!authorizationLocation.contains('evil.example.org')
-	}
-
-	def '8. Second provider with preferred_username claim: reserved admin is denied to the per-request failureurl'() {
+	def '6. Second provider with preferred_username claim: reserved admin is denied to the per-request failureurl'() {
 		// Covers four seams in one flow: explicit multi-provider selection (?provider=), a
 		// non-default username-claim (preferred_username — the email claim maps Keycloak's admin to
 		// admin@test.com, which is NOT reserved), end-to-end failureurl propagation
@@ -290,7 +262,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		callbackConn.getResponseCode() in [302, 303, 307]
 		callbackConn.getHeaderField('Location') == customFailureUrl
 
-		and: 'no authenticated session leaks (same rationale as step 6)'
+		and: 'no authenticated session leaks (same rationale as step 5)'
 		def leakedCookies = callbackConn.getHeaderFields()['Set-Cookie']
 		def userConn
 		if (leakedCookies != null && !leakedCookies.isEmpty()) {

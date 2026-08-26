@@ -39,6 +39,13 @@ import java.util.concurrent.TimeUnit;
  * where the browser withholds the session cookie on the cross-site redirect from the provider
  * back to the {@code /login/oauth2/code/{registrationId}} callback — the OIDC counterpart of
  * {@link CacheSaml2AuthenticationRequestRepository}.
+ *
+ * <p>DoS posture (shared with {@code OidcAuthStateCache}): the cache is written on the anonymous,
+ * un-rate-limited login-initiation path, so {@code maximumSize} bounds the heap, and capacity
+ * evictions emit a WARN gated on {@link #shouldWarnFor(RemovalCause)} — the eviction listener also
+ * fires for ordinary {@code EXPIRED} evictions, which must stay silent — and throttled through
+ * {@link LogThrottle}, because the listener runs synchronously inside the cache's atomic eviction
+ * and an unthrottled line per eviction would trade the heap bound for log amplification.
  */
 @Slf4j
 @Component
@@ -56,19 +63,20 @@ public class CacheOAuth2AuthorizationRequestRepository
 			Caffeine.newBuilder()
 					.expireAfterWrite(2, TimeUnit.MINUTES)
 					.maximumSize(MAX_ENTRIES)
-					// The SIZE filter is load-bearing: evictionListener fires for every evicted cause,
-					// including ordinary EXPIRED — only capacity evictions indicate a flood. The
-					// listener runs synchronously inside the cache's atomic eviction on an anonymously
-					// writable path, so the warn is throttled: at capacity every further initiation
-					// evicts, and one line per eviction would trade the heap bound for log amplification.
+					// Guard order matters: tryAcquire consumes the interval token (class Javadoc).
 					.evictionListener((String state, OAuth2AuthorizationRequest value, RemovalCause cause) -> {
-						if (cause == RemovalCause.SIZE && evictionWarnThrottle.shouldLog()) {
+						if (shouldWarnFor(cause) && evictionWarnThrottle.tryAcquire()) {
 							log.warn("OAuth2 authorization-request cache is evicting at capacity ({}) — "
 									+ "possible login-initiation flood", MAX_ENTRIES);
 						}
 					})
 					.recordStats()
 					.build();
+
+	/** Only capacity evictions indicate a flood; ordinary expiry must stay silent (class Javadoc). */
+	static boolean shouldWarnFor(RemovalCause cause) {
+		return cause == RemovalCause.SIZE;
+	}
 
 	@Override
 	public Map<String, Cache<?, ?>> caffeineCaches() {

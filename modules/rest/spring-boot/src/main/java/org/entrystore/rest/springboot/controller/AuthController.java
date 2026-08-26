@@ -141,7 +141,18 @@ public class AuthController {
 		return "redirect:/saml2/authenticate/{idpId}";
 	}
 
-	// Endpoint initiates OIDC authentication by redirecting to the provider's authorization endpoint
+	/**
+	 * Initiates OIDC authentication by redirecting to the selected provider's authorization
+	 * endpoint. An unknown registration id would otherwise surface deep inside Spring Security's
+	 * {@code OAuth2AuthorizationRequestRedirectFilter} as an HTML 500 that bypasses
+	 * {@code AppExceptionHandler}, so the guard below fails early, classified by the selection's
+	 * provenance: a bogus {@code ?provider=} parameter is the caller's fault (400); a config-derived
+	 * id — a {@code default-provider} typo, or an {@code entrystore.auth.oidc.provider.{id}} entry
+	 * whose map key has no registration (domain routing returns that key, never the {@code domains}
+	 * values) — is a server misconfiguration surfaced as a 500 that {@code AppExceptionHandler}
+	 * logs at error. {@code OidcProviderRegistrationValidator} rejects such config at startup;
+	 * the guard is the runtime backstop.
+	 */
 	@GetMapping("/auth/oidc")
 	public String startOidcLogin(@RequestParam(required = false) String username,
 								 @RequestParam(required = false) String provider,
@@ -162,24 +173,20 @@ public class AuthController {
 		}
 
 		var selection = oidcAuthService.findProviderIdForRequest(username, provider);
-		// An unknown registration id would otherwise surface deep inside Spring Security's
-		// OAuth2AuthorizationRequestRedirectFilter as an HTML 500 that bypasses AppExceptionHandler —
-		// fail early instead, classified by the selection's provenance: a bogus ?provider= parameter
-		// is the caller's fault (400); a config-derived id (default-provider typo, or a
-		// provider.{id}.domains entry naming a nonexistent registration) is a server misconfiguration
-		// that breaks every affected login — surface it as a 500, which AppExceptionHandler logs at
-		// error. OidcProviderRegistrationValidator rejects such config at startup; this is the
-		// runtime backstop.
-		boolean knownProvider = clientRegistrationRepository
-				.map(registrations -> registrations.findByRegistrationId(selection.id()) != null)
-				.orElse(false);
-		if (!knownProvider) {
+		// No repository bean at all is config-shaped, not caller-shaped (see method Javadoc).
+		if (clientRegistrationRepository.isEmpty()) {
+			throw new IllegalStateException("OIDC is enabled but no spring.security.oauth2.client.registration "
+					+ "entries are configured — no provider can complete a login");
+		}
+		if (clientRegistrationRepository.get().findByRegistrationId(selection.id()) == null) {
 			if (selection.fromRequestParameter()) {
-				throw new BadRequestException("Unknown OIDC provider: " + selection.id());
+				// sanitizeForLog: the raw ?provider= value is reflected into the message, which is
+				// copied into the JSON body and the handler's debug log.
+				throw new BadRequestException("Unknown OIDC provider: " + HttpUtil.sanitizeForLog(selection.id()));
 			}
 			throw new IllegalStateException("Configured OIDC provider id '" + selection.id()
 					+ "' has no matching spring.security.oauth2.client.registration entry — check "
-					+ "entrystore.auth.oidc.default-provider and entrystore.auth.oidc.provider.*.domains");
+					+ "entrystore.auth.oidc.default-provider and the entrystore.auth.oidc.provider.{id} keys");
 		}
 		redirectAttributes.addAttribute("providerId", selection.id());
 

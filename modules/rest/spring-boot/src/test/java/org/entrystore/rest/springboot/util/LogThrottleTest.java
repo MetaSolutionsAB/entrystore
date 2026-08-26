@@ -19,9 +19,17 @@ package org.entrystore.rest.springboot.util;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.IntStream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LogThrottleTest {
@@ -31,20 +39,60 @@ class LogThrottleTest {
 		var clock = new AtomicLong(1_000_000L);
 		var throttle = new LogThrottle(Duration.ofMinutes(1), clock::get);
 
-		assertTrue(throttle.shouldLog());
-		assertFalse(throttle.shouldLog());
+		assertTrue(throttle.tryAcquire());
+		assertFalse(throttle.tryAcquire());
 		clock.addAndGet(Duration.ofSeconds(59).toNanos());
-		assertFalse(throttle.shouldLog());
+		assertFalse(throttle.tryAcquire());
+	}
+
+	// The interval is measured from the last ADMITTED call: the suppressed call at +30s must not
+	// push the window out, or under a sustained flood (one rejected call per eviction) the warn
+	// would fire once and then go permanently silent.
+	@Test
+	void rejectedCallsDoNotExtendTheInterval() {
+		var clock = new AtomicLong(1_000_000L);
+		var throttle = new LogThrottle(Duration.ofMinutes(1), clock::get);
+		assertTrue(throttle.tryAcquire());
+
+		clock.addAndGet(Duration.ofSeconds(30).toNanos());
+		assertFalse(throttle.tryAcquire());
+		clock.addAndGet(Duration.ofSeconds(30).toNanos());
+		assertTrue(throttle.tryAcquire());
+		assertFalse(throttle.tryAcquire());
+	}
+
+	// Caffeine invokes the eviction listener on whichever request thread triggers maintenance, so
+	// under a flood N threads race this call with the same stale timestamp — exactly one may win,
+	// or the throttle is no throttle (a plain set() would admit all N).
+	@Test
+	void concurrentCallersAdmitExactlyOne() throws Exception {
+		var frozenClock = new AtomicLong(1_000_000L);
+		var throttle = new LogThrottle(Duration.ofMinutes(1), frozenClock::get);
+		int threads = 8;
+		var barrier = new CyclicBarrier(threads);
+		var admitted = new AtomicInteger();
+
+		try (ExecutorService executor = Executors.newFixedThreadPool(threads)) {
+			var futures = IntStream.range(0, threads)
+					.mapToObj(i -> executor.submit(() -> {
+						barrier.await();
+						if (throttle.tryAcquire()) {
+							admitted.incrementAndGet();
+						}
+						return null;
+					}))
+					.toList();
+			for (Future<?> future : futures) {
+				future.get();
+			}
+		}
+
+		assertEquals(1, admitted.get());
 	}
 
 	@Test
-	void nextOccurrenceAfterTheIntervalIsAdmittedAgain() {
-		var clock = new AtomicLong(1_000_000L);
-		var throttle = new LogThrottle(Duration.ofMinutes(1), clock::get);
-		assertTrue(throttle.shouldLog());
-
-		clock.addAndGet(Duration.ofMinutes(1).toNanos());
-		assertTrue(throttle.shouldLog());
-		assertFalse(throttle.shouldLog());
+	void nonPositiveIntervalIsRejected() {
+		assertThrows(IllegalArgumentException.class, () -> new LogThrottle(Duration.ZERO));
+		assertThrows(IllegalArgumentException.class, () -> new LogThrottle(Duration.ofSeconds(-1)));
 	}
 }

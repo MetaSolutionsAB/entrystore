@@ -34,6 +34,10 @@ import java.util.concurrent.TimeUnit;
  * {@code state} parameter — the OIDC counterpart of {@link SamlAuthStateCache}. Entries carry
  * the whitelist-validated success/failure redirect URLs through the provider round-trip and
  * expire after a fixed duration.
+ *
+ * <p>DoS posture: written on the anonymous login-initiation path, hence the size cap and the
+ * {@link #shouldWarnFor(RemovalCause)}-gated, throttled capacity warn — see
+ * {@code CacheOAuth2AuthorizationRequestRepository}'s Javadoc for the shared rationale.
  */
 @Slf4j
 @Service
@@ -49,16 +53,20 @@ public class OidcAuthStateCache implements CaffeineCacheSource {
 	private final Cache<String, AuthState> requestCache = Caffeine.newBuilder()
 			.expireAfterWrite(2, TimeUnit.MINUTES)
 			.maximumSize(MAX_ENTRIES)
-			// SIZE filter and throttle are both load-bearing — see the sibling listener in
-			// CacheOAuth2AuthorizationRequestRepository for the full rationale.
+			// Guard order matters: tryAcquire consumes the interval token (class Javadoc).
 			.evictionListener((String state, AuthState value, RemovalCause cause) -> {
-				if (cause == RemovalCause.SIZE && evictionWarnThrottle.shouldLog()) {
+				if (shouldWarnFor(cause) && evictionWarnThrottle.tryAcquire()) {
 					log.warn("OIDC auth-state cache is evicting at capacity ({}) — "
 							+ "possible login-initiation flood", MAX_ENTRIES);
 				}
 			})
 			.recordStats()
 			.build();
+
+	/** Only capacity evictions indicate a flood; ordinary expiry must stay silent (class Javadoc). */
+	static boolean shouldWarnFor(RemovalCause cause) {
+		return cause == RemovalCause.SIZE;
+	}
 
 	@Override
 	public Map<String, Cache<?, ?>> caffeineCaches() {

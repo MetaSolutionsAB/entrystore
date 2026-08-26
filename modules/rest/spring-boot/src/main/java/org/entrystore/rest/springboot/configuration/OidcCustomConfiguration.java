@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.configuration;
 
+import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.springboot.util.CaseFolding;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
@@ -39,23 +40,32 @@ public record OidcCustomConfiguration(
 		RedirectUrl redirectSuccess,
 		RedirectUrl redirectFailure
 ) {
+	/**
+	 * Normalizes and validates the bound values so misconfiguration fails at binding, naming the
+	 * key, instead of surfacing later and vaguer. The bound collections are copied so a consumer
+	 * cannot mutate the whitelist or provider routing. The whitelist is lowercased (hostnames are
+	 * case-insensitive; {@code OidcAuthService} compares the case-folded request-side host) and
+	 * shape-checked: the lookup compares {@code URI.getHost()}, so an entry that can never equal a
+	 * host value — scheme, port, path, userinfo, a {@code *} wildcard, or blank — would silently
+	 * drop every caller-supplied {@code successurl}/{@code failureurl}. A bracketed IPv6 literal
+	 * ({@code [::1]}) is exactly what {@code URI.getHost()} returns and is therefore allowed.
+	 * A blank {@code default-provider} is normalized to null so downstream sees one "not
+	 * configured" state ({@code OidcAuthService} answers a 400, {@code
+	 * OidcProviderRegistrationValidator} skips it) instead of a whitespace id failing per-request.
+	 */
 	public OidcCustomConfiguration {
 		if (redirectSuccess == null) redirectSuccess = new RedirectUrl("/auth/user");
 		if (redirectFailure == null) redirectFailure = new RedirectUrl("/auth/user");
-		// Copy the bound collections so a consumer cannot mutate the redirect whitelist or provider
-		// routing. The whitelist is lowercased because hostnames are case-insensitive and
-		// OidcAuthService compares against the lowercased request-side host — an uppercase config
-		// entry would otherwise silently reject legitimate redirect URLs.
+		defaultProvider = StringUtils.trimToNull(defaultProvider);
 		redirectDomainWhitelist = redirectDomainWhitelist == null ? List.of()
 				: redirectDomainWhitelist.stream().map(CaseFolding::toLowerCase).toList();
-		// Shape check: the whitelist lookup compares URI.getHost() — a bare hostname — so an entry
-		// carrying a scheme, port, path or userinfo can never match and would silently drop every
-		// caller-supplied successurl/failureurl. Same silent-misroute class the lowercasing above
-		// exists to prevent; fail at binding instead.
 		for (String host : redirectDomainWhitelist) {
-			if (host.contains("/") || host.contains(":") || host.contains("@")) {
+			boolean ipv6Literal = host.startsWith("[") && host.endsWith("]");
+			if (host.isBlank() || host.contains("*") || host.contains("/") || host.contains("@")
+					|| (!ipv6Literal && host.contains(":"))) {
 				throw new IllegalArgumentException("entrystore.auth.oidc.redirect-domain-whitelist entries "
-						+ "must be bare hostnames without scheme, port, path or userinfo; got: '" + host + "'");
+						+ "must be single bare hostnames (or bracketed IPv6 literals) without scheme, port, "
+						+ "path, userinfo or wildcards; got: '" + host + "'");
 			}
 		}
 		provider = provider == null ? Map.of() : Map.copyOf(provider);
@@ -72,8 +82,7 @@ public record OidcCustomConfiguration(
 		public static final String DEFAULT_USERNAME_CLAIM = "email";
 
 		public Provider {
-			// Copy + lowercase: email domains are case-insensitive, and the routing lookup
-			// (OidcAuthService.findProviderIdForDomain) compares against a lowercased request domain —
+			// Copy + lowercase: the routing lookup compares against a case-folded request domain —
 			// an uppercase config entry would otherwise silently misroute to the wildcard/default.
 			domains = domains == null ? List.of("*")
 					: domains.stream().map(CaseFolding::toLowerCase).toList();
@@ -82,18 +91,20 @@ public record OidcCustomConfiguration(
 		}
 	}
 
+	/**
+	 * Rejects blank and syntactically invalid values at binding, naming the key. A blank binding
+	 * ({@code entrystore.auth.oidc.redirect-success.url=}) bypasses the null-only defaulting in the
+	 * outer constructor; downstream, {@code SecurityConfig}'s {@code setDefaultTargetUrl} and
+	 * {@code SimpleUrlAuthenticationFailureHandler} reject it at bean creation anyway — but only
+	 * when OIDC is enabled, and without naming the offending key. A malformed URL would otherwise
+	 * defer failure to the first post-login redirect at runtime.
+	 */
 	public record RedirectUrl(String url) {
 		public RedirectUrl {
-			// A blank binding (e.g. `entrystore.auth.oidc.redirect-success.url=`) would bypass the
-			// null-only defaulting in the outer constructor. Downstream it fails anyway — the success
-			// and failure handlers assert UrlUtils.isValidRedirectUrl at bean creation — but only when
-			// OIDC is enabled, and without naming the offending key. Fail at binding instead.
 			if (url == null || url.isBlank()) {
 				throw new IllegalArgumentException(
 						"entrystore.auth.oidc redirect-success.url/redirect-failure.url must not be blank when configured");
 			}
-			// Complete the fail-fast intent: a syntactically invalid URL would otherwise defer
-			// failure to the first post-login redirect at runtime.
 			try {
 				URI.create(url);
 			} catch (IllegalArgumentException e) {

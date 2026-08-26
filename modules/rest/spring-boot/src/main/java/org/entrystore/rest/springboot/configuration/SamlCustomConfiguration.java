@@ -23,6 +23,14 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * EntryStore-specific SAML login settings. Deliberate asymmetry inside this record (maintainer
+ * decision, PR #324): {@code idp.{id}.domains} is case-folded at binding because a case-mismatched
+ * domain silently misroutes logins, while {@code redirectDomainWhitelist} stays unfolded and
+ * shape-unchecked — a whitelist mismatch only rejects a redirect (fail-closed), and existing SAML
+ * deployments rely on the current matching. {@link OidcCustomConfiguration} folds and validates
+ * both; do not "align" this record with it without revisiting that decision.
+ */
 @ConfigurationProperties(prefix = "entrystore.auth.saml")
 public record SamlCustomConfiguration(
 		@DefaultValue("false") boolean enabled,
@@ -47,10 +55,8 @@ public record SamlCustomConfiguration(
 			Metadata metadata
 	) {
 		public Idp {
-			// Copy + lowercase: email domains are case-insensitive, and the routing lookup
-			// (SamlAuthService.findIdpIdForDomain) compares against a case-folded request domain —
-			// an uppercase config entry would otherwise silently misroute to the wildcard IdP
-			// (mirrors OidcCustomConfiguration.Provider).
+			// Copy + lowercase: the routing lookup compares against a case-folded request domain —
+			// an uppercase config entry would otherwise silently misroute to the wildcard IdP.
 			domains = domains == null ? List.of("*") : domains.stream().map(CaseFolding::toLowerCase).toList();
 			metadata = metadata == null ? new Metadata(Metadata.DEFAULT_MAX_AGE_SECONDS) : metadata;
 		}

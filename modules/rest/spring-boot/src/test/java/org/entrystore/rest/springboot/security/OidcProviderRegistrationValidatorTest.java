@@ -91,19 +91,20 @@ class OidcProviderRegistrationValidatorTest {
 				() -> "message should name the offending key, was: " + ex.getMessage());
 	}
 
-	// OIDC enabled with no client registrations at all: any configured provider reference is broken.
+	// OIDC enabled with no client registrations at all (e.g. a mistyped
+	// spring.security.oauth2.client.registration prefix): no login can ever complete, so startup
+	// must abort even when nothing under entrystore.auth.oidc.* references a provider id.
 	@Test
-	void missingRegistrationRepositoryFailsWhenDefaultProviderIsConfigured() {
-		var validator = validator(config("keycloak", Map.of()));
-
-		assertThrows(IllegalStateException.class, validator::afterPropertiesSet);
+	void absentRegistrationRepositoryFailsStartup() {
+		assertThrows(IllegalStateException.class, () -> validator(config("keycloak", Map.of())).afterPropertiesSet());
+		assertThrows(IllegalStateException.class, () -> validator(config(null, Map.of())).afterPropertiesSet());
 	}
 
-	// No default-provider and no provider.{id} entries: nothing to validate, startup proceeds (the
-	// controller then answers hint-less logins with a 400, which is request-shaped, not config-shaped).
+	// Registrations exist but nothing under entrystore.auth.oidc.* references one: nothing to
+	// validate, startup proceeds (hint-less logins then get the request-shaped 400).
 	@Test
-	void absentConfigReferencesPassWithoutRegistrations() {
-		var validator = validator(config(null, Map.of()));
+	void absentConfigReferencesPassWithRegistrationsPresent() {
+		var validator = validator(config(null, Map.of()), "keycloak");
 
 		assertDoesNotThrow(validator::afterPropertiesSet);
 	}

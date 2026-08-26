@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -109,14 +110,32 @@ class OidcCustomConfigurationTest {
 		assertEquals(List.of("app.example.com"), config.redirectDomainWhitelist());
 	}
 
-	// The whitelist lookup compares URI.getHost() — a bare hostname — so an entry with a scheme,
-	// port, path or userinfo can never match and would silently drop every custom redirect URL.
+	// The whitelist lookup compares URI.getHost() — a single bare hostname — so an entry that can
+	// never equal a host value (scheme, port, path, userinfo, wildcard, blank) would silently drop
+	// every custom redirect URL.
 	@ParameterizedTest(name = "\"{0}\"")
 	@ValueSource(strings = {"https://app.example.com", "app.example.com:8443", "app.example.com/",
-			"user@app.example.com"})
+			"user@app.example.com", "*.app.example.com", "*", " "})
 	void nonBareHostnameWhitelistEntryFailsFast(String entry) {
 		assertThrows(IllegalArgumentException.class,
 				() -> new OidcCustomConfiguration(true, null, List.of(entry), null, null, null));
+	}
+
+	// URI.getHost() returns the bracketed form for IPv6 literals, so that exact form must be
+	// whitelistable — its colons are not a port separator.
+	@Test
+	void bracketedIpv6WhitelistEntryIsAccepted() {
+		var config = new OidcCustomConfiguration(true, null, List.of("[::1]"), null, null, null);
+		assertEquals(List.of("[::1]"), config.redirectDomainWhitelist());
+	}
+
+	// A whitespace-only default-provider (YAML `default-provider: " "`, an escaped trailing space)
+	// must normalize to "not configured", or it passes the startup validator's isNotBlank check but
+	// fails per-request as a configured-looking id.
+	@Test
+	void blankDefaultProviderNormalizesToNull() {
+		var config = new OidcCustomConfiguration(true, "  ", null, null, null, null);
+		assertNull(config.defaultProvider());
 	}
 
 	// A blank binding (`entrystore.auth.oidc.redirect-success.url=`) bypasses the null-only

@@ -37,6 +37,9 @@ public final class LogThrottle {
 	}
 
 	LogThrottle(Duration interval, LongSupplier nanoTime) {
+		if (interval.isZero() || interval.isNegative()) {
+			throw new IllegalArgumentException("LogThrottle interval must be positive, got: " + interval);
+		}
 		this.intervalNanos = interval.toNanos();
 		this.nanoTime = nanoTime;
 		// Seed one interval in the past so the first occurrence is always admitted. (Seeding with
@@ -44,10 +47,18 @@ public final class LogThrottle {
 		this.lastAdmittedNanos = new AtomicLong(nanoTime.getAsLong() - intervalNanos);
 	}
 
-	/** True at most once per interval; the caller logs only on true. */
-	public boolean shouldLog() {
+	/**
+	 * True at most once per interval; the caller logs only on true. This call CONSUMES the
+	 * interval's single token when it returns true — evaluate it last in any condition, after every
+	 * cheaper filter, or an admitted token is burned on an occurrence that is then not logged.
+	 * A rejected call does not extend the interval.
+	 */
+	public boolean tryAcquire() {
 		long now = nanoTime.getAsLong();
 		long last = lastAdmittedNanos.get();
-		return now - last >= intervalNanos && lastAdmittedNanos.compareAndSet(last, now);
+		if (now - last < intervalNanos) {
+			return false;
+		}
+		return lastAdmittedNanos.compareAndSet(last, now);
 	}
 }
