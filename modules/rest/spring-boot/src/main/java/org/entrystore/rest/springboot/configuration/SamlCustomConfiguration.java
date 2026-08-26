@@ -24,12 +24,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * EntryStore-specific SAML login settings. Deliberate asymmetry inside this record (maintainer
- * decision, PR #324): {@code idp.{id}.domains} is case-folded at binding because a case-mismatched
- * domain silently misroutes logins, while {@code redirectDomainWhitelist} stays unfolded and
- * shape-unchecked — a whitelist mismatch only rejects a redirect (fail-closed), and existing SAML
- * deployments rely on the current matching. {@link OidcCustomConfiguration} folds and validates
- * both; do not "align" this record with it without revisiting that decision.
+ * EntryStore-specific SAML login settings. Deliberate asymmetry inside this record:
+ * {@code idp.{id}.domains} is case-folded at binding because a case-mismatched domain silently
+ * misroutes logins, while {@code redirectDomainWhitelist} stays unfolded and shape-unchecked — a
+ * whitelist mismatch only rejects a redirect (fail-closed), and installed SAML deployments rely on
+ * the current matching. This intentionally differs from {@link OidcCustomConfiguration}, which
+ * case-folds both surfaces and shape-checks its whitelist (its {@code provider.{id}.domains}
+ * deliberately accepts {@code *} for routing, which its whitelist rejects).
  */
 @ConfigurationProperties(prefix = "entrystore.auth.saml")
 public record SamlCustomConfiguration(

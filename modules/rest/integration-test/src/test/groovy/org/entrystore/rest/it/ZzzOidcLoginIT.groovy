@@ -17,8 +17,6 @@
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
-import org.springframework.boot.SpringApplication
 import spock.lang.Shared
 import spock.lang.Stepwise
 
@@ -56,8 +54,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		keycloakIssuerUrl = getKeycloakOidcIssuerUrl()
 
 		log.info('Starting EntryStoreApp with OIDC')
-		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+		startOwnedApp([
 			'--entrystore.auth.oidc.enabled=true',
 			'--entrystore.auth.oidc.redirect-failure.url=' + failureLoginUrl,
 			// Second provider against the same realm with a non-default username claim; distinct
@@ -67,9 +64,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 			'--spring.profiles.active=oidc',
 			'--spring.security.oauth2.client.provider.keycloak.issuer-uri=' + keycloakIssuerUrl,
 			'--spring.security.oauth2.client.provider.keycloak2.issuer-uri=' + keycloakIssuerUrl
-		] as String[]
-		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
-		appStarted = true
+		])
 	}
 
 	def '1. GET /auth/oidc should redirect via /oauth2/authorization/keycloak to the provider authorization endpoint'() {

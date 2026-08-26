@@ -145,13 +145,15 @@ public class AuthController {
 	 * Initiates OIDC authentication by redirecting to the selected provider's authorization
 	 * endpoint. An unknown registration id would otherwise surface deep inside Spring Security's
 	 * {@code OAuth2AuthorizationRequestRedirectFilter} as an HTML 500 that bypasses
-	 * {@code AppExceptionHandler}, so the guard below fails early, classified by the selection's
-	 * provenance: a bogus {@code ?provider=} parameter is the caller's fault (400); a config-derived
-	 * id — a {@code default-provider} typo, or an {@code entrystore.auth.oidc.provider.{id}} entry
-	 * whose map key has no registration (domain routing returns that key, never the {@code domains}
-	 * values) — is a server misconfiguration surfaced as a 500 that {@code AppExceptionHandler}
-	 * logs at error. {@code OidcProviderRegistrationValidator} rejects such config at startup;
-	 * the guard is the runtime backstop.
+	 * {@code AppExceptionHandler}, so the guard below fails early. A missing registration repository
+	 * altogether is config-shaped (500), regardless of what the caller sent. An unknown id is then
+	 * classified by the selection's provenance: a bogus {@code ?provider=} parameter is the caller's
+	 * fault (400); a config-derived id — a {@code default-provider} typo, or an
+	 * {@code entrystore.auth.oidc.provider.{id}} entry whose map key has no registration (domain
+	 * routing returns that key, never the {@code domains} values) — is a server misconfiguration
+	 * surfaced as a 500 that {@code AppExceptionHandler} logs at error.
+	 * {@code OidcProviderRegistrationValidator} rejects all of these at startup; the guard is the
+	 * runtime backstop.
 	 */
 	@GetMapping("/auth/oidc")
 	public String startOidcLogin(@RequestParam(required = false) String username,
@@ -174,11 +176,10 @@ public class AuthController {
 
 		var selection = oidcAuthService.findProviderIdForRequest(username, provider);
 		// No repository bean at all is config-shaped, not caller-shaped (see method Javadoc).
-		if (clientRegistrationRepository.isEmpty()) {
-			throw new IllegalStateException("OIDC is enabled but no spring.security.oauth2.client.registration "
-					+ "entries are configured — no provider can complete a login");
-		}
-		if (clientRegistrationRepository.get().findByRegistrationId(selection.id()) == null) {
+		var registrations = clientRegistrationRepository.orElseThrow(
+				() -> new IllegalStateException("OIDC is enabled but no spring.security.oauth2.client.registration "
+						+ "entries are configured — no provider can complete a login"));
+		if (registrations.findByRegistrationId(selection.id()) == null) {
 			if (selection.fromRequestParameter()) {
 				// sanitizeForLog: the raw ?provider= value is reflected into the message, which is
 				// copied into the JSON body and the handler's debug log.

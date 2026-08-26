@@ -42,10 +42,10 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>DoS posture (shared with {@code OidcAuthStateCache}): the cache is written on the anonymous,
  * un-rate-limited login-initiation path, so {@code maximumSize} bounds the heap, and capacity
- * evictions emit a WARN gated on {@link #shouldWarnFor(RemovalCause)} — the eviction listener also
- * fires for ordinary {@code EXPIRED} evictions, which must stay silent — and throttled through
- * {@link LogThrottle}, because the listener runs synchronously inside the cache's atomic eviction
- * and an unthrottled line per eviction would trade the heap bound for log amplification.
+ * evictions emit a WARN via {@link #warnIfCapacityEviction(RemovalCause)} — the eviction listener
+ * also fires for ordinary {@code EXPIRED} evictions, which must stay silent — throttled through
+ * {@link LogThrottle}, because the listener runs inside the cache's eviction maintenance and an
+ * unthrottled line per eviction would trade the heap bound for log amplification.
  */
 @Slf4j
 @Component
@@ -63,19 +63,18 @@ public class CacheOAuth2AuthorizationRequestRepository
 			Caffeine.newBuilder()
 					.expireAfterWrite(2, TimeUnit.MINUTES)
 					.maximumSize(MAX_ENTRIES)
-					// Guard order matters: tryAcquire consumes the interval token (class Javadoc).
-					.evictionListener((String state, OAuth2AuthorizationRequest value, RemovalCause cause) -> {
-						if (shouldWarnFor(cause) && evictionWarnThrottle.tryAcquire()) {
-							log.warn("OAuth2 authorization-request cache is evicting at capacity ({}) — "
-									+ "possible login-initiation flood", MAX_ENTRIES);
-						}
-					})
+					.evictionListener((String state, OAuth2AuthorizationRequest value, RemovalCause cause) ->
+							warnIfCapacityEviction(cause))
 					.recordStats()
 					.build();
 
-	/** Only capacity evictions indicate a flood; ordinary expiry must stay silent (class Javadoc). */
-	static boolean shouldWarnFor(RemovalCause cause) {
-		return cause == RemovalCause.SIZE;
+	// Package-private so the test can drive the real listener body per cause (class Javadoc).
+	void warnIfCapacityEviction(RemovalCause cause) {
+		// Guard order matters: tryAcquire consumes the interval token (see its Javadoc).
+		if (cause == RemovalCause.SIZE && evictionWarnThrottle.tryAcquire()) {
+			log.warn("OAuth2 authorization-request cache is evicting at capacity ({}) — "
+					+ "possible login-initiation flood", MAX_ENTRIES);
+		}
 	}
 
 	@Override

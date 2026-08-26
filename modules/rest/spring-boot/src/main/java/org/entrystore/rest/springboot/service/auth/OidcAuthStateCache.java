@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit;
  * expire after a fixed duration.
  *
  * <p>DoS posture: written on the anonymous login-initiation path, hence the size cap and the
- * {@link #shouldWarnFor(RemovalCause)}-gated, throttled capacity warn — see
+ * throttled capacity warn in {@link #warnIfCapacityEviction(RemovalCause)} — see
  * {@code CacheOAuth2AuthorizationRequestRepository}'s Javadoc for the shared rationale.
  */
 @Slf4j
@@ -53,19 +53,17 @@ public class OidcAuthStateCache implements CaffeineCacheSource {
 	private final Cache<String, AuthState> requestCache = Caffeine.newBuilder()
 			.expireAfterWrite(2, TimeUnit.MINUTES)
 			.maximumSize(MAX_ENTRIES)
-			// Guard order matters: tryAcquire consumes the interval token (class Javadoc).
-			.evictionListener((String state, AuthState value, RemovalCause cause) -> {
-				if (shouldWarnFor(cause) && evictionWarnThrottle.tryAcquire()) {
-					log.warn("OIDC auth-state cache is evicting at capacity ({}) — "
-							+ "possible login-initiation flood", MAX_ENTRIES);
-				}
-			})
+			.evictionListener((String state, AuthState value, RemovalCause cause) -> warnIfCapacityEviction(cause))
 			.recordStats()
 			.build();
 
-	/** Only capacity evictions indicate a flood; ordinary expiry must stay silent (class Javadoc). */
-	static boolean shouldWarnFor(RemovalCause cause) {
-		return cause == RemovalCause.SIZE;
+	// Package-private so the test can drive the real listener body per cause (class Javadoc).
+	void warnIfCapacityEviction(RemovalCause cause) {
+		// Guard order matters: tryAcquire consumes the interval token (see its Javadoc).
+		if (cause == RemovalCause.SIZE && evictionWarnThrottle.tryAcquire()) {
+			log.warn("OIDC auth-state cache is evicting at capacity ({}) — "
+					+ "possible login-initiation flood", MAX_ENTRIES);
+		}
 	}
 
 	@Override

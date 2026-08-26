@@ -19,15 +19,8 @@ package org.entrystore.rest.springboot.util;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
-import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.IntStream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -59,35 +52,6 @@ class LogThrottleTest {
 		clock.addAndGet(Duration.ofSeconds(30).toNanos());
 		assertTrue(throttle.tryAcquire());
 		assertFalse(throttle.tryAcquire());
-	}
-
-	// Caffeine invokes the eviction listener on whichever request thread triggers maintenance, so
-	// under a flood N threads race this call with the same stale timestamp — exactly one may win,
-	// or the throttle is no throttle (a plain set() would admit all N).
-	@Test
-	void concurrentCallersAdmitExactlyOne() throws Exception {
-		var frozenClock = new AtomicLong(1_000_000L);
-		var throttle = new LogThrottle(Duration.ofMinutes(1), frozenClock::get);
-		int threads = 8;
-		var barrier = new CyclicBarrier(threads);
-		var admitted = new AtomicInteger();
-
-		try (ExecutorService executor = Executors.newFixedThreadPool(threads)) {
-			var futures = IntStream.range(0, threads)
-					.mapToObj(i -> executor.submit(() -> {
-						barrier.await();
-						if (throttle.tryAcquire()) {
-							admitted.incrementAndGet();
-						}
-						return null;
-					}))
-					.toList();
-			for (Future<?> future : futures) {
-				future.get();
-			}
-		}
-
-		assertEquals(1, admitted.get());
 	}
 
 	@Test

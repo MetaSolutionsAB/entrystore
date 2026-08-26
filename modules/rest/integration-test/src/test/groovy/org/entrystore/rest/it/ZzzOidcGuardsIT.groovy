@@ -17,8 +17,6 @@
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
-import org.springframework.boot.SpringApplication
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 
@@ -39,15 +37,12 @@ class ZzzOidcGuardsIT extends KeycloakBaseSpec {
 		def keycloakIssuerUrl = getKeycloakOidcIssuerUrl()
 
 		log.info('Starting EntryStoreApp with OIDC (guard cases)')
-		def args = [
-			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+		startOwnedApp([
 			'--entrystore.auth.oidc.enabled=true',
 			'--spring.profiles.active=oidc',
 			'--spring.security.oauth2.client.provider.keycloak.issuer-uri=' + keycloakIssuerUrl,
 			'--spring.security.oauth2.client.provider.keycloak2.issuer-uri=' + keycloakIssuerUrl
-		] as String[]
-		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
-		appStarted = true
+		])
 	}
 
 	def 'Unknown ?provider= parameter must fail with 400, not a filter-level HTML 500'() {

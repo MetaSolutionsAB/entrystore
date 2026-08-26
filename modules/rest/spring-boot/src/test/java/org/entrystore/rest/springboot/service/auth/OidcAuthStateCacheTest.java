@@ -23,7 +23,6 @@ import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -54,21 +53,27 @@ class OidcAuthStateCacheTest {
 			var caffeine = cache.caffeineCaches().get("oidc-auth-state");
 			caffeine.cleanUp();
 
-			// Bounded from both sides — see the CacheOAuth2AuthorizationRequestRepository test.
 			assertTrue(caffeine.estimatedSize() <= OidcAuthStateCache.MAX_ENTRIES);
-			assertTrue(caffeine.estimatedSize() >= OidcAuthStateCache.MAX_ENTRIES - 100);
+			// Pinned against a literal — see the CacheOAuth2AuthorizationRequestRepository test.
+			assertTrue(OidcAuthStateCache.MAX_ENTRIES >= 10_000,
+					"cap must stay large enough for legitimate concurrent in-flight logins");
 			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
 		}
 	}
 
-	// The throttle caps the WARN count at 1 whether or not the cause filter exists, so the capacity
-	// test above cannot detect its removal — without it, ordinary expiry would warn forever.
+	// Drives the real listener body per cause: the throttle caps the WARN at 1 either way, so the
+	// capacity test above cannot detect removal of the SIZE guard — without it, ordinary expiry
+	// under normal login traffic (abandoned attempts timing out) would emit false flood WARNs.
 	@Test
 	void onlySizeEvictionsWarn() {
-		assertTrue(OidcAuthStateCache.shouldWarnFor(RemovalCause.SIZE));
-		assertFalse(OidcAuthStateCache.shouldWarnFor(RemovalCause.EXPIRED));
-		assertFalse(OidcAuthStateCache.shouldWarnFor(RemovalCause.EXPLICIT));
-		assertFalse(OidcAuthStateCache.shouldWarnFor(RemovalCause.REPLACED));
+		try (var appender = CapturingAppender.attachTo(OidcAuthStateCache.class)) {
+			var cache = new OidcAuthStateCache();
+			cache.warnIfCapacityEviction(RemovalCause.EXPIRED);
+			assertEquals(0, appender.countAt(Level.WARN), appender::toString);
+
+			cache.warnIfCapacityEviction(RemovalCause.SIZE);
+			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
+		}
 	}
 }

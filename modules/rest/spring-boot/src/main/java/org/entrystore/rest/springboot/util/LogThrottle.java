@@ -24,7 +24,9 @@ import java.util.function.LongSupplier;
  * Admits at most one log line per interval for a diagnostic that can fire once per request on an
  * attacker-reachable path — without the throttle, such a line turns the condition it reports into a
  * log/disk amplifier. Lock-free and safe to call from latency-sensitive callbacks (e.g. Caffeine
- * eviction listeners, which run inside the cache's atomic eviction).
+ * eviction listeners, which run inside the cache's eviction maintenance). The {@code AtomicLong}
+ * provides the visibility the current call sites need (the thread invoking the callback varies over
+ * time); the CAS additionally makes concurrent callers admit exactly one, as befits a shared util.
  */
 public final class LogThrottle {
 

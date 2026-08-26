@@ -50,19 +50,20 @@ public class OidcProviderRegistrationValidator implements InitializingBean {
 	public void afterPropertiesSet() {
 		// An absent repository bean is not an ordinary miss: OIDC is enabled but no registration
 		// exists at all (e.g. a mistyped spring.security.oauth2.client.registration prefix), so no
-		// login can ever complete — abort rather than let the app report healthy.
-		if (clientRegistrationRepository.isEmpty()) {
-			throw new IllegalStateException("EntryStore startup aborted: entrystore.auth.oidc.enabled=true but "
-					+ "no spring.security.oauth2.client.registration entries are configured — no OIDC provider "
-					+ "can complete a login. Add at least one client registration or disable OIDC.");
-		}
+		// login can ever complete — abort rather than let the app report healthy. Resolving the
+		// repository up front also keeps the lookups below from re-encoding "absent means not
+		// registered", the misclassification this guard exists to remove.
+		ClientRegistrationRepository registrations = clientRegistrationRepository.orElseThrow(
+				() -> new IllegalStateException("EntryStore startup aborted: entrystore.auth.oidc.enabled=true "
+						+ "but no spring.security.oauth2.client.registration entries are configured — no OIDC "
+						+ "provider can complete a login. Add at least one client registration or disable OIDC."));
 		List<String> unknown = new ArrayList<>();
 		String defaultProvider = oidcConfiguration.defaultProvider();
-		if (StringUtils.isNotBlank(defaultProvider) && !isRegistered(defaultProvider)) {
+		if (StringUtils.isNotBlank(defaultProvider) && registrations.findByRegistrationId(defaultProvider) == null) {
 			unknown.add("entrystore.auth.oidc.default-provider=" + defaultProvider);
 		}
 		for (String providerId : oidcConfiguration.provider().keySet()) {
-			if (!isRegistered(providerId)) {
+			if (registrations.findByRegistrationId(providerId) == null) {
 				unknown.add("entrystore.auth.oidc.provider." + providerId + ".*");
 			}
 		}
@@ -71,11 +72,5 @@ public class OidcProviderRegistrationValidator implements InitializingBean {
 					+ "provider ids without a matching spring.security.oauth2.client.registration entry: "
 					+ unknown + ". Fix the key(s) or add the missing client registration(s).");
 		}
-	}
-
-	private boolean isRegistered(String providerId) {
-		return clientRegistrationRepository
-				.map(registrations -> registrations.findByRegistrationId(providerId) != null)
-				.orElse(false);
 	}
 }

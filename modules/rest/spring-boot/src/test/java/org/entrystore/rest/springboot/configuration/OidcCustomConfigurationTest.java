@@ -110,12 +110,12 @@ class OidcCustomConfigurationTest {
 		assertEquals(List.of("app.example.com"), config.redirectDomainWhitelist());
 	}
 
-	// The whitelist lookup compares URI.getHost() — a single bare hostname — so an entry that can
-	// never equal a host value (scheme, port, path, userinfo, wildcard, blank) would silently drop
-	// every custom redirect URL.
+	// Entries must round-trip through URI.getHost() unchanged — anything else can never match the
+	// lookup and would silently drop every custom redirect URL.
 	@ParameterizedTest(name = "\"{0}\"")
 	@ValueSource(strings = {"https://app.example.com", "app.example.com:8443", "app.example.com/",
-			"user@app.example.com", "*.app.example.com", "*", " "})
+			"user@app.example.com", "*.app.example.com", "*", " app.example.com",
+			"app.example.com portal.example.com", "internal_app.example.com", "[foo]"})
 	void nonBareHostnameWhitelistEntryFailsFast(String entry) {
 		assertThrows(IllegalArgumentException.class,
 				() -> new OidcCustomConfiguration(true, null, List.of(entry), null, null, null));
@@ -129,9 +129,18 @@ class OidcCustomConfigurationTest {
 		assertEquals(List.of("[::1]"), config.redirectDomainWhitelist());
 	}
 
+	// A trailing or doubled comma binds as a blank list element; that formatting artifact must not
+	// abort startup (this record binds even on deployments with OIDC disabled) — filter, not reject.
+	@Test
+	void blankWhitelistEntriesAreFilteredOut() {
+		var config = new OidcCustomConfiguration(true, null, List.of("app.example.com", "", "  "), null, null, null);
+		assertEquals(List.of("app.example.com"), config.redirectDomainWhitelist());
+	}
+
 	// A whitespace-only default-provider (YAML `default-provider: " "`, an escaped trailing space)
-	// must normalize to "not configured", or it passes the startup validator's isNotBlank check but
-	// fails per-request as a configured-looking id.
+	// must normalize to "not configured": the startup validator's isNotBlank would skip it while
+	// OidcAuthService's isEmpty would treat it as a configured id and fail per-request — trimming
+	// here makes both see the same "not configured" state.
 	@Test
 	void blankDefaultProviderNormalizesToNull() {
 		var config = new OidcCustomConfiguration(true, "  ", null, null, null, null);

@@ -43,29 +43,38 @@ public record OidcCustomConfiguration(
 	/**
 	 * Normalizes and validates the bound values so misconfiguration fails at binding, naming the
 	 * key, instead of surfacing later and vaguer. The bound collections are copied so a consumer
-	 * cannot mutate the whitelist or provider routing. The whitelist is lowercased (hostnames are
-	 * case-insensitive; {@code OidcAuthService} compares the case-folded request-side host) and
-	 * shape-checked: the lookup compares {@code URI.getHost()}, so an entry that can never equal a
-	 * host value — scheme, port, path, userinfo, a {@code *} wildcard, or blank — would silently
-	 * drop every caller-supplied {@code successurl}/{@code failureurl}. A bracketed IPv6 literal
-	 * ({@code [::1]}) is exactly what {@code URI.getHost()} returns and is therefore allowed.
-	 * A blank {@code default-provider} is normalized to null so downstream sees one "not
-	 * configured" state ({@code OidcAuthService} answers a 400, {@code
-	 * OidcProviderRegistrationValidator} skips it) instead of a whitespace id failing per-request.
+	 * cannot mutate the whitelist or provider routing. Blank whitelist elements (a trailing or
+	 * doubled comma) carry no semantics and are filtered out rather than rejected — this record
+	 * binds even when OIDC is disabled, so rejecting a formatting artifact would abort unrelated
+	 * deployments. The surviving entries are lowercased (hostnames are case-insensitive;
+	 * {@code OidcAuthService} compares the case-folded request-side host) and must round-trip
+	 * through {@code URI.getHost()} unchanged — the invariant the lookup depends on — so any entry
+	 * that lookup could never match (scheme, port, path, userinfo, wildcards, spaces, hosts the URI
+	 * parser rejects) fails at binding instead of silently dropping every caller-supplied
+	 * {@code successurl}/{@code failureurl}. A bracketed IPv6 literal ({@code [::1]}) round-trips
+	 * and is therefore allowed. A blank {@code default-provider} is normalized to null so
+	 * downstream sees one "not configured" state instead of a whitespace id failing per-request.
 	 */
 	public OidcCustomConfiguration {
 		if (redirectSuccess == null) redirectSuccess = new RedirectUrl("/auth/user");
 		if (redirectFailure == null) redirectFailure = new RedirectUrl("/auth/user");
 		defaultProvider = StringUtils.trimToNull(defaultProvider);
 		redirectDomainWhitelist = redirectDomainWhitelist == null ? List.of()
-				: redirectDomainWhitelist.stream().map(CaseFolding::toLowerCase).toList();
+				: redirectDomainWhitelist.stream()
+						.filter(StringUtils::isNotBlank)
+						.map(CaseFolding::toLowerCase)
+						.toList();
 		for (String host : redirectDomainWhitelist) {
-			boolean ipv6Literal = host.startsWith("[") && host.endsWith("]");
-			if (host.isBlank() || host.contains("*") || host.contains("/") || host.contains("@")
-					|| (!ipv6Literal && host.contains(":"))) {
+			String parsed;
+			try {
+				parsed = URI.create("https://" + host).getHost();
+			} catch (IllegalArgumentException e) {
+				parsed = null;
+			}
+			if (!host.equals(parsed)) {
 				throw new IllegalArgumentException("entrystore.auth.oidc.redirect-domain-whitelist entries "
-						+ "must be single bare hostnames (or bracketed IPv6 literals) without scheme, port, "
-						+ "path, userinfo or wildcards; got: '" + host + "'");
+						+ "must be single bare hostnames (or bracketed IPv6 literals) that URI.getHost() can "
+						+ "return, without scheme, port, path, userinfo or wildcards; got: '" + host + "'");
 			}
 		}
 		provider = provider == null ? Map.of() : Map.copyOf(provider);
