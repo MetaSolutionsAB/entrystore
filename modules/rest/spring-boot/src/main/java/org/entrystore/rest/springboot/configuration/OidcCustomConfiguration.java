@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.configuration;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.springboot.util.CaseFolding;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -24,6 +25,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * EntryStore-specific OIDC login settings, mirroring the structure of {@link SamlCustomConfiguration}.
@@ -31,6 +33,7 @@ import java.util.Map;
  * native {@code spring.security.oauth2.client.registration.{id}.*} / {@code ...client.provider.{id}.*}
  * properties — the same split SAML uses with {@code spring.security.saml2.relyingparty.*}.
  */
+@Slf4j
 @ConfigurationProperties(prefix = "entrystore.auth.oidc")
 public record OidcCustomConfiguration(
 		@DefaultValue("false") boolean enabled,
@@ -43,27 +46,35 @@ public record OidcCustomConfiguration(
 	/**
 	 * Normalizes and validates the bound values so misconfiguration fails at binding, naming the
 	 * key, instead of surfacing later and vaguer. The bound collections are copied so a consumer
-	 * cannot mutate the whitelist or provider routing. Blank whitelist elements (a trailing or
-	 * doubled comma) carry no semantics and are filtered out rather than rejected — this record
-	 * binds even when OIDC is disabled, so rejecting a formatting artifact would abort unrelated
-	 * deployments. The surviving entries are lowercased (hostnames are case-insensitive;
-	 * {@code OidcAuthService} compares the case-folded request-side host) and must round-trip
-	 * through {@code URI.getHost()} unchanged — the invariant the lookup depends on — so any entry
-	 * that lookup could never match (scheme, port, path, userinfo, wildcards, spaces, hosts the URI
-	 * parser rejects) fails at binding instead of silently dropping every caller-supplied
-	 * {@code successurl}/{@code failureurl}. A bracketed IPv6 literal ({@code [::1]}) round-trips
-	 * and is therefore allowed. A blank {@code default-provider} is normalized to null so
-	 * downstream sees one "not configured" state instead of a whitespace id failing per-request.
+	 * cannot mutate the whitelist or provider routing. Whitelist entries are trimmed and blank
+	 * elements (a trailing or doubled comma) dropped rather than rejected — Spring trims only the
+	 * comma-delimited binding form, and this record binds even when OIDC is disabled, so rejecting
+	 * a formatting artifact would abort unrelated deployments; a configured-but-all-blank list is
+	 * warned about, since it silently ignores every caller-supplied redirect. The surviving entries
+	 * are lowercased (hostnames are case-insensitive; {@code OidcAuthService} compares the
+	 * case-folded request-side host) and must round-trip through {@code URI.getHost()} unchanged —
+	 * the invariant the lookup depends on — so any entry that lookup could never match (scheme,
+	 * port, path, userinfo, wildcards, inner spaces, hosts the URI parser rejects) fails at binding
+	 * instead of silently dropping every caller-supplied {@code successurl}/{@code failureurl}.
+	 * A bracketed IPv6 literal ({@code [::1]}) round-trips and is therefore allowed. A blank
+	 * {@code default-provider} is normalized to null so downstream sees one "not configured" state
+	 * instead of a whitespace id failing per-request.
 	 */
 	public OidcCustomConfiguration {
 		if (redirectSuccess == null) redirectSuccess = new RedirectUrl("/auth/user");
 		if (redirectFailure == null) redirectFailure = new RedirectUrl("/auth/user");
 		defaultProvider = StringUtils.trimToNull(defaultProvider);
-		redirectDomainWhitelist = redirectDomainWhitelist == null ? List.of()
+		boolean whitelistConfigured = redirectDomainWhitelist != null && !redirectDomainWhitelist.isEmpty();
+		redirectDomainWhitelist = !whitelistConfigured ? List.of()
 				: redirectDomainWhitelist.stream()
-						.filter(StringUtils::isNotBlank)
+						.map(StringUtils::trimToNull)
+						.filter(Objects::nonNull)
 						.map(CaseFolding::toLowerCase)
 						.toList();
+		if (whitelistConfigured && redirectDomainWhitelist.isEmpty()) {
+			log.warn("entrystore.auth.oidc.redirect-domain-whitelist is configured but every entry is blank — "
+					+ "the whitelist is empty, so all caller-supplied successurl/failureurl values will be ignored");
+		}
 		for (String host : redirectDomainWhitelist) {
 			String parsed;
 			try {

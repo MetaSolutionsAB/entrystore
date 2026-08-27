@@ -54,9 +54,12 @@ class OidcAuthStateCacheTest {
 			caffeine.cleanUp();
 
 			assertTrue(caffeine.estimatedSize() <= OidcAuthStateCache.MAX_ENTRIES);
-			// Pinned against a literal — see the CacheOAuth2AuthorizationRequestRepository test.
+			// Both bounds pinned against literals — see the CacheOAuth2AuthorizationRequestRepository
+			// test for the rationale.
 			assertTrue(OidcAuthStateCache.MAX_ENTRIES >= 10_000,
-					"cap must stay large enough for legitimate concurrent in-flight logins");
+					"declared cap shrunk below legitimate login concurrency");
+			assertTrue(caffeine.estimatedSize() >= 9_900,
+					"effective cache cap shrunk below legitimate login concurrency");
 			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
 		}

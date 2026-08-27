@@ -114,11 +114,20 @@ class OidcCustomConfigurationTest {
 	// lookup and would silently drop every custom redirect URL.
 	@ParameterizedTest(name = "\"{0}\"")
 	@ValueSource(strings = {"https://app.example.com", "app.example.com:8443", "app.example.com/",
-			"user@app.example.com", "*.app.example.com", "*", " app.example.com",
+			"user@app.example.com", "*.app.example.com", "*",
 			"app.example.com portal.example.com", "internal_app.example.com", "[foo]"})
 	void nonBareHostnameWhitelistEntryFailsFast(String entry) {
 		assertThrows(IllegalArgumentException.class,
 				() -> new OidcCustomConfiguration(true, null, List.of(entry), null, null, null));
+	}
+
+	// Padding survives every binding form except the comma-delimited string (indexed keys, YAML list
+	// items, quoted CLI values) — a formatting artifact, so trim rather than reject; inner spaces
+	// (the multi-host mistake) still fail the round-trip above.
+	@Test
+	void whitelistEntriesAreTrimmedAtBinding() {
+		var config = new OidcCustomConfiguration(true, null, List.of(" App.Example.com "), null, null, null);
+		assertEquals(List.of("app.example.com"), config.redirectDomainWhitelist());
 	}
 
 	// URI.getHost() returns the bracketed form for IPv6 literals, so that exact form must be

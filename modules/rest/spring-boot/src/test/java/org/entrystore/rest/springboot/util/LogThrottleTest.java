@@ -19,8 +19,15 @@ package org.entrystore.rest.springboot.util;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.IntStream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -52,6 +59,37 @@ class LogThrottleTest {
 		clock.addAndGet(Duration.ofSeconds(30).toNanos());
 		assertTrue(throttle.tryAcquire());
 		assertFalse(throttle.tryAcquire());
+	}
+
+	// Contract test for the class Javadoc's exactly-one-admission guarantee. Today's eviction-
+	// listener call sites are serialized by Caffeine's evictionLock, but this is a public util
+	// that invites genuinely concurrent per-request call sites. Deterministic: with a frozen
+	// clock every thread reads the same stale timestamp, so exactly one CAS can succeed
+	// regardless of scheduling — it cannot flake on correct code, and a plain set() admits all.
+	@Test
+	void concurrentCallersAdmitExactlyOne() throws Exception {
+		var frozenClock = new AtomicLong(1_000_000L);
+		var throttle = new LogThrottle(Duration.ofMinutes(1), frozenClock::get);
+		int threads = 8;
+		var barrier = new CyclicBarrier(threads);
+		var admitted = new AtomicInteger();
+
+		try (ExecutorService executor = Executors.newFixedThreadPool(threads)) {
+			var futures = IntStream.range(0, threads)
+					.mapToObj(i -> executor.submit(() -> {
+						barrier.await();
+						if (throttle.tryAcquire()) {
+							admitted.incrementAndGet();
+						}
+						return null;
+					}))
+					.toList();
+			for (Future<?> future : futures) {
+				future.get();
+			}
+		}
+
+		assertEquals(1, admitted.get());
 	}
 
 	@Test

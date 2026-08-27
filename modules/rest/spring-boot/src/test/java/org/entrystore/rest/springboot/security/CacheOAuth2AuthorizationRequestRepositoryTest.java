@@ -103,10 +103,15 @@ class CacheOAuth2AuthorizationRequestRepositoryTest {
 			cache.cleanUp();
 
 			assertTrue(cache.estimatedSize() <= CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES);
-			// Pinned against a literal: legitimate concurrent logins must keep fitting, or callbacks
-			// start failing with authorization_request_not_found.
+			// Both bounds pinned against literals: the declared constant AND the effective builder
+			// cap must stay large enough for legitimate concurrent in-flight logins, or callbacks
+			// start failing with authorization_request_not_found. Only the estimatedSize bound
+			// catches a shrunken .maximumSize(...) wiring; only the constant bound catches a
+			// shrunken MAX_ENTRIES.
 			assertTrue(CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES >= 10_000,
-					"cap must stay large enough for legitimate concurrent in-flight logins");
+					"declared cap shrunk below legitimate login concurrency");
+			assertTrue(cache.estimatedSize() >= 9_900,
+					"effective cache cap shrunk below legitimate login concurrency");
 			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
 		}
