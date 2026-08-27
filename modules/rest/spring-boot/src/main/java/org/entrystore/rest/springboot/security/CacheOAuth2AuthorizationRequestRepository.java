@@ -1,0 +1,114 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.entrystore.rest.springboot.security;
+
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
+import org.entrystore.rest.springboot.util.LogThrottle;
+import org.springframework.security.oauth2.client.web.AuthorizationRequestRepository;
+import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
+import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Stores OAuth2/OIDC authorization requests in a Caffeine cache keyed by the {@code state}
+ * parameter, instead of in the HTTP session. This avoids the SameSite=Strict cookie problem
+ * where the browser withholds the session cookie on the cross-site redirect from the provider
+ * back to the {@code /login/oauth2/code/{registrationId}} callback — the OIDC counterpart of
+ * {@link CacheSaml2AuthenticationRequestRepository}.
+ *
+ * <p>DoS posture (shared with {@code OidcAuthStateCache}): the cache is written on the anonymous,
+ * un-rate-limited login-initiation path, so {@code maximumSize} bounds the heap, and capacity
+ * evictions emit a WARN via {@link #warnIfCapacityEviction(RemovalCause)} — the eviction listener
+ * also fires for ordinary {@code EXPIRED} evictions, which must stay silent — throttled through
+ * {@link LogThrottle}, because the listener runs inside the cache's eviction maintenance and an
+ * unthrottled line per eviction would trade the heap bound for log amplification.
+ */
+@Slf4j
+@Component
+public class CacheOAuth2AuthorizationRequestRepository
+		implements AuthorizationRequestRepository<OAuth2AuthorizationRequest>, CaffeineCacheSource {
+
+	// Cardinality bound: every anonymous request to /oauth2/authorization/{registrationId} mints an
+	// entry, and expireAfterWrite bounds only lifetime — without a cap, request-rate × 120 s of
+	// entries could exhaust the heap. 10k entries ≈ a few MB, far above legitimate concurrent logins.
+	static final long MAX_ENTRIES = 10_000;
+
+	private final LogThrottle evictionWarnThrottle = new LogThrottle(Duration.ofMinutes(1));
+
+	private final Cache<String, OAuth2AuthorizationRequest> cache =
+			Caffeine.newBuilder()
+					.expireAfterWrite(2, TimeUnit.MINUTES)
+					.maximumSize(MAX_ENTRIES)
+					.evictionListener((String state, OAuth2AuthorizationRequest value, RemovalCause cause) ->
+							warnIfCapacityEviction(cause))
+					.recordStats()
+					.build();
+
+	// Package-private so the test can drive the real listener body per cause (class Javadoc).
+	void warnIfCapacityEviction(RemovalCause cause) {
+		// Guard order matters: tryAcquire consumes the interval token (see its Javadoc).
+		if (cause == RemovalCause.SIZE && evictionWarnThrottle.tryAcquire()) {
+			log.warn("OAuth2 authorization-request cache is evicting at capacity ({}) — "
+					+ "possible login-initiation flood", MAX_ENTRIES);
+		}
+	}
+
+	@Override
+	public Map<String, Cache<?, ?>> caffeineCaches() {
+		return Map.of("oauth2-authz-requests", cache);
+	}
+
+	@Override
+	public OAuth2AuthorizationRequest loadAuthorizationRequest(HttpServletRequest request) {
+		String state = request.getParameter(OAuth2ParameterNames.STATE);
+		return (state != null) ? cache.getIfPresent(state) : null;
+	}
+
+	@Override
+	public void saveAuthorizationRequest(OAuth2AuthorizationRequest authorizationRequest,
+										 HttpServletRequest request,
+										 HttpServletResponse response) {
+		if (authorizationRequest == null) {
+			// Spring's session-based repository treats a null request as removal; mirror that contract.
+			removeAuthorizationRequest(request, response);
+			return;
+		}
+		if (authorizationRequest.getState() != null) {
+			cache.put(authorizationRequest.getState(), authorizationRequest);
+		}
+	}
+
+	@Override
+	public OAuth2AuthorizationRequest removeAuthorizationRequest(HttpServletRequest request,
+																 HttpServletResponse response) {
+		String state = request.getParameter(OAuth2ParameterNames.STATE);
+		// Atomic retrieve-and-remove: a getIfPresent + invalidate pair would let two concurrent
+		// callbacks carrying the same state both observe the request, weakening the single-use
+		// replay guard to the IdP's code single-use alone.
+		return (state != null) ? cache.asMap().remove(state) : null;
+	}
+}

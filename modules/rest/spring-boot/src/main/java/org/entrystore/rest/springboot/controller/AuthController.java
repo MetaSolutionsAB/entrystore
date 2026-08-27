@@ -27,8 +27,10 @@ import org.entrystore.rest.springboot.model.api.ConfirmRequestBody;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.springboot.model.auth.ConfirmationResult;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.service.AuthService;
+import org.entrystore.rest.springboot.service.OidcAuthService;
 import org.entrystore.rest.springboot.service.SamlAuthService;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.RequestBodyValidator;
@@ -37,6 +39,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.cas.ServiceProperties;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.MultiValueMap;
@@ -85,10 +88,16 @@ public class AuthController {
 	@Value("${entrystore.auth.saml.enabled:false}")
 	private boolean isSamlAuthEnabled;
 
+	@Value("${entrystore.auth.oidc.enabled:false}")
+	private boolean isOidcAuthEnabled;
+
 	private final AuthService authService;
 	private final SamlAuthService samlAuthService;
+	private final OidcAuthService oidcAuthService;
 	private final CasCustomConfiguration casConfiguration;
 	private final Optional<ServiceProperties> casServiceProperties;
+	// Optional: the bean exists only when spring.security.oauth2.client registrations are configured.
+	private final Optional<ClientRegistrationRepository> clientRegistrationRepository;
 	private final RequestBodyValidator requestBodyValidator;
 
 	@GetMapping("/auth/cas")
@@ -130,6 +139,61 @@ public class AuthController {
 		redirectAttributes.addAttribute("idpId", idpId);
 
 		return "redirect:/saml2/authenticate/{idpId}";
+	}
+
+	/**
+	 * Initiates OIDC authentication by redirecting to the selected provider's authorization
+	 * endpoint. An unknown registration id would otherwise surface deep inside Spring Security's
+	 * {@code OAuth2AuthorizationRequestRedirectFilter} as an HTML 500 that bypasses
+	 * {@code AppExceptionHandler}, so the guard below fails early. Once a provider id has been
+	 * selected, a missing registration repository is config-shaped (500). An unknown id is then
+	 * classified by the selection's provenance: a bogus {@code ?provider=} parameter is the caller's
+	 * fault (400); a config-derived id — a {@code default-provider} typo, or an
+	 * {@code entrystore.auth.oidc.provider.{id}} entry whose map key has no registration (domain
+	 * routing returns that key, never the {@code domains} values) — is a server misconfiguration
+	 * surfaced as a 500 that {@code AppExceptionHandler} logs at error.
+	 * {@code OidcProviderRegistrationValidator} rejects both config-derived cases at startup; the
+	 * guard is the runtime backstop.
+	 */
+	@GetMapping("/auth/oidc")
+	public String startOidcLogin(@RequestParam(required = false) String username,
+								 @RequestParam(required = false) String provider,
+								 @RequestParam(name = "successurl", required = false) String successUrl,
+								 @RequestParam(name = "failureurl", required = false) String failureUrl,
+								 RedirectAttributes redirectAttributes) {
+
+		if (!isOidcAuthEnabled) {
+			throw new EntityNotFoundException("Not Found");
+		}
+
+		if (successUrl != null && oidcAuthService.isValidRedirectUrl(successUrl)) {
+			redirectAttributes.addAttribute("successurl", successUrl);
+		}
+
+		if (failureUrl != null && oidcAuthService.isValidRedirectUrl(failureUrl)) {
+			redirectAttributes.addAttribute("failureurl", failureUrl);
+		}
+
+		var selection = oidcAuthService.findProviderIdForRequest(username, provider);
+		// With a provider id selected, no repository bean is config-shaped (see method Javadoc).
+		var registrations = clientRegistrationRepository.orElseThrow(
+				() -> new IllegalStateException("OIDC is enabled but no spring.security.oauth2.client.registration "
+						+ "entries are configured — no provider can complete a login"));
+		if (registrations.findByRegistrationId(selection.id()) == null) {
+			if (selection.fromRequestParameter()) {
+				// sanitizeForLog: the raw ?provider= value is reflected into the message, which is
+				// copied into the JSON body and the handler's debug log.
+				throw new BadRequestException("Unknown OIDC provider: " + HttpUtil.sanitizeForLog(selection.id()));
+			}
+			throw new IllegalStateException("Configured OIDC provider id '" + selection.id()
+					+ "' has no matching spring.security.oauth2.client.registration entry — check "
+					+ "entrystore.auth.oidc.default-provider and the entrystore.auth.oidc.provider.{id} keys");
+		}
+		redirectAttributes.addAttribute("providerId", selection.id());
+
+		// Spring Security's OAuth2AuthorizationRequestRedirectFilter serves this path;
+		// OidcAuthorizationRequestResolver re-validates and caches the redirect URLs there.
+		return "redirect:/oauth2/authorization/{providerId}";
 	}
 
 	@Operation(

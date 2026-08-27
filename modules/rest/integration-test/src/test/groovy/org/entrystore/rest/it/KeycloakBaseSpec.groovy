@@ -28,8 +28,9 @@ import spock.lang.Shared
 // SSO-specific args, reusing this single Keycloak container. See ENTRYSTORE-1019.
 abstract class KeycloakBaseSpec extends BaseSpec {
 
-	// Merged realm test-realm-keycloak.json contains both SAML and CAS clients;
-	// the CAS protocol jar is mounted so both flows are available from one container.
+	// Merged realm test-realm-keycloak.json contains SAML, CAS and OIDC clients; the CAS
+	// protocol jar is mounted so all three flows are available from one container (Keycloak
+	// speaks OIDC natively — no extra provider jar needed for it).
 	@Shared
 	static KeycloakContainer keycloakContainer = new KeycloakContainer()
 		.withAdminUsername('admin')
@@ -60,6 +61,10 @@ abstract class KeycloakBaseSpec extends BaseSpec {
 
 	static String getKeycloakCasRealmUrl() {
 		return keycloakContainer.getAuthServerUrl() + '/realms/test/protocol/cas'
+	}
+
+	static String getKeycloakOidcIssuerUrl() {
+		return keycloakContainer.getAuthServerUrl() + '/realms/test'
 	}
 
 	/** Extracts the (HTML-unescaped) form action URL from a Keycloak login page. */

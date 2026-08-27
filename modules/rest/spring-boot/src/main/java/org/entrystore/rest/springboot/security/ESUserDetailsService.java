@@ -110,7 +110,7 @@ public class ESUserDetailsService implements UserDetailsService {
 
 	/**
 	 * Creates a new EntryStore User with the given principal name.
-	 * Used by SSO login handlers (CAS, SAML) for auto-provisioning.
+	 * Used by SSO login handlers (CAS, SAML, OIDC) for auto-provisioning.
 	 *
 	 * @param username principal name for the new user
 	 * @return the created User

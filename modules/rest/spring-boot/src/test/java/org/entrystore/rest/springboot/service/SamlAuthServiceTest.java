@@ -68,6 +68,17 @@ class SamlAuthServiceTest {
 		return new SamlAuthService(new SamlCustomConfiguration(true, defaultIdp, List.of(), idps, null, null));
 	}
 
+	// Config-side case variance: an uppercase domains entry must still route (normalized at
+	// binding, case-folded on the request side) — the SAML twin of the OIDC test.
+	@Test
+	void findIdpIdForRequest_matchesUppercaseConfiguredDomain() {
+		var svc = serviceWithIdps("keycloak", Map.of(
+				"keycloak", new Idp(List.of("*"), true, null),
+				"corp", new Idp(List.of("EXAMPLE.com"), false, null)));
+
+		assertEquals("corp", svc.findIdpIdForRequest("user@Example.COM", null));
+	}
+
 	@Test
 	void findIdpIdForRequest_exactDomainMatchWinsOverWildcard() {
 		var svc = serviceWithIdps("keycloak", Map.of(

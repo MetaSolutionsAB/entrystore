@@ -33,6 +33,7 @@ import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.cas.authentication.CasAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.saml2.provider.service.authentication.Saml2Authentication;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -79,6 +80,9 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 			String externalAuthType = switch (auth) {
 				case Saml2Authentication ignored -> "SAML";
 				case CasAuthenticationToken ignored -> "CAS";
+				// getName() is the per-provider username claim — UsernameClaimOidcUserService names
+				// the principal after it during login.
+				case OAuth2AuthenticationToken ignored -> "OIDC";
 				default -> null;
 			};
 			if (externalAuthType != null) {

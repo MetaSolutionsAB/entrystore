@@ -2,7 +2,7 @@
   "realm": "test",
   "enabled": true,
   "id": "test-realm-merged",
-  "displayName": "Test Realm (SAML + CAS)",
+  "displayName": "Test Realm (SAML + CAS + OIDC)",
   "users": [
     {
       "username": "testuserrr",
@@ -32,6 +32,22 @@
         {
           "type": "password",
           "value": "caspassword",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "testoidcuser",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "testoidcuser@test.com",
+      "firstName": "OIDC",
+      "lastName": "User",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "oidcpassword",
           "temporary": false
         }
       ]
@@ -86,6 +102,26 @@
       "enabled": true,
       "protocol": "cas",
       "publicClient": true,
+      "redirectUris": [
+        "http://host.docker.internal:8181/*",
+        "http://localhost:8181/*"
+      ],
+      "baseUrl": "http://host.docker.internal:8181",
+      "webOrigins": [
+        "http://host.docker.internal:8181",
+        "http://localhost:8181"
+      ]
+    },
+    {
+      "clientId": "entrystore-oidc",
+      "name": "OIDC Test Client",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "oidc-test-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
       "redirectUris": [
         "http://host.docker.internal:8181/*",
         "http://localhost:8181/*"
