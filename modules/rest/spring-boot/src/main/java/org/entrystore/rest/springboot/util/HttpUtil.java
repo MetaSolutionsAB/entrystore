@@ -87,16 +87,22 @@ public class HttpUtil {
 
 	/**
 	 * Sets Last-Modified and ETag headers on the provided {@link HttpHeaders} instance.
-	 * If the modification date is null, a warning is logged and the headers are not updated.
+	 * If the modification date is null, a debug message is logged and the headers are not updated.
+	 *
+	 * <p>Debug rather than warn: an entry whose graph carries no {@code dcterms:modified} is a data
+	 * property rather than a server fault, and the unauthenticated read callers (the relation, lookup
+	 * and metadata GETs) sit on endpoints anyone can request in a loop — at warn, one such entry lets
+	 * an anonymous client drive unbounded log volume. The write callers (the context and group POSTs,
+	 * the entry and metadata PUTs) share this helper and are knowingly silenced along with them, even
+	 * though for those a null date after a successful write is a server-side invariant violation
+	 * rather than a data property.
 	 *
 	 * @param headers      the headers to update
 	 * @param modifiedDate the modification date used for generating the headers
 	 */
 	public static void setLastModifiedAndETag(HttpHeaders headers, Date modifiedDate) {
 		if (modifiedDate == null) {
-			// debug, not warn: an entry whose graph carries no dcterms:modified is a data property rather
-			// than a server fault, and the read-path callers sit on endpoints that anyone can request in a
-			// loop — at warn, one such entry lets an anonymous client drive unbounded log volume.
+			// debug, not warn — rationale in the Javadoc above.
 			log.debug("Last-Modified and ETag omitted because the modification date is null");
 		} else {
 			headers.setLastModified(modifiedDate.getTime());
@@ -107,8 +113,9 @@ public class HttpUtil {
 	/**
 	 * Updates the response headers with the last modification date and a strong ETag
 	 * based on the provided modification date.
-	 * If the modification date is null a warning is logged, and
-	 * the headers are not updated.
+	 * A null modification date is logged at debug and the headers are not updated, exactly as in
+	 * {@link #setLastModifiedAndETag(HttpHeaders, Date)}, which this method delegates to and whose
+	 * Javadoc carries the rationale for the log level.
 	 *
 	 * @param responseBuilder the response builder used to set the headers
 	 * @param modifiedDate    the modification date used for generating the headers

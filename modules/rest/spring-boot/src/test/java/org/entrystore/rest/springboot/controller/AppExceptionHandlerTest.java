@@ -217,9 +217,9 @@ class AppExceptionHandlerTest {
 		assertNotNull(body, "Expected non-null ErrorResponse body");
 		assertEquals(401, body.status());
 		assertEquals("Unauthorized", body.error());
-		// The message names which guard fired and that the caller is merely non-admin rather than
-		// unauthenticated; an unauthenticated prober must not learn either.
-		assertFalse(body.error().contains("not-admin"),
+		// The call-site message names which guard fired and that the caller is merely non-admin rather
+		// than unauthenticated; an unauthenticated prober must learn neither, from any field.
+		assertFalse(body.toString().contains("not-admin"),
 				"the call-site message must not reach an anonymous caller");
 	}
 
