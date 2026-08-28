@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
@@ -2006,4 +2022,155 @@ class ResourceIT extends BaseSpec {
 		tempDir?.deleteDir()
 	}
 
+	def "PUT multipart /{context-id}/resource/{entry-id} with a part not named 'file' stores the file"() {
+		given:
+		def entryId = createEntry(contextId, [:])
+		assert entryId.length() > 0
+
+		def uploadedFile = File.createTempFile('partName', '.html')
+		uploadedFile.deleteOnExit()
+		uploadedFile.bytes = '<html>Hello</html>'.bytes
+
+		when:
+		// Clients that build the body by iterating a FileList send indexed part names such as "0"
+		def putConn = EntryStoreClient.putRequestMultiPart(
+			'/' + contextId + '/resource/' + entryId,
+			uploadedFile,
+			'admin',
+			[:],
+			'text/html',
+			'0'
+		)
+
+		then:
+		putConn.responseCode == HTTP_CREATED
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.responseCode == HTTP_OK
+		resourceConn.contentType.contains('text/html')
+		resourceConn.inputStream.readAllBytes() == uploadedFile.bytes
+
+		and: 'the stored filename comes from the part filename, never from the part name'
+		fileNameOf(contextId, entryId) == uploadedFile.name
+
+		cleanup:
+		uploadedFile?.delete()
+	}
+
+	def "PUT multipart /{context-id}/resource/{entry-id} finds the real upload behind a placeholder of the same name"() {
+		given:
+		def entryId = createEntry(contextId, [:])
+		assert entryId.length() > 0
+
+		// Two <input type="file" name="file"> where the first is unfilled, i.e. two parts sharing a name
+		def fileParts = [
+			[name: 'file', filename: '', contentType: 'application/octet-stream', bytes: new byte[0]],
+			[name: 'file', filename: 'real.html', contentType: 'text/html', bytes: '<html>Real</html>'.bytes]
+		]
+
+		when:
+		def putConn = EntryStoreClient.putRequestMultiPartParts('/' + contextId + '/resource/' + entryId, fileParts)
+
+		then:
+		putConn.responseCode == HTTP_CREATED
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.responseCode == HTTP_OK
+		resourceConn.inputStream.readAllBytes() == '<html>Real</html>'.bytes
+		fileNameOf(contextId, entryId) == 'real.html'
+	}
+
+	def "PUT multipart /{context-id}/resource/{entry-id} uses the real upload, not an unfilled file input"() {
+		given:
+		def entryId = createEntry(contextId, [:])
+		assert entryId.length() > 0
+
+		// An unfilled <input type="file"> is submitted as a zero-byte part with an empty filename,
+		// and the servlet layer reports it as a file part like any other
+		def fileParts = [
+			[name: 'file', filename: '', contentType: 'application/octet-stream', bytes: new byte[0]],
+			[name: '0', filename: 'real.html', contentType: 'text/html', bytes: '<html>Real</html>'.bytes]
+		]
+
+		when:
+		def putConn = EntryStoreClient.putRequestMultiPartParts('/' + contextId + '/resource/' + entryId, fileParts)
+
+		then:
+		putConn.responseCode == HTTP_CREATED
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.responseCode == HTTP_OK
+		resourceConn.inputStream.readAllBytes() == '<html>Real</html>'.bytes
+		fileNameOf(contextId, entryId) == 'real.html'
+	}
+
+	def "PUT multipart /{context-id}/resource/{entry-id} with only an unfilled file input should respond with Bad Request 400"() {
+		given:
+		def entryId = createEntry(contextId, [:])
+		assert entryId.length() > 0
+
+		def fileParts = [[name: '0', filename: '', contentType: 'application/octet-stream', bytes: new byte[0]]]
+
+		when:
+		def putConn = EntryStoreClient.putRequestMultiPartParts('/' + contextId + '/resource/' + entryId, fileParts)
+
+		then:
+		putConn.responseCode == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(putConn.errorStream.text)['error'] == 'Multipart request contains no file part'
+	}
+
+	def "PUT multipart /{context-id}/resource/{entry-id} with a part carrying no filename falls back to the entry id"() {
+		given:
+		def entryId = createEntry(contextId, [:])
+		assert entryId.length() > 0
+
+		def named = [[name: 'file', filename: 'first.html', contentType: 'text/html', bytes: '<html>First</html>'.bytes]]
+		assert EntryStoreClient.putRequestMultiPartParts('/' + contextId + '/resource/' + entryId, named).responseCode == HTTP_CREATED
+		assert fileNameOf(contextId, entryId) == 'first.html'
+
+		when: 'the entry is re-uploaded through a part that carries content but no filename'
+		def unnamed = [[name: 'file', filename: '', contentType: 'text/plain', bytes: 'second'.bytes]]
+		def putConn = EntryStoreClient.putRequestMultiPartParts('/' + contextId + '/resource/' + entryId, unnamed)
+
+		then:
+		putConn.responseCode == HTTP_CREATED
+
+		and: 'the name of the previous upload does not survive onto the new content'
+		fileNameOf(contextId, entryId) == entryId
+	}
+
+	def "PUT multipart /{context-id}/resource/{entry-id} without any file part should respond with Bad Request 400"() {
+		given:
+		def entryId = createEntry(contextId, [:])
+		assert entryId.length() > 0
+
+		when:
+		def putConn = EntryStoreClient.putRequestMultiPartWithoutFile(
+			'/' + contextId + '/resource/' + entryId,
+			[mimeType: 'text/html']
+		)
+
+		then:
+		putConn.responseCode == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(putConn.errorStream.text)['error'] == 'Multipart request contains no file part'
+	}
+
+	/** Reads the filename stored for an entry, i.e. the rdfs:label of its resource. */
+	def fileNameOf(String contextId, String entryId) {
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		assert entryConn.responseCode == HTTP_OK
+		def entryJson = JSON_PARSER.parseText(entryConn.inputStream.text)
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		def resourceUri = entryJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE][0]['value'].toString()
+		return entryJson['info'][resourceUri]['http://www.w3.org/2000/01/rdf-schema#label'][0]['value']
+	}
 }

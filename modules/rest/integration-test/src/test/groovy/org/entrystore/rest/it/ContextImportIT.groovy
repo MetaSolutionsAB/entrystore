@@ -389,6 +389,50 @@ class ContextImportIT extends BaseSpec {
 		importedFileConn.inputStream.text == 'imported file content'
 	}
 
+	def "POST /{context-id}/import with a multi-part file not named 'file' should import the context"() {
+		given:
+		def partNameImportId = 'context-import-part-name'
+		getOrCreateContext([contextId: partNameImportId, name: 'context for part-name import'])
+
+		def exportConn = EntryStoreClient.getRequest('/' + contextExportId + '/export')
+		assert exportConn.getResponseCode() == HTTP_OK
+		def tempFile = File.createTempFile('export-file', '.zip')
+		tempFile.deleteOnExit()
+		tempFile.withOutputStream { out ->
+			out << exportConn.getInputStream()
+		}
+
+		when: 'the ZIP is sent in a part named "0" instead of "file"'
+		def connection = EntryStoreClient.postRequestMultiPart('/' + partNameImportId + '/import',
+			tempFile, 'admin', [:], 'application/zip', '0')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.inputStream.text == '<textarea></textarea>'
+
+		and: 'the exported entry is now present in the importing context'
+		def contextConn = EntryStoreClient.getRequest('/' + partNameImportId)
+		contextConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(contextConn.inputStream.text) == [entryIdInExportOriginally]
+
+		cleanup:
+		tempFile?.delete()
+	}
+
+	def "POST /{context-id}/import with a multi-part request carrying no file part should return Bad-Request 400"() {
+		given:
+		def noPartImportId = 'context-import-no-file-part'
+		getOrCreateContext([contextId: noPartImportId, name: 'context for no-file-part import'])
+
+		when:
+		def connection = EntryStoreClient.postRequestMultiPartWithoutFile('/' + noPartImportId + '/import',
+			[someField: 'someValue'])
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(connection.errorStream.text)['error'] == 'Multipart request contains no file part'
+	}
+
 	// Copies a context-export ZIP while overwriting the triples.rdf entry with invalid RDF, leaving
 	// export.properties intact so the import reaches the parse step (which then fails).
 	private static byte[] corruptTriplesInZip(InputStream zipInput) {
