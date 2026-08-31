@@ -1,8 +1,25 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
 import spock.lang.Unroll
 
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_OK
@@ -25,7 +42,7 @@ class EchoIT extends BaseSpec {
 	}
 
 	@Unroll
-	def 'POST /echo as "#user" with multi-part file should respond with the file contents as string in html textarea'() {
+	def 'POST /echo as #user with multi-part file should respond with the file contents as string in html textarea'() {
 		given:
 		// create a test binary file with some data
 		def testBinFile = createTempBinaryFile('echoTest', '.bin', 'Hello, its me! Mario!'.bytes)
@@ -54,6 +71,29 @@ class EchoIT extends BaseSpec {
 		echoConn.getResponseCode() == HTTP_OK
 		echoConn.getContentType().contains('text/html')
 		echoConn.inputStream.text.contains('<textarea>status:200\nHello, its me! &lt;b&gt;bold&lt;/b&gt; Mario and a hash tag # &amp; !</textarea>')
+	}
+
+	def 'POST /echo as admin with a multi-part file not named "file" should respond with the file contents'() {
+		given:
+		def testBinFile = createTempBinaryFile('echoTest', '.bin', 'Hello, its me! Mario!'.bytes)
+
+		when: 'the file is sent in a part named "0" instead of "file"'
+		def echoConn = EntryStoreClient.postRequestMultiPart('/echo', testBinFile, 'admin', [:], 'application/octet-stream', '0')
+
+		then:
+		echoConn.getResponseCode() == HTTP_OK
+		echoConn.getContentType().contains('text/html')
+		echoConn.inputStream.text.contains('<textarea>status:200\nHello, its me! Mario!</textarea>')
+	}
+
+	def 'POST /echo as admin with a multi-part request carrying no file part should respond with BAD_REQUEST 400'() {
+		when:
+		def echoConn = EntryStoreClient.postRequestMultiPartWithoutFile('/echo', [someField: 'someValue'])
+
+		then:
+		echoConn.getResponseCode() == HTTP_BAD_REQUEST
+		echoConn.getContentType().contains('text/html')
+		echoConn.errorStream.text.contains('<textarea>status:400\nMissing file part in the request</textarea>')
 	}
 
 	def 'POST /echo as admin with content other than multi-part file should respond with UNSUPPORTED_TYPE 415'() {

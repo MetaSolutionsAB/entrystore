@@ -459,14 +459,18 @@ public class ResourceService {
 			}
 			entry.setMimetype(itemMimeType);
 			String originalFilename = file.getOriginalFilename();
-			String name;
-			if (StringUtils.isBlank(originalFilename)) {
-				name = file.getName();
-				log.warn("Multipart upload missing original filename, falling back to part name '{}'", name);
+			if (StringUtils.isNotBlank(originalFilename)) {
+				entry.setFilename(FileUtil.sanitizeFilename(originalFilename));
 			} else {
-				name = originalFilename;
+				// The part name is client-controlled and carries no filename semantics, so it is not
+				// used as a fallback. The entry id is, so that a name left over from an earlier
+				// upload cannot end up describing the content stored now. It is sanitized like any
+				// other stored filename: ids of imported entries do not go through the REST layer's
+				// id validation.
+				log.warn("Multipart upload for entry '{}' is missing the original filename, falling back to the entry id",
+						entry.getEntryURI());
+				entry.setFilename(FileUtil.sanitizeFilename(entry.getId()));
 			}
-			entry.setFilename(FileUtil.sanitizeFilename(name));
 
 			return CompletionState.CREATED;
 		} catch (IOException ioe) {

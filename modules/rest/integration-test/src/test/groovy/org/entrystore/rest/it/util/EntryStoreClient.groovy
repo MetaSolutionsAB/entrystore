@@ -127,23 +127,47 @@ class EntryStoreClient {
 
 	def static putRequestMultiPart(String path, File file, String asUser = 'admin',
 								   Map<String, String> formData = [:],
-								   String partContentType = 'application/octet-stream') {
+								   String partContentType = 'application/octet-stream',
+								   String partName = 'file') {
 		def boundary = '----FormBoundary' + System.currentTimeMillis()
 		def contentType = 'multipart/form-data; boundary=' + boundary
 
-		def content = buildMultipartContent(file, formData, boundary, partContentType)
+		def content = buildMultipartContent(file, formData, boundary, partContentType, partName)
 		def inputStream = new ByteArrayInputStream(content)
 
 		return sendRequestAsStream(HttpMethod.PUT, path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
 	}
 
-	def static postRequestMultiPart(String path, File file, String asUser = 'admin',
-									Map<String, String> formData = [:],
-									String partContentType = 'application/octet-stream') {
+	/** Sends a multipart/form-data request carrying only form fields, i.e. without any file part. */
+	def static putRequestMultiPartWithoutFile(String path, Map<String, String> formData, String asUser = 'admin') {
+		return putRequestMultiPart(path, null, asUser, formData)
+	}
+
+	/** Sends a PUT built from raw file-part descriptors, see {@link #buildMultipartBody}. */
+	def static putRequestMultiPartParts(String path, List<Map> fileParts,
+										Map<String, String> formData = [:], String asUser = 'admin') {
 		def boundary = '----FormBoundary' + System.currentTimeMillis()
 		def contentType = 'multipart/form-data; boundary=' + boundary
 
-		def content = buildMultipartContent(file, formData, boundary, partContentType)
+		def content = buildMultipartBody(formData, fileParts, boundary)
+
+		return sendRequestAsStream(HttpMethod.PUT, path, new ByteArrayInputStream(content), asUser, contentType,
+			['Content-Length': content.length.toString()])
+	}
+
+	/** Sends a multipart/form-data request carrying only form fields, i.e. without any file part. */
+	def static postRequestMultiPartWithoutFile(String path, Map<String, String> formData, String asUser = 'admin') {
+		return postRequestMultiPart(path, null, asUser, formData)
+	}
+
+	def static postRequestMultiPart(String path, File file, String asUser = 'admin',
+									Map<String, String> formData = [:],
+									String partContentType = 'application/octet-stream',
+									String partName = 'file') {
+		def boundary = '----FormBoundary' + System.currentTimeMillis()
+		def contentType = 'multipart/form-data; boundary=' + boundary
+
+		def content = buildMultipartContent(file, formData, boundary, partContentType, partName)
 		def inputStream = new ByteArrayInputStream(content)
 
 		return sendRequestAsStream(HttpMethod.POST, path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
@@ -333,8 +357,21 @@ class EntryStoreClient {
 		return setCookieLines.collect { it.split(';')[0] }.join('; ')
 	}
 
+	/** Builds a multipart body of the given form fields, plus a file part when a file is given. */
 	def static buildMultipartContent(File file, Map<String, String> formData, String boundary,
-									 String partContentType = 'application/octet-stream') {
+									 String partContentType = 'application/octet-stream',
+									 String partName = 'file') {
+		def fileParts = (file == null) ? [] :
+			[[name: partName, filename: file.name, contentType: partContentType, bytes: file.bytes]]
+		return buildMultipartBody(formData, fileParts, boundary)
+	}
+
+	/**
+	 * Builds a multipart body from raw file-part descriptors, for the shapes the file-plus-form-fields
+	 * helpers cannot express: several file parts, or a part whose filename differs from the file's name.
+	 * Each descriptor is a map of [name:, filename:, contentType:, bytes:].
+	 */
+	def static buildMultipartBody(Map<String, String> formData, List<Map> fileParts, String boundary) {
 		def os = new ByteArrayOutputStream()
 
 		formData.each { name, value ->
@@ -343,11 +380,16 @@ class EntryStoreClient {
 			os.write("${value}\r\n".bytes)
 		}
 
-		os.write("--${boundary}\r\n".bytes)
-		os.write("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"\r\n".bytes)
-		os.write("Content-Type: ${partContentType}\r\n\r\n".bytes)
-		os.write(file.bytes)
-		os.write("\r\n--${boundary}--\r\n".bytes)
+		fileParts.each { part ->
+			assert part.name != null && part.filename != null && part.bytes != null:
+				"file part descriptor needs name, filename and bytes, got: " + part
+			os.write("--${boundary}\r\n".bytes)
+			os.write("Content-Disposition: form-data; name=\"${part.name}\"; filename=\"${part.filename}\"\r\n".bytes)
+			os.write("Content-Type: ${part.contentType ?: 'application/octet-stream'}\r\n\r\n".bytes)
+			os.write(part.bytes as byte[])
+			os.write("\r\n".bytes)
+		}
+		os.write("--${boundary}--\r\n".bytes)
 
 		return os.toByteArray()
 	}
