@@ -164,6 +164,7 @@ class MultipartUtilTest {
 		assertTrue(resolved.isPresent());
 		assertArrayEquals("payload".getBytes(StandardCharsets.UTF_8), resolved.get().getBytes());
 	}
+
 	@Test
 	void returnsTheFilePartOfARequestThatAlsoCarriesFormFields() {
 		MockMultipartHttpServletRequest request = new MockMultipartHttpServletRequest();
