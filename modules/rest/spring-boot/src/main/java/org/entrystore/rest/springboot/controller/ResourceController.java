@@ -204,9 +204,13 @@ public class ResourceController {
 			content = @Content(
 					mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
 					schema = @Schema(type = "object"),
-					schemaProperties = @SchemaProperty(
-							name = "file",
-							schema = @Schema(type = "string", format = "binary"))))
+					schemaProperties = {
+							@SchemaProperty(
+									name = "file",
+									schema = @Schema(type = "string", format = "binary")),
+							@SchemaProperty(
+									name = "mimeType",
+									schema = @Schema(type = "string"))}))
 	@PutMapping(
 			path = "/{context-id}/resource/{entry-id}",
 			consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

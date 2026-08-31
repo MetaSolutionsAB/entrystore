@@ -42,10 +42,10 @@ public class MultipartUtil {
 	 * still submitted, as a zero-byte part with {@code filename=""} that the servlet layer reports as
 	 * a file part like any other, and such a placeholder must never win over a real upload.
 	 * <p>
-	 * Every part is considered, including several sharing one name, in the order Spring reports them
-	 * — {@link MultipartRequest#getMultiFileMap()} is filled from the container's parts, which is
-	 * request-body order. {@link MultipartRequest#getFileMap()} is deliberately not used here: it is
-	 * a single-value view that keeps only the first part of each name, which would hide the real
+	 * Every part is considered, including several sharing one name, in the order Spring reports them,
+	 * grouped by part name: {@link MultipartRequest#getMultiFileMap()} is keyed by name, so a body of
+	 * a, b, a is seen as a, a, b. {@link MultipartRequest#getFileMap()} is deliberately not used: it
+	 * is a single-value view that keeps only the first part of each name, which would hide the real
 	 * upload behind an unfilled input of the same name.
 	 *
 	 * @param request the multipart request to read the file part from
