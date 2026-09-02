@@ -25,8 +25,8 @@ stepdefinitions:
         - mkdir -p smoke-data
         - export VERSION=`cat VERSION.txt`
         - java -jar modules/rest/spring-boot/target/entrystore-rest-spring-boot-${VERSION}-exec.jar --server.port=8299 > smoke.log 2>&1 & echo $! > smoke.pid
-        - for i in $(seq 1 60); do curl -fsS http://localhost:8299/management/status && break || sleep 2; done
-        - curl -fsS http://localhost:8299/management/status || (echo "--- exec jar failed to start ---"; tail -100 smoke.log; kill $(cat smoke.pid) 2>/dev/null; exit 1)
+        - for i in $(seq 1 60); do curl -fsS http://localhost:8299/store/management/status && break || sleep 2; done
+        - curl -fsS http://localhost:8299/store/management/status || (echo "--- exec jar failed to start ---"; tail -100 smoke.log; kill $(cat smoke.pid) 2>/dev/null; exit 1)
         # Cleanup only — never let a failed kill (process already gone) fail the step.
         - kill $(cat smoke.pid) 2>/dev/null || true
         - rm -f entrystore.properties smoke.pid

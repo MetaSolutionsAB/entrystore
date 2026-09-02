@@ -505,7 +505,7 @@ class SignupResourceIT extends BaseSpec {
 		confirmConn.getContentType().contains('text/html')
 		def body = confirmConn.errorStream.text
 		body.contains('Invalid confirmation link.')
-		body.contains('<a href="http://localhost:8181"')
+		body.contains('<a href="' + EntryStoreClient.baseUrl + '"')
 	}
 
 	def "GET /auth/signup should not confirm creating new user after signing up with already used token"() {
@@ -672,7 +672,7 @@ class SignupResourceIT extends BaseSpec {
 
 		then:
 		confirmConn.getResponseCode() == HTTP_CREATED
-		confirmConn.getURL().toString() == 'http://localhost:8181/auth/signup?confirm=' + token
+		confirmConn.getURL().toString() == EntryStoreClient.baseUrl + '/auth/signup?confirm=' + token
 	}
 
 	def "GET /auth/signup should not confirm user signup and redirect to failure url"() {

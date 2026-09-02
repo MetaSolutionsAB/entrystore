@@ -560,7 +560,7 @@ class PasswordResetResourceIT extends BaseSpec {
 
 		then:
 		confirmConn.getResponseCode() == HTTP_OK
-		confirmConn.getURL().toString() == 'http://localhost:8181/auth/pwreset?confirm=' + token
+		confirmConn.getURL().toString() == EntryStoreClient.baseUrl + '/auth/pwreset?confirm=' + token
 	}
 
 	def "GET /auth/pwreset should not confirm password reset for a non-existing user and redirect to failure url"() {

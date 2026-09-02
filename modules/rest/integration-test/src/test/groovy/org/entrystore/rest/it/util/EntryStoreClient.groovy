@@ -24,7 +24,8 @@ class EntryStoreClient {
 	static String host = 'localhost'
 	static int port = 8181 // Math.abs(new Random().nextInt() % 50000) + 10000
 	static String origin = 'http://' + host + ':' + port
-	static String baseUrl = origin + '/store'
+	static String contextPath = '/store'
+	static String baseUrl = origin + contextPath
 	static String adminsGroupUri = baseUrl + '/_principals/resource/_admins'
 
 	static def emptyJsonBody = JsonOutput.toJson([:])
@@ -184,16 +185,17 @@ class EntryStoreClient {
 	/**
 	 *
 	 * @param path can be a local path. e.g. /_contexts/entry/_principals or a full URL
+	 * or a local path with context e.g. /store/*
 	 * @return
 	 */
 	def static createConnection(String path) {
-		def hostInfo = ''
-		if (path.startsWith('/')) {
-			hostInfo = origin
-		} else {
-			path = path.replaceFirst('/store', '')
+		def hostUrl = ''
+		if (path.startsWith(contextPath)) {
+			hostUrl = origin
+		} else if (path.startsWith('/')) {
+			hostUrl = baseUrl
 		}
-		return (HttpURLConnection) new URI(hostInfo + path).toURL().openConnection()
+		return (HttpURLConnection) new URI(hostUrl + path).toURL().openConnection()
 	}
 
 	def static authorize(String asUser) {

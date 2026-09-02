@@ -26,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -66,11 +67,9 @@ import org.springframework.stereotype.Service;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.security.SecureRandom;
 import java.util.function.Consumer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -456,8 +455,8 @@ public class AuthService {
 	public String confirmSignup(String token, String title) {
 		SignupInfo signupInfo = signupTokenCache.getTokenValue(token);
 		if (signupInfo == null) {
-			URL bURL = repositoryManager.getRepositoryURL();
-			String appURL = bURL.getProtocol() + "://" + bURL.getHost() + (Arrays.asList(-1, 80, 443).contains(bURL.getPort()) ? "" : ":" + bURL.getPort());
+			// The "sign up again" link must stay inside the mount point (entrystore.baseurl.folder), not the host root.
+			String appURL = Strings.CS.removeEnd(repositoryManager.getRepositoryURL().toExternalForm(), "/");
 			throw new BadRequestHtmlException(INVALID_SIGNUP_TOKEN_MESSAGE, title, appURL);
 		}
 		signupTokenCache.removeToken(token);

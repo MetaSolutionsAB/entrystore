@@ -35,6 +35,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.util.UrlUtils;
 
 import java.io.IOException;
 import java.util.Date;
@@ -205,16 +206,20 @@ public class HttpUtil {
 	 * Redirects to the given URL if non-null, otherwise writes a 401 JSON error response.
 	 * Safe to call from servlet filter context (no exceptions thrown to the filter chain).
 	 *
+	 * <p>A context-relative {@code redirectUrl} (e.g. the default {@code /auth/user}) is prefixed with the
+	 * servlet context path, mirroring Spring Security's {@code DefaultRedirectStrategy}; the container
+	 * would otherwise resolve it against the server root.
+	 *
 	 * @param failureMessage message for the JSON fallback body (e.g. "CAS login failed")
 	 */
-	public static void redirectOrWriteUnauthorized(HttpServletResponse response, String requestUri,
+	public static void redirectOrWriteUnauthorized(HttpServletRequest request, HttpServletResponse response,
 												   String redirectUrl, String failureMessage) throws IOException {
 		if (redirectUrl != null) {
-			response.sendRedirect(redirectUrl);
+			response.sendRedirect(UrlUtils.isAbsoluteUrl(redirectUrl) ? redirectUrl : request.getContextPath() + redirectUrl);
 		} else {
 			writeErrorResponseAsJson(response, ErrorResponse.builder()
 					.status(HttpStatus.UNAUTHORIZED.value())
-					.path(requestUri)
+					.path(request.getRequestURI())
 					.error(failureMessage != null ? failureMessage : "SSO login failed")
 					.build());
 		}
