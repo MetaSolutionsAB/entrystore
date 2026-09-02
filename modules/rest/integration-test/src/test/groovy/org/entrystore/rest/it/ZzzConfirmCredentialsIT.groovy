@@ -103,6 +103,9 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		body.contains('name="password"')
 		body.contains('name="confirm"')
 		body.contains(token)
+
+		and: 'the form posts back into the application, i.e. under the servlet context path'
+		body.contains('action="' + EntryStoreClient.contextPath + '/auth/signup/confirm"')
 	}
 
 	def "POST /auth/signup/confirm creates the user with a valid token and matching credentials"() {
@@ -319,6 +322,9 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		body.contains('name="email"')
 		body.contains('name="password"')
 		body.contains(token)
+
+		and: 'the form posts back into the application, i.e. under the servlet context path'
+		body.contains('action="' + EntryStoreClient.contextPath + '/auth/pwreset/confirm"')
 	}
 
 	def "GET /auth/pwreset with an unknown token does not render the form"() {

@@ -46,7 +46,8 @@ public class EntryEndpointContentNegotiationStrategy implements ContentNegotiati
 	@Override
 	public @NonNull List<MediaType> resolveMediaTypes(NativeWebRequest webRequest) throws HttpMediaTypeNotAcceptableException {
 		HttpServletRequest servletRequest = webRequest.getNativeRequest(HttpServletRequest.class);
-		if (servletRequest != null && HttpMethod.GET.name().equals(servletRequest.getMethod()) && ENTRY_URL_PATTERN.matcher(servletRequest.getRequestURI()).matches()) {
+		// Servlet path excludes the context path (server.servlet.context-path), which getRequestURI() includes.
+		if (servletRequest != null && HttpMethod.GET.name().equals(servletRequest.getMethod()) && ENTRY_URL_PATTERN.matcher(servletRequest.getServletPath()).matches()) {
 			String accept = servletRequest.getHeader("Accept");
 			if (StringUtils.isEmpty(accept) || MediaType.ALL_VALUE.equals(accept)) {
 				return List.of(MediaType.valueOf(GraphUtil.DEFAULT_RDF_MEDIA_TYPE));

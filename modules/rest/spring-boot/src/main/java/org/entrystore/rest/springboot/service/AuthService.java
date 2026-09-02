@@ -23,6 +23,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -69,7 +70,6 @@ import org.springframework.stereotype.Service;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.security.SecureRandom;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -78,7 +78,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Collectors;
@@ -656,10 +655,13 @@ public class AuthService {
 		return trimmed;
 	}
 
+	/**
+	 * The EntryStore mount point ({@code entrystore.baseurl.folder} without its trailing slash), used as the
+	 * "sign up again" link on the invalid-token pages so it stays correct when the app is served under a
+	 * path prefix.
+	 */
 	private String appBaseUrl() {
-		URL url = repositoryManager.getRepositoryURL();
-		boolean isDefaultPort = url.getPort() == -1 || url.getPort() == 80 || url.getPort() == 443;
-		return url.getProtocol() + "://" + url.getHost() + (isDefaultPort ? "" : ":" + url.getPort());
+		return Strings.CS.removeEnd(repositoryManager.getRepositoryURL().toExternalForm(), "/");
 	}
 
 	/**

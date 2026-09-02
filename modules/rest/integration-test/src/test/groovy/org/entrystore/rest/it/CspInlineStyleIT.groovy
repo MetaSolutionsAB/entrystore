@@ -85,9 +85,7 @@ class CspInlineStyleIT extends BaseSpec {
 
 	def 'the linked stylesheet must be served by EntryStore as CSS once the proxy prefix is stripped'() {
 		when: 'the href is requested the way the proxy forwards it, with the base prefix removed'
-		def connection = (HttpURLConnection) URI
-				.create(EntryStoreClient.origin + STYLESHEET_HREF.substring(BASE_PREFIX.length()))
-				.toURL().openConnection()
+		def connection = EntryStoreClient.getRequest(STYLESHEET_HREF.substring(BASE_PREFIX.length()), '', '')
 
 		then:
 		connection.getResponseCode() == HTTP_OK
