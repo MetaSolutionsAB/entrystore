@@ -35,14 +35,16 @@ class SearchIT extends BaseSpec {
 
 	def static contextId = 'searchContextId'
 	def static entryId = ''
+	def static entryId2 = ''
 	def static decimalEntryId = ''
 	def static malformedDecimalEntryId = ''
 
-	// Test-only predicate attached to this IT's entries so SPARQL syndication tests can query
-	// for a result set containing only SearchIT's entries, regardless of what other ITs have
-	// added to the shared repository. Without this the feed's default-size window fills with
-	// dc:title-bearing entries from other ITs and pushes SearchIT's entries out.
+	// Test-only predicate attached to this IT's entries so the SPARQL specs can query a result
+	// set containing only SearchIT's entries, regardless of what other ITs have added to the
+	// shared repository. Without it the JSON specs' exact counts depend on shared state and the
+	// syndication feed's default-size window fills with other ITs' dc:title-bearing entries.
 	static final String MARKER_PREDICATE_IRI = 'http://example.org/ns/searchIT-marker'
+	static final String MARKER_PREDICATE_QUERY = '<' + MARKER_PREDICATE_IRI + '>'
 
 	// Test-only predicate carrying an xsd:double literal, used by the numeric range-query specs.
 	// Its Solr dynamic field is derived from the predicate IRI with the same MD5 truncation the
@@ -124,11 +126,12 @@ class SearchIT extends BaseSpec {
 								  [type: 'literal', value: 'searchIT-entry-2']
 							  ]
 						  ]]]
-		getOrCreateEntry(contextId, secondParams, secondBody)
+		entryId2 = getOrCreateEntry(contextId, secondParams, secondBody)
+		assert entryId2.length() > 0
 
 		// Entry carrying only an xsd:double literal — deliberately no dc:title/dc:description/marker
-		// predicate, so the count assertions in the other specs (results == 1, item.size() == 2) stay
-		// valid. Used by the numeric range-query specs below.
+		// predicate, so the exact-count assertions in the other specs stay valid. Used by the numeric
+		// range-query specs below.
 		def decimalParams = [id: 'searchDecimalEntryId', graphtype: 'string']
 		def decimalBody = [resource: 'Decimal text',
 						   metadata: [(newResourceIri): [
@@ -589,9 +592,9 @@ class SearchIT extends BaseSpec {
 		'; DROP'                | _ // semicolon injection
 	}
 
-	def "GET /search?type=sparql with valid full IRI predicate should return results"() {
+	def "GET /search?type=sparql with valid full IRI predicate should return only the marker-bearing entries"() {
 		given:
-		def queryParams = [type: 'sparql', query: '<http://purl.org/dc/terms/title>']
+		def queryParams = [type: 'sparql', query: MARKER_PREDICATE_QUERY]
 
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
@@ -600,11 +603,11 @@ class SearchIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
 		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
-		respJson['results'] > 0
+		respJson['results'] == 2
 		respJson['resource'] != null
 		respJson['resource']['children'] != null
 		def results = respJson['resource']['children'].collect()
-		results.size() > 0
+		results.collect { it['entryId'] }.toSet() == [entryId, entryId2].toSet()
 		results[0]['metadata'] != null
 	}
 
@@ -624,9 +627,9 @@ class SearchIT extends BaseSpec {
 		respJson['error'].toString().contains('Not Found')
 	}
 
-	def "GET /search?type=sparql&query=dc:title as admin should return entries json response with entries having 'dc:title' predicate"() {
+	def "GET /search?type=sparql with test-only marker predicate as admin should return entries json response with this IT's entries"() {
 		given:
-		def queryParams = [type: 'sparql', query: 'dc:title']
+		def queryParams = [type: 'sparql', query: MARKER_PREDICATE_QUERY]
 
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
@@ -636,12 +639,12 @@ class SearchIT extends BaseSpec {
 		conn.getContentType().contains('application/json')
 		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
 		respJson['offset'] == 0
-		respJson['results'] > 1
+		respJson['results'] == 2
 		respJson['resource'] != null
 		respJson['resource']['children'] != null
 		def results = respJson['resource']['children'].collect()
+		results.collect { it['entryId'] }.toSet() == [entryId, entryId2].toSet()
 		def searchTestEntry = results.find { it['entryId'] == entryId }
-		searchTestEntry != null
 		searchTestEntry['metadata'] != null
 		def metadataMap = (searchTestEntry['metadata'] as Map).values()
 		metadataMap.size() == 1
@@ -652,9 +655,9 @@ class SearchIT extends BaseSpec {
 		dcTitle.find { it['lang'] == 'en' && it['value'] == 'local metadata title explicitly in EN' } != null
 	}
 
-	def "GET /search?type=sparql&query=dc:title&rdfFormat=ld+json should return ld+json response with entries having 'dc:title' predicate"() {
+	def "GET /search?type=sparql with test-only marker predicate, rdfFormat=ld+json should return ld+json response with this IT's entries"() {
 		given:
-		def queryParams = [type: 'sparql', query: 'dc:title', rdfFormat: 'application/ld+json']
+		def queryParams = [type: 'sparql', query: MARKER_PREDICATE_QUERY, rdfFormat: 'application/ld+json']
 
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
@@ -664,12 +667,12 @@ class SearchIT extends BaseSpec {
 		conn.getContentType().contains('application/json')
 		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
 		respJson['offset'] == 0
-		respJson['results'] > 1
+		respJson['results'] == 2
 		respJson['resource'] != null
 		respJson['resource']['children'] != null
 		def results = respJson['resource']['children'].collect()
+		results.collect { it['entryId'] }.toSet() == [entryId, entryId2].toSet()
 		def searchTestEntry = results.find { it['entryId'] == entryId }
-		searchTestEntry != null
 		searchTestEntry['metadata'] != null
 		searchTestEntry['metadata']['@graph'] != null
 		def metadataMap = searchTestEntry['metadata']['@graph'].collect()
@@ -700,7 +703,7 @@ class SearchIT extends BaseSpec {
 		respXml['channel'].size() == 1
 		def channelNode = respXml['channel'][0] as Node
 		channelNode['title'][0]?.value()?[0] == 'Syndication feed of search'
-		// SearchIT populates 2 dc:title-bearing entries in setupSpec, so both must appear in the feed.
+		// setupSpec guarantees the repo holds >= 2 dc:title-bearing entries, so the feed has >= 2 items.
 		channelNode['item'].size() >= 2
 		// A curie-resolution regression could return items with the namespace declared but empty
 		// <title> elements; assert at least one item has a non-empty title.
@@ -711,7 +714,7 @@ class SearchIT extends BaseSpec {
 		given:
 		// Narrow to SearchIT's own entries via the marker predicate — avoids the 50-item feed
 		// window being exhausted by dc:title-bearing entries from other ITs.
-		def queryParams = [type: 'sparql', query: '<' + MARKER_PREDICATE_IRI + '>', syndication: 'rss_2.0']
+		def queryParams = [type: 'sparql', query: MARKER_PREDICATE_QUERY, syndication: 'rss_2.0']
 
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
@@ -753,7 +756,7 @@ class SearchIT extends BaseSpec {
 		// The marker predicate is unique to SearchIT's 2 entries.
 		channelNode['item'].size() == 2
 		def entry1Item = channelNode['item'].find { Node item ->
-			(item['link'][0]?.value()?[0] as String) == EntryStoreClient.baseUrl + '/' + contextId + '/resource/searchEntryId'
+			(item['link'][0]?.value()?[0] as String) == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryId
 		} as Node
 		entry1Item != null
 		entry1Item['title'][0].value()[0] == 'local metadata title explicitly in EN'
@@ -762,7 +765,7 @@ class SearchIT extends BaseSpec {
 
 	def "GET /search?type=sparql with test-only marker predicate, syndication=atom_1.0 should return atom feed with this IT's entries, defaulting to explicit English text"() {
 		given:
-		def queryParams = [type: 'sparql', query: '<' + MARKER_PREDICATE_IRI + '>', syndication: 'atom_1.0']
+		def queryParams = [type: 'sparql', query: MARKER_PREDICATE_QUERY, syndication: 'atom_1.0']
 
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
@@ -798,7 +801,7 @@ class SearchIT extends BaseSpec {
 
 		respXml['entry'].size() == 2
 		def entry1AtomEntry = respXml['entry'].find { Node e ->
-			(e['link'][0] as Node).attribute('href') == EntryStoreClient.baseUrl + '/' + contextId + '/resource/searchEntryId'
+			(e['link'][0] as Node).attribute('href') == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryId
 		} as Node
 		entry1AtomEntry != null
 		entry1AtomEntry['title'][0].value()[0] == 'local metadata title explicitly in EN'
@@ -807,7 +810,7 @@ class SearchIT extends BaseSpec {
 
 	def "GET /search?type=sparql with test-only marker predicate, syndication=atom_1.0&lang=pl should return atom feed with this IT's entries, with values explicitly in Polish"() {
 		given:
-		def queryParams = [type: 'sparql', query: '<' + MARKER_PREDICATE_IRI + '>', syndication: 'atom_1.0', lang: 'pl']
+		def queryParams = [type: 'sparql', query: MARKER_PREDICATE_QUERY, syndication: 'atom_1.0', lang: 'pl']
 
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
@@ -843,7 +846,7 @@ class SearchIT extends BaseSpec {
 
 		respXml['entry'].size() == 2
 		def entry1PlAtomEntry = respXml['entry'].find { Node e ->
-			(e['link'][0] as Node).attribute('href') == EntryStoreClient.baseUrl + '/' + contextId + '/resource/searchEntryId'
+			(e['link'][0] as Node).attribute('href') == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryId
 		} as Node
 		entry1PlAtomEntry != null
 		entry1PlAtomEntry['title'][0].value()[0] == 'lokalne metadane tytułsearch jawnie po polsku'
