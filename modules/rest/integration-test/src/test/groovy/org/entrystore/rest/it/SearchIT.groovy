@@ -592,9 +592,10 @@ class SearchIT extends BaseSpec {
 		'; DROP'                | _ // semicolon injection
 	}
 
-	def "GET /search?type=sparql with valid full IRI predicate should return only the marker-bearing entries"() {
+	def "GET /search?type=sparql with valid full IRI predicate should return only the entries bearing that predicate"() {
 		given:
-		def queryParams = [type: 'sparql', query: MARKER_PREDICATE_QUERY]
+		// Covers the full-IRI accept path against a different entry set than the marker specs below.
+		def queryParams = [type: 'sparql', query: '<' + DECIMAL_PREDICATE_IRI + '>']
 
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
@@ -607,7 +608,8 @@ class SearchIT extends BaseSpec {
 		respJson['resource'] != null
 		respJson['resource']['children'] != null
 		def results = respJson['resource']['children'].collect()
-		results.collect { it['entryId'] }.toSet() == [entryId, entryId2].toSet()
+		results.size() == 2
+		results.collect { it['entryId'] }.toSet() == [decimalEntryId, malformedDecimalEntryId].toSet()
 		results[0]['metadata'] != null
 	}
 
@@ -643,6 +645,7 @@ class SearchIT extends BaseSpec {
 		respJson['resource'] != null
 		respJson['resource']['children'] != null
 		def results = respJson['resource']['children'].collect()
+		results.size() == 2
 		results.collect { it['entryId'] }.toSet() == [entryId, entryId2].toSet()
 		def searchTestEntry = results.find { it['entryId'] == entryId }
 		searchTestEntry['metadata'] != null
@@ -671,6 +674,7 @@ class SearchIT extends BaseSpec {
 		respJson['resource'] != null
 		respJson['resource']['children'] != null
 		def results = respJson['resource']['children'].collect()
+		results.size() == 2
 		results.collect { it['entryId'] }.toSet() == [entryId, entryId2].toSet()
 		def searchTestEntry = results.find { it['entryId'] == entryId }
 		searchTestEntry['metadata'] != null
