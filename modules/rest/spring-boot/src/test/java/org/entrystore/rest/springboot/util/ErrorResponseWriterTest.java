@@ -19,6 +19,7 @@ package org.entrystore.rest.springboot.util;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -83,7 +84,7 @@ class ErrorResponseWriterTest {
 	void redirectOrWriteUnauthorized_withRedirectUrl_redirectsWithoutWritingBody() throws Exception {
 		var response = new MockHttpServletResponse();
 
-		writer.redirectOrWriteUnauthorized(response, "/login/saml2/sso/idp", "https://example.org/failed", "SAML login failed");
+		writer.redirectOrWriteUnauthorized(request("/login/saml2/sso/idp"), response, "https://example.org/failed", "SAML login failed");
 
 		assertEquals("https://example.org/failed", response.getRedirectedUrl());
 		assertEquals("", response.getContentAsString());
@@ -99,7 +100,7 @@ class ErrorResponseWriterTest {
 		response.flushBuffer();
 
 		assertDoesNotThrow(() -> writer.redirectOrWriteUnauthorized(
-				response, "/login/cas", "https://example.org/failed", "CAS login failed"));
+				request("/login/cas"), response, "https://example.org/failed", "CAS login failed"));
 
 		assertNull(response.getRedirectedUrl());
 	}
@@ -108,7 +109,7 @@ class ErrorResponseWriterTest {
 	void redirectOrWriteUnauthorized_withoutRedirectUrl_writes401WithFailureMessage() throws Exception {
 		var response = new MockHttpServletResponse();
 
-		writer.redirectOrWriteUnauthorized(response, "/login/cas", null, "CAS login failed");
+		writer.redirectOrWriteUnauthorized(request("/login/cas"), response, null, "CAS login failed");
 
 		assertEquals(HttpStatus.UNAUTHORIZED.value(), response.getStatus());
 		assertTrue(response.getContentAsString().contains("\"error\":\"CAS login failed\""));
@@ -118,8 +119,47 @@ class ErrorResponseWriterTest {
 	void redirectOrWriteUnauthorized_nullFailureMessage_fallsBackToGenericText() throws Exception {
 		var response = new MockHttpServletResponse();
 
-		writer.redirectOrWriteUnauthorized(response, "/login/cas", null, null);
+		writer.redirectOrWriteUnauthorized(request("/login/cas"), response, null, null);
 
 		assertTrue(response.getContentAsString().contains("\"error\":\"SSO login failed\""));
+	}
+
+	@Test
+	void redirectOrWriteUnauthorized_contextRelativeUrl_isPrefixedWithTheContextPath() throws Exception {
+		// The default failure URL (/auth/user) is context-relative; a raw sendRedirect would resolve it
+		// against the server root and 404 when the app is served under a servlet context path.
+		var response = new MockHttpServletResponse();
+
+		writer.redirectOrWriteUnauthorized(request("/store", "/store/login/cas"), response, "/auth/user", "CAS login failed");
+
+		assertEquals("/store/auth/user", response.getRedirectedUrl());
+	}
+
+	@Test
+	void redirectOrWriteUnauthorized_absoluteUrl_isNotPrefixedWithTheContextPath() throws Exception {
+		var response = new MockHttpServletResponse();
+
+		writer.redirectOrWriteUnauthorized(request("/store", "/store/login/cas"), response, "https://app.example.org/login", "CAS login failed");
+
+		assertEquals("https://app.example.org/login", response.getRedirectedUrl());
+	}
+
+	@Test
+	void redirectOrWriteUnauthorized_withoutRedirectUrl_reportsTheRequestUriAsPath() throws Exception {
+		var response = new MockHttpServletResponse();
+
+		writer.redirectOrWriteUnauthorized(request("/store", "/store/login/cas"), response, null, "CAS login failed");
+
+		assertTrue(response.getContentAsString().contains("\"path\":\"/store/login/cas\""));
+	}
+
+	private static MockHttpServletRequest request(String requestUri) {
+		return request("", requestUri);
+	}
+
+	private static MockHttpServletRequest request(String contextPath, String requestUri) {
+		var request = new MockHttpServletRequest("GET", requestUri);
+		request.setContextPath(contextPath);
+		return request;
 	}
 }

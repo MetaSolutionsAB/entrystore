@@ -117,7 +117,7 @@ class ManagementLoggingIT extends BaseSpec {
 
 		assert appender.events.count {
 			it.level == Level.DEBUG &&
-					it.message.formattedMessage.contains("General ErrorResponse Exception of type 'org.springframework.web.HttpRequestMethodNotSupportedException' at endpoint '/management/status'. Error: ")
+					it.message.formattedMessage.contains("General ErrorResponse Exception of type 'org.springframework.web.HttpRequestMethodNotSupportedException' at endpoint '/store/management/status'. Error: ")
 		} == 1
 
 		// Trigger a 409 response - should be logged at WARN level
@@ -150,7 +150,7 @@ class ManagementLoggingIT extends BaseSpec {
 		then: 'the DEBUG event is not captured (configured level is INFO)'
 		appender.events.count {
 			it.level == Level.DEBUG &&
-					it.message.formattedMessage.contains("General ErrorResponse Exception of type 'org.springframework.web.HttpRequestMethodNotSupportedException' at endpoint '/management/status'. Error: ")
+					it.message.formattedMessage.contains("General ErrorResponse Exception of type 'org.springframework.web.HttpRequestMethodNotSupportedException' at endpoint '/store/management/status'. Error: ")
 		} == 1
 
 		when: 'a 409 is triggered (WARN is still emitted)'

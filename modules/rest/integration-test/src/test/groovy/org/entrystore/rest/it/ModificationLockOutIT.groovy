@@ -67,7 +67,7 @@ class ModificationLockOutIT extends BaseSpec {
 		connection.getContentType().contains('application/json')
 		def body = JSON_PARSER.parseText(connection.errorStream.text)
 		body['status'] == HTTP_UNAVAILABLE
-		body['path'] == '/_principals/groups'
+		body['path'] == EntryStoreClient.contextPath + '/_principals/groups'
 		body['error'] == 'The service is being maintained and does not accept modification requests right now, please check back later'
 		body['timestamp'] != null
 	}
@@ -153,7 +153,7 @@ class ModificationLockOutIT extends BaseSpec {
 
 		when:
 		def request = HttpRequest.newBuilder()
-				.uri(URI.create(EntryStoreClient.origin + '/' + contextId + '/entry/' + entryId))
+				.uri(URI.create(EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId))
 				.header('Content-Type', 'application/json')
 				.header('Cookie', EntryStoreClient.cookies['admin'].toString())
 				.method('PATCH', HttpRequest.BodyPublishers.ofString('{"resource":"https://example.com/patched"}'))

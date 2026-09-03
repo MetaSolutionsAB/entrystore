@@ -10,7 +10,7 @@
     <br/>
     <p th:text="${intro}">Please confirm this request.</p>
     <p th:if="${error}" th:text="${error}" class="error">error</p>
-    <form th:action="${action}" method="post">
+    <form th:action="@{${action}}" method="post">
         E-Mail address<br/><input type="text" name="email"><br/>
         <span th:text="${passwordLabel}">Password</span><br/><input type="password" name="password"><br/>
         <input type="hidden" name="confirm" th:value="${token}"/>

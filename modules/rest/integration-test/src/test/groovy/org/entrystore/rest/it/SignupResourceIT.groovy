@@ -447,7 +447,7 @@ class SignupResourceIT extends BaseSpec {
 		confirmConn.getContentType().contains('text/html')
 		def body = confirmConn.errorStream.text
 		body.contains('Invalid confirmation link.')
-		body.contains('<a href="' + EntryStoreClient.origin + '"')
+		body.contains('<a href="' + EntryStoreClient.baseUrl + '"')
 	}
 
 	def "GET /auth/signup should not confirm creating new user after signing up with already used token"() {

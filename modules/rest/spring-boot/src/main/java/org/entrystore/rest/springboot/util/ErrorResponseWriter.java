@@ -16,12 +16,14 @@
 
 package org.entrystore.rest.springboot.util;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.web.util.UrlUtils;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
@@ -69,20 +71,24 @@ public class ErrorResponseWriter {
 	 * {@code IllegalStateException} in that case — which would escape the Security filter chain as a
 	 * raw container 500 instead of the intended failure response.
 	 *
+	 * <p>A context-relative {@code redirectUrl} (e.g. the default {@code /auth/user}) is prefixed with the
+	 * servlet context path, mirroring Spring Security's {@code DefaultRedirectStrategy}; the container
+	 * would otherwise resolve it against the server root.
+	 *
 	 * @param failureMessage message for the JSON fallback body (e.g. "CAS login failed")
 	 */
-	public void redirectOrWriteUnauthorized(HttpServletResponse response, String requestUri,
+	public void redirectOrWriteUnauthorized(HttpServletRequest request, HttpServletResponse response,
 											String redirectUrl, String failureMessage) throws IOException {
 		if (redirectUrl != null) {
 			if (response.isCommitted()) {
 				log.warn("Cannot redirect to the SSO failure URL — response already committed");
 				return;
 			}
-			response.sendRedirect(redirectUrl);
+			response.sendRedirect(UrlUtils.isAbsoluteUrl(redirectUrl) ? redirectUrl : request.getContextPath() + redirectUrl);
 		} else {
 			writeErrorResponseAsJson(response, ErrorResponse.builder()
 					.status(HttpStatus.UNAUTHORIZED.value())
-					.path(requestUri)
+					.path(request.getRequestURI())
 					.error(failureMessage != null ? failureMessage : "SSO login failed")
 					.build());
 		}

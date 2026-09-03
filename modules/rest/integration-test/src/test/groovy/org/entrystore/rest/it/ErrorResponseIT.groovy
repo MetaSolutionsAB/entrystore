@@ -287,7 +287,7 @@ class ErrorResponseIT extends BaseSpec {
 		resp['status'] == 404
 		resp['error'] == 'Not Found'
 		resp['timestamp'] != null
-		resp['path'] == '/no/such/route/here'
+		resp['path'] == EntryStoreClient.contextPath + '/no/such/route/here'
 	}
 
 	// ========================
@@ -328,7 +328,7 @@ class ErrorResponseIT extends BaseSpec {
 		resp['status'] == 406
 		resp['error'] != null
 		resp['timestamp'] != null
-		resp['path'] == '/management/status'
+		resp['path'] == EntryStoreClient.contextPath + '/management/status'
 	}
 
 	def "GET /{context-id}/metadata/{entry-id}?format=application/invalid-rdf should return 406 with JSON error response"() {
