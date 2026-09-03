@@ -384,14 +384,23 @@ public class ResourceJsonSerializer {
 
 	public JSONObject serializeResourceNone(Resource resource) {
 		JSONObject resourceObj = new JSONObject();
-		DataImpl data = new DataImpl(resource.getEntry());
-		String digest = data.readDigest();
+		String digest = readDigest(resource.getEntry());
 		if (digest != null) {
 			resourceObj.put("sha256", digest);
-		} else {
-			log.debug("Digest does not exist for [{}]", resource.getURI());
 		}
 		return resourceObj;
+	}
+
+	/**
+	 * Returns the stored SHA-256 hex digest of a local binary entry's data, or null when the resource is not a
+	 * {@link DataImpl} or its digest file is missing or unreadable.
+	 */
+	public String readDigest(Entry entry) {
+		String digest = entry.getResource() instanceof DataImpl data ? data.readDigest() : null;
+		if (digest == null) {
+			log.debug("No digest available for [{}]", entry.getResourceURI());
+		}
+		return digest;
 	}
 
 	public JSONArray serializeResourceContext(Resource resource) {

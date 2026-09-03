@@ -22,16 +22,22 @@ import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
+import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.ResourceType;
 import org.entrystore.User;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.impl.StringResource;
 import org.entrystore.rest.springboot.model.api.ListFilter;
+import org.entrystore.rest.springboot.model.api.ResourceQuery;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
+import org.entrystore.rest.springboot.model.dto.RenderedFeed;
+import org.entrystore.rest.springboot.model.dto.ResourceRepresentation;
 import org.entrystore.rest.springboot.util.EmailSender;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.json.JSONArray;
@@ -49,9 +55,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -68,6 +78,7 @@ import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -107,6 +118,9 @@ class ResourceServiceTest {
 	@Mock
 	private EmailSender emailSender;
 
+	@Mock
+	private SyndicationService syndicationService;
+
 	private ResourceService service;
 
 	@BeforeEach
@@ -115,7 +129,7 @@ class ResourceServiceTest {
 		// exercise the parsing these cases depend on.
 		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, ssrfValidator,
 				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()), authService, emailSender,
-				JsonMapper.builder().build());
+				JsonMapper.builder().build(), syndicationService);
 		// Point importTmpDir at the JUnit-managed isolated directory so the
 		// temp-file cleanup assertions are scoped to this test and cannot be
 		// polluted by other processes or orphan files in the shared system temp.
@@ -170,6 +184,177 @@ class ResourceServiceTest {
 
 	private static byte[] passwordBody(String password) {
 		return ("{\"password\":\"" + password + "\"}").getBytes(StandardCharsets.UTF_8);
+	}
+
+	@Test
+	void getResourceRepresentation_localNoneWithDataFile_returnsFileDownloadNamedAfterEntryId() throws IOException {
+		File dataFile = Files.createFile(isolatedTmpDir.resolve("payload.bin")).toFile();
+		Data data = mock(Data.class);
+		when(data.getDataFile()).thenReturn(dataFile);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.None);
+		when(entry.getResourceType()).thenReturn(ResourceType.InformationResource);
+		when(entry.getResource()).thenReturn(data);
+		when(entry.getMimetype()).thenReturn("image/png");
+		when(entry.getFilename()).thenReturn(null);
+		when(entry.getId()).thenReturn("42");
+		when(resourceSerializer.readDigest(entry)).thenReturn("ab12");
+
+		ResourceRepresentation result = service.getResourceRepresentation(entry, plainQuery());
+
+		var download = assertInstanceOf(ResourceRepresentation.FileDownload.class, result);
+		assertSame(dataFile, download.file());
+		assertEquals(MediaType.IMAGE_PNG, download.mediaType());
+		// No stored filename, so the entry id names the download.
+		assertEquals("42", download.filename());
+		assertEquals("ab12", download.sha256Digest());
+	}
+
+	@Test
+	void getResourceRepresentation_localNoneWithInvalidMimetype_fallsBackToOctetStream() throws IOException {
+		File dataFile = Files.createFile(isolatedTmpDir.resolve("payload.bin")).toFile();
+		Data data = mock(Data.class);
+		when(data.getDataFile()).thenReturn(dataFile);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.None);
+		when(entry.getResourceType()).thenReturn(ResourceType.InformationResource);
+		when(entry.getResource()).thenReturn(data);
+		// The mimetype is stored verbatim from the upload request, so it may not parse.
+		when(entry.getMimetype()).thenReturn("not a type");
+		when(entry.getFilename()).thenReturn("payload.bin");
+
+		ResourceRepresentation result = service.getResourceRepresentation(entry, plainQuery());
+
+		var download = assertInstanceOf(ResourceRepresentation.FileDownload.class, result);
+		assertEquals(MediaType.APPLICATION_OCTET_STREAM, download.mediaType());
+	}
+
+	@Test
+	void getResourceRepresentation_localNoneWithoutDataFile_returnsEmpty() {
+		Data data = mock(Data.class);
+		when(data.getDataFile()).thenReturn(null);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.None);
+		when(entry.getResourceType()).thenReturn(ResourceType.InformationResource);
+		when(entry.getResource()).thenReturn(data);
+
+		ResourceRepresentation result = service.getResourceRepresentation(entry, plainQuery());
+
+		assertInstanceOf(ResourceRepresentation.Empty.class, result);
+	}
+
+	@Test
+	void getResourceRepresentation_localString_returnsTextPlainBody() {
+		StringResource resource = mock(StringResource.class);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.String);
+		when(entry.getResource()).thenReturn(resource);
+		when(resourceSerializer.serializeResourceString(resource)).thenReturn("hello");
+
+		ResourceRepresentation result = service.getResourceRepresentation(entry, plainQuery());
+
+		assertEquals(new ResourceRepresentation.TextBody("hello", MediaType.TEXT_PLAIN), result);
+	}
+
+	@Test
+	void getResourceRepresentation_localStringWithoutText_returnsEmptyTextPlainBody() {
+		// StringResource.getString() is null when no rdf:value is stored; the controller used to answer 200 with an
+		// empty body for that, so the sealed type must not turn it into a 500.
+		StringResource resource = mock(StringResource.class);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.String);
+		when(entry.getResource()).thenReturn(resource);
+		when(resourceSerializer.serializeResourceString(resource)).thenReturn(null);
+
+		ResourceRepresentation result = service.getResourceRepresentation(entry, plainQuery());
+
+		assertEquals(new ResourceRepresentation.TextBody("", MediaType.TEXT_PLAIN), result);
+	}
+
+	@Test
+	void getResourceRepresentation_syndicationRequested_delegatesBeforeInspectingEntry() {
+		when(syndicationService.renderFeed(entry, "rss_2.0", "sv", 7))
+				.thenReturn(new RenderedFeed("<rss/>", MediaType.APPLICATION_RSS_XML));
+		var query = new ResourceQuery(null, "application/rdf+xml", "rss_2.0", "sv", 7, emptyListFilter());
+
+		ResourceRepresentation result = service.getResourceRepresentation(entry, query);
+
+		assertEquals(new ResourceRepresentation.TextBody("<rss/>", MediaType.APPLICATION_RSS_XML), result);
+		// Syndication is decided before the entry's type: a feed on a list or context must not fall into the
+		// list/graph branch.
+		verify(entry, never()).getEntryType();
+		verify(entry, never()).getGraphType();
+	}
+
+	@Test
+	void getResourceRepresentation_listWithTurtleRdfFormat_returnsTurtleMediaType() {
+		org.entrystore.List list = mock(org.entrystore.List.class);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.List);
+		when(entry.getResource()).thenReturn(list);
+		when(list.getGraph()).thenReturn(new LinkedHashModel());
+		var query = new ResourceQuery(MediaType.parseMediaType("text/turtle"), "application/rdf+xml", null, "en", 50,
+				emptyListFilter());
+
+		ResourceRepresentation result = service.getResourceRepresentation(entry, query);
+
+		ResourceRepresentation.TextBody body = assertInstanceOf(ResourceRepresentation.TextBody.class, result);
+		assertEquals(MediaType.parseMediaType("text/turtle"), body.mediaType());
+	}
+
+	@Test
+	void setEntryResource_stringResource_updatesModificationDate() {
+		StringResource resource = mock(StringResource.class);
+		when(entry.getGraphType()).thenReturn(GraphType.String);
+		when(entry.getResource()).thenReturn(resource);
+
+		CompletionState state = service.setEntryResource(entry, "text".getBytes(StandardCharsets.UTF_8),
+				"text/plain", null, false, null, "session-1");
+
+		assertEquals(CompletionState.UPDATED, state);
+		verify(resource).setString("text");
+		verify(entry).updateModificationDate();
+	}
+
+	@Test
+	void setEntryResourceMultipart_nonNoneGraphType_throwsWithoutUpdatingModificationDate() {
+		when(entry.getGraphType()).thenReturn(GraphType.String);
+
+		assertThrows(BadRequestException.class,
+				() -> service.setEntryResourceMultipart(entry, mock(MultipartFile.class), null));
+
+		verify(entry, never()).updateModificationDate();
+	}
+
+	@Test
+	void setEntryResourceMultipart_noneGraphType_updatesModificationDate() throws IOException {
+		File dataFile = Files.createFile(isolatedTmpDir.resolve("upload.txt")).toFile();
+		Data data = mock(Data.class);
+		when(data.getDataFile()).thenReturn(dataFile);
+		when(entry.getGraphType()).thenReturn(GraphType.None);
+		when(entry.getResource()).thenReturn(data);
+		when(repositoryManager.getMaximumFileSize()).thenReturn(-1L);
+		MultipartFile file = mock(MultipartFile.class);
+		when(file.getInputStream()).thenReturn(new ByteArrayInputStream(new byte[0]));
+		when(file.getContentType()).thenReturn("text/plain");
+		when(file.getOriginalFilename()).thenReturn("upload.txt");
+
+		CompletionState state = service.setEntryResourceMultipart(entry, file, null);
+
+		assertEquals(CompletionState.CREATED, state);
+		verify(entry).updateModificationDate();
+	}
+
+	@Test
+	void setEntryResource_unsupportedGraphType_returnsErrorWithoutUpdatingModificationDate() {
+		// Context has no branch in the resource update, so it falls through to ERROR and must not look modified.
+		when(entry.getGraphType()).thenReturn(GraphType.Context);
+
+		CompletionState state = service.setEntryResource(entry, new byte[0], "application/json", null, false, null,
+				"session-1");
+
+		assertEquals(CompletionState.ERROR, state);
+		verify(entry, never()).updateModificationDate();
 	}
 
 	@Test
@@ -292,7 +477,7 @@ class ResourceServiceTest {
 		when(entry.getResource()).thenReturn(resource);
 		when(resource.getGraph()).thenReturn(graph);
 
-		String result = service.serializeResourceAsJson(entry, "application/json", new ListFilter(null, null, null, null, null, null, null));
+		String result = service.serializeResourceAsJson(entry, "application/json", emptyListFilter());
 
 		// Routing: RDF/JSON, not the id array the isList branch would have produced.
 		assertEquals(RDFJSON.graphToRdfJson(graph), result);
@@ -425,5 +610,13 @@ class ResourceServiceTest {
 			zos.closeEntry();
 		}
 		return baos.toByteArray();
+	}
+
+	private static ResourceQuery plainQuery() {
+		return new ResourceQuery(null, "application/rdf+xml", null, "en", 50, emptyListFilter());
+	}
+
+	private static ListFilter emptyListFilter() {
+		return new ListFilter(null, null, null, null, null, null, null);
 	}
 }

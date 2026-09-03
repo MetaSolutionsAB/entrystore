@@ -28,16 +28,19 @@ import org.entrystore.GraphType;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.rest.springboot.model.dto.RenderedFeed;
 import org.entrystore.rest.springboot.model.exception.MethodNotAllowedException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.util.Syndication;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 @Slf4j
@@ -52,7 +55,20 @@ public class SyndicationService {
 	@Value("${entrystore.solr.max-limit:" + DEFAULT_FEED_SIZE + "}")
 	private int maxFeedSize;
 
-	public SyndFeed getSyndicationFeedSolr(Entry entry, String type, String language, Integer feedSize) {
+	/**
+	 * Renders the feed of a context or list entry as XML; an unknown feed type fails as a bad request. Entries of
+	 * any other graph type are rejected with {@link MethodNotAllowedException}, installations without a Solr index
+	 * answer {@link NotImplementedException}, and {@code feedSize} is clamped to {@code entrystore.solr.max-limit}.
+	 */
+	public RenderedFeed renderFeed(Entry entry, String feedType, String language, int feedSize) {
+		SyndFeed feed = getSyndicationFeedSolr(entry, feedType, language, feedSize);
+		String xml = Syndication.convertSyndFeedToXml(feed);
+		MediaType mediaType = Objects.requireNonNull(Syndication.convertFeedTypeToMediaType(feed.getFeedType()),
+				() -> "No media type for feed type " + feed.getFeedType());
+		return new RenderedFeed(xml, mediaType);
+	}
+
+	private SyndFeed getSyndicationFeedSolr(Entry entry, String type, String language, int feedSize) {
 
 		if (repositoryManager.getIndex() == null) {
 			throw new NotImplementedException("Feeds are not supported by this installation");
