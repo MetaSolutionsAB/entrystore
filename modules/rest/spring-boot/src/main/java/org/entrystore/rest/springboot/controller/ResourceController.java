@@ -20,6 +20,10 @@ import com.rometools.rome.feed.synd.SyndFeed;
 import com.rometools.rome.io.FeedException;
 import com.rometools.rome.io.SyndFeedOutput;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.media.SchemaProperty;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,10 +36,12 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.api.ModifyListResourceResponse;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.EntryService;
 import org.entrystore.rest.springboot.service.ResourceService;
 import org.entrystore.rest.springboot.service.SyndicationService;
 import org.entrystore.rest.springboot.util.GraphUtil;
+import org.entrystore.rest.springboot.util.MultipartUtil;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -51,9 +57,9 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.multipart.MultipartRequest;
 
 import java.io.File;
 
@@ -202,8 +208,21 @@ public class ResourceController {
 
 	@Operation(
 			summary = "Sets a resource.",
-			description = "Resource should be sent in the request body. Depending on the entry’s character the resource may be binary, " +
-					"JSON or RDF. See Knowledge Base for details.")
+			description = "Resource should be sent as a file part of a multipart/form-data request. It may carry any " +
+					"part name: a part named \"file\" is used when it carries a filename, otherwise the first part " +
+					"carrying a filename, otherwise the first part carrying content. Depending on the entry’s character " +
+					"the resource may be binary, JSON or RDF. See Knowledge Base for details.")
+	@io.swagger.v3.oas.annotations.parameters.RequestBody(
+			content = @Content(
+					mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+					schema = @Schema(type = "object"),
+					schemaProperties = {
+							@SchemaProperty(
+									name = "file",
+									schema = @Schema(type = "string", format = "binary")),
+							@SchemaProperty(
+									name = "mimeType",
+									schema = @Schema(type = "string"))}))
 	@PutMapping(
 			path = "/{context-id}/resource/{entry-id}",
 			consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -211,8 +230,11 @@ public class ResourceController {
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
 			@RequestParam(required = false) String mimeType,
-			@RequestPart("file") MultipartFile file
+			@Parameter(hidden = true) MultipartRequest request
 	) {
+
+		MultipartFile file = MultipartUtil.firstFilePart(request)
+				.orElseThrow(() -> new BadRequestException("Multipart request contains no file part"));
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 		CompletionState result = resourceService.setEntryResourceMultipart(entry, file, mimeType);

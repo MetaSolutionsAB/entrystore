@@ -1,6 +1,10 @@
 package org.entrystore.rest.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.media.SchemaProperty;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Context;
@@ -13,6 +17,7 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.ContextService;
 import org.entrystore.rest.springboot.service.EntryService;
 import org.entrystore.rest.springboot.util.HttpUtil;
+import org.entrystore.rest.springboot.util.MultipartUtil;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -23,9 +28,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.multipart.MultipartRequest;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -136,14 +141,28 @@ public class ContextController {
 		return "<textarea></textarea>";
 	}
 
-	@Operation(summary = "Import of a single context")
+	@Operation(
+			summary = "Import of a single context",
+			description = "The ZIP file should be sent as a file part of a multipart/form-data request. It may carry any " +
+					"part name: a part named \"file\" is used when it carries a filename, otherwise the first part " +
+					"carrying a filename, otherwise the first part carrying content.")
+	@io.swagger.v3.oas.annotations.parameters.RequestBody(
+			content = @Content(
+					mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+					schema = @Schema(type = "object"),
+					schemaProperties = @SchemaProperty(
+							name = "file",
+							schema = @Schema(type = "string", format = "binary"))))
 	@PostMapping(
 			path = "/{context-id}/import",
 			consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
 			produces = MediaType.TEXT_HTML_VALUE)
 	public String importContextFromMultipartForm(
 			@PathVariable("context-id") String contextId,
-			@RequestPart(value = "file") MultipartFile file) throws IOException {
+			@Parameter(hidden = true) MultipartRequest request) throws IOException {
+
+		MultipartFile file = MultipartUtil.firstFilePart(request)
+				.orElseThrow(() -> new BadRequestException("Multipart request contains no file part"));
 
 		Context context = contextService.getContextOrThrow(contextId);
 		try (InputStream inputStream = file.getInputStream()) {
