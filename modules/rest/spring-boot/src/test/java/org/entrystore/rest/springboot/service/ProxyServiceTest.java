@@ -45,7 +45,11 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -97,6 +101,36 @@ class ProxyServiceTest {
 		assertThrows(ForbiddenException.class,
 				() -> withRealProperties.validateGlobalAccess("local.example"),
 				"a host on the local whitelist must not become guest-reachable");
+	}
+
+	@Test
+	void deleteUrl_validatorRejects_propagatesWithoutOpeningConnection() throws Exception {
+		// The individual rejection reasons (blacklisted host, scheme, userinfo) are pinned in SsrfValidatorTest;
+		// here only the ordering matters: validation happens before any outbound connection.
+		doThrow(new ForbiddenException("Access denied: host is blacklisted"))
+				.when(ssrfValidator).validateForDelete(anyString());
+
+		assertThrows(ForbiddenException.class, () -> service.deleteUrl("http://127.0.0.1:1/x"));
+
+		verify(ssrfValidator, never()).openPinnedConnection(any(), any());
+	}
+
+	@Test
+	void deleteUrl_upstreamError_throws502WithoutUpstreamBody() throws Exception {
+		SsrfValidator.ValidatedTarget target = validatedTarget("http://upstream.example.com/doc", "192.0.2.10");
+		when(ssrfValidator.validateForDelete("http://upstream.example.com/doc")).thenReturn(target);
+		HttpURLConnection conn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(target.uri(), target.resolved())).thenReturn(conn);
+		when(conn.getResponseCode()).thenReturn(500);
+
+		CustomResponseException e = assertThrows(CustomResponseException.class,
+				() -> service.deleteUrl("http://upstream.example.com/doc"));
+
+		assertEquals(HttpStatus.BAD_GATEWAY, e.getStatus());
+		// The upstream body is never read, so nothing from it can leak into the message.
+		assertEquals("Delete request received an error response (status 500)", e.getMessage());
+		verify(conn, never()).getInputStream();
+		verify(conn, never()).getErrorStream();
 	}
 
 	@Test

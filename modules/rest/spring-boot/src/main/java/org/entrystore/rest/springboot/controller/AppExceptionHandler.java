@@ -270,7 +270,7 @@ public class AppExceptionHandler {
 
 	// Handles application-specific authentication/authorization exceptions whose messages are
 	// intentionally user-facing (hand-crafted at call sites in GroupService, MessageService,
-	// SolrManagementService, ResourceService and ProxyService), so the message is surfaced in the HTTP
+	// SolrManagementService, UserService and ProxyService), so the message is surfaced in the HTTP
 	// body for 403.
 	//
 	// SsrfValidator is deliberately NOT in that list even though it throws the same type: its denial

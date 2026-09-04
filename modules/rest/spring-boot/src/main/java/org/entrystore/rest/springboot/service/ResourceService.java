@@ -16,113 +16,54 @@
 
 package org.entrystore.rest.springboot.service;
 
-import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.eclipse.rdf4j.model.Model;
-import org.entrystore.Context;
-import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
-import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
-import org.entrystore.QuotaException;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
-import org.entrystore.User;
-import org.entrystore.impl.ListImpl;
 import org.entrystore.impl.RDFResource;
-import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.security.Password;
-import org.entrystore.repository.util.FileOperations;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.api.ResourceQuery;
-import org.entrystore.rest.springboot.model.api.UserSettingsRequestBody;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
 import org.entrystore.rest.springboot.model.dto.RenderedFeed;
 import org.entrystore.rest.springboot.model.dto.ResourceRepresentation;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
-import org.entrystore.rest.springboot.model.exception.CustomResponseException;
-import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
-import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
-import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
-import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
-import org.entrystore.rest.springboot.security.SsrfSafeHttpClient;
-import org.entrystore.rest.springboot.security.SsrfValidator;
-import org.entrystore.rest.springboot.service.auth.BasicVerifier;
-import org.entrystore.rest.springboot.util.EmailSender;
-import org.entrystore.rest.springboot.util.FileUtil;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
 
-import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.StringWriter;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.Vector;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
-@Slf4j
+/**
+ * Entry point for the {@code /{context-id}/resource/{entry-id}} operations. Dispatches on the entry's graph type
+ * to {@link ListResourceService}, {@link FileResourceService}, {@link UserService} and {@link ProxyService}, and
+ * keeps the String and Graph/Pipeline handling that is small enough not to need a home of its own.
+ */
 @Service
 @RequiredArgsConstructor
 public class ResourceService {
 
 	private static final String EMPTY_REPRESENTATION = "";
 
-	private final RepositoryManagerImpl repositoryManager;
 	private final ResourceJsonSerializer resourceSerializer;
 	private final PrincipalManager principalManager;
-
-	private final SsrfValidator ssrfValidator;
-	private final SsrfSafeHttpClient ssrfSafeHttpClient;
-
-	private final AuthService authService;
-	private final EmailSender emailSender;
-	private final ObjectMapper objectMapper;
 	private final SyndicationService syndicationService;
-
-	@Value("${entrystore.import.tmpdir:${java.io.tmpdir}}")
-	@Setter(AccessLevel.PACKAGE)
-	private File importTmpDir;
-
-	@Value("${entrystore.http.allow-media-type-javascript:false}")
-	private boolean rewriteMediaTypeJavaScript;
-
-	@Value("${entrystore.auth.password.require-current-password:true}")
-	@Setter(AccessLevel.PACKAGE)
-	private boolean requireCurrentPassword;
+	private final ListResourceService listResourceService;
+	private final FileResourceService fileResourceService;
+	private final UserService userService;
+	private final ProxyService proxyService;
 
 	/**
 	 * Chooses the representation a GET on the resource URI answers with. A syndication request is served before
@@ -139,13 +80,13 @@ public class ResourceService {
 		GraphType graphType = entry.getGraphType();
 
 		if (entryType == EntryType.Local && graphType == GraphType.None) {
-			File file = serializeResourceNoneAsFile(entry);
+			File file = fileResourceService.dataFileForDownload(entry);
 			if (file == null) {
 				return new ResourceRepresentation.Empty();
 			}
 			String filename = Objects.requireNonNullElse(entry.getFilename(), entry.getId());
-			return new ResourceRepresentation.FileDownload(file, determineMediaTypeForDownload(entry), filename,
-					resourceSerializer.readDigest(entry));
+			return new ResourceRepresentation.FileDownload(file, fileResourceService.mediaTypeForDownload(entry),
+					filename, resourceSerializer.readDigest(entry));
 		}
 
 		if (entryType == EntryType.Local && graphType == GraphType.String) {
@@ -191,7 +132,7 @@ public class ResourceService {
 
 			if (graph != null) {
 				if (isList && MediaType.APPLICATION_JSON_VALUE.equals(mediaType)) {
-					return serializeJsonRepresentationResourceList(entry, listFilter);
+					return listResourceService.serializeChildrenIds(entry, listFilter);
 				}
 				// serializeGraph routes application/json and application/rdf+json through RDFJSON itself
 				return GraphUtil.serializeGraph(graph, mediaType);
@@ -242,352 +183,96 @@ public class ResourceService {
 		return EMPTY_REPRESENTATION;
 	}
 
-	private File serializeResourceNoneAsFile(Entry entry) {
-
-		if (entry.getResourceType() == ResourceType.InformationResource) {
-			// Local data
-			return ((Data) entry.getResource()).getDataFile();
-		} else if (entry.getResourceType() == ResourceType.NamedResource) {
-			// If there is no resource we redirect to the metadata
-			throw new RedirectSeeOtherException(entry.getLocalMetadataURI());
-		}
-		// NOT USED YET
-		//	if (ResourceType.Unknown.equals(entry.getResourceType())) {}
-		return null;
-	}
-
 	/**
-	 * Replaces the entry's resource with the request body and bumps the entry's modification date unless the
-	 * graph type is unsupported ({@link CompletionState#ERROR}).
+	 * Routes a PUT body to the service owning the entry's graph type and bumps the entry's modification date.
+	 * A binary upload is reported as {@link CompletionState#CREATED}, every other update as
+	 * {@link CompletionState#UPDATED}; an unsupported graph type answers {@link CompletionState#ERROR} and leaves
+	 * the entry untouched.
 	 */
-	public CompletionState setEntryResource(Entry entry, byte[] requestBody, String mediaType, String mimeType, boolean textArea, String filename, String currentSessionId) {
-		CompletionState state = applyEntryResource(entry, requestBody, mediaType, mimeType, textArea, filename,
-				currentSessionId);
+	public CompletionState setEntryResource(Entry entry, byte[] requestBody, String mediaType, String mimeType,
+											String filename, String currentSessionId) {
+		CompletionState state = switch (entry.getGraphType()) {
+			case List, Group -> {
+				if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType)) {
+					listResourceService.setChildrenFromJson(entry, requestBody);
+				} else {
+					listResourceService.setGraph(entry, requestBody, mediaType);
+				}
+				yield CompletionState.UPDATED;
+			}
+			case None -> {
+				fileResourceService.setData(entry, requestBody, mediaType, mimeType, filename);
+				yield CompletionState.CREATED;
+			}
+			case String -> {
+				setString(entry, requestBody);
+				yield CompletionState.UPDATED;
+			}
+			case Graph, Pipeline -> {
+				setGraph(entry, requestBody, mediaType);
+				yield CompletionState.UPDATED;
+			}
+			case User -> {
+				userService.updateSettings(entry, requestBody, currentSessionId);
+				yield CompletionState.UPDATED;
+			}
+			case null, default -> CompletionState.ERROR;
+		};
 		if (state != CompletionState.ERROR) {
 			entry.updateModificationDate();
 		}
 		return state;
 	}
 
-	private CompletionState applyEntryResource(Entry entry, byte[] requestBody, String mediaType, String mimeType,
-											   boolean textArea, String filename, String currentSessionId) {
-		GraphType gt = entry.getGraphType();
-		/*
-		 * List and Group
-		 */
-		if (GraphType.List.equals(gt) || GraphType.Group.equals(gt)) {
-
-			if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType)) {
-				try {
-					JSONArray childrenJSONArray = new JSONArray(new String(requestBody, StandardCharsets.UTF_8));
-					ArrayList<URI> newResource = new ArrayList<>();
-
-					// Add new entries to the list.
-					for (int i = 0; i < childrenJSONArray.length(); i++) {
-						String childId = childrenJSONArray.get(i).toString();
-						Entry childEntry = entry.getContext().get(childId);
-						if (childEntry == null) {
-							throw new BadRequestException("Cannot update resource, since one of the children does not exist. ChildId: " + childId);
-						} else {
-							newResource.add(childEntry.getEntryURI());
-						}
-					}
-
-					if (entry.getGraphType() == GraphType.List) {
-						org.entrystore.List resourceList = (org.entrystore.List) entry.getResource();
-						resourceList.setChildren(newResource);
-					} else {
-						Group resourceGroup = (Group) entry.getResource();
-						resourceGroup.setChildren(newResource);
-					}
-					return CompletionState.UPDATED;
-				} catch (JSONException e) {
-					throw new BadRequestException("Cannot parse given body resource as JSONArray.");
-				} catch (IllegalArgumentException iae) {
-					throw new BadRequestException(iae.getMessage(), iae); // Core exception — message is safe to return
-				} catch (RepositoryException re) {
-					throw new DataConflictException("An entry cannot be added multiple times", re);
-				}
-			} else {
-				Model graph = GraphUtil.deserializeGraph(new String(requestBody, StandardCharsets.UTF_8), mediaType);
-				try {
-					if (entry.getGraphType() == GraphType.List) {
-						((org.entrystore.List) entry.getResource()).setGraph(graph);
-					} else if (entry.getGraphType() == GraphType.Group) {
-						((Group) entry.getResource()).setGraph(graph);
-					} else {
-						throw new BadRequestException("Unsupported graph type for RDF graph update: " + entry.getGraphType());
-					}
-				} catch (IllegalArgumentException iae) {
-					throw new BadRequestException(iae.getMessage(), iae); // Core exception — message is safe to return
-				} catch (RepositoryException e) {
-					throw new DataConflictException("An entry cannot be added multiple times", e);
-				}
-			}
-			return CompletionState.UPDATED;
+	private static void setString(Entry entry, byte[] requestBody) {
+		try {
+			StringResource stringResource = (StringResource) entry.getResource();
+			stringResource.setString(new String(requestBody, StandardCharsets.UTF_8));
+		} catch (RepositoryException e) {
+			throw new InternalServerErrorException("Failed to store string resource for entry " + entry.getEntryURI(), e);
+		} catch (IllegalArgumentException e) {
+			throw new BadRequestException("Invalid string resource payload for entry " + entry.getEntryURI(), e);
+		} catch (ClassCastException e) {
+			throw new InternalServerErrorException("Resource of entry " + entry.getEntryURI() + " is not a StringResource", e);
 		}
+	}
 
-		/*
-		 * Data
-		 */
-		if (gt == GraphType.None) {
-
-			if (MediaType.MULTIPART_FORM_DATA_VALUE.equals(mediaType)) {
-				throw new BadRequestException("Content negotiation failure, Multipart file content should be handled by other endpoint.");
-			} else {
-				try {
-					((Data) entry.getResource()).setData(new ByteArrayInputStream(requestBody));
-					entry.setFileSize(((Data) entry.getResource()).getDataFile().length());
-					if (mimeType == null) {
-						mimeType = Objects.requireNonNullElse(mediaType, MediaType.APPLICATION_OCTET_STREAM_VALUE);
-					}
-					entry.setMimetype(mimeType);
-					if (StringUtils.isNotEmpty(filename)) {
-						entry.setFilename(FileUtil.sanitizeFilename(filename));
-					}
-				} catch (QuotaException qe) {
-					throw new EntityTooLargeException(qe.getMessage(), qe);
-				} catch (IOException ioe) {
-					if (ioe.getCause() instanceof NullPointerException) {
-						throw new BadRequestException("Invalid request data", ioe);
-					} else {
-						throw new InternalServerErrorException("Failed to process resource data", ioe);
-					}
-				}
-			}
-			// TODO: add textarea TEXT_HTML response inside ExceptionHandler, when textArea param is set
-			/*
-			if (error != null) {
-				if (textArea) {
-					// TODO
-					//getResponse().setEntity("<textarea>{\"error\":\"" + error + "\"}</textarea>", MediaType.TEXT_HTML);
-					return CompletionState.ERROR;
-				} else {
-					throw new InternalServerErrorException(error);
-				}
-			}*/
-
-			return CompletionState.CREATED;
+	private static void setGraph(Entry entry, byte[] requestBody, String mediaType) {
+		if (!(entry.getResource() instanceof RDFResource graphResource)) {
+			throw new InternalServerErrorException("No RDF resource found for entry with ResourceType Graph");
 		}
-
-		/* String  */
-		if (gt == GraphType.String) {
-			try {
-				StringResource stringResource = (StringResource) entry.getResource();
-				stringResource.setString(new String(requestBody, StandardCharsets.UTF_8));
-			} catch (RepositoryException e) {
-				throw new InternalServerErrorException("Failed to store string resource for entry " + entry.getEntryURI(), e);
-			} catch (IllegalArgumentException e) {
-				throw new BadRequestException("Invalid string resource payload for entry " + entry.getEntryURI(), e);
-			} catch (ClassCastException e) {
-				throw new InternalServerErrorException("Resource of entry " + entry.getEntryURI() + " is not a StringResource", e);
-			}
-
-			return CompletionState.UPDATED;
-		}
-
-		/* Graph and Pipeline */
-		if (gt == GraphType.Graph || gt == GraphType.Pipeline) {
-			if (!(entry.getResource() instanceof RDFResource graphResource)) {
-				throw new InternalServerErrorException("No RDF resource found for entry with ResourceType Graph");
-			}
-			Model graph = GraphUtil.deserializeGraph(new String(requestBody, StandardCharsets.UTF_8), mediaType);
-			graphResource.setGraph(graph);
-
-			return CompletionState.UPDATED;
-		}
-
-		/* User */
-		if (GraphType.User.equals(gt)) {
-			PrincipalManager pm = repositoryManager.getPrincipalManager();
-			UserSettingsRequestBody settings;
-			try {
-				settings = objectMapper.readValue(requestBody, UserSettingsRequestBody.class);
-			} catch (JacksonException e) {
-				// Cause preserved for the log; the parser's own message is not echoed to the client.
-				throw new BadRequestException(UserSettingsRequestBody.SYNTAX_ERROR_MESSAGE, e);
-			}
-			if (settings == null) {
-				// The JSON literal `null` deserializes to a null reference instead of throwing, so without
-				// this the next dereference answers 500 for a four-byte body any authenticated caller can
-				// send.
-				throw new BadRequestException(UserSettingsRequestBody.SYNTAX_ERROR_MESSAGE);
-			}
-
-			User resourceUser = (User) entry.getResource();
-			if (settings.hasName()) {
-				String newName = settings.nameValue();
-				if (!resourceUser.setName(newName)) {
-					throw new BadRequestException("Name is already in use: " + newName);
-				}
-			}
-			if (settings.hasPassword()) {
-				String newPassword = settings.passwordValue();
-
-				if (requireCurrentPassword) {
-					// we require the current password if:
-					// (1) the user is a non-admin user, or
-					// (2) the user is an admin user and wants to set his own password
-					if (!pm.currentUserIsAdminOrAdminGroup() ||
-							(pm.currentUserIsAdminOrAdminGroup() && pm.getAuthenticatedUserURI().equals(resourceUser.getURI()))) {
-						if (!settings.hasCurrentPassword()) {
-							throw new ForbiddenException("Current password is required");
-						}
-						String currentPassword = settings.currentPasswordValue();
-						String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(pm, resourceUser.getName());
-						if (saltedHashedSecret == null || !Password.check(currentPassword, saltedHashedSecret)) {
-							throw new ForbiddenException("No password set or incorrect current password provided");
-						}
-					}
-				}
-
-				if (resourceUser.setSecret(newPassword)) {
-					// we need to expire sessions of the user, whose password is being changed
-
-					// if it is an admin/admingroup member, who is changing the password of another user, we expire all sessions of that user
-					// if it is an admin/admingroup member changing his own password, or user changing his own password,
-					// we expire all sessions of that admin/user except the session, through which it is being changed (currentSessionId)
-
-					// the test only asks if the authenticatedUser is the same as the user, whose password is to be changed
-					// because no user can change password of another user, only admin
-					boolean expireAllSessions = !pm.getAuthenticatedUserURI().equals(resourceUser.getURI());
-					authService.expireUserSessions(resourceUser, expireAllSessions ? null : currentSessionId);
-
-					emailSender.sendPasswordChangeConfirmation(entry);
-				} else {
-					throw new BadRequestException("Password must conform to configured rules.");
-				}
-			}
-			if (settings.hasLanguage()) {
-				String prefLang = settings.languageValue();
-				if (prefLang.isEmpty()) {
-					resourceUser.setLanguage(null);
-				} else if (!resourceUser.setLanguage(prefLang)) {
-					throw new BadRequestException("Preferred language could not be set.");
-				}
-			}
-			if (settings.hasHomeContext()) {
-				String homeContext = settings.homeContextValue();
-				Entry entryHomeContext = repositoryManager.getContextManager().get(homeContext);
-				if (entryHomeContext != null) {
-					if (!(entryHomeContext.getResource() instanceof Context)
-							|| !resourceUser.setHomeContext((Context) entryHomeContext.getResource())) {
-
-						throw new BadRequestException("Given homecontext is not a context.");
-					}
-				}
-			}
-			if (settings.hasDisabled()) {
-				if (entry.getResourceURI().equals(pm.getAuthenticatedUserURI())) {
-					throw new BadRequestException("Users cannot set their own disabled status.");
-				}
-				resourceUser.setDisabled(settings.disabledValue());
-			}
-			if (settings.hasCustomProperties()) {
-				resourceUser.setCustomProperties(settings.customPropertiesValue());
-			}
-
-			return CompletionState.UPDATED;
-		}
-
-		return CompletionState.ERROR;
+		Model graph = GraphUtil.deserializeGraph(new String(requestBody, StandardCharsets.UTF_8), mediaType);
+		graphResource.setGraph(graph);
 	}
 
 	/**
-	 * Stores an uploaded file as the resource of a binary (GraphType None) entry and bumps the entry's modification
-	 * date. Any other graph type is rejected as a bad request.
+	 * Stores an uploaded file via {@link FileResourceService#setDataMultipart} and bumps the entry's modification
+	 * date.
 	 */
 	public CompletionState setEntryResourceMultipart(Entry entry, MultipartFile file, String mimeType) {
-
-		if (entry.getGraphType() != GraphType.None) {
-			throw new BadRequestException("Cannot set resource for entry with GraphType " + entry.getGraphType() + ". Only None GraphType can set a multipart file.");
-		}
-
-		try {
-			long maxFileSize = repositoryManager.getMaximumFileSize();
-
-			// we check if the file is not too big
-			if (maxFileSize != -1 && file.getSize() > maxFileSize) {
-				throw new BadRequestException("Received file size (of " + file.getSize() + "b) exceeds maximum allowed size of: " + maxFileSize + "b");
-			}
-
-			((Data) entry.getResource()).setData(file.getInputStream());
-			entry.setFileSize(((Data) entry.getResource()).getDataFile().length());
-			String itemMimeType = file.getContentType();
-			if (mimeType != null) {
-				itemMimeType = mimeType;
-			}
-			entry.setMimetype(itemMimeType);
-			String originalFilename = file.getOriginalFilename();
-			if (StringUtils.isNotBlank(originalFilename)) {
-				entry.setFilename(FileUtil.sanitizeFilename(originalFilename));
-			} else {
-				// The part name is client-controlled and carries no filename semantics, so it is not
-				// used as a fallback. The entry id is, so that a name left over from an earlier
-				// upload cannot end up describing the content stored now. It is sanitized like any
-				// other stored filename: ids of imported entries do not go through the REST layer's
-				// id validation.
-				log.warn("Multipart upload for entry '{}' is missing the original filename, falling back to the entry id",
-						entry.getEntryURI());
-				entry.setFilename(FileUtil.sanitizeFilename(entry.getId()));
-			}
-
-			entry.updateModificationDate();
-			return CompletionState.CREATED;
-		} catch (IOException ioe) {
-			throw new InternalServerErrorException("Failed to process multipart resource data", ioe);
-		} catch (QuotaException qe) {
-			throw new EntityTooLargeException(qe.getMessage(), qe);
-		}
+		fileResourceService.setDataMultipart(entry, file, mimeType);
+		entry.updateModificationDate();
+		return CompletionState.CREATED;
 	}
 
+	/**
+	 * See {@link ListResourceService#importFromZip}.
+	 */
 	public void importEntryResource(Entry entry, byte[] requestBody) {
-
-		GraphType graphType = entry.getGraphType();
-
-		if (graphType == GraphType.List) {
-			// Reads the ZIP; a .rdf entry throws from importRDFResource, otherwise the throw below signals not-implemented.
-			importFromZIP(requestBody);
-			throw new NotImplementedException("Resource ZIP import is not yet implemented");
-		} else {
-			throw new BadRequestException("Bad request: ZIP import supports only Entry graphType of List (given: " + graphType + ") with 'application/zip' format");
-		}
+		listResourceService.importFromZip(entry, requestBody);
 	}
 
+	/**
+	 * See {@link ListResourceService#moveEntry}.
+	 */
 	public Entry modifyListEntryResource(Entry entry, String moveEntry, String fromList, boolean removeAll) {
-
-		GraphType graphType = entry.getGraphType();
-
-		if (graphType == GraphType.List
-				&& moveEntry != null
-				&& fromList != null) {
-
-			// POST 3/resource/45?moveEntry=2/entry/34&fromList=2/resource/67
-			ListImpl dest = (ListImpl) entry.getResource();
-
-			String baseURI = repositoryManager.getRepositoryURL().toString();
-			if (!baseURI.endsWith("/")) {
-				baseURI += "/";
-			}
-
-			// Entry URI of the Entry to be moved
-			URI movableEntry = moveEntry.startsWith("http://") ? URI.create(moveEntry) : URI.create(baseURI + moveEntry);
-			// Resource URI of the source List
-			URI movableEntrySource = fromList.startsWith("http://") ? URI.create(fromList) : URI.create(baseURI + fromList);
-
-			Entry movedEntry;
-			try {
-				movedEntry = dest.moveEntryHere(movableEntry, movableEntrySource, removeAll);
-			} catch (QuotaException qe) {
-				throw new EntityTooLargeException(qe.getMessage(), qe);
-			}
-
-			return movedEntry;
-		} else {
-			throw new BadRequestException("Bad request: supports only Entry graphType of List (given: " + graphType + ") and moving Entry with 'moveEntry' and 'fromList' parameters.");
-		}
+		return listResourceService.moveEntry(entry, moveEntry, fromList, removeAll);
 	}
 
+	/**
+	 * Checks write access, then deletes the remote document of a link-type entry when {@code proxy} is
+	 * {@code "true"} and otherwise routes to the service owning the entry's graph type.
+	 */
 	public void deleteResource(Entry entry, String proxy, boolean isRecursive) {
 		principalManager.checkAuthenticatedUserAuthorized(entry, PrincipalManager.AccessProperty.WriteResource);
 
@@ -595,176 +280,15 @@ public class ResourceService {
 
 		if ((entryType == EntryType.Link || entryType == EntryType.Reference || entryType == EntryType.LinkReference)
 				&& "true".equalsIgnoreCase(proxy)) {
-
-			deleteRemoteResource(entry.getResourceURI().toString());
-		} else {
-			deleteLocalResource(entry, isRecursive);
+			proxyService.deleteUrl(entry.getResourceURI().toString());
+			return;
 		}
-	}
-
-	private void deleteRemoteResource(String url) {
-		SsrfValidator.ValidatedTarget target = ssrfValidator.validateForDelete(url);
-		ssrfSafeHttpClient.execute(target, "DELETE", Map.of(),
-				location -> {
-					log.info("DELETE request redirected to {}", location);
-					return ssrfValidator.validateForDelete(location);
-				},
-				(status, conn) -> {
-					if (status >= 200 && status < 300) {
-						return null;
-					}
-					// Suppress upstream body — may leak internal details.
-					throw new CustomResponseException("Delete request received an error response (status " + status + ")",
-							HttpStatus.BAD_GATEWAY);
-				});
-	}
-
-	/**
-	 * Deletes the resource if the entry has any.
-	 */
-	private void deleteLocalResource(Entry entry, boolean isRecursive) {
-		/*
-		 * List
-		 */
-		if (entry.getGraphType() == GraphType.List) {
-			ListImpl l = (ListImpl) entry.getResource();
-			if (isRecursive) {
-				l.removeTree();
-			} else {
-				l.setChildren(new Vector<>());
-			}
-		}
-
-		/*
-		 * None
-		 */
-		if (entry.getGraphType() == GraphType.None) {
-			if (entry.getResourceType() == ResourceType.InformationResource) {
-				Data data = (Data) entry.getResource();
-				if (!data.delete()) {
-					File dataFile = data.getDataFile();
-					String diagnostics;
-					if (dataFile == null) {
-						diagnostics = "dataFile=null";
-					} else {
-						boolean exists = dataFile.exists();
-						long size = exists ? dataFile.length() : -1;
-						diagnostics = "path=" + dataFile.getAbsolutePath() + ", exists=" + exists + ", size=" + size;
-					}
-					log.error("Unable to delete resource of entry {} ({})", entry.getEntryURI(), diagnostics);
-					throw new InternalServerErrorException("Unable to delete resource of entry " + entry.getEntryURI());
-				}
+		switch (entry.getGraphType()) {
+			case List -> listResourceService.deleteChildren(entry, isRecursive);
+			case None -> fileResourceService.deleteData(entry);
+			case null, default -> {
+				// Nothing to delete for the remaining graph types.
 			}
 		}
 	}
-
-	private String serializeJsonRepresentationResourceList(Entry entry,
-														   ListFilter listFilter) {
-		JSONArray array = new JSONArray();
-		org.entrystore.List l = (org.entrystore.List) entry.getResource();
-		List<URI> uris = l.getChildren();
-		Set<String> IDs = new HashSet<>();
-		for (URI u : uris) {
-			String id = (u.toASCIIString()).substring((u.toASCIIString()).lastIndexOf('/') + 1);
-			IDs.add(id);
-		}
-
-		if (listFilter.sort() != null && (IDs.size() < 501)) {
-			List<Entry> childrenEntries = new ArrayList<>();
-			for (String id : IDs) {
-				Entry childEntry = entry.getContext().get(id);
-				if (childEntry != null) {
-					childrenEntries.add(childEntry);
-				} else {
-					log.warn("Child entry {} in context {} does not exist, but is referenced by a list.", id, entry.getContext().getURI());
-				}
-			}
-
-			ResourceJsonSerializer.sortChildrenEntries(childrenEntries, ResourceJsonSerializer.ListParams.withoutPagination(listFilter));
-
-			for (Entry childEntry : childrenEntries) {
-				URI childURI = childEntry.getEntryURI();
-				String id = (childURI.toASCIIString()).substring((childURI.toASCIIString()).lastIndexOf('/') + 1);
-				array.put(id);
-			}
-		} else {
-			if (IDs.size() > 500) {
-				log.warn("No sorting performed because of list size bigger than 500 children");
-			}
-			for (String id : IDs) {
-				array.put(id);
-			}
-		}
-		return array.toString();
-	}
-
-	private MediaType determineMediaTypeForDownload(Entry entry) {
-		String medTyp = entry.getMimetype();
-		if (medTyp == null) {
-			return MediaType.APPLICATION_OCTET_STREAM;
-		}
-		if (rewriteMediaTypeJavaScript && medTyp.toLowerCase().contains("javascript")) {
-			log.info("Rewriting media type {} to text/plain for {}", medTyp, entry.getResourceURI());
-			return MediaType.TEXT_PLAIN;
-		}
-		try {
-			return MediaType.parseMediaType(medTyp);
-		} catch (InvalidMediaTypeException e) {
-			log.warn("Invalid stored media type [{}] for {}, serving as application/octet-stream", medTyp,
-					entry.getEntryURI());
-			return MediaType.APPLICATION_OCTET_STREAM;
-		}
-	}
-
-	private void importFromZIP(byte[] requestBody) {
-		File tmpFile = null;
-		try {
-			tmpFile = writeStreamToTmpFile(new ByteArrayInputStream(requestBody));
-			importZipFile(tmpFile);
-		} catch (IOException ioe) {
-			throw new InternalServerErrorException("Failed to process ZIP import", ioe);
-		} finally {
-			if (tmpFile != null) {
-				try {
-					Files.deleteIfExists(tmpFile.toPath());
-				} catch (IOException e) {
-					log.warn("[IMPORT] Failed to delete temporary ZIP file: {}", tmpFile, e);
-				}
-			}
-		}
-	}
-
-	private void importZipFile(File tmpFile) throws IOException {
-		try (ZipFile zipFile = new ZipFile(tmpFile)) {
-			Enumeration<? extends ZipEntry> zipEntries = zipFile.entries();
-			while (zipEntries.hasMoreElements()) {
-				ZipEntry entry = zipEntries.nextElement();
-				String name = entry.getName();
-				if (entry.isDirectory() || !name.endsWith(".rdf")) {
-					continue;
-				}
-				String fileString;
-				try (InputStream fileIS = zipFile.getInputStream(entry)) {
-					StringWriter writer = new StringWriter();
-					IOUtils.copy(fileIS, writer, StandardCharsets.UTF_8);
-					fileString = writer.toString();
-				}
-				importRDFResource(fileString);
-			}
-		}
-	}
-
-	private File writeStreamToTmpFile(InputStream is) throws IOException {
-		File tmpFile = File.createTempFile("entrystore_res_import", ".zip", importTmpDir);
-		log.info("[IMPORT] Created temporary file: {}", tmpFile);
-		try (OutputStream fos = Files.newOutputStream(tmpFile.toPath())) {
-			FileOperations.copyFile(is, fos);
-		}
-		return tmpFile;
-	}
-
-	private void importRDFResource(String rdfString) {
-		throw new NotImplementedException("RDF resource import is not yet implemented");
-	}
-
 }
