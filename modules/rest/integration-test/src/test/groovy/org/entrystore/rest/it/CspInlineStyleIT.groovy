@@ -71,7 +71,7 @@ class CspInlineStyleIT extends BaseSpec {
 
 			// Resolving against the page URL is the point: it proves the relative href still
 			// points at the stylesheet from the depth this page is actually served at.
-			def stylesheetUri = URI.create(EntryStoreClient.origin + path).resolve(link.group(1))
+			def stylesheetUri = URI.create(EntryStoreClient.baseUrl + path).resolve(link.group(1))
 			def cssConnection = (HttpURLConnection) stylesheetUri.toURL().openConnection()
 
 			assert cssConnection.getResponseCode() == HTTP_OK: "stylesheet ${stylesheetUri} is not served (linked from ${path})"

@@ -45,7 +45,7 @@ class JettyContainerErrorIT extends BaseSpec {
 		resp['status'] == 400
 		resp['error'] == 'Bad Request'
 		resp['timestamp'] != null
-		resp['path'] == '/search'
+		resp['path'] == EntryStoreClient.contextPath + '/search'
 		// Jetty's default error body leaked all of these before the sanitized handlers were installed
 		!body.contains('"url"')
 		!body.contains('"origin"')
@@ -82,7 +82,7 @@ class JettyContainerErrorIT extends BaseSpec {
 		conn.getContentType().contains('text/plain')
 		def body = conn.errorStream.text
 		body.contains('HTTP ERROR 400 Bad Request')
-		body.contains('PATH: /search')
+		body.contains('PATH: ' + EntryStoreClient.contextPath + '/search')
 		!body.contains('http://')
 		!body.contains('dispatcherServlet')
 		!body.contains('Unable to parse form content')

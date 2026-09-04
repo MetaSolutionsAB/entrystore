@@ -20,7 +20,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -147,5 +149,43 @@ class HttpUtilTest {
 		verify(session).invalidate();
 		assertNull(SecurityContextHolder.getContext().getAuthentication(),
 				"SecurityContext must be cleared even when session.invalidate() throws IllegalStateException");
+	}
+
+	@Test
+	void redirectOrWriteUnauthorized_contextRelativeUrl_isPrefixedWithTheContextPath() throws Exception {
+		// The default failure URL (/auth/user) is context-relative; a raw sendRedirect would resolve it
+		// against the server root and 404 when the app is served under a servlet context path.
+		var response = new MockHttpServletResponse();
+
+		HttpUtil.redirectOrWriteUnauthorized(request("/store", "/store/login/cas"), response, "/auth/user", "CAS login failed");
+
+		assertEquals("/store/auth/user", response.getRedirectedUrl());
+		assertEquals("", response.getContentAsString());
+	}
+
+	@Test
+	void redirectOrWriteUnauthorized_absoluteUrl_isNotPrefixedWithTheContextPath() throws Exception {
+		var response = new MockHttpServletResponse();
+
+		HttpUtil.redirectOrWriteUnauthorized(request("/store", "/store/login/cas"), response, "https://app.example.org/login", "CAS login failed");
+
+		assertEquals("https://app.example.org/login", response.getRedirectedUrl());
+	}
+
+	@Test
+	void redirectOrWriteUnauthorized_withoutRedirectUrl_writes401WithTheRequestUriAsPath() throws Exception {
+		var response = new MockHttpServletResponse();
+
+		HttpUtil.redirectOrWriteUnauthorized(request("/store", "/store/login/cas"), response, null, "CAS login failed");
+
+		assertEquals(HttpStatus.UNAUTHORIZED.value(), response.getStatus());
+		assertTrue(response.getContentAsString().contains("\"path\":\"/store/login/cas\""));
+		assertTrue(response.getContentAsString().contains("\"error\":\"CAS login failed\""));
+	}
+
+	private static MockHttpServletRequest request(String contextPath, String requestUri) {
+		var request = new MockHttpServletRequest("GET", requestUri);
+		request.setContextPath(contextPath);
+		return request;
 	}
 }

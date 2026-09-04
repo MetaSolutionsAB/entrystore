@@ -67,7 +67,7 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 			// Undo the filter-persisted token before resolving the (subclass-supplied) failure URL: a
 			// throwing defaultFailureUrl() must not leave the rejected user authenticated behind the 500.
 			HttpUtil.clearAuthenticatedSession(request);
-			HttpUtil.redirectOrWriteUnauthorized(response, request.getRequestURI(), defaultFailureUrl(),
+			HttpUtil.redirectOrWriteUnauthorized(request, response, defaultFailureUrl(),
 					authTypeLabel() + " login failed");
 		}
 	}
@@ -144,7 +144,7 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 		// The protocol's filter already persisted the token to the SecurityContext; undo that
 		// before redirecting so the rejected user doesn't remain authenticated.
 		HttpUtil.clearAuthenticatedSession(request);
-		HttpUtil.redirectOrWriteUnauthorized(response, request.getRequestURI(), failureUrl,
+		HttpUtil.redirectOrWriteUnauthorized(request, response, failureUrl,
 				authTypeLabel() + " login failed");
 	}
 

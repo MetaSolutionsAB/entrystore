@@ -246,7 +246,7 @@ class CsrfIT extends BaseSpec {
 		def attrs = setCookie.split(';').collect { it.trim().toLowerCase() }
 		attrs.contains('samesite=none')
 		attrs.contains('secure')
-		attrs.contains('path=/')
+		attrs.contains('path=' + EntryStoreClient.contextPath)
 		// SPAs read the token from JS to forward as X-XSRF-TOKEN, so HttpOnly must NOT be set.
 		!attrs.contains('httponly')
 	}

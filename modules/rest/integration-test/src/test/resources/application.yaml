@@ -4,7 +4,7 @@ server:
   shutdown: graceful
   forward-headers-strategy: framework
   servlet:
-#    context-path: /store
+    context-path: /store
     session.cookie:
       name: auth_token
       http-only: ${entrystore.auth.cookie.httponly:true}
