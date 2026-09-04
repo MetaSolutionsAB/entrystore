@@ -23,6 +23,7 @@ import org.entrystore.rest.it.util.UserUtil
 import org.springframework.http.HttpMethod
 
 import java.nio.file.Files
+import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -125,8 +126,7 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('text/plain')
 		// The body is the raw string as submitted, not JSON-quoted/escaped — matches legacy Restlet behavior.
-		def resourceRespText = resourceConn.inputStream.text
-		resourceRespText == someText
+		resourceConn.inputStream.text == someText
 	}
 
 	def "GET /{context-id}/resource/{entry-id} as guest on List graph should respond with Not Found 404"() {
@@ -400,6 +400,47 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType() == 'application/octet-stream'
 		resourceConn.getInputStream().readAllBytes() == testBinFile.getBytes()
+	}
+
+	def "GET /{context-id}/resource/{entry-id} on None graph entry with file should answer inline Content-Disposition and a sha-256 Digest header"() {
+		given:
+		def body = [resource: [name: 'Digest header entry']]
+		def entryId = getOrCreateEntry(contextId, [id: 'digestNoneId'], body)
+		assert entryId.length() > 0
+		def payload = ([0xCA, 0xFE] + "Digest me".bytes.toList()) as byte[]
+		// .txt is not on FileUtil's dangerous-extension list, so the stored filename stays unchanged
+		def testBinFile = createTempBinaryFile('digest', '.txt', payload)
+		def sendFileConn = EntryStoreClient.putRequestFile('/' + contextId + '/resource/' + entryId, testBinFile,
+			'admin', 'application/octet-stream')
+		assert sendFileConn.getResponseCode() == HTTP_CREATED
+		def expectedDigest = MessageDigest.getInstance('SHA-256').digest(payload).encodeHex().toString()
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getHeaderField('Content-Disposition') == 'inline; filename="' + testBinFile.getName() + '"'
+		resourceConn.getHeaderField('Digest') == 'sha-256=' + expectedDigest
+	}
+
+	def "GET /{context-id}/resource/{entry-id}?download on None graph entry with file should answer attachment Content-Disposition"() {
+		given:
+		def body = [resource: [name: 'Download entry']]
+		def entryId = getOrCreateEntry(contextId, [id: 'downloadNoneId'], body)
+		assert entryId.length() > 0
+		def testBinFile = createTempBinaryFile('download', '.txt', "Save me".bytes)
+		def sendFileConn = EntryStoreClient.putRequestFile('/' + contextId + '/resource/' + entryId, testBinFile,
+			'admin', 'application/octet-stream')
+		assert sendFileConn.getResponseCode() == HTTP_CREATED
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId + '?download')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getHeaderField('Content-Disposition') == 'attachment; filename="' + testBinFile.getName() + '"'
+		resourceConn.getInputStream().readAllBytes() == "Save me".bytes
 	}
 
 	def "PUT /{context-id}/resource/{entry-id} multipart upload under the configured cap should succeed"() {

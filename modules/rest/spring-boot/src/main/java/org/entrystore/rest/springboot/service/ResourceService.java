@@ -42,8 +42,11 @@ import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.rest.springboot.model.api.ListFilter;
+import org.entrystore.rest.springboot.model.api.ResourceQuery;
 import org.entrystore.rest.springboot.model.api.UserSettingsRequestBody;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
+import org.entrystore.rest.springboot.model.dto.RenderedFeed;
+import org.entrystore.rest.springboot.model.dto.ResourceRepresentation;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
@@ -64,6 +67,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -107,6 +111,7 @@ public class ResourceService {
 	private final AuthService authService;
 	private final EmailSender emailSender;
 	private final ObjectMapper objectMapper;
+	private final SyndicationService syndicationService;
 
 	@Value("${entrystore.import.tmpdir:${java.io.tmpdir}}")
 	@Setter(AccessLevel.PACKAGE)
@@ -119,7 +124,49 @@ public class ResourceService {
 	@Setter(AccessLevel.PACKAGE)
 	private boolean requireCurrentPassword;
 
-	public String serializeResourceAsJson(Entry entry, String mediaType, ListFilter listFilter) {
+	/**
+	 * Chooses the representation a GET on the resource URI answers with. A syndication request is served before
+	 * the entry's own type is considered. May throw {@code RedirectSeeOtherException} for named resources.
+	 */
+	public ResourceRepresentation getResourceRepresentation(Entry entry, ResourceQuery query) {
+		if (query.syndication() != null) {
+			RenderedFeed feed = syndicationService.renderFeed(entry, query.syndication(), query.language(),
+					query.feedSize());
+			return new ResourceRepresentation.TextBody(feed.xml(), feed.mediaType());
+		}
+
+		EntryType entryType = entry.getEntryType();
+		GraphType graphType = entry.getGraphType();
+
+		if (entryType == EntryType.Local && graphType == GraphType.None) {
+			File file = serializeResourceNoneAsFile(entry);
+			if (file == null) {
+				return new ResourceRepresentation.Empty();
+			}
+			String filename = Objects.requireNonNullElse(entry.getFilename(), entry.getId());
+			return new ResourceRepresentation.FileDownload(file, determineMediaTypeForDownload(entry), filename,
+					resourceSerializer.readDigest(entry));
+		}
+
+		if (entryType == EntryType.Local && graphType == GraphType.String) {
+			// A String resource without a rdf:value has no text; the answer is an empty body, not an error.
+			String text = Objects.requireNonNullElse(
+					resourceSerializer.serializeResourceString(entry.getResource()), "");
+			return new ResourceRepresentation.TextBody(text, MediaType.TEXT_PLAIN);
+		}
+
+		if (graphType == GraphType.Graph || graphType == GraphType.List) {
+			String rdfMediaType = GraphUtil.resolveRdfMediaType(query.rdfFormat(), query.acceptHeader());
+			return new ResourceRepresentation.TextBody(serializeResourceAsJson(entry, rdfMediaType, query.listFilter()),
+					MediaType.parseMediaType(rdfMediaType));
+		}
+
+		String mediaType = query.rdfFormat() != null ? query.rdfFormat().toString() : query.acceptHeader();
+		return new ResourceRepresentation.TextBody(serializeResourceAsJson(entry, mediaType, query.listFilter()),
+				MediaType.APPLICATION_JSON);
+	}
+
+	String serializeResourceAsJson(Entry entry, String mediaType, ListFilter listFilter) {
 
 		EntryType entryType = entry.getEntryType();
 		GraphType graphType = entry.getGraphType();
@@ -195,7 +242,7 @@ public class ResourceService {
 		return EMPTY_REPRESENTATION;
 	}
 
-	public File serializeResourceNoneAsFile(Entry entry) {
+	private File serializeResourceNoneAsFile(Entry entry) {
 
 		if (entry.getResourceType() == ResourceType.InformationResource) {
 			// Local data
@@ -209,12 +256,21 @@ public class ResourceService {
 		return null;
 	}
 
-	public String serializeResourceString(Entry entry) {
-
-		return resourceSerializer.serializeResourceString(entry.getResource());
+	/**
+	 * Replaces the entry's resource with the request body and bumps the entry's modification date unless the
+	 * graph type is unsupported ({@link CompletionState#ERROR}).
+	 */
+	public CompletionState setEntryResource(Entry entry, byte[] requestBody, String mediaType, String mimeType, boolean textArea, String filename, String currentSessionId) {
+		CompletionState state = applyEntryResource(entry, requestBody, mediaType, mimeType, textArea, filename,
+				currentSessionId);
+		if (state != CompletionState.ERROR) {
+			entry.updateModificationDate();
+		}
+		return state;
 	}
 
-	public CompletionState setEntryResource(Entry entry, byte[] requestBody, String mediaType, String mimeType, boolean textArea, String filename, String currentSessionId) {
+	private CompletionState applyEntryResource(Entry entry, byte[] requestBody, String mediaType, String mimeType,
+											   boolean textArea, String filename, String currentSessionId) {
 		GraphType gt = entry.getGraphType();
 		/*
 		 * List and Group
@@ -437,6 +493,10 @@ public class ResourceService {
 		return CompletionState.ERROR;
 	}
 
+	/**
+	 * Stores an uploaded file as the resource of a binary (GraphType None) entry and bumps the entry's modification
+	 * date. Any other graph type is rejected as a bad request.
+	 */
 	public CompletionState setEntryResourceMultipart(Entry entry, MultipartFile file, String mimeType) {
 
 		if (entry.getGraphType() != GraphType.None) {
@@ -472,6 +532,7 @@ public class ResourceService {
 				entry.setFilename(FileUtil.sanitizeFilename(entry.getId()));
 			}
 
+			entry.updateModificationDate();
 			return CompletionState.CREATED;
 		} catch (IOException ioe) {
 			throw new InternalServerErrorException("Failed to process multipart resource data", ioe);
@@ -637,25 +698,22 @@ public class ResourceService {
 		return array.toString();
 	}
 
-	public String determineMediaTypeForDownload(Entry entry) {
+	private MediaType determineMediaTypeForDownload(Entry entry) {
 		String medTyp = entry.getMimetype();
-		if (medTyp != null) {
-			try {
-				if (rewriteMediaTypeJavaScript) {
-					if (medTyp.toLowerCase().contains("javascript")) {
-						log.info("Rewriting media type {} to text/plain for {}", medTyp, entry.getResourceURI());
-						medTyp = MediaType.TEXT_PLAIN_VALUE;
-					}
-				}
-				return medTyp;
-			} catch (IllegalArgumentException iae) {
-				log.warn("Invalid media type for {}: {}", entry.getEntryURI(), iae.getMessage());
-				return MediaType.ALL_VALUE;
-			}
-		} else {
-			return MediaType.APPLICATION_OCTET_STREAM_VALUE;
+		if (medTyp == null) {
+			return MediaType.APPLICATION_OCTET_STREAM;
 		}
-
+		if (rewriteMediaTypeJavaScript && medTyp.toLowerCase().contains("javascript")) {
+			log.info("Rewriting media type {} to text/plain for {}", medTyp, entry.getResourceURI());
+			return MediaType.TEXT_PLAIN;
+		}
+		try {
+			return MediaType.parseMediaType(medTyp);
+		} catch (InvalidMediaTypeException e) {
+			log.warn("Invalid stored media type [{}] for {}, serving as application/octet-stream", medTyp,
+					entry.getEntryURI());
+			return MediaType.APPLICATION_OCTET_STREAM;
+		}
 	}
 
 	private void importFromZIP(byte[] requestBody) {
