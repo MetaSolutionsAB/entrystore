@@ -21,13 +21,17 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -36,6 +40,8 @@ class SolrSearchInputValidatorTest {
 	private static final int MAX_LEN = 1024;
 	private static final int MAX_FQ_COUNT = 16;
 	private static final int MAX_FACET_COUNT = 16;
+	private static final int MAX_LIMIT = 100;
+	private static final int MAX_FACET_LIMIT = 1000;
 
 	private SolrSearchInputValidator validator;
 
@@ -48,6 +54,8 @@ class SolrSearchInputValidatorTest {
 		ReflectionTestUtils.setField(validator, "maxFilterQueryCount", MAX_FQ_COUNT);
 		ReflectionTestUtils.setField(validator, "maxFacetFieldsLength", MAX_LEN);
 		ReflectionTestUtils.setField(validator, "maxFacetFieldCount", MAX_FACET_COUNT);
+		ReflectionTestUtils.setField(validator, "maxLimit", MAX_LIMIT);
+		ReflectionTestUtils.setField(validator, "maxFacetLimit", MAX_FACET_LIMIT);
 	}
 
 	@Test
@@ -124,52 +132,98 @@ class SolrSearchInputValidatorTest {
 	}
 
 	@Test
-	void validateFilterQueriesAcceptsNullAndEmpty() {
-		assertDoesNotThrow(() -> validator.validateFilterQueries(List.of(), null));
-		assertDoesNotThrow(() -> validator.validateFilterQueries(List.of(""), ""));
+	void parseFilterQueriesReturnsNoEntriesForNullAndEmpty() {
+		assertEquals(List.of(), validator.parseFilterQueries(null));
+		assertEquals(List.of(), validator.parseFilterQueries(""));
 	}
 
 	@Test
-	void validateFilterQueriesAcceptsAtMaxCount() {
-		List<String> fqs = new ArrayList<>();
-		for (int i = 0; i < MAX_FQ_COUNT; i++) {
-			fqs.add("field" + i + ":value" + i);
-		}
-		assertDoesNotThrow(() -> validator.validateFilterQueries(fqs, String.join(",", fqs)));
+	void parseFilterQueriesSplitsOnCommaAndDecodesEachPartAfterwards() {
+		// Decoding after the split is what lets a client use an unencoded comma as the separator and an
+		// encoded one as content of a single filter query.
+		assertEquals(List.of("rdfType:a,b", "rdfType:c"), validator.parseFilterQueries("rdfType:a%2Cb,rdfType:c"));
 	}
 
 	@Test
-	void validateFilterQueriesAcceptsAtMaxLength() {
+	void parseFilterQueriesAcceptsAtMaxCount() {
+		String raw = String.join(",", Collections.nCopies(MAX_FQ_COUNT, "f:v"));
+		assertEquals(MAX_FQ_COUNT, validator.parseFilterQueries(raw).size());
+	}
+
+	@Test
+	void parseFilterQueriesAcceptsAtMaxLength() {
 		String raw = "a".repeat(MAX_LEN);
-		assertDoesNotThrow(() -> validator.validateFilterQueries(List.of(raw), raw));
+		assertEquals(List.of(raw), validator.parseFilterQueries(raw));
 	}
 
 	@Test
-	void validateFilterQueriesRejectsOneOverMaxCount() {
-		List<String> fqs = new ArrayList<>();
-		for (int i = 0; i < MAX_FQ_COUNT + 1; i++) {
-			fqs.add("f:v");
-		}
-		assertThrows(BadRequestException.class,
-				() -> validator.validateFilterQueries(fqs, String.join(",", fqs)));
+	void parseFilterQueriesRejectsOneOverMaxCount() {
+		String raw = String.join(",", Collections.nCopies(MAX_FQ_COUNT + 1, "f:v"));
+		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.parseFilterQueries(raw));
+		assertTrue(ex.getMessage().contains("'filterQuery'"), ex.getMessage());
 	}
 
 	@Test
-	void validateFilterQueriesRejectsCombinedOverlongInput() {
+	void parseFilterQueriesRejectsOverlongInput() {
 		String raw = "a".repeat(MAX_LEN + 1);
-		assertThrows(BadRequestException.class,
-				() -> validator.validateFilterQueries(List.of(raw), raw));
+		assertThrows(BadRequestException.class, () -> validator.parseFilterQueries(raw));
 	}
 
 	@Test
-	void validateFilterQueriesRejectsOverlongDecodedEntry() {
-		// The per-entry cap is defense-in-depth: unreachable from the controller flow today
-		// (raw filterQuery is length-capped first, and URLDecoder only shrinks length), but this
-		// test pins the behaviour for a future caller that passes pre-decoded entries directly.
-		String decoded = "a".repeat(MAX_LEN + 1);
-		String raw = "f:v";   // raw fits under the cap
-		assertThrows(BadRequestException.class,
-				() -> validator.validateFilterQueries(List.of(decoded), raw));
+	void parseFilterQueriesRejectsMalformedPercentEncoding() {
+		// Reached URLDecoder unguarded before and surfaced as a 500 from the generic handler.
+		BadRequestException ex = assertThrows(BadRequestException.class,
+				() -> validator.parseFilterQueries("rdfType:%zz"));
+		assertTrue(ex.getMessage().contains("'filterQuery'"), ex.getMessage());
+	}
+
+	@ParameterizedTest(name = "limit {0} clamps to {1}")
+	@CsvSource({
+			"150, 100", // above the configured maximum — capped at maxLimit
+			"100, 100", // exactly the maximum — unchanged
+			"42, 42",   // in range — unchanged
+			"0, 0",     // 0 is allowed on purpose: enables count-only requests
+			"-1, 50",   // negative — falls back to the default page size
+	})
+	void clampLimitClampsToConfiguredBounds(int requested, int expected) {
+		assertEquals(expected, validator.clampLimit(requested));
+	}
+
+	@Test
+	void maxLimitBindsFromTheConfiguredProperty() {
+		// Pins the placeholder key itself, which the reflection-set fields in setUp cannot: a misspelt
+		// @Value key would leave every clamp case green while an operator's entrystore.solr.max-limit
+		// was silently ignored and results stayed capped at the default.
+		new ApplicationContextRunner()
+				.withBean(PropertySourcesPlaceholderConfigurer.class)
+				.withBean(SolrSearchInputValidator.class)
+				.withPropertyValues("entrystore.solr.max-limit=7")
+				.run(context -> assertEquals(7, context.getBean(SolrSearchInputValidator.class).clampLimit(150)));
+	}
+
+	@Test
+	void maxFacetLimitBindsFromTheConfiguredProperty() {
+		// A requested facetLimit above the bound is what makes the cap observable; an absent one takes the default.
+		FacetSettingsRequestParams request = new FacetSettingsRequestParams();
+		request.setFacetLimit(50);
+		new ApplicationContextRunner()
+				.withBean(PropertySourcesPlaceholderConfigurer.class)
+				.withBean(SolrSearchInputValidator.class)
+				.withPropertyValues("entrystore.solr.facet-max-limit=7")
+				.run(context -> assertEquals(7,
+						context.getBean(SolrSearchInputValidator.class).toFacetSettings(request).limit));
+	}
+
+	@Test
+	void toFacetSettingsAppliesTheDefaultFacetLimitWhenNoneIsRequested() {
+		assertEquals(100, validator.toFacetSettings(new FacetSettingsRequestParams()).limit);
+	}
+
+	@Test
+	void toFacetSettingsRejectsDisallowedFacetFieldsBeforeConverting() {
+		FacetSettingsRequestParams request = new FacetSettingsRequestParams();
+		request.setFacetFields("secret_field");
+		assertThrows(BadRequestException.class, () -> validator.toFacetSettings(request));
 	}
 
 	@Test

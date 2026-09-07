@@ -23,6 +23,7 @@ import org.entrystore.User;
 import org.entrystore.rest.springboot.configuration.SignupWhitelistProperties;
 import org.entrystore.rest.springboot.model.auth.SignupInfo;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
+import org.entrystore.rest.springboot.util.EmailSender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -147,6 +148,29 @@ class AuthServiceTest {
 	}
 
 	@Test
+	void completePasswordChange_expiresOtherSessionsThenMailsTheUser() {
+		// The two halves belong together: expiring sessions without telling the user, or telling the user
+		// without expiring the sessions, is the split this method exists to prevent.
+		SessionRegistry sessionRegistry = mock(SessionRegistry.class);
+		EmailSender emailSender = mock(EmailSender.class);
+		AuthService service = authServiceWith(sessionRegistry, emailSender);
+		UserDetails principal = principalFor("http://example.com/_principals/resource/42");
+		SessionInformation current = mock(SessionInformation.class);
+		SessionInformation other = mock(SessionInformation.class);
+		when(current.getSessionId()).thenReturn("current-session");
+		when(other.getSessionId()).thenReturn("other-session");
+		when(sessionRegistry.getAllPrincipals()).thenReturn(List.of(principal));
+		when(sessionRegistry.getAllSessions(principal, false)).thenReturn(List.of(current, other));
+		User user = userWithResourceUri("http://example.com/_principals/resource/42");
+
+		service.completePasswordChange(user, "current-session");
+
+		verify(other).expireNow();
+		verify(current, never()).expireNow();
+		verify(emailSender).sendPasswordChangeConfirmation(user.getEntry());
+	}
+
+	@Test
 	@SuppressWarnings("unchecked")
 	void constructor_signupWhitelist_isLowerCasedSoMixedCaseConfigStillMatches() {
 		// The domain comparison at the end of signup() is an exact Set lookup against a lower-cased
@@ -163,8 +187,12 @@ class AuthServiceTest {
 	}
 
 	private AuthService authServiceWithSessionRegistry(SessionRegistry sessionRegistry) {
+		return authServiceWith(sessionRegistry, null);
+	}
+
+	private AuthService authServiceWith(SessionRegistry sessionRegistry, EmailSender emailSender) {
 		return new AuthService(null, null, null, null, null, null, new EmailValidator(),
-				null, sessionRegistry, null, null, meterRegistry,
+				emailSender, sessionRegistry, null, null, meterRegistry,
 				new SignupWhitelistProperties(Map.of()), executor);
 	}
 

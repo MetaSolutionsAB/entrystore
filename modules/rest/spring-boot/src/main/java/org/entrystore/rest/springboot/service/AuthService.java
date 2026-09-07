@@ -262,6 +262,16 @@ public class AuthService {
 	}
 
 	/**
+	 * Finishes a successful secret change: every other session of the user is expired and the user is told by
+	 * email. {@code exceptSessionId} spares the session performing the change (a user or admin changing their
+	 * own password); pass {@code null} to expire all sessions.
+	 */
+	public void completePasswordChange(User user, String exceptSessionId) {
+		expireUserSessions(user, exceptSessionId);
+		emailSender.sendPasswordChangeConfirmation(user.getEntry());
+	}
+
+	/**
 	 * Legacy password-reset confirmation: clicking the emailed link immediately applies the password
 	 * the requester chose at request time. Used when {@code entrystore.auth.confirmation.legacy=true}.
 	 */
@@ -324,8 +334,7 @@ public class AuthService {
 					signupTokenCache.removeAllTokens(ci.getEmail());
 					log.debug("Removed any authentication tokens belonging to user {}", u.getURI());
 
-					expireUserSessions(u, null);
-					emailSender.sendPasswordChangeConfirmation(u.getEntry());
+					completePasswordChange(u, null);
 					log.info("Reset password for user {}", u.getURI());
 				} else {
 					log.error("Error when resetting password for user {}", u.getURI());

@@ -23,7 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.rdf4j.model.Model;
-import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
@@ -33,17 +32,14 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.QuotaException;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
-import org.entrystore.User;
 import org.entrystore.impl.ListImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.api.ResourceQuery;
-import org.entrystore.rest.springboot.model.api.UserSettingsRequestBody;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
 import org.entrystore.rest.springboot.model.dto.RenderedFeed;
 import org.entrystore.rest.springboot.model.dto.ResourceRepresentation;
@@ -52,14 +48,11 @@ import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
-import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.springboot.security.SsrfSafeHttpClient;
 import org.entrystore.rest.springboot.security.SsrfValidator;
-import org.entrystore.rest.springboot.service.auth.BasicVerifier;
-import org.entrystore.rest.springboot.util.EmailSender;
 import org.entrystore.rest.springboot.util.FileUtil;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
@@ -71,8 +64,6 @@ import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -108,9 +99,7 @@ public class ResourceService {
 	private final SsrfValidator ssrfValidator;
 	private final SsrfSafeHttpClient ssrfSafeHttpClient;
 
-	private final AuthService authService;
-	private final EmailSender emailSender;
-	private final ObjectMapper objectMapper;
+	private final UserSettingsService userSettingsService;
 	private final SyndicationService syndicationService;
 
 	@Value("${entrystore.import.tmpdir:${java.io.tmpdir}}")
@@ -119,10 +108,6 @@ public class ResourceService {
 
 	@Value("${entrystore.http.allow-media-type-javascript:false}")
 	private boolean rewriteMediaTypeJavaScript;
-
-	@Value("${entrystore.auth.password.require-current-password:true}")
-	@Setter(AccessLevel.PACKAGE)
-	private boolean requireCurrentPassword;
 
 	/**
 	 * Chooses the representation a GET on the resource URI answers with. A syndication request is served before
@@ -399,94 +384,7 @@ public class ResourceService {
 
 		/* User */
 		if (GraphType.User.equals(gt)) {
-			PrincipalManager pm = repositoryManager.getPrincipalManager();
-			UserSettingsRequestBody settings;
-			try {
-				settings = objectMapper.readValue(requestBody, UserSettingsRequestBody.class);
-			} catch (JacksonException e) {
-				// Cause preserved for the log; the parser's own message is not echoed to the client.
-				throw new BadRequestException(UserSettingsRequestBody.SYNTAX_ERROR_MESSAGE, e);
-			}
-			if (settings == null) {
-				// The JSON literal `null` deserializes to a null reference instead of throwing, so without
-				// this the next dereference answers 500 for a four-byte body any authenticated caller can
-				// send.
-				throw new BadRequestException(UserSettingsRequestBody.SYNTAX_ERROR_MESSAGE);
-			}
-
-			User resourceUser = (User) entry.getResource();
-			if (settings.hasName()) {
-				String newName = settings.nameValue();
-				if (!resourceUser.setName(newName)) {
-					throw new BadRequestException("Name is already in use: " + newName);
-				}
-			}
-			if (settings.hasPassword()) {
-				String newPassword = settings.passwordValue();
-
-				if (requireCurrentPassword) {
-					// we require the current password if:
-					// (1) the user is a non-admin user, or
-					// (2) the user is an admin user and wants to set his own password
-					if (!pm.currentUserIsAdminOrAdminGroup() ||
-							(pm.currentUserIsAdminOrAdminGroup() && pm.getAuthenticatedUserURI().equals(resourceUser.getURI()))) {
-						if (!settings.hasCurrentPassword()) {
-							throw new ForbiddenException("Current password is required");
-						}
-						String currentPassword = settings.currentPasswordValue();
-						String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(pm, resourceUser.getName());
-						if (saltedHashedSecret == null || !Password.check(currentPassword, saltedHashedSecret)) {
-							throw new ForbiddenException("No password set or incorrect current password provided");
-						}
-					}
-				}
-
-				if (resourceUser.setSecret(newPassword)) {
-					// we need to expire sessions of the user, whose password is being changed
-
-					// if it is an admin/admingroup member, who is changing the password of another user, we expire all sessions of that user
-					// if it is an admin/admingroup member changing his own password, or user changing his own password,
-					// we expire all sessions of that admin/user except the session, through which it is being changed (currentSessionId)
-
-					// the test only asks if the authenticatedUser is the same as the user, whose password is to be changed
-					// because no user can change password of another user, only admin
-					boolean expireAllSessions = !pm.getAuthenticatedUserURI().equals(resourceUser.getURI());
-					authService.expireUserSessions(resourceUser, expireAllSessions ? null : currentSessionId);
-
-					emailSender.sendPasswordChangeConfirmation(entry);
-				} else {
-					throw new BadRequestException("Password must conform to configured rules.");
-				}
-			}
-			if (settings.hasLanguage()) {
-				String prefLang = settings.languageValue();
-				if (prefLang.isEmpty()) {
-					resourceUser.setLanguage(null);
-				} else if (!resourceUser.setLanguage(prefLang)) {
-					throw new BadRequestException("Preferred language could not be set.");
-				}
-			}
-			if (settings.hasHomeContext()) {
-				String homeContext = settings.homeContextValue();
-				Entry entryHomeContext = repositoryManager.getContextManager().get(homeContext);
-				if (entryHomeContext != null) {
-					if (!(entryHomeContext.getResource() instanceof Context)
-							|| !resourceUser.setHomeContext((Context) entryHomeContext.getResource())) {
-
-						throw new BadRequestException("Given homecontext is not a context.");
-					}
-				}
-			}
-			if (settings.hasDisabled()) {
-				if (entry.getResourceURI().equals(pm.getAuthenticatedUserURI())) {
-					throw new BadRequestException("Users cannot set their own disabled status.");
-				}
-				resourceUser.setDisabled(settings.disabledValue());
-			}
-			if (settings.hasCustomProperties()) {
-				resourceUser.setCustomProperties(settings.customPropertiesValue());
-			}
-
+			userSettingsService.updateUser(entry, requestBody, currentSessionId);
 			return CompletionState.UPDATED;
 		}
 

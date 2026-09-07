@@ -16,11 +16,15 @@
 
 package org.entrystore.rest.springboot.service;
 
+import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.model.api.FacetSettingsRequestParams;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -33,7 +37,10 @@ import java.util.regex.Pattern;
  * fixed allow-list (plus a few dynamic {@code metadata.predicate.*} families), and constrains
  * {@code facetMatches} to a literal-only pattern so Solr's per-field regex filter cannot be
  * abused for ReDoS or arbitrary regex evaluation. Violations throw {@link BadRequestException};
- * {@code AppExceptionHandler} maps that to {@code 400 Bad Request}.
+ * {@code AppExceptionHandler} maps that to {@code 400 Bad Request}. The validator also
+ * normalises the two request values that are bounded rather than rejected: {@code limit} is clamped to
+ * {@code entrystore.solr.max-limit} and the comma-separated {@code filterQuery} is split into its individual
+ * filter queries.
  */
 @Service
 public class SolrSearchInputValidator {
@@ -88,6 +95,10 @@ public class SolrSearchInputValidator {
 	 */
 	private static final Pattern FACET_MATCHES = Pattern.compile("^[\\w-]{1,64}$");
 
+	/** Page size for a negative {@code limit}; the same 50 the endpoint declares as its default. */
+	private static final int DEFAULT_LIMIT = 50;
+	private static final int DEFAULT_FACET_LIMIT = 100;
+
 	@Value("${entrystore.solr.search.query.max-length:1024}")
 	private int maxQueryLength;
 
@@ -105,6 +116,12 @@ public class SolrSearchInputValidator {
 
 	@Value("${entrystore.solr.search.facet-fields.max-count:16}")
 	private int maxFacetFieldCount;
+
+	@Value("${entrystore.solr.max-limit:100}")
+	private int maxLimit;
+
+	@Value("${entrystore.solr.facet-max-limit:1000}")
+	private int maxFacetLimit;
 
 	public void validateQuery(String query) {
 		if (query != null && query.length() > maxQueryLength) {
@@ -134,28 +151,57 @@ public class SolrSearchInputValidator {
 		}
 	}
 
-	public void validateFilterQueries(List<String> filterQueries, String rawFilterQuery) {
+	/**
+	 * Clamps the requested page size to {@code entrystore.solr.max-limit}. A negative value falls back to the
+	 * default page size; zero is allowed on purpose, since it lets a client ask for the result count alone.
+	 */
+	public int clampLimit(int limit) {
+		if (limit > maxLimit) {
+			return maxLimit;
+		}
+		if (limit < 0) {
+			return DEFAULT_LIMIT;
+		}
+		return limit;
+	}
+
+	/**
+	 * Splits the raw {@code filterQuery} parameter on commas and URL-decodes each part afterwards, so an
+	 * unencoded comma separates filter queries while an encoded one stays inside a filter query. The raw
+	 * value is length-capped before the split and the part count is capped before anything is decoded.
+	 */
+	public List<String> parseFilterQueries(String rawFilterQuery) {
 		if (rawFilterQuery == null || rawFilterQuery.isEmpty()) {
-			return;
+			return List.of();
 		}
 		if (rawFilterQuery.length() > maxFilterQueryLength) {
 			throw new BadRequestException(
 					"Query parameter 'filterQuery' exceeds maximum length of " + maxFilterQueryLength);
 		}
-		if (filterQueries.size() > maxFilterQueryCount) {
+		String[] parts = rawFilterQuery.split(",");
+		if (parts.length > maxFilterQueryCount) {
 			throw new BadRequestException(
 					"Query parameter 'filterQuery' contains more than " + maxFilterQueryCount + " entries");
 		}
-		// Defense-in-depth per-entry cap. Currently unreachable from the controller flow
-		// (URLDecoder.decode only shrinks length, and rawFilterQuery is already length-capped
-		// above), but kept so a future caller that supplies pre-decoded entries from a different
-		// source cannot bypass the cap.
-		for (String fq : filterQueries) {
-			if (fq != null && fq.length() > maxFilterQueryLength) {
+		List<String> filterQueries = new ArrayList<>(parts.length);
+		for (String part : parts) {
+			try {
+				filterQueries.add(URLDecoder.decode(part, StandardCharsets.UTF_8));
+			} catch (IllegalArgumentException e) {
 				throw new BadRequestException(
-						"Query parameter 'filterQuery' entry exceeds maximum length of " + maxFilterQueryLength);
+						"Query parameter 'filterQuery' contains a malformed percent-encoding", e);
 			}
 		}
+		return filterQueries;
+	}
+
+	/**
+	 * Validates the facet request and converts it, bounding the requested facet limit by
+	 * {@code entrystore.solr.facet-max-limit}.
+	 */
+	public SolrSearchIndex.FacetSettings toFacetSettings(FacetSettingsRequestParams request) {
+		validateFacetSettings(request);
+		return request.toSolrFacetSettings(maxFacetLimit, DEFAULT_FACET_LIMIT);
 	}
 
 	public void validateFacetSettings(FacetSettingsRequestParams request) {

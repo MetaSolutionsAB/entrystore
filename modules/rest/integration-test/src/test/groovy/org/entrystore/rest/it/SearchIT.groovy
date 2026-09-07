@@ -1006,6 +1006,47 @@ class SearchIT extends BaseSpec {
 		conn.errorStream.text.contains("'filterQuery'")
 	}
 
+	def "GET /search?type=solr with 'limit' above the configured maximum should clamp it to the maximum"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search?type=solr&query=description.pl:opissearch&limit=1000', '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['limit'] == 100
+	}
+
+	def "GET /search?type=solr with a negative 'limit' should fall back to the default page size"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search?type=solr&query=description.pl:opissearch&limit=-1', '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['limit'] == 50
+	}
+
+	def "GET /search?type=solr with an encoded comma inside a filter query should count it as one filter query"() {
+		given: 'sixteen segments, the first carrying an encoded comma: exactly the cap after the split, seventeen if decoded first'
+		def fqs = (['rdfType:Type1%2CType2'] + (3..17).collect { "rdfType:Type${it}" }).join(',')
+
+		when:
+		def conn = EntryStoreClient.getRequest(
+			'/search' + convertMapToQueryParams([type: 'solr', query: 'description.pl:opissearch', filterQuery: fqs]), '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+	}
+
+	def "GET /search?type=solr with a malformed percent-encoding in 'filterQuery' should reply with Bad Request 400"() {
+		when:
+		def conn = EntryStoreClient.getRequest(
+			'/search' + convertMapToQueryParams([type: 'solr', query: 'description.pl:opissearch', filterQuery: 'rdfType:%zz']), '')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('application/json')
+		conn.errorStream.text.contains("'filterQuery'")
+	}
+
 	def "GET /search?type=solr with 'facetFields' on a non-allowlisted field should reply with Bad Request 400"() {
 		when:
 		def conn = EntryStoreClient.getRequest(

@@ -29,7 +29,6 @@ import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
-import org.entrystore.User;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.StringResource;
@@ -38,7 +37,6 @@ import org.entrystore.rest.springboot.model.api.ResourceQuery;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
 import org.entrystore.rest.springboot.model.dto.RenderedFeed;
 import org.entrystore.rest.springboot.model.dto.ResourceRepresentation;
-import org.entrystore.rest.springboot.util.EmailSender;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.json.JSONArray;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
@@ -57,7 +55,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.web.multipart.MultipartFile;
-import tools.jackson.databind.json.JsonMapper;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -110,13 +107,10 @@ class ResourceServiceTest {
 	private SsrfValidator ssrfValidator;
 
 	@Mock
-	private AuthService authService;
+	private UserSettingsService userSettingsService;
 
 	@Mock
 	private Entry entry;
-
-	@Mock
-	private EmailSender emailSender;
 
 	@Mock
 	private SyndicationService syndicationService;
@@ -125,11 +119,9 @@ class ResourceServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		// The mapper is real, since the user-settings body is parsed with it and a mock would not
-		// exercise the parsing these cases depend on.
 		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, ssrfValidator,
-				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()), authService, emailSender,
-				JsonMapper.builder().build(), syndicationService);
+				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()), userSettingsService,
+				syndicationService);
 		// Point importTmpDir at the JUnit-managed isolated directory so the
 		// temp-file cleanup assertions are scoped to this test and cannot be
 		// polluted by other processes or orphan files in the shared system temp.
@@ -137,53 +129,30 @@ class ResourceServiceTest {
 	}
 
 	@Test
-	void setEntryResource_userPasswordChange_sendsTheConfirmationEmail() {
-		// The only place ResourceService sends mail. It was previously unreachable in this test class,
-		// because EmailSender was a literal null, so nothing pinned that a password change notifies the
-		// user at all — or that it does so only after the change actually took.
-		URI userUri = URI.create("http://example.com/_principals/resource/3");
-		User resourceUser = userWithPasswordChangeAllowed(userUri, "Sup3rSecret!", true);
-		when(principalManager.getAuthenticatedUserURI()).thenReturn(userUri);
+	void setEntryResource_userEntry_delegatesToUserSettingsServiceAndBumpsTheModificationDate() {
+		when(entry.getGraphType()).thenReturn(GraphType.User);
+		byte[] body = "{\"name\":\"alice\"}".getBytes(StandardCharsets.UTF_8);
 
-		CompletionState state = service.setEntryResource(entry, passwordBody("Sup3rSecret!"),
-				"application/json", "application/json", false, null, "session-1");
+		CompletionState state = service.setEntryResource(entry, body, "application/json", "application/json", false,
+				null, "session-1");
 
 		assertEquals(CompletionState.UPDATED, state);
-		verify(resourceUser).setSecret("Sup3rSecret!");
-		// Own password change, so only the other sessions of this user are expired.
-		verify(authService).expireUserSessions(resourceUser, "session-1");
-		verify(emailSender).sendPasswordChangeConfirmation(entry);
+		verify(userSettingsService).updateUser(entry, body, "session-1");
+		verify(entry).updateModificationDate();
 	}
 
 	@Test
-	void setEntryResource_rejectedPassword_sendsNoConfirmationEmail() {
-		// setSecret returning false means the password did not change, so a confirmation would tell the
-		// user something untrue.
-		// No getAuthenticatedUserURI stub: a rejected password throws before session expiry is considered,
-		// which is itself worth knowing — nothing is expired and nothing is mailed.
-		userWithPasswordChangeAllowed(URI.create("http://example.com/_principals/resource/3"), "weak", false);
-
-		assertThrows(BadRequestException.class, () -> service.setEntryResource(entry, passwordBody("weak"),
-				"application/json", "application/json", false, null, "session-1"));
-
-		verifyNoInteractions(emailSender);
-		verifyNoInteractions(authService);
-	}
-
-	private User userWithPasswordChangeAllowed(URI userUri, String newPassword, boolean accepted) {
-		User resourceUser = mock(User.class);
-		lenient().when(resourceUser.getURI()).thenReturn(userUri);
-		lenient().when(resourceUser.setSecret(newPassword)).thenReturn(accepted);
+	void setEntryResource_userEntryRejectedByTheSettingsService_doesNotBumpTheModificationDate() {
+		// A change that did not happen must not look like one: no date bump on the exception path.
 		when(entry.getGraphType()).thenReturn(GraphType.User);
-		when(entry.getResource()).thenReturn(resourceUser);
-		// Skips the current-password challenge, which is a separate branch with its own coverage.
-		service.setRequireCurrentPassword(false);
-		when(repositoryManager.getPrincipalManager()).thenReturn(principalManager);
-		return resourceUser;
-	}
+		byte[] body = "{\"password\":\"weak\"}".getBytes(StandardCharsets.UTF_8);
+		doThrow(new BadRequestException("Password must conform to configured rules."))
+				.when(userSettingsService).updateUser(entry, body, "session-1");
 
-	private static byte[] passwordBody(String password) {
-		return ("{\"password\":\"" + password + "\"}").getBytes(StandardCharsets.UTF_8);
+		assertThrows(BadRequestException.class, () -> service.setEntryResource(entry, body, "application/json",
+				"application/json", false, null, "session-1"));
+
+		verify(entry, never()).updateModificationDate();
 	}
 
 	@Test
