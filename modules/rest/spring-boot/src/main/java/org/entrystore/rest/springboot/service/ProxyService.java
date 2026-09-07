@@ -129,4 +129,28 @@ public class ProxyService {
 		}
 		return out.toByteArray();
 	}
+
+	/**
+	 * Sends an SSRF-guarded DELETE to a remote resource, re-validating every redirect hop. Used for
+	 * {@code DELETE /{ctx}/resource/{id}?proxy=true} on link entries; the caller performs the ACL check. Unlike
+	 * {@link #fetchUrl}, the URL is validated here because the caller holds a stored resource URI, not a
+	 * client-supplied one already resolved by the controller. A non-2xx upstream answer is reported as 502 without
+	 * echoing the upstream body.
+	 */
+	public void deleteUrl(String url) {
+		SsrfValidator.ValidatedTarget target = ssrfValidator.validateForDelete(url);
+		ssrfSafeHttpClient.execute(target, "DELETE", Map.of(),
+				location -> {
+					log.info("DELETE request redirected to {}", location);
+					return ssrfValidator.validateForDelete(location);
+				},
+				(status, conn) -> {
+					if (status >= 200 && status < 300) {
+						return null;
+					}
+					// Suppress upstream body — may leak internal details.
+					throw new CustomResponseException("Delete request received an error response (status " + status + ")",
+							HttpStatus.BAD_GATEWAY);
+				});
+	}
 }

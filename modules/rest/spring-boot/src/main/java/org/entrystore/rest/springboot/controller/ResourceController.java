@@ -131,7 +131,8 @@ public class ResourceController {
 		}
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		CompletionState result = resourceService.setEntryResource(entry, body, mediaType, mimeType, textarea != null, filename, session.getId());
+		CompletionState result = resourceService.setEntryResource(entry, body, mediaType, mimeType, filename,
+				session.getId());
 
 		return buildSetResourceResponse(entry, result);
 	}

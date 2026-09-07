@@ -22,10 +22,10 @@ import java.time.Duration;
 
 /**
  * Shared {@link ProxyProperties} instances for tests of the outbound-fetch collaborators
- * ({@code SsrfValidator}, {@code SsrfSafeHttpClient}, {@code ProxyService}, {@code ResourceService}).
+ * ({@code SsrfValidator}, {@code SsrfSafeHttpClient}, {@code ProxyService}).
  *
  * <p>Kept in one place so that a change to the shipped defaults does not have to be mirrored across
- * four test classes, and so a test that cares about a specific limit says so explicitly.
+ * three test classes, and so a test that cares about a specific limit says so explicitly.
  */
 public final class ProxyPropertiesFixture {
 

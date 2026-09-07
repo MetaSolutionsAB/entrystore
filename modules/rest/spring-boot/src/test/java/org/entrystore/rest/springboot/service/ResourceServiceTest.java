@@ -21,70 +21,39 @@ import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.AuthorizationException;
-import org.entrystore.Context;
-import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.ResourceType;
-import org.entrystore.User;
 import org.entrystore.impl.RDFResource;
-import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.StringResource;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.api.ResourceQuery;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
 import org.entrystore.rest.springboot.model.dto.RenderedFeed;
 import org.entrystore.rest.springboot.model.dto.ResourceRepresentation;
-import org.entrystore.rest.springboot.util.EmailSender;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
-import org.json.JSONArray;
-import org.entrystore.rest.springboot.model.exception.ForbiddenException;
-import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
-import org.entrystore.rest.springboot.model.exception.NotImplementedException;
-import org.entrystore.rest.springboot.security.SsrfSafeHttpClient;
-import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.entrystore.rest.springboot.util.RDFJSON;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
-import org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.web.multipart.MultipartFile;
-import tools.jackson.databind.json.JsonMapper;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.List;
-import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipException;
-import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -94,12 +63,6 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ResourceServiceTest {
 
-	@TempDir
-	Path isolatedTmpDir;
-
-	@Mock
-	private RepositoryManagerImpl repositoryManager;
-
 	@Mock
 	private ResourceJsonSerializer resourceSerializer;
 
@@ -107,95 +70,38 @@ class ResourceServiceTest {
 	private PrincipalManager principalManager;
 
 	@Mock
-	private SsrfValidator ssrfValidator;
+	private SyndicationService syndicationService;
 
 	@Mock
-	private AuthService authService;
+	private ListResourceService listResourceService;
+
+	@Mock
+	private FileResourceService fileResourceService;
+
+	@Mock
+	private UserService userService;
+
+	@Mock
+	private ProxyService proxyService;
 
 	@Mock
 	private Entry entry;
-
-	@Mock
-	private EmailSender emailSender;
-
-	@Mock
-	private SyndicationService syndicationService;
 
 	private ResourceService service;
 
 	@BeforeEach
 	void setUp() {
-		// The mapper is real, since the user-settings body is parsed with it and a mock would not
-		// exercise the parsing these cases depend on.
-		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, ssrfValidator,
-				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()), authService, emailSender,
-				JsonMapper.builder().build(), syndicationService);
-		// Point importTmpDir at the JUnit-managed isolated directory so the
-		// temp-file cleanup assertions are scoped to this test and cannot be
-		// polluted by other processes or orphan files in the shared system temp.
-		service.setImportTmpDir(isolatedTmpDir.toFile());
+		service = new ResourceService(resourceSerializer, principalManager, syndicationService, listResourceService,
+				fileResourceService, userService, proxyService);
 	}
 
 	@Test
-	void setEntryResource_userPasswordChange_sendsTheConfirmationEmail() {
-		// The only place ResourceService sends mail. It was previously unreachable in this test class,
-		// because EmailSender was a literal null, so nothing pinned that a password change notifies the
-		// user at all — or that it does so only after the change actually took.
-		URI userUri = URI.create("http://example.com/_principals/resource/3");
-		User resourceUser = userWithPasswordChangeAllowed(userUri, "Sup3rSecret!", true);
-		when(principalManager.getAuthenticatedUserURI()).thenReturn(userUri);
-
-		CompletionState state = service.setEntryResource(entry, passwordBody("Sup3rSecret!"),
-				"application/json", "application/json", false, null, "session-1");
-
-		assertEquals(CompletionState.UPDATED, state);
-		verify(resourceUser).setSecret("Sup3rSecret!");
-		// Own password change, so only the other sessions of this user are expired.
-		verify(authService).expireUserSessions(resourceUser, "session-1");
-		verify(emailSender).sendPasswordChangeConfirmation(entry);
-	}
-
-	@Test
-	void setEntryResource_rejectedPassword_sendsNoConfirmationEmail() {
-		// setSecret returning false means the password did not change, so a confirmation would tell the
-		// user something untrue.
-		// No getAuthenticatedUserURI stub: a rejected password throws before session expiry is considered,
-		// which is itself worth knowing — nothing is expired and nothing is mailed.
-		userWithPasswordChangeAllowed(URI.create("http://example.com/_principals/resource/3"), "weak", false);
-
-		assertThrows(BadRequestException.class, () -> service.setEntryResource(entry, passwordBody("weak"),
-				"application/json", "application/json", false, null, "session-1"));
-
-		verifyNoInteractions(emailSender);
-		verifyNoInteractions(authService);
-	}
-
-	private User userWithPasswordChangeAllowed(URI userUri, String newPassword, boolean accepted) {
-		User resourceUser = mock(User.class);
-		lenient().when(resourceUser.getURI()).thenReturn(userUri);
-		lenient().when(resourceUser.setSecret(newPassword)).thenReturn(accepted);
-		when(entry.getGraphType()).thenReturn(GraphType.User);
-		when(entry.getResource()).thenReturn(resourceUser);
-		// Skips the current-password challenge, which is a separate branch with its own coverage.
-		service.setRequireCurrentPassword(false);
-		when(repositoryManager.getPrincipalManager()).thenReturn(principalManager);
-		return resourceUser;
-	}
-
-	private static byte[] passwordBody(String password) {
-		return ("{\"password\":\"" + password + "\"}").getBytes(StandardCharsets.UTF_8);
-	}
-
-	@Test
-	void getResourceRepresentation_localNoneWithDataFile_returnsFileDownloadNamedAfterEntryId() throws IOException {
-		File dataFile = Files.createFile(isolatedTmpDir.resolve("payload.bin")).toFile();
-		Data data = mock(Data.class);
-		when(data.getDataFile()).thenReturn(dataFile);
+	void getResourceRepresentation_localNoneWithDataFile_returnsFileDownloadNamedAfterEntryId() {
+		File dataFile = new File("payload.bin");
 		when(entry.getEntryType()).thenReturn(EntryType.Local);
 		when(entry.getGraphType()).thenReturn(GraphType.None);
-		when(entry.getResourceType()).thenReturn(ResourceType.InformationResource);
-		when(entry.getResource()).thenReturn(data);
-		when(entry.getMimetype()).thenReturn("image/png");
+		when(fileResourceService.dataFileForDownload(entry)).thenReturn(dataFile);
+		when(fileResourceService.mediaTypeForDownload(entry)).thenReturn(MediaType.IMAGE_PNG);
 		when(entry.getFilename()).thenReturn(null);
 		when(entry.getId()).thenReturn("42");
 		when(resourceSerializer.readDigest(entry)).thenReturn("ab12");
@@ -211,32 +117,10 @@ class ResourceServiceTest {
 	}
 
 	@Test
-	void getResourceRepresentation_localNoneWithInvalidMimetype_fallsBackToOctetStream() throws IOException {
-		File dataFile = Files.createFile(isolatedTmpDir.resolve("payload.bin")).toFile();
-		Data data = mock(Data.class);
-		when(data.getDataFile()).thenReturn(dataFile);
-		when(entry.getEntryType()).thenReturn(EntryType.Local);
-		when(entry.getGraphType()).thenReturn(GraphType.None);
-		when(entry.getResourceType()).thenReturn(ResourceType.InformationResource);
-		when(entry.getResource()).thenReturn(data);
-		// The mimetype is stored verbatim from the upload request, so it may not parse.
-		when(entry.getMimetype()).thenReturn("not a type");
-		when(entry.getFilename()).thenReturn("payload.bin");
-
-		ResourceRepresentation result = service.getResourceRepresentation(entry, plainQuery());
-
-		var download = assertInstanceOf(ResourceRepresentation.FileDownload.class, result);
-		assertEquals(MediaType.APPLICATION_OCTET_STREAM, download.mediaType());
-	}
-
-	@Test
 	void getResourceRepresentation_localNoneWithoutDataFile_returnsEmpty() {
-		Data data = mock(Data.class);
-		when(data.getDataFile()).thenReturn(null);
 		when(entry.getEntryType()).thenReturn(EntryType.Local);
 		when(entry.getGraphType()).thenReturn(GraphType.None);
-		when(entry.getResourceType()).thenReturn(ResourceType.InformationResource);
-		when(entry.getResource()).thenReturn(data);
+		when(fileResourceService.dataFileForDownload(entry)).thenReturn(null);
 
 		ResourceRepresentation result = service.getResourceRepresentation(entry, plainQuery());
 
@@ -303,163 +187,18 @@ class ResourceServiceTest {
 	}
 
 	@Test
-	void setEntryResource_stringResource_updatesModificationDate() {
-		StringResource resource = mock(StringResource.class);
-		when(entry.getGraphType()).thenReturn(GraphType.String);
-		when(entry.getResource()).thenReturn(resource);
-
-		CompletionState state = service.setEntryResource(entry, "text".getBytes(StandardCharsets.UTF_8),
-				"text/plain", null, false, null, "session-1");
-
-		assertEquals(CompletionState.UPDATED, state);
-		verify(resource).setString("text");
-		verify(entry).updateModificationDate();
-	}
-
-	@Test
-	void setEntryResourceMultipart_nonNoneGraphType_throwsWithoutUpdatingModificationDate() {
-		when(entry.getGraphType()).thenReturn(GraphType.String);
-
-		assertThrows(BadRequestException.class,
-				() -> service.setEntryResourceMultipart(entry, mock(MultipartFile.class), null));
-
-		verify(entry, never()).updateModificationDate();
-	}
-
-	@Test
-	void setEntryResourceMultipart_noneGraphType_updatesModificationDate() throws IOException {
-		File dataFile = Files.createFile(isolatedTmpDir.resolve("upload.txt")).toFile();
-		Data data = mock(Data.class);
-		when(data.getDataFile()).thenReturn(dataFile);
-		when(entry.getGraphType()).thenReturn(GraphType.None);
-		when(entry.getResource()).thenReturn(data);
-		when(repositoryManager.getMaximumFileSize()).thenReturn(-1L);
-		MultipartFile file = mock(MultipartFile.class);
-		when(file.getInputStream()).thenReturn(new ByteArrayInputStream(new byte[0]));
-		when(file.getContentType()).thenReturn("text/plain");
-		when(file.getOriginalFilename()).thenReturn("upload.txt");
-
-		CompletionState state = service.setEntryResourceMultipart(entry, file, null);
-
-		assertEquals(CompletionState.CREATED, state);
-		verify(entry).updateModificationDate();
-	}
-
-	@Test
-	void setEntryResource_unsupportedGraphType_returnsErrorWithoutUpdatingModificationDate() {
-		// Context has no branch in the resource update, so it falls through to ERROR and must not look modified.
-		when(entry.getGraphType()).thenReturn(GraphType.Context);
-
-		CompletionState state = service.setEntryResource(entry, new byte[0], "application/json", null, false, null,
-				"session-1");
-
-		assertEquals(CompletionState.ERROR, state);
-		verify(entry, never()).updateModificationDate();
-	}
-
-	@Test
-	void importEntryResource_zipWithoutRdfEntries_throwsNotImplementedAndDeletesTempFile() throws IOException {
+	void serializeResourceAsJson_listAsJson_delegatesToListResourceService() {
+		// The JSON id array is the one list representation that is not a plain graph serialization.
+		org.entrystore.List list = mock(org.entrystore.List.class);
 		when(entry.getGraphType()).thenReturn(GraphType.List);
-		byte[] zipBytes = buildZip("readme.txt", "hello");
+		when(entry.getResource()).thenReturn(list);
+		when(list.getGraph()).thenReturn(new LinkedHashModel());
+		ListFilter filter = emptyListFilter();
+		when(listResourceService.serializeChildrenIds(entry, filter)).thenReturn("[\"a\"]");
 
-		// No .rdf entries to import, so importFromZIP returns and importEntryResource throws
-		// NotImplementedException afterwards; the temp file must still be cleaned up.
-		assertThrows(NotImplementedException.class,
-				() -> service.importEntryResource(entry, zipBytes));
+		String result = service.serializeResourceAsJson(entry, "application/json", filter);
 
-		assertIsolatedTmpDirIsEmpty("not-implemented path, no rdf entries");
-	}
-
-	@Test
-	void importEntryResource_nonListGraphType_throwsBadRequest() throws IOException {
-		when(entry.getGraphType()).thenReturn(GraphType.None);
-		byte[] zipBytes = buildZip("data.rdf", "<rdf:RDF/>");
-
-		// The else branch rejects non-List entries before any ZIP is read.
-		assertThrows(BadRequestException.class,
-				() -> service.importEntryResource(entry, zipBytes));
-
-		assertIsolatedTmpDirIsEmpty("non-List graphType rejected before importFromZIP");
-	}
-
-	@Test
-	void importEntryResource_zipWithRdfEntry_deletesTempFileEvenOnException() throws IOException {
-		when(entry.getGraphType()).thenReturn(GraphType.List);
-		byte[] zipBytes = buildZip("data.rdf", "<rdf:RDF/>");
-
-		// importRDFResource is currently stubbed and throws NotImplementedException;
-		// the finally block in importFromZIP must still clean up.
-		assertThrows(NotImplementedException.class,
-				() -> service.importEntryResource(entry, zipBytes));
-
-		assertIsolatedTmpDirIsEmpty("exception path from importRDFResource stub");
-	}
-
-	@Test
-	void deleteResource_proxyTrueUnauthorized_throwsBeforeOutboundDelete() {
-		// Pins the contract that the WriteResource check fires BEFORE the proxy branch
-		// reaches deleteRemoteResource — otherwise an unauthorized caller could trigger
-		// an outbound DELETE.
-		doThrow(new AuthorizationException(null, null, AccessProperty.WriteResource))
-				.when(principalManager).checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
-
-		assertThrows(AuthorizationException.class,
-				() -> service.deleteResource(entry, "true", false));
-
-		verifyNoInteractions(ssrfValidator);
-	}
-
-	@Test
-	void deleteResource_proxyTrue_blacklistedOrigin_throwsForbidden() throws Exception {
-		when(entry.getEntryType()).thenReturn(EntryType.Link);
-		when(entry.getResourceURI()).thenReturn(URI.create("http://127.0.0.1:1/x"));
-		doThrow(new ForbiddenException("Access denied: host is blacklisted"))
-				.when(ssrfValidator).validateForDelete(anyString());
-
-		assertThrows(ForbiddenException.class,
-				() -> service.deleteResource(entry, "true", false));
-
-		verify(ssrfValidator, never()).openPinnedConnection(any(), any());
-	}
-
-	@Test
-	void deleteResource_proxyTrue_badScheme_throwsBadRequest() throws Exception {
-		when(entry.getEntryType()).thenReturn(EntryType.Reference);
-		when(entry.getResourceURI()).thenReturn(URI.create("ftp://example.org/x"));
-		doThrow(new BadRequestException("Only http and https URLs are supported"))
-				.when(ssrfValidator).validateForDelete(anyString());
-
-		assertThrows(BadRequestException.class,
-				() -> service.deleteResource(entry, "true", false));
-
-		verify(ssrfValidator, never()).openPinnedConnection(any(), any());
-	}
-
-	@Test
-	void deleteResource_proxyTrue_userinfoInUrl_throwsBadRequest() throws Exception {
-		when(entry.getEntryType()).thenReturn(EntryType.LinkReference);
-		when(entry.getResourceURI()).thenReturn(URI.create("http://user:pass@example.org/x"));
-		doThrow(new BadRequestException("URLs with embedded credentials are not allowed"))
-				.when(ssrfValidator).validateForDelete(anyString());
-
-		assertThrows(BadRequestException.class,
-				() -> service.deleteResource(entry, "true", false));
-
-		verify(ssrfValidator, never()).openPinnedConnection(any(), any());
-	}
-
-	@Test
-	void importEntryResource_malformedZipPayload_deletesTempFileAndThrows() throws IOException {
-		when(entry.getGraphType()).thenReturn(GraphType.List);
-		byte[] notAZip = "this is not a zip file".getBytes(StandardCharsets.UTF_8);
-
-		// new ZipFile(tmpFile) throws ZipException (an IOException) for a non-ZIP
-		// payload; importFromZIP wraps it as InternalServerErrorException.
-		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
-				() -> service.importEntryResource(entry, notAZip));
-		assertInstanceOf(ZipException.class, ex.getCause());
-
-		assertIsolatedTmpDirIsEmpty("exception path from ZipFile constructor");
+		assertEquals("[\"a\"]", result);
 	}
 
 	// The isList && application/json short-circuit must not swallow a non-list Graph resource: that case goes
@@ -486,130 +225,176 @@ class ResourceServiceTest {
 		assertTrue(result.contains("http://purl.org/dc/terms/title"),
 				"Expected the predicate IRI in the RDF/JSON output");
 		assertTrue(result.contains("Sample"), "Expected the literal value in the RDF/JSON output");
+		verifyNoInteractions(listResourceService);
 	}
 
 	@Test
-	void serializeResourceAsJson_listWithSort_returnsSortedIdArray() {
-		Context context = mockListEntry(List.of("a", "b", "c"));
-		mockResolvableChild(context, "a", new Date(3000));
-		mockResolvableChild(context, "b", new Date(1000));
-		mockResolvableChild(context, "c", new Date(2000));
-		var filter = new ListFilter("modified", null, null, null, null, null, null);
+	void setEntryResource_stringResource_updatesModificationDate() {
+		StringResource resource = mock(StringResource.class);
+		when(entry.getGraphType()).thenReturn(GraphType.String);
+		when(entry.getResource()).thenReturn(resource);
 
-		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+		CompletionState state = service.setEntryResource(entry, "text".getBytes(StandardCharsets.UTF_8),
+				"text/plain", null, null, "session-1");
 
-		assertEquals(List.of("b", "c", "a"), jsonArrayToList(result));
+		assertEquals(CompletionState.UPDATED, state);
+		verify(resource).setString("text");
+		verify(entry).updateModificationDate();
 	}
 
 	@Test
-	void serializeResourceAsJson_listSortDescending_returnsReversedIdArray() {
-		// Pins the !"desc".equalsIgnoreCase(order) mapping in ListParams.withoutPagination.
-		Context context = mockListEntry(List.of("a", "b", "c"));
-		mockResolvableChild(context, "a", new Date(3000));
-		mockResolvableChild(context, "b", new Date(1000));
-		mockResolvableChild(context, "c", new Date(2000));
-		var filter = new ListFilter("modified", null, null, null, "desc", null, null);
+	void setEntryResource_listAsJson_delegatesToListResourceServiceAndUpdatesModificationDate() {
+		byte[] body = "[\"a\"]".getBytes(StandardCharsets.UTF_8);
+		when(entry.getGraphType()).thenReturn(GraphType.List);
 
-		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+		CompletionState state = service.setEntryResource(entry, body, "application/json", null, null, "session-1");
 
-		assertEquals(List.of("a", "c", "b"), jsonArrayToList(result));
+		assertEquals(CompletionState.UPDATED, state);
+		verify(listResourceService).setChildrenFromJson(entry, body);
+		verify(entry).updateModificationDate();
 	}
 
 	@Test
-	void serializeResourceAsJson_listOver500Children_returnsUnsortedIds() {
-		// Above 500 children the sort branch is skipped entirely: the raw (HashSet-ordered,
-		// nondeterministic) ID set is returned and no child entry is resolved.
-		List<String> ids = new ArrayList<>();
-		for (int i = 0; i < 501; i++) {
-			ids.add("id" + i);
-		}
-		mockListEntry(ids);
-		var filter = new ListFilter("modified", null, null, null, null, null, null);
+	void setEntryResource_groupAsTurtle_delegatesToGraphUpdate() {
+		byte[] body = "<a> <b> <c> .".getBytes(StandardCharsets.UTF_8);
+		when(entry.getGraphType()).thenReturn(GraphType.Group);
 
-		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+		CompletionState state = service.setEntryResource(entry, body, "text/turtle", null, null, "session-1");
 
-		List<String> returned = jsonArrayToList(result);
-		assertEquals(501, returned.size());
-		assertEquals(new HashSet<>(ids), new HashSet<>(returned));
+		assertEquals(CompletionState.UPDATED, state);
+		verify(listResourceService).setGraph(entry, body, "text/turtle");
+		verify(entry).updateModificationDate();
 	}
 
 	@Test
-	void serializeResourceAsJson_listSortedBranch_missingChildSkipped() {
-		// "b" is referenced by the list but does not resolve in the context — it is logged
-		// and dropped from the sorted output (unlike the unsorted branch, which keeps raw IDs).
-		Context context = mockListEntry(List.of("a", "b", "c"));
-		mockResolvableChild(context, "a", new Date(1000));
-		when(context.get("b")).thenReturn(null);
-		mockResolvableChild(context, "c", new Date(2000));
-		var filter = new ListFilter("modified", null, null, null, null, null, null);
+	void setEntryResource_binaryBody_delegatesToFileResourceServiceAndAnswersCreated() {
+		byte[] body = {1, 2, 3};
+		when(entry.getGraphType()).thenReturn(GraphType.None);
 
-		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+		CompletionState state = service.setEntryResource(entry, body, "image/png", null, "a.png", "session-1");
 
-		assertEquals(List.of("a", "c"), jsonArrayToList(result));
+		// A binary upload is the one PUT that answers 201.
+		assertEquals(CompletionState.CREATED, state);
+		verify(fileResourceService).setData(entry, body, "image/png", null, "a.png");
+		verify(entry).updateModificationDate();
 	}
 
 	@Test
-	void serializeResourceAsJson_listWithSort_ignoresNonNumericOffsetAndLimit() {
-		// The sorting path ignores offset/limit, so malformed values must not fail the request
-		// (ListParams.withoutPagination skips the Integer.parseInt done by ListParams(ListFilter)).
-		Context context = mockListEntry(List.of("a", "b"));
-		mockResolvableChild(context, "a", new Date(2000));
-		mockResolvableChild(context, "b", new Date(1000));
-		var filter = new ListFilter("modified", null, null, null, null, "abc", "xyz");
+	void setEntryResource_user_delegatesToUserServiceWithSessionId() {
+		byte[] body = "{\"language\":\"sv\"}".getBytes(StandardCharsets.UTF_8);
+		when(entry.getGraphType()).thenReturn(GraphType.User);
 
-		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+		CompletionState state = service.setEntryResource(entry, body, "application/json", null, null, "session-1");
 
-		assertEquals(List.of("b", "a"), jsonArrayToList(result));
+		assertEquals(CompletionState.UPDATED, state);
+		verify(userService).updateSettings(entry, body, "session-1");
+		verify(entry).updateModificationDate();
 	}
 
-	/** Stubs {@code entry} as a List-type entry whose list resource references the given child IDs. */
-	private Context mockListEntry(List<String> childIds) {
-		Context context = mock(Context.class);
-		org.entrystore.List list = mock(org.entrystore.List.class);
+	@Test
+	void setEntryResource_unsupportedGraphType_returnsErrorWithoutUpdatingModificationDate() {
+		// Context has no branch in the resource update, so it falls through to ERROR and must not look modified.
+		when(entry.getGraphType()).thenReturn(GraphType.Context);
+
+		CompletionState state = service.setEntryResource(entry, new byte[0], "application/json", null, null,
+				"session-1");
+
+		assertEquals(CompletionState.ERROR, state);
+		verify(entry, never()).updateModificationDate();
+	}
+
+	@Test
+	void setEntryResourceMultipart_delegatesAndUpdatesModificationDate() {
+		MultipartFile file = mock(MultipartFile.class);
+
+		CompletionState state = service.setEntryResourceMultipart(entry, file, "image/png");
+
+		assertEquals(CompletionState.CREATED, state);
+		verify(fileResourceService).setDataMultipart(entry, file, "image/png");
+		verify(entry).updateModificationDate();
+	}
+
+	@Test
+	void setEntryResourceMultipart_rejectedUpload_doesNotUpdateModificationDate() {
+		// The date bump must stay behind the delegate call: a rejected upload leaves the entry untouched.
+		MultipartFile file = mock(MultipartFile.class);
+		doThrow(new BadRequestException("rejected")).when(fileResourceService).setDataMultipart(entry, file, null);
+
+		assertThrows(BadRequestException.class, () -> service.setEntryResourceMultipart(entry, file, null));
+
+		verify(entry, never()).updateModificationDate();
+	}
+
+	@Test
+	void deleteResource_proxyTrueUnauthorized_throwsBeforeOutboundDelete() {
+		// Pins the contract that the WriteResource check fires BEFORE the proxy branch
+		// reaches the outbound DELETE — otherwise an unauthorized caller could trigger it.
+		doThrow(new AuthorizationException(null, null, AccessProperty.WriteResource))
+				.when(principalManager).checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
+
+		assertThrows(AuthorizationException.class,
+				() -> service.deleteResource(entry, "true", false));
+
+		verifyNoInteractions(proxyService);
+	}
+
+	@Test
+	void deleteResource_proxyTrueOnLink_deletesRemoteUrlOnly() {
+		assertProxyDeleteForEntryType(EntryType.Link);
+	}
+
+	@Test
+	void deleteResource_proxyTrueOnReference_deletesRemoteUrlOnly() {
+		assertProxyDeleteForEntryType(EntryType.Reference);
+	}
+
+	@Test
+	void deleteResource_proxyTrueOnLinkReference_deletesRemoteUrlOnly() {
+		assertProxyDeleteForEntryType(EntryType.LinkReference);
+	}
+
+	@Test
+	void deleteResource_proxyTrueOnLocalEntry_ignoresProxyAndDeletesLocally() {
+		// proxy=true only means something for non-local entries; a local entry must never trigger an outbound DELETE.
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.None);
+
+		service.deleteResource(entry, "true", false);
+
+		verify(fileResourceService).deleteData(entry);
+		verifyNoInteractions(proxyService);
+	}
+
+	private void assertProxyDeleteForEntryType(EntryType entryType) {
+		when(entry.getEntryType()).thenReturn(entryType);
+		when(entry.getResourceURI()).thenReturn(URI.create("http://example.org/x"));
+
+		service.deleteResource(entry, "true", false);
+
+		verify(proxyService).deleteUrl("http://example.org/x");
+		verifyNoInteractions(listResourceService, fileResourceService);
+	}
+
+	@Test
+	void deleteResource_localList_delegatesRecursiveFlag() {
 		when(entry.getEntryType()).thenReturn(EntryType.Local);
 		when(entry.getGraphType()).thenReturn(GraphType.List);
-		when(entry.getResource()).thenReturn(list);
-		when(list.getGraph()).thenReturn(new LinkedHashModel());
-		lenient().when(entry.getContext()).thenReturn(context);
-		List<URI> childUris = new ArrayList<>();
-		for (String id : childIds) {
-			childUris.add(URI.create("http://example.com/ctx/entry/" + id));
-		}
-		when(list.getChildren()).thenReturn(childUris);
-		return context;
+
+		service.deleteResource(entry, null, true);
+
+		verify(listResourceService).deleteChildren(entry, true);
+		verifyNoInteractions(proxyService, fileResourceService);
 	}
 
-	private void mockResolvableChild(Context context, String id, Date modified) {
-		Entry child = mock(Entry.class);
-		lenient().when(child.getEntryURI()).thenReturn(URI.create("http://example.com/ctx/entry/" + id));
-		lenient().when(child.getModifiedDate()).thenReturn(modified);
-		lenient().when(context.get(id)).thenReturn(child);
-	}
+	@Test
+	void deleteResource_localBinary_delegatesToFileResourceService() {
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.None);
 
-	private static List<String> jsonArrayToList(String json) {
-		JSONArray array = new JSONArray(json);
-		List<String> values = new ArrayList<>();
-		for (int i = 0; i < array.length(); i++) {
-			values.add(array.getString(i));
-		}
-		return values;
-	}
+		service.deleteResource(entry, null, false);
 
-	private void assertIsolatedTmpDirIsEmpty(String pathDescription) throws IOException {
-		try (Stream<Path> entries = Files.list(isolatedTmpDir)) {
-			assertEquals(0, entries.count(),
-					"isolated tmpdir must be empty after importEntryResource (" + pathDescription + ")");
-		}
-	}
-
-	private static byte[] buildZip(String entryName, String body) throws IOException {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		try (ZipOutputStream zos = new ZipOutputStream(baos)) {
-			zos.putNextEntry(new ZipEntry(entryName));
-			zos.write(body.getBytes(StandardCharsets.UTF_8));
-			zos.closeEntry();
-		}
-		return baos.toByteArray();
+		verify(fileResourceService).deleteData(entry);
+		verifyNoInteractions(proxyService, listResourceService);
 	}
 
 	private static ResourceQuery plainQuery() {
