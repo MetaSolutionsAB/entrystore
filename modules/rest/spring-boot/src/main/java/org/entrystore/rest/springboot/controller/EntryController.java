@@ -67,7 +67,8 @@ public class EntryController {
 			@ModelAttribute ListFilter listFilter
 	) {
 		String mediaType = rdfFormat != null ? GraphUtil.validateRdfMediaType(rdfFormat.toString()) : null;
-		return entryService.getEntryInJsonFormat(contextId, entryId, mediaType, includeAll != null, listFilter);
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		return entryService.getEntryInJsonFormat(entry, mediaType, includeAll != null, listFilter);
 	}
 
 	@Operation(
@@ -86,7 +87,8 @@ public class EntryController {
 		// echo back the client's Accept type (text/rdf+n3) as the response Content-Type, but we respond with
 		// the normalized form (text/n3) since text/rdf+n3 is a non-standard legacy N3 MIME type.
 		String mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, GraphUtil.DEFAULT_RDF_MEDIA_TYPE);
-		String body = entryService.getEntryInRdfFormat(contextId, entryId, mediaType);
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		String body = entryService.getEntryInRdfFormat(entry, mediaType);
 		return ResponseEntity.ok()
 				.contentType(MediaType.parseMediaType(mediaType))
 				.body(body);
@@ -108,7 +110,8 @@ public class EntryController {
 		String mediaType = GraphUtil.validateRdfMediaType(
 				determineMediaType(format, contentType), HttpStatus.UNSUPPORTED_MEDIA_TYPE);
 
-		Entry modifiedEntry = entryService.modifyEntry(contextId, entryId, body, mediaType, applyACLtoChildren != null);
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		Entry modifiedEntry = entryService.modifyEntry(entry, body, mediaType, applyACLtoChildren != null);
 
 		return HttpUtil.updateResponseWithModificationDateAndETag(
 						ResponseEntity.noContent(),
@@ -126,7 +129,8 @@ public class EntryController {
 			@RequestParam(required = false) String recursive
 	) {
 
-		entryService.deleteEntry(contextId, entryId, recursive != null);
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		entryService.deleteEntry(entry, recursive != null);
 
 		return ResponseEntity
 				.noContent()

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.springboot.security;
+package org.entrystore.rest.springboot.filter;
 
 import org.entrystore.rest.springboot.configuration.PasswordLoginListProperties;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;

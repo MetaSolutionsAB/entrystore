@@ -35,7 +35,6 @@ import org.entrystore.rest.springboot.model.dto.RenderedFeed;
 import org.entrystore.rest.springboot.model.dto.ResourceRepresentation;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.util.RDFJSON;
-import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -64,7 +63,7 @@ import static org.mockito.Mockito.when;
 class ResourceServiceTest {
 
 	@Mock
-	private ResourceJsonSerializer resourceSerializer;
+	private ResourceSerializationService resourceSerializationService;
 
 	@Mock
 	private PrincipalManager principalManager;
@@ -91,8 +90,8 @@ class ResourceServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new ResourceService(resourceSerializer, principalManager, syndicationService, listResourceService,
-				fileResourceService, userService, proxyService);
+		service = new ResourceService(resourceSerializationService, principalManager, syndicationService,
+				listResourceService, fileResourceService, userService, proxyService);
 	}
 
 	@Test
@@ -104,7 +103,7 @@ class ResourceServiceTest {
 		when(fileResourceService.mediaTypeForDownload(entry)).thenReturn(MediaType.IMAGE_PNG);
 		when(entry.getFilename()).thenReturn(null);
 		when(entry.getId()).thenReturn("42");
-		when(resourceSerializer.readDigest(entry)).thenReturn("ab12");
+		when(resourceSerializationService.readDigest(entry)).thenReturn("ab12");
 
 		ResourceRepresentation result = service.getResourceRepresentation(entry, plainQuery());
 
@@ -133,7 +132,7 @@ class ResourceServiceTest {
 		when(entry.getEntryType()).thenReturn(EntryType.Local);
 		when(entry.getGraphType()).thenReturn(GraphType.String);
 		when(entry.getResource()).thenReturn(resource);
-		when(resourceSerializer.serializeResourceString(resource)).thenReturn("hello");
+		when(resourceSerializationService.serializeResourceString(resource)).thenReturn("hello");
 
 		ResourceRepresentation result = service.getResourceRepresentation(entry, plainQuery());
 
@@ -148,7 +147,7 @@ class ResourceServiceTest {
 		when(entry.getEntryType()).thenReturn(EntryType.Local);
 		when(entry.getGraphType()).thenReturn(GraphType.String);
 		when(entry.getResource()).thenReturn(resource);
-		when(resourceSerializer.serializeResourceString(resource)).thenReturn(null);
+		when(resourceSerializationService.serializeResourceString(resource)).thenReturn(null);
 
 		ResourceRepresentation result = service.getResourceRepresentation(entry, plainQuery());
 

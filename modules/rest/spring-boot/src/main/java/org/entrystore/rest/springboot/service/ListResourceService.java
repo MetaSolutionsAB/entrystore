@@ -31,13 +31,13 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.rest.springboot.model.api.ListFilter;
+import org.entrystore.rest.springboot.model.dto.ListParams;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.util.GraphUtil;
-import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.springframework.beans.factory.annotation.Value;
@@ -233,7 +233,8 @@ public class ListResourceService {
 				}
 			}
 
-			ResourceJsonSerializer.sortChildrenEntries(childrenEntries, ResourceJsonSerializer.ListParams.withoutPagination(listFilter));
+			ResourceSerializationService.sortChildrenEntries(childrenEntries,
+					ListParams.withoutPagination(listFilter));
 
 			for (Entry childEntry : childrenEntries) {
 				URI childURI = childEntry.getEntryURI();

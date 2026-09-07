@@ -25,9 +25,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -102,7 +104,7 @@ class SolrSearchInputValidatorTest {
 		// SearchService.ORDER.valueOf and falls back to asc on unknown values).
 		String padded = "modified " + "a".repeat(MAX_LEN - "modified ".length());
 		// Sanity check: at-cap.
-		assertTrue(padded.length() == MAX_LEN, "test setup: padded length != MAX_LEN");
+		assertEquals(MAX_LEN, padded.length(), "test setup: padded length != MAX_LEN");
 		assertDoesNotThrow(() -> validator.validateSort(padded));
 	}
 
@@ -170,6 +172,29 @@ class SolrSearchInputValidatorTest {
 		String raw = "f:v";   // raw fits under the cap
 		assertThrows(BadRequestException.class,
 				() -> validator.validateFilterQueries(List.of(decoded), raw));
+	}
+
+	@Test
+	void parseFilterQueriesNullReturnsEmptyList() {
+		assertTrue(validator.parseFilterQueries(null).isEmpty());
+	}
+
+	@Test
+	void parseFilterQueriesBlankValueYieldsOneEmptyQuery() {
+		// filterQuery= from URL-template clients keeps its current shape: one empty entry, no rejection.
+		assertEquals(List.of(""), validator.parseFilterQueries(""));
+	}
+
+	@Test
+	void parseFilterQueriesDecodesAfterSplit() {
+		// An unencoded comma separates filter queries; an encoded one (%2C) stays inside one.
+		assertEquals(List.of("a:x,y", "b:z"), validator.parseFilterQueries("a:x%2Cy,b:z"));
+	}
+
+	@Test
+	void parseFilterQueriesRejectsOneOverMaxCount() {
+		String raw = String.join(",", Collections.nCopies(MAX_FQ_COUNT + 1, "f:v"));
+		assertThrows(BadRequestException.class, () -> validator.parseFilterQueries(raw));
 	}
 
 	@Test

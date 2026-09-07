@@ -51,7 +51,7 @@ public class RelationController {
 					"application/ld+json", "application/rdf+json"
 			}
 	)
-	public ResponseEntity<String> getResource(
+	public ResponseEntity<String> getRelations(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
 			@RequestParam(required = false) MediaType format,

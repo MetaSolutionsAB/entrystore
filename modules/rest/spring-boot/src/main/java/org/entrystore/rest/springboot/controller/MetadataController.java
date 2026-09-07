@@ -67,7 +67,12 @@ public class MetadataController {
 
 	@Operation(
 			summary = "Returns an entry's metadata graph.",
-			description = "desc")
+			description = "The {type} path segment selects the entry's local metadata, its cached external metadata " +
+					"or the merged graph of both. The RDF format follows the 'format' parameter, then the Accept " +
+					"header. 'graphQuery' filters the graph; 'recursive' lists traversal profiles or predicates to " +
+					"follow up to 'depth' levels within 'scope' (when given, {type} and 'rev' are ignored and the " +
+					"traversal merges local and cached external metadata); 'rev' selects a revision of the local " +
+					"metadata; 'download' answers with Content-Disposition: attachment.")
 	@GetMapping(path = "/{context-id}/{type:metadata|cached-external-metadata|merged-metadata}/{entry-id}")
 	public ResponseEntity<String> getMetadata(
 			@PathVariable("context-id") String contextId,
@@ -99,7 +104,8 @@ public class MetadataController {
 
 	@Operation(
 			summary = "Sets an entry's metadata graph.",
-			description = "desc")
+			description = "Replaces the entry's local or cached external metadata with the graph in the request " +
+					"body; the merged graph is read-only. 'rev' is accepted but historic revisions cannot be modified.")
 	@PutMapping(path = "/{context-id}/{type:metadata|cached-external-metadata|merged-metadata}/{entry-id}")
 	public ResponseEntity<Void> setMetadata(
 			@PathVariable("context-id") String contextId,
@@ -127,7 +133,8 @@ public class MetadataController {
 
 	@Operation(
 			summary = "Deletes an entry's metadata graph.",
-			description = "desc")
+			description = "Clears the entry's local or cached external metadata graph; the merged graph cannot be " +
+					"deleted. 'rev' is accepted but historic revisions cannot be modified.")
 	@DeleteMapping(path = "/{context-id}/{type:metadata|cached-external-metadata|merged-metadata}/{entry-id}")
 	public ResponseEntity<Void> deleteMetadata(
 			@PathVariable("context-id") String contextId,

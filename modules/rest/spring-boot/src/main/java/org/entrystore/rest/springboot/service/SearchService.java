@@ -34,17 +34,18 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.configuration.SyndicationProperties;
+import org.entrystore.rest.springboot.model.api.FacetSettingsRequestParams;
 import org.entrystore.rest.springboot.model.dto.QueryResultsDto;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.util.HttpQueryRedactor;
-import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.entrystore.rest.springboot.util.Syndication;
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -59,10 +60,21 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SearchService {
 
+	/** Page size applied when the caller omits {@code limit} or passes a negative value. */
+	public static final int DEFAULT_LIMIT = 50;
+
+	/** Facet page size when {@code facetLimit} is absent or below 1. */
+	private static final int DEFAULT_FACET_LIMIT = 100;
+
 	private final RepositoryManagerImpl repositoryManager;
 	private final SyndicationProperties syndicationProperties;
-	private final ResourceJsonSerializer resourceJsonSerializer;
+	private final ResourceSerializationService resourceSerializationService;
 
+	@Value("${entrystore.solr.max-limit:100}")
+	private int solrMaxLimit;
+
+	@Value("${entrystore.solr.facet-max-limit:1000}")
+	private int solrMaxFacetLimit;
 
 	/**
 	 * Valid SPARQL predicate: a full IRI ({@code <http://...>}), a prefixed name ({@code dc:title}),
@@ -71,6 +83,29 @@ public class SearchService {
 	private static final Pattern VALID_SPARQL_PREDICATE = Pattern.compile(
 			"^(<[^<>\"\\s{}|^`\\\\]+>|[a-zA-Z][\\w.-]*:[a-zA-Z_][\\w.-]*[\\w]|a)$"
 	);
+
+	/**
+	 * Clamps a requested page size to {@code entrystore.solr.max-limit}. Zero is allowed on purpose so a
+	 * client can ask for the result count only; a negative value falls back to {@link #DEFAULT_LIMIT}.
+	 */
+	public int clampLimit(int limit) {
+		if (limit > solrMaxLimit) {
+			return solrMaxLimit;
+		}
+		if (limit < 0) {
+			return DEFAULT_LIMIT;
+		}
+		return limit;
+	}
+
+	/**
+	 * Converts the bound facet request parameters into Solr facet settings, capping the facet limit at
+	 * {@code entrystore.solr.facet-max-limit} and substituting {@link #DEFAULT_FACET_LIMIT} when it is absent or
+	 * below 1; {@code facetMinCount} is raised to at least 1.
+	 */
+	public SolrSearchIndex.FacetSettings toFacetSettings(FacetSettingsRequestParams request) {
+		return request.toSolrFacetSettings(solrMaxFacetLimit, DEFAULT_FACET_LIMIT);
+	}
 
 	public List<Entry> findEntriesSparql(String queryValue) {
 
@@ -93,6 +128,10 @@ public class SearchService {
 		}
 	}
 
+	/**
+	 * Runs a Solr query. The row count is clamped with {@link #clampLimit(int)} here as well, so the
+	 * {@code entrystore.solr.max-limit} cap holds for every caller.
+	 */
 	public QueryResultsDto findEntriesSolr(
 			String queryValue,
 			String sorting,
@@ -113,7 +152,7 @@ public class SearchService {
 
 			SolrQuery q = new SolrQuery(queryValue);
 			q.setStart(offset);
-			q.setRows(limit);
+			q.setRows(clampLimit(limit));
 
 			if (sorting != null) {
 				for (String string : sorting.split(",")) {
@@ -211,14 +250,14 @@ public class SearchService {
 							childJSON.put("name", ((Group) groupResource).getName());
 						}
 					}
-					JSONArray rights = resourceJsonSerializer.serializeRights(e);
+					JSONArray rights = resourceSerializationService.serializeRights(e);
 					if (!rights.isEmpty()) {
 						// unlike list serialization, search children only carry a "rights" key when
 						// at least one right exists
 						childJSON.put("rights", rights);
 					}
 
-					resourceJsonSerializer.appendMetadataInfoAndRelations(e, childJSON, rdfFormat, true);
+					resourceSerializationService.appendMetadataInfoAndRelations(e, childJSON, rdfFormat, true);
 
 					children.put(childJSON);
 				}

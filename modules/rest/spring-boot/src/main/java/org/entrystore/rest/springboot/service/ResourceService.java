@@ -37,7 +37,6 @@ import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.springboot.util.GraphUtil;
-import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -57,7 +56,7 @@ public class ResourceService {
 
 	private static final String EMPTY_REPRESENTATION = "";
 
-	private final ResourceJsonSerializer resourceSerializer;
+	private final ResourceSerializationService resourceSerializationService;
 	private final PrincipalManager principalManager;
 	private final SyndicationService syndicationService;
 	private final ListResourceService listResourceService;
@@ -86,13 +85,13 @@ public class ResourceService {
 			}
 			String filename = Objects.requireNonNullElse(entry.getFilename(), entry.getId());
 			return new ResourceRepresentation.FileDownload(file, fileResourceService.mediaTypeForDownload(entry),
-					filename, resourceSerializer.readDigest(entry));
+					filename, resourceSerializationService.readDigest(entry));
 		}
 
 		if (entryType == EntryType.Local && graphType == GraphType.String) {
 			// A String resource without a rdf:value has no text; the answer is an empty body, not an error.
 			String text = Objects.requireNonNullElse(
-					resourceSerializer.serializeResourceString(entry.getResource()), "");
+					resourceSerializationService.serializeResourceString(entry.getResource()), "");
 			return new ResourceRepresentation.TextBody(text, MediaType.TEXT_PLAIN);
 		}
 
@@ -160,16 +159,18 @@ public class ResourceService {
 			try {
 				Resource resource = entry.getResource();
 				return switch (graphType) {
-					case User -> resourceSerializer.serializeResourceUser(resource).toString();
-					case Group -> resourceSerializer.serializeResourceGroup(resource, mediaType).toString();
-					case Context -> resourceSerializer.serializeResourceContext(resource).toString();
-					case SystemContext -> resourceSerializer.serializeResourceSystemContext(resource).toString();
+					case User -> resourceSerializationService.serializeResourceUser(resource).toString();
+					case Group -> resourceSerializationService.serializeResourceGroup(resource, mediaType).toString();
+					case Context -> resourceSerializationService.serializeResourceContext(resource).toString();
+					case SystemContext ->
+							resourceSerializationService.serializeResourceSystemContext(resource).toString();
 					case Pipeline -> {
 						if (resource instanceof RDFResource pipeline) {
 							if (pipeline.getGraph() == null) {
 								throw new EntityNotFoundException("The pipeline has not been set");
 							}
-							yield resourceSerializer.serializeResourcePipeline(pipeline, mediaType).toString();
+							yield resourceSerializationService.serializeResourcePipeline(pipeline, mediaType)
+									.toString();
 						}
 						yield EMPTY_REPRESENTATION;
 					}

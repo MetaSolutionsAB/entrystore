@@ -18,7 +18,7 @@ package org.entrystore.rest.springboot.security;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.entrystore.rest.springboot.configuration.CacheControlFilter;
+import org.entrystore.rest.springboot.filter.CacheControlFilter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.web.DefaultRedirectStrategy;
 

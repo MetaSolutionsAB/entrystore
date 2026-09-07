@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.service;
 
+import org.apache.solr.client.solrj.request.SolrQuery;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
@@ -27,17 +28,25 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.repository.util.QueryResult;
+import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.configuration.SyndicationProperties;
+import org.entrystore.rest.springboot.model.api.FacetSettingsRequestParams;
 import org.entrystore.rest.springboot.model.dto.QueryResultsDto;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
-import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.URI;
 import java.net.URL;
@@ -49,8 +58,10 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -68,12 +79,77 @@ class SearchServiceTest {
 	private final SyndicationProperties syndicationProperties = new SyndicationProperties(Map.of());
 
 	/**
-	 * generateJson delegates the per-entry sections and rights to ResourceJsonSerializer, so the
+	 * generateJson delegates the per-entry sections and rights to ResourceSerializationService, so the
 	 * tests use a real serializer (over the same mocks) instead of a mock to keep asserting the
 	 * produced JSON.
 	 */
-	private ResourceJsonSerializer realSerializer() {
-		return new ResourceJsonSerializer(principalManager, repositoryManager, loginAttemptService);
+	private ResourceSerializationService realSerializer() {
+		return new ResourceSerializationService(principalManager, repositoryManager, loginAttemptService);
+	}
+
+	@ParameterizedTest(name = "limit {0} clamps to {1}")
+	@CsvSource({
+			"150, 100", // above the configured maximum — capped at solrMaxLimit
+			"100, 100", // exactly the maximum — unchanged
+			"42, 42",   // in range — unchanged
+			"0, 0",     // 0 is allowed on purpose: enables count-only requests
+			"-1, 50",   // negative — falls back to the default page size
+	})
+	void clampLimit_clampsToConfiguredBounds(int requested, int expected) {
+		var service = new SearchService(null, null, null);
+		// @Value-injected field — set via reflection since there is no Spring context here; mirrors the default.
+		ReflectionTestUtils.setField(service, "solrMaxLimit", 100);
+
+		assertEquals(expected, service.clampLimit(requested));
+	}
+
+	@Test
+	void solrMaxLimit_bindsFromTheConfiguredProperty() {
+		// Pins the placeholder key itself, which the reflection-set field above cannot: a misspelt
+		// @Value key would leave every case above green while an operator's entrystore.solr.max-limit
+		// was silently ignored and results stayed capped at the default.
+		new ApplicationContextRunner()
+				.withBean(PropertySourcesPlaceholderConfigurer.class)
+				.withBean(SearchService.class, () -> new SearchService(null, null, null))
+				.withPropertyValues("entrystore.solr.max-limit=7")
+				.run(context -> assertEquals(7, context.getBean(SearchService.class).clampLimit(150)));
+	}
+
+	@Test
+	void solrMaxFacetLimit_bindsFromTheConfiguredProperty() {
+		// Same key-pinning rationale as above, observed through the facet settings the cap is applied to.
+		var request = new FacetSettingsRequestParams();
+		request.setFacetLimit(5000);
+
+		new ApplicationContextRunner()
+				.withBean(PropertySourcesPlaceholderConfigurer.class)
+				.withBean(SearchService.class, () -> new SearchService(null, null, null))
+				.withPropertyValues("entrystore.solr.facet-max-limit=7")
+				.run(context -> assertEquals(7, context.getBean(SearchService.class).toFacetSettings(request).limit));
+	}
+
+	@Test
+	void toFacetSettings_withoutFacetLimit_usesDefaultFacetLimit() {
+		var service = new SearchService(null, null, null);
+		ReflectionTestUtils.setField(service, "solrMaxFacetLimit", 1000);
+
+		assertEquals(100, service.toFacetSettings(new FacetSettingsRequestParams()).limit);
+	}
+
+	@Test
+	void findEntriesSolr_clampsRowsToConfiguredMaximum() {
+		// The cap must hold inside the service, not only for callers that remembered clampLimit().
+		SolrSearchIndex solrIndex = mock(SolrSearchIndex.class);
+		when(repositoryManager.getIndex()).thenReturn(solrIndex);
+		when(solrIndex.sendQuery(any())).thenReturn(new QueryResult(Set.of(), 0, List.of()));
+		var service = new SearchService(repositoryManager, syndicationProperties, realSerializer());
+		ReflectionTestUtils.setField(service, "solrMaxLimit", 100);
+
+		service.findEntriesSolr("q", null, 0, 5000, List.of(), new SolrSearchIndex.FacetSettings());
+
+		ArgumentCaptor<SolrQuery> query = ArgumentCaptor.forClass(SolrQuery.class);
+		verify(solrIndex).sendQuery(query.capture());
+		assertEquals(100, query.getValue().getRows());
 	}
 
 	@Test

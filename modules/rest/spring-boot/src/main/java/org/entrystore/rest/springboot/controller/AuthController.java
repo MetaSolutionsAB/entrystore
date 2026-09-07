@@ -51,7 +51,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -100,6 +99,8 @@ public class AuthController {
 	private final Optional<ClientRegistrationRepository> clientRegistrationRepository;
 	private final RequestBodyValidator requestBodyValidator;
 
+	@Operation(summary = "Starts a CAS login by redirecting to the CAS server's login page. Answers 404 when CAS " +
+			"is disabled.")
 	@GetMapping("/auth/cas")
 	public void startCasLogin(HttpServletResponse response) throws IOException {
 		if (!casConfiguration.enabled()) {
@@ -115,7 +116,8 @@ public class AuthController {
 		response.sendRedirect(CommonUtils.constructRedirectUrl(loginUrl, "service", serviceUrl, false, false));
 	}
 
-	// Endpoint initiates SAML authentication by redirecting to the IdP for authentication
+	@Operation(summary = "Starts a SAML login by redirecting to the identity provider chosen from the 'username' " +
+			"domain, else 'idp', else the configured default IdP. Answers 404 when SAML is disabled.")
 	@GetMapping("/auth/saml")
 	public String startSamlLogin(@RequestParam(required = false) String username,
 								 @RequestParam(required = false) String idp,
@@ -155,6 +157,8 @@ public class AuthController {
 	 * {@code OidcProviderRegistrationValidator} rejects both config-derived cases at startup; the
 	 * guard is the runtime backstop.
 	 */
+	@Operation(summary = "Starts an OIDC login by redirecting to the provider chosen from the 'username' domain, " +
+			"else 'provider', else the configured default provider. Answers 404 when OIDC is disabled.")
 	@GetMapping("/auth/oidc")
 	public String startOidcLogin(@RequestParam(required = false) String username,
 								 @RequestParam(required = false) String provider,

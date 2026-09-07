@@ -41,11 +41,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.net.URLDecoder;
-import java.util.ArrayList;
 import java.util.List;
-
-import static java.nio.charset.StandardCharsets.UTF_8;
 
 @Slf4j
 @RestController
@@ -53,8 +49,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 @Validated
 @RequiredArgsConstructor
 public class SearchController {
-
-	private static final int DEFAULT_FACET_LIMIT = 100;
 
 	private final SearchService searchService;
 	private final SolrSearchInputValidator solrSearchInputValidator;
@@ -65,12 +59,6 @@ public class SearchController {
 	// Config coerces yes/1 to false while Spring's relaxed binding maps them to true.
 	@Value("${entrystore.trust.x-forwarded-for:false}")
 	private boolean trustForwardedFor;
-
-	@Value("${entrystore.solr.max-limit:100}")
-	private int solrMaxLimit;
-
-	@Value("${entrystore.solr.facet-max-limit:1000}")
-	private int solrMaxFacetLimit;
 
 	@Operation(summary = "Searches the repository and returns entries")
 	@GetMapping(
@@ -84,12 +72,12 @@ public class SearchController {
 			@RequestParam(name = "feedtitle", defaultValue = "Syndication feed of search") String feedTitle,
 			@RequestParam(defaultValue = MediaType.APPLICATION_JSON_VALUE) String rdfFormat,
 			@RequestParam(defaultValue = "en") String lang,
-			@RequestParam(defaultValue = "50") int limit
+			@RequestParam(defaultValue = "" + SearchService.DEFAULT_LIMIT) int limit
 	) {
 
 		searchRateLimiter.acquirePermit(HttpUtil.getClientIpAddress(request, trustForwardedFor));
 
-		limit = clampLimit(limit);
+		limit = searchService.clampLimit(limit);
 
 		List<Entry> foundEntries = searchService.findEntriesSparql(query);
 
@@ -111,7 +99,7 @@ public class SearchController {
 			@RequestParam(defaultValue = MediaType.APPLICATION_JSON_VALUE) String rdfFormat,
 			@RequestParam(defaultValue = "en") String lang,
 			@RequestParam(defaultValue = "0") int offset,
-			@RequestParam(defaultValue = "50") int limit,
+			@RequestParam(defaultValue = "" + SearchService.DEFAULT_LIMIT) int limit,
 			@RequestParam(required = false) String sort,
 			@RequestParam(required = false) String filterQuery,
 			FacetSettingsRequestParams facetRequest
@@ -130,36 +118,13 @@ public class SearchController {
 			offset = 0;
 		}
 
-		// Query parameter: limit
-		limit = clampLimit(limit);
-
-		// Query parameter: filterQuery
-		List<String> filterQueries = new ArrayList<>();
-		if (filterQuery != null) {
-			// We URLDecode after the split because we want to be able to use comma
-			// as separator (unencoded) for FQs and as content inside FQs (encoded)
-			for (String fq : filterQuery.split(",")) {
-				filterQueries.add(URLDecoder.decode(fq, UTF_8));
-			}
-		}
-		solrSearchInputValidator.validateFilterQueries(filterQueries, filterQuery);
-
-		SolrSearchIndex.FacetSettings facetSettings = facetRequest.toSolrFacetSettings(solrMaxFacetLimit, DEFAULT_FACET_LIMIT);
+		limit = searchService.clampLimit(limit);
+		List<String> filterQueries = solrSearchInputValidator.parseFilterQueries(filterQuery);
+		SolrSearchIndex.FacetSettings facetSettings = searchService.toFacetSettings(facetRequest);
 
 		QueryResultsDto queryResults = searchService.findEntriesSolr(query, sort, offset, limit, filterQueries, facetSettings);
 
 		return buildSearchResponse(request, queryResults, syndication, lang, offset, limit, urlTemplate, feedTitle, rdfFormat);
-	}
-
-	int clampLimit(int limit) {
-		if (limit > solrMaxLimit) {
-			return solrMaxLimit;
-		}
-		if (limit < 0) {
-			// we allow 0 on purpose, this enables requests for the purpose of getting a result count only
-			return 50;
-		}
-		return limit;
 	}
 
 	private ResponseEntity<String> buildSearchResponse(HttpServletRequest request, QueryResultsDto queryResults,

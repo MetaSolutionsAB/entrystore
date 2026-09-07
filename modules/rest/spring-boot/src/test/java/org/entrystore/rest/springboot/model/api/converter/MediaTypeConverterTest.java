@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.springboot.model.api;
+package org.entrystore.rest.springboot.model.api.converter;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.InvalidMediaTypeException;

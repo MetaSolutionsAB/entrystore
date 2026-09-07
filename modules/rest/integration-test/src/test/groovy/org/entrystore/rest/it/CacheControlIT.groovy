@@ -21,7 +21,7 @@ import org.entrystore.rest.it.util.EntryStoreClient
 
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
-import static org.entrystore.rest.springboot.configuration.CacheControlFilter.CACHE_CONTROL_AUTHENTICATED
+import static org.entrystore.rest.springboot.filter.CacheControlFilter.CACHE_CONTROL_AUTHENTICATED
 
 class CacheControlIT extends BaseSpec {
 
