@@ -65,16 +65,20 @@ public class SolrSearchInputValidator {
 	 * facet field; the rewrite does NOT apply to sort clauses, so passing
 	 * {@code metadata.predicate.literal.<tail>} in {@code sort=} reaches Solr unrewritten. The
 	 * {@code title.} prefix covers the sort form {@code title.<lang>}, which {@code SearchService}
-	 * rewrites to {@code title_sort.<lang>}.
+	 * rewrites to {@code title_sort.<lang>}. The {@code metadata.predicate.literal_l.} prefix and its
+	 * {@code related.} twin are the language-aware facet family; see
+	 * {@link org.entrystore.repository.util.LangFacetValue}.
 	 */
 	private static final List<String> ALLOWED_DYNAMIC_PREFIXES = List.of(
 			"metadata.predicate.uri.",
 			"metadata.predicate.literal_s.",
 			"metadata.predicate.literal_t.",
+			"metadata.predicate.literal_l.",
 			"metadata.predicate.literal.",
 			"related.metadata.predicate.uri.",
 			"related.metadata.predicate.literal_s.",
 			"related.metadata.predicate.literal_t.",
+			"related.metadata.predicate.literal_l.",
 			"title.");
 
 	/**

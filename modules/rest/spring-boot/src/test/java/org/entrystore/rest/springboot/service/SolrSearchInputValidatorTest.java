@@ -213,8 +213,10 @@ class SolrSearchInputValidatorTest {
 			"metadata.predicate.uri.0123abcd",
 			"metadata.predicate.literal_s.deadbeef",
 			"metadata.predicate.literal_t.cafebabe",
+			"metadata.predicate.literal_l.0123abcd",
 			"metadata.predicate.literal.shorthand_form",
 			"related.metadata.predicate.uri.0123abcd",
+			"related.metadata.predicate.literal_l.0123abcd",
 			"rdfType,lang,status"
 	})
 	void validateFacetSettingsAcceptsAllowedFields(String facetFields) {

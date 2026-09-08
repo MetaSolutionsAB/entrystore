@@ -1161,7 +1161,13 @@ public class SolrSearchIndex implements SearchIndex {
 		return doc;
 	}
 
-	private void addGenericMetadataFields(SolrInputDocument doc, Model metadata, boolean related) {
+	/**
+	 * Indexes the IRI and literal objects of the graph (blank-node objects are skipped) into the dynamic
+	 * {@code metadata.predicate.*} fields, {@code related.}-prefixed for the related graph, plus the flat
+	 * {@code metadata.object.*} fields for the primary graph. Package-private so the literal field layout can be
+	 * tested without a Solr server.
+	 */
+	void addGenericMetadataFields(SolrInputDocument doc, Model metadata, boolean related) {
 		if (doc == null || metadata == null) {
 			throw new IllegalArgumentException("Neither SolrInputDocument nor Graph must be null");
 		}
@@ -1197,6 +1203,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 				// predicate value is included in the parameter name, the object value is the field value
 				addFieldValueOnce(doc,prefix + "metadata.predicate.literal_s." + predMD5Trunc8, l.getLabel());
+				addFieldValueOnce(doc, prefix + LangFacetValue.FIELD_PREFIX + predMD5Trunc8, LangFacetValue.encode(l));
 
 				// special handling of integer values, to be used for e.g., sorting
 				if (MetadataUtil.isIntegerLiteral(l)) {
