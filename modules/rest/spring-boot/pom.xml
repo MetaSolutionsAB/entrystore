@@ -105,7 +105,8 @@
 
 		<!-- Provides CaffeineCacheManager (in spring-context-support) so the hand-built Caffeine
 		     caches can be registered with a CacheManager and surface under the actuator /caches
-		     endpoint. Cache auto-configuration stays inert without @EnableCaching. -->
+		     endpoint. The REST layer deliberately does not enable @EnableCaching (see
+		     CaffeineCacheSource), so Spring's cache auto-configuration stays inert. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-cache</artifactId>

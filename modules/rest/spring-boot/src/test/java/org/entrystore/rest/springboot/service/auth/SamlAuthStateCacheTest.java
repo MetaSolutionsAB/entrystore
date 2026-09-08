@@ -25,37 +25,35 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class OidcAuthStateCacheTest {
+class SamlAuthStateCacheTest {
 
 	@Test
 	void storedStateIsRetrievableByIdAndUnknownIdReturnsNull() {
-		var cache = new OidcAuthStateCache();
+		var cache = new SamlAuthStateCache();
 		var authState = new AuthState("http://app.example.com/ok", "http://app.example.com/fail");
-		cache.storeAuthState("state-token", authState);
+		cache.storeAuthState("relay-state", authState);
 
-		assertEquals(authState, cache.getAuthState("state-token"));
-		assertNull(cache.getAuthState("other-state"));
+		assertEquals(authState, cache.getAuthState("relay-state"));
+		assertNull(cache.getAuthState("other-relay-state"));
 	}
 
 	// The maximumSize bound and its throttled SIZE-eviction warn are the DoS defences on this
-	// anonymously writable cache — this pins both: the cache never grows past its cap, and
-	// sustained capacity eviction emits one throttled WARN rather than one line per eviction
-	// (mirrors the CacheOAuth2AuthorizationRequestRepository test).
+	// anonymously writable cache (every GET /auth/saml with a whitelisted redirect mints an entry) —
+	// this pins both: the cache never grows past its cap, and sustained capacity eviction emits one
+	// throttled WARN rather than one line per eviction (mirrors OidcAuthStateCacheTest).
 	@Test
 	void capacityEvictionIsBoundedAndWarnsOnce() {
-		try (var appender = CapturingAppender.attachTo(OidcAuthStateCache.class)) {
-			var cache = new OidcAuthStateCache();
+		try (var appender = CapturingAppender.attachTo(SamlAuthStateCache.class)) {
+			var cache = new SamlAuthStateCache();
 			var authState = new AuthState("http://app.example.com/ok", null);
-			for (int i = 0; i < OidcAuthStateCache.MAX_ENTRIES + 100; i++) {
-				cache.storeAuthState("state-" + i, authState);
+			for (int i = 0; i < SamlAuthStateCache.MAX_ENTRIES + 100; i++) {
+				cache.storeAuthState("relay-" + i, authState);
 			}
-			var caffeine = cache.caffeineCaches().get("oidc-auth-state");
+			var caffeine = cache.caffeineCaches().get("saml-auth-state");
 			caffeine.cleanUp();
 
-			assertTrue(caffeine.estimatedSize() <= OidcAuthStateCache.MAX_ENTRIES);
-			// Both bounds pinned against literals — see the CacheOAuth2AuthorizationRequestRepository
-			// test for the rationale.
-			assertTrue(OidcAuthStateCache.MAX_ENTRIES >= 10_000,
+			assertTrue(caffeine.estimatedSize() <= SamlAuthStateCache.MAX_ENTRIES);
+			assertTrue(SamlAuthStateCache.MAX_ENTRIES >= 10_000,
 					"declared cap shrunk below legitimate login concurrency");
 			assertTrue(caffeine.estimatedSize() >= 9_900,
 					"effective cache cap shrunk below legitimate login concurrency");

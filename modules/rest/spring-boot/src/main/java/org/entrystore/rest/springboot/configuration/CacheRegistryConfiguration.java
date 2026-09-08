@@ -36,8 +36,8 @@ import java.util.Map;
  * {@code CacheManager} the endpoint reports an empty {@code cacheManagers}, because the caches are
  * created directly via {@code Caffeine.newBuilder()} and are otherwise invisible to Spring.
  *
- * <p>This is the registration half of the {@link CaffeineCacheSource} bridge. The longer-term plan
- * (ENTRYSTORE-1036) is to adopt Spring's {@code @Cacheable} abstraction and retire this class.
+ * <p>This is the registration half of the {@link CaffeineCacheSource} registry; see that interface
+ * for why the REST layer registers native caches instead of adopting {@code @EnableCaching}.
  */
 @Slf4j
 @Configuration

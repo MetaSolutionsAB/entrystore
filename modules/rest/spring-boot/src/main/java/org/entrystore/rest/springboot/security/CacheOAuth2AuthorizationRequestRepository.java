@@ -18,18 +18,16 @@ package org.entrystore.rest.springboot.security;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.RemovalCause;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
-import org.entrystore.rest.springboot.util.LogThrottle;
+import org.entrystore.rest.springboot.util.CapacityEvictionWarning;
 import org.springframework.security.oauth2.client.web.AuthorizationRequestRepository;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -40,12 +38,9 @@ import java.util.concurrent.TimeUnit;
  * back to the {@code /login/oauth2/code/{registrationId}} callback — the OIDC counterpart of
  * {@link CacheSaml2AuthenticationRequestRepository}.
  *
- * <p>DoS posture (shared with {@code OidcAuthStateCache}): the cache is written on the anonymous,
- * un-rate-limited login-initiation path, so {@code maximumSize} bounds the heap, and capacity
- * evictions emit a WARN via {@link #warnIfCapacityEviction(RemovalCause)} — the eviction listener
- * also fires for ordinary {@code EXPIRED} evictions, which must stay silent — throttled through
- * {@link LogThrottle}, because the listener runs inside the cache's eviction maintenance and an
- * unthrottled line per eviction would trade the heap bound for log amplification.
+ * <p>The cache is written on the anonymous, un-rate-limited login-initiation path, so
+ * {@code maximumSize} bounds the heap and {@link CapacityEvictionWarning} reports when the bound
+ * bites.
  */
 @Slf4j
 @Component
@@ -57,25 +52,15 @@ public class CacheOAuth2AuthorizationRequestRepository
 	// entries could exhaust the heap. 10k entries ≈ a few MB, far above legitimate concurrent logins.
 	static final long MAX_ENTRIES = 10_000;
 
-	private final LogThrottle evictionWarnThrottle = new LogThrottle(Duration.ofMinutes(1));
+	private final CapacityEvictionWarning capacityWarning =
+			new CapacityEvictionWarning(log, "OAuth2 authorization-request", MAX_ENTRIES);
 
-	private final Cache<String, OAuth2AuthorizationRequest> cache =
-			Caffeine.newBuilder()
-					.expireAfterWrite(2, TimeUnit.MINUTES)
-					.maximumSize(MAX_ENTRIES)
-					.evictionListener((String state, OAuth2AuthorizationRequest value, RemovalCause cause) ->
-							warnIfCapacityEviction(cause))
-					.recordStats()
-					.build();
-
-	// Package-private so the test can drive the real listener body per cause (class Javadoc).
-	void warnIfCapacityEviction(RemovalCause cause) {
-		// Guard order matters: tryAcquire consumes the interval token (see its Javadoc).
-		if (cause == RemovalCause.SIZE && evictionWarnThrottle.tryAcquire()) {
-			log.warn("OAuth2 authorization-request cache is evicting at capacity ({}) — "
-					+ "possible login-initiation flood", MAX_ENTRIES);
-		}
-	}
+	private final Cache<String, OAuth2AuthorizationRequest> cache = Caffeine.newBuilder()
+			.expireAfterWrite(2, TimeUnit.MINUTES)
+			.maximumSize(MAX_ENTRIES)
+			.evictionListener(capacityWarning.listener())
+			.recordStats()
+			.build();
 
 	@Override
 	public Map<String, Cache<?, ?>> caffeineCaches() {

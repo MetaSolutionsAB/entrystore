@@ -18,14 +18,12 @@ package org.entrystore.rest.springboot.service.auth;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.RemovalCause;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
 import org.entrystore.rest.springboot.model.auth.AuthState;
-import org.entrystore.rest.springboot.util.LogThrottle;
+import org.entrystore.rest.springboot.util.CapacityEvictionWarning;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -35,9 +33,8 @@ import java.util.concurrent.TimeUnit;
  * the whitelist-validated success/failure redirect URLs through the provider round-trip and
  * expire after a fixed duration.
  *
- * <p>DoS posture: written on the anonymous login-initiation path, hence the size cap and the
- * throttled capacity warn in {@link #warnIfCapacityEviction(RemovalCause)} — see
- * {@code CacheOAuth2AuthorizationRequestRepository}'s Javadoc for the shared rationale.
+ * <p>The cache is written on the anonymous login-initiation path, so {@code maximumSize} bounds the
+ * heap and {@link CapacityEvictionWarning} reports when the bound bites.
  */
 @Slf4j
 @Service
@@ -48,23 +45,15 @@ public class OidcAuthStateCache implements CaffeineCacheSource {
 	// heap (mirrors CacheOAuth2AuthorizationRequestRepository).
 	static final long MAX_ENTRIES = 10_000;
 
-	private final LogThrottle evictionWarnThrottle = new LogThrottle(Duration.ofMinutes(1));
+	private final CapacityEvictionWarning capacityWarning =
+			new CapacityEvictionWarning(log, "OIDC auth-state", MAX_ENTRIES);
 
 	private final Cache<String, AuthState> requestCache = Caffeine.newBuilder()
 			.expireAfterWrite(2, TimeUnit.MINUTES)
 			.maximumSize(MAX_ENTRIES)
-			.evictionListener((String state, AuthState value, RemovalCause cause) -> warnIfCapacityEviction(cause))
+			.evictionListener(capacityWarning.listener())
 			.recordStats()
 			.build();
-
-	// Package-private so the test can drive the real listener body per cause (class Javadoc).
-	void warnIfCapacityEviction(RemovalCause cause) {
-		// Guard order matters: tryAcquire consumes the interval token (see its Javadoc).
-		if (cause == RemovalCause.SIZE && evictionWarnThrottle.tryAcquire()) {
-			log.warn("OIDC auth-state cache is evicting at capacity ({}) — "
-					+ "possible login-initiation flood", MAX_ENTRIES);
-		}
-	}
 
 	@Override
 	public Map<String, Cache<?, ?>> caffeineCaches() {

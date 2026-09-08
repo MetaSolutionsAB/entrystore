@@ -24,6 +24,22 @@ import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class ManagementCachesIT extends BaseSpec {
 
+	// Owned by unconditional beans, so registered regardless of optional-auth configuration.
+	static final List<String> ALWAYS_PRESENT_CACHES = [
+		'login-attempt-counters', 'login-lockouts',
+		'saml-auth-state', 'saml2-authn-requests',
+		'oidc-auth-state', 'oauth2-authz-requests',
+		'signup-tokens',
+	]
+
+	// Present only because entrystore-it.properties enables their owners:
+	// entrystore.auth.http-basic.enabled=true and entrystore.message.rate.limit.max=3.
+	static final List<String> CONFIG_ENABLED_CACHES = ['password-verification', 'rate-limit-message']
+
+	// A limiter disabled by configuration (max=0 in entrystore-it.properties) holds no cache and must
+	// not be listed — this pins the disabled-limiter contract of CaffeineCacheSource end to end.
+	static final List<String> CONFIG_DISABLED_CACHES = ['rate-limit-signup', 'rate-limit-password-reset', 'rate-limit-search']
+
 	def "GET /management/caches as guest should reply with Unauthorized 401"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/management/caches', '')
@@ -55,12 +71,9 @@ class ManagementCachesIT extends BaseSpec {
 		// The single CacheManager bean is registered under its @Bean method name 'cacheManager'.
 		def caches = responseJson['cacheManagers']['cacheManager']['caches'] as Map
 		caches != null
-		// These four caches are owned by always-present beans (built unconditionally), so they are
-		// registered regardless of optional-auth configuration.
-		caches.containsKey('login-attempt-counters')
-		caches.containsKey('login-lockouts')
-		caches.containsKey('saml-auth-state')
-		caches.containsKey('saml2-authn-requests')
+		caches.keySet().containsAll(ALWAYS_PRESENT_CACHES)
+		caches.keySet().containsAll(CONFIG_ENABLED_CACHES)
+		caches.keySet().disjoint(CONFIG_DISABLED_CACHES)
 	}
 
 	def "GET /management/caches as userInAdminGroup should list the registered Caffeine caches"() {

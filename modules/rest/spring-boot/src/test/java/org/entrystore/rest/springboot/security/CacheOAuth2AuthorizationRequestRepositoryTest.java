@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.springboot.security;
 
-import com.github.benmanes.caffeine.cache.RemovalCause;
 import org.apache.logging.log4j.Level;
 import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.BeforeEach;
@@ -114,20 +113,6 @@ class CacheOAuth2AuthorizationRequestRepositoryTest {
 					"effective cache cap shrunk below legitimate login concurrency");
 			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
-		}
-	}
-
-	// Drives the real listener body per cause: the throttle caps the WARN at 1 either way, so the
-	// capacity test above cannot detect removal of the SIZE guard — without it, ordinary expiry
-	// under normal login traffic (abandoned attempts timing out) would emit false flood WARNs.
-	@Test
-	void onlySizeEvictionsWarn() {
-		try (var appender = CapturingAppender.attachTo(CacheOAuth2AuthorizationRequestRepository.class)) {
-			repository.warnIfCapacityEviction(RemovalCause.EXPIRED);
-			assertEquals(0, appender.countAt(Level.WARN), appender::toString);
-
-			repository.warnIfCapacityEviction(RemovalCause.SIZE);
-			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 		}
 	}
 

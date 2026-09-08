@@ -20,9 +20,11 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
-import org.springframework.security.saml2.provider.service.web.Saml2AuthenticationRequestRepository;
+import org.entrystore.rest.springboot.util.CapacityEvictionWarning;
 import org.springframework.security.saml2.provider.service.authentication.AbstractSaml2AuthenticationRequest;
+import org.springframework.security.saml2.provider.service.web.Saml2AuthenticationRequestRepository;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -33,16 +35,30 @@ import java.util.concurrent.TimeUnit;
  * instead of in the HTTP session. This avoids the SameSite=Strict cookie problem where
  * the browser withholds the session cookie on the cross-site POST from the IdP back to
  * the ACS endpoint.
+ *
+ * <p>The cache is written on the anonymous, un-rate-limited login-initiation path, so
+ * {@code maximumSize} bounds the heap and {@link CapacityEvictionWarning} reports when the bound
+ * bites — the same posture as {@link CacheOAuth2AuthorizationRequestRepository}.
  */
+@Slf4j
 @Component
 public class CacheSaml2AuthenticationRequestRepository
 		implements Saml2AuthenticationRequestRepository<AbstractSaml2AuthenticationRequest>, CaffeineCacheSource {
 
-	private final Cache<String, AbstractSaml2AuthenticationRequest> cache =
-			Caffeine.newBuilder()
-					.expireAfterWrite(2, TimeUnit.MINUTES)
-					.recordStats()
-					.build();
+	// Cardinality bound: every anonymous GET /auth/saml mints an entry, and expireAfterWrite bounds
+	// only lifetime — without a cap, request-rate × 120 s of entries could exhaust the heap. 10k
+	// entries ≈ a few MB, far above legitimate concurrent logins.
+	static final long MAX_ENTRIES = 10_000;
+
+	private final CapacityEvictionWarning capacityWarning =
+			new CapacityEvictionWarning(log, "SAML authentication-request", MAX_ENTRIES);
+
+	private final Cache<String, AbstractSaml2AuthenticationRequest> cache = Caffeine.newBuilder()
+			.expireAfterWrite(2, TimeUnit.MINUTES)
+			.maximumSize(MAX_ENTRIES)
+			.evictionListener(capacityWarning.listener())
+			.recordStats()
+			.build();
 
 	@Override
 	public Map<String, Cache<?, ?>> caffeineCaches() {
@@ -68,11 +84,9 @@ public class CacheSaml2AuthenticationRequestRepository
 	public AbstractSaml2AuthenticationRequest removeAuthenticationRequest(
 			HttpServletRequest request, HttpServletResponse response) {
 		String relayState = request.getParameter("RelayState");
-		if (relayState != null) {
-			AbstractSaml2AuthenticationRequest authRequest = cache.getIfPresent(relayState);
-			cache.invalidate(relayState);
-			return authRequest;
-		}
-		return null;
+		// Atomic retrieve-and-remove: a getIfPresent + invalidate pair would let two concurrent ACS
+		// POSTs carrying the same RelayState both observe the request, weakening the single-use
+		// replay guard to the IdP's assertion single-use alone.
+		return (relayState != null) ? cache.asMap().remove(relayState) : null;
 	}
 }

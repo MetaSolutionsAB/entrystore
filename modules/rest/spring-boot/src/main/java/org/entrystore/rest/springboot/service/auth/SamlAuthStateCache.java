@@ -18,24 +18,39 @@ package org.entrystore.rest.springboot.service.auth;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
 import org.entrystore.rest.springboot.model.auth.AuthState;
+import org.entrystore.rest.springboot.util.CapacityEvictionWarning;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * A cache service for storing and retrieving SAML authentication relay state. This service
- * is designed to handle temporary storage of authentication states associated with
- * unique identifiers, expiring entries after a fixed duration.
+ * Stores SAML authentication state keyed by the relay state token — the whitelist-validated
+ * success/failure redirect URLs that must survive the IdP round-trip. Entries expire after a
+ * fixed two minutes.
  *
+ * <p>The cache is written on the anonymous login-initiation path, so {@code maximumSize} bounds the
+ * heap and {@link CapacityEvictionWarning} reports when the bound bites — the same posture as
+ * {@link OidcAuthStateCache}.
  */
+@Slf4j
 @Service
 public class SamlAuthStateCache implements CaffeineCacheSource {
 
+	// Cardinality bound: anonymous logins with a whitelisted successurl/failureurl mint entries, and
+	// expireAfterWrite bounds only lifetime — cap the size so an initiation flood cannot exhaust the heap.
+	static final long MAX_ENTRIES = 10_000;
+
+	private final CapacityEvictionWarning capacityWarning =
+			new CapacityEvictionWarning(log, "SAML auth-state", MAX_ENTRIES);
+
 	private final Cache<String, AuthState> requestCache = Caffeine.newBuilder()
 			.expireAfterWrite(2, TimeUnit.MINUTES)
+			.maximumSize(MAX_ENTRIES)
+			.evictionListener(capacityWarning.listener())
 			.recordStats()
 			.build();
 

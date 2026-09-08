@@ -16,25 +16,38 @@
 
 package org.entrystore.rest.springboot.service.auth;
 
+import com.github.benmanes.caffeine.cache.Ticker;
+import org.apache.logging.log4j.Level;
 import org.entrystore.rest.springboot.model.auth.ConfirmAttemptResult;
 import org.entrystore.rest.springboot.model.auth.SignupInfo;
+import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.Date;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SignupTokenCacheTest {
 
 	private static final Predicate<SignupInfo> ALWAYS_MATCH = info -> true;
 	private static final Predicate<SignupInfo> NEVER_MATCH = info -> false;
+
+	private static SignupTokenCache newCache() {
+		return new SignupTokenCache(Ticker.systemTicker());
+	}
 
 	private SignupInfo pendingInfo() {
 		SignupInfo info = new SignupInfo();
@@ -45,7 +58,7 @@ class SignupTokenCacheTest {
 
 	@Test
 	void confirmAttempt_returnsValidAndConsumesToken_whenCredentialsMatch() {
-		var cache = new SignupTokenCache();
+		var cache = newCache();
 		SignupInfo info = pendingInfo();
 		cache.putToken("tok", info);
 
@@ -58,7 +71,7 @@ class SignupTokenCacheTest {
 
 	@Test
 	void confirmAttempt_returnsTokenNotFound_forUnknownToken() {
-		var cache = new SignupTokenCache();
+		var cache = newCache();
 
 		ConfirmAttemptResult result = cache.confirmAttempt("missing", ALWAYS_MATCH, 3);
 
@@ -67,7 +80,7 @@ class SignupTokenCacheTest {
 
 	@Test
 	void confirmAttempt_returnsTokenNotFound_forNullToken() {
-		var cache = new SignupTokenCache();
+		var cache = newCache();
 		cache.putToken("tok", pendingInfo());
 
 		// A confirm request that omits the token field arrives as null; it must not throw.
@@ -78,7 +91,7 @@ class SignupTokenCacheTest {
 
 	@Test
 	void confirmAttempt_countsFailureAndKeepsToken_belowLimit() {
-		var cache = new SignupTokenCache();
+		var cache = newCache();
 		SignupInfo info = pendingInfo();
 		cache.putToken("tok", info);
 
@@ -97,7 +110,7 @@ class SignupTokenCacheTest {
 
 	@Test
 	void confirmAttempt_invalidatesToken_whenLimitReached() {
-		var cache = new SignupTokenCache();
+		var cache = newCache();
 		cache.putToken("tok", pendingInfo());
 
 		cache.confirmAttempt("tok", NEVER_MATCH, 3);
@@ -110,7 +123,7 @@ class SignupTokenCacheTest {
 
 	@Test
 	void confirmAttempt_doesNotMatchAfterTokenInvalidated() {
-		var cache = new SignupTokenCache();
+		var cache = newCache();
 		cache.putToken("tok", pendingInfo());
 
 		cache.confirmAttempt("tok", NEVER_MATCH, 3);
@@ -125,7 +138,7 @@ class SignupTokenCacheTest {
 
 	@Test
 	void confirmAttempt_returnsTokenNotFoundAndRemoves_whenTokenExpired() {
-		var cache = new SignupTokenCache();
+		var cache = newCache();
 		SignupInfo info = pendingInfo();
 		info.setExpirationDate(new Date(System.currentTimeMillis() - 1000)); // already expired
 		cache.putToken("tok", info);
@@ -140,7 +153,7 @@ class SignupTokenCacheTest {
 
 	@Test
 	void confirmAttempt_isAtomic_underConcurrentWrongAttempts() {
-		var cache = new SignupTokenCache();
+		var cache = newCache();
 		SignupInfo info = pendingInfo();
 		cache.putToken("tok", info);
 		int maxAttempts = 3;
@@ -161,7 +174,7 @@ class SignupTokenCacheTest {
 
 	@Test
 	void confirmAttempt_consumesTokenExactlyOnce_underConcurrentValidAttempts() {
-		var cache = new SignupTokenCache();
+		var cache = newCache();
 		cache.putToken("tok", pendingInfo());
 		int attempts = 200;
 
@@ -173,6 +186,96 @@ class SignupTokenCacheTest {
 				"a token must be consumable by exactly one concurrent confirmation");
 		assertEquals(attempts - 1L, count(results, ConfirmAttemptResult.Status.TOKEN_NOT_FOUND));
 		assertNull(cache.getTokenValue("tok"));
+	}
+
+	// A token without a deadline would live until capacity eviction, so it must be rejected at the
+	// door rather than stored.
+	@Test
+	void putToken_withoutExpirationDate_throws() {
+		var cache = newCache();
+		SignupInfo info = new SignupInfo();
+		info.setEmail("user@example.com");
+
+		assertThrows(NullPointerException.class, () -> cache.putToken("tok", info));
+		assertNull(cache.getTokenValue("tok"));
+	}
+
+	// Caffeine measures elapsed time on the injected ticker, so the deadline is crossed by advancing
+	// the ticker rather than by sleeping or by back-dating the token.
+	@Test
+	void token_expiresAtItsExpirationDate() {
+		var nanos = new AtomicLong();
+		var cache = new SignupTokenCache(nanos::get);
+		cache.putToken("tok", pendingInfo()); // one hour ahead
+		assertNotNull(cache.getTokenValue("tok"));
+
+		nanos.addAndGet(Duration.ofHours(2).toNanos());
+
+		assertNull(cache.getTokenValue("tok"), "a token must not outlive its expiration date");
+		assertEquals(ConfirmAttemptResult.Status.TOKEN_NOT_FOUND, cache.confirmAttempt("tok", ALWAYS_MATCH, 3).status());
+	}
+
+	@Test
+	void token_alreadyExpiredAtInsert_isNotRetrievable() {
+		var cache = newCache();
+		SignupInfo info = pendingInfo();
+		info.setExpirationDate(new Date(System.currentTimeMillis() - 1000));
+
+		cache.putToken("tok", info);
+
+		assertNull(cache.getTokenValue("tok"));
+	}
+
+	@Test
+	void removeAllTokens_removesOnlyTokensOfThatEmail() {
+		var cache = newCache();
+		SignupInfo firstOfAlice = pendingInfo();
+		SignupInfo secondOfAlice = pendingInfo();
+		SignupInfo ofBob = pendingInfo();
+		ofBob.setEmail("bob@example.com");
+		cache.putToken("alice-1", firstOfAlice);
+		cache.putToken("alice-2", secondOfAlice);
+		cache.putToken("bob-1", ofBob);
+
+		cache.removeAllTokens("user@example.com");
+
+		assertNull(cache.getTokenValue("alice-1"));
+		assertNull(cache.getTokenValue("alice-2"));
+		assertSame(ofBob, cache.getTokenValue("bob-1"), "another user's pending token must survive");
+	}
+
+	@Test
+	void caffeineCaches_exposesTheTokenCacheAsSignupTokens() {
+		var cache = newCache();
+		cache.putToken("tok", pendingInfo());
+
+		var caches = cache.caffeineCaches();
+
+		assertEquals(Set.of("signup-tokens"), caches.keySet());
+		assertEquals(1L, caches.get("signup-tokens").estimatedSize());
+	}
+
+	// The maximumSize bound and its throttled SIZE-eviction warn bound the heap against a sign-up
+	// flood that outruns the per-IP rate limiter (many source addresses); this pins both, and that
+	// the cap stays generous enough that a day of legitimate sign-ups is never evicted early.
+	@Test
+	void capacityEvictionIsBoundedAndWarnsOnce() {
+		try (var appender = CapturingAppender.attachTo(SignupTokenCache.class)) {
+			var cache = newCache();
+			for (int i = 0; i < SignupTokenCache.MAX_ENTRIES + 100; i++) {
+				cache.putToken("tok-" + i, pendingInfo());
+			}
+			var caffeine = cache.caffeineCaches().get("signup-tokens");
+			caffeine.cleanUp();
+
+			assertTrue(caffeine.estimatedSize() <= SignupTokenCache.MAX_ENTRIES);
+			assertTrue(SignupTokenCache.MAX_ENTRIES >= 100_000,
+					"declared cap shrunk below a day of legitimate sign-ups and password resets");
+			assertTrue(caffeine.estimatedSize() >= 99_000,
+					"effective cache cap shrunk below a day of legitimate sign-ups and password resets");
+			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
+			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
+		}
 	}
 
 	/**

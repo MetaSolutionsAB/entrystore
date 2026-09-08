@@ -27,9 +27,10 @@ import java.util.Map;
  * application {@code CacheManager}, so each cache becomes observable (and evictable by an admin)
  * without its owner having to expose the mutable cache reference through a public getter.
  *
- * <p>The caches in this codebase are built directly via {@code Caffeine.newBuilder()} rather than
- * through Spring's {@code @Cacheable} abstraction; this interface is the bridge that keeps them
- * visible until that migration (ENTRYSTORE-1036) lands.
+ * <p>This registry, not Spring's {@code @Cacheable} abstraction, is the REST layer's cache
+ * integration by design: its caches are keyed stores that need atomic compute or get-and-remove,
+ * per-entry expiry, or loader deduplication with null-not-stored semantics, none of which the Spring
+ * {@code Cache} API can express. Owners therefore build their own Caffeine cache and register it here.
  */
 @FunctionalInterface
 public interface CaffeineCacheSource {
