@@ -189,6 +189,13 @@ entrystore.data.folder=/srv/entrystore/files/
 # is renewed based on the current time/date. (default: off)
 # entrystore.auth.cookie.update.expiry=on|off
 
+# Cross-request cache of each user's group memberships, consulted on every
+# authorization decision instead of scanning the whole _principals context.
+# Invalidated automatically on group membership changes, group create/delete
+# and user delete. Set to false to fall back to a full scan per decision.
+# (default: true)
+# entrystore.auth.group-cache=true|false
+
 ## User-initiated sign-up (default: off)
 # entrystore.auth.signup=off
 # entrystore.auth.signup.email.subject=User sign-up request
