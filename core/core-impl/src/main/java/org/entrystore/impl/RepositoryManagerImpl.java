@@ -299,6 +299,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			setCheckForAuthorization(true);
 		}
 
+		registerGroupCacheInvalidationListener();
+
 		trackDeletedEntries = configuration.getBoolean(Settings.REPOSITORY_TRACK_DELETED, false);
 		log.info("Tracking of deleted entries is {}", trackDeletedEntries ? "activated" : "deactivated");
 		boolean cleanupDeleted = configuration.getBoolean(Settings.REPOSITORY_TRACK_DELETED_CLEANUP, false);
@@ -359,6 +361,30 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	private void initialize() {
 		this.contextManager = new ContextManagerImpl(this, repository);
 		this.contextManager.initializeSystemEntries();
+	}
+
+	/**
+	 * Wires the user-to-groups authorization cache to repository events; the invalidation policy lives with the
+	 * cache in {@link PrincipalManagerImpl#onRepositoryEvent(RepositoryEventObject)}. Registers nothing when the
+	 * cache is disabled, so the kill switch also takes the listener out of every event dispatch.
+	 */
+	private void registerGroupCacheInvalidationListener() {
+		PrincipalManagerImpl principals = (PrincipalManagerImpl) getPrincipalManager();
+		if (!principals.isGroupCacheEnabled()) {
+			log.info("User-to-groups authorization cache is disabled");
+			return;
+		}
+		RepositoryListener invalidator = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				principals.onRepositoryEvent(eventObject);
+			}
+		};
+		registerListener(invalidator, RepositoryEvent.EntryCreated);
+		registerListener(invalidator, RepositoryEvent.EntryUpdated);
+		registerListener(invalidator, RepositoryEvent.ResourceUpdated);
+		registerListener(invalidator, RepositoryEvent.RelationsUpdated);
+		registerListener(invalidator, RepositoryEvent.EntryDeleted);
 	}
 
 	/**

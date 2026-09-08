@@ -16,6 +16,7 @@
 
 package org.entrystore.impl;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.rdf4j.model.Resource;
@@ -31,15 +32,22 @@ import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.URISplit;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -65,6 +73,23 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	private static final String ENV_ADMIN_PASSWORD = "ENTRYSTORE_ADMIN_PASSWORD";
 
 	/**
+	 * User resource URI to the resource URIs of the groups that user belongs to, as {@link #getGroupUris(URI)}
+	 * would return them. Values are shared, so callers must not mutate them; {@link #onRepositoryEvent} keeps
+	 * them current. Package-private for tests.
+	 */
+	final Map<URI, Set<URI>> userGroupsCache = new ConcurrentHashMap<>();
+
+	/**
+	 * Bumped on every invalidation. A loader records the epoch before scanning and publishes only while it is
+	 * unchanged, re-checking after the put, so a scan that started before a membership change committed can
+	 * never park pre-change state in the cache.
+	 */
+	private final AtomicLong userGroupsCacheEpoch = new AtomicLong();
+
+	@Getter(AccessLevel.PACKAGE)
+	private final boolean groupCacheEnabled;
+
+	/**
 	 * Creates a principal manager
 	 * @param entry this principal managers entry
 	 * @param uri this principal managers URI
@@ -72,6 +97,8 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	 */
 	public PrincipalManagerImpl(EntryImpl entry, String uri, SoftCache softCache) {
 		super(entry, uri, softCache);
+		this.groupCacheEnabled = entry.getRepositoryManager().getConfiguration()
+				.getBoolean(Settings.AUTH_GROUP_CACHE, true);
 	}
 
 
@@ -268,6 +295,63 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		return groupUris;
 	}
 
+	/**
+	 * Cache-fronted {@link #getGroupUris(URI)}: scans the principals context at most once per user and
+	 * invalidation window. The returned set must not be mutated.
+	 */
+	Set<URI> getGroupUrisCached(URI userURI) {
+		if (!groupCacheEnabled) {
+			return getGroupUris(userURI);
+		}
+		Set<URI> cached = userGroupsCache.get(userURI);
+		if (cached != null) {
+			return cached;
+		}
+		long epochBefore = userGroupsCacheEpoch.get();
+		Set<URI> groups = Set.copyOf(getGroupUris(userURI));
+		if (userGroupsCacheEpoch.get() == epochBefore) {
+			userGroupsCache.putIfAbsent(userURI, groups);
+			if (userGroupsCacheEpoch.get() != epochBefore) {
+				// An invalidation raced the put, so this snapshot may predate the mutation.
+				userGroupsCache.remove(userURI);
+			}
+		}
+		return groups;
+	}
+
+	/**
+	 * Keeps {@link #userGroupsCache} consistent with the repository. A {@link RepositoryEventObject} carries no
+	 * previous state, so any event sourced from a Group entry clears everything (directory mutations are rare
+	 * next to decisions), while a deleted User evicts only its own key. Subscribed to every post-commit event a
+	 * group entry emits (ResourceDeleted fires inside the transaction and is followed by EntryDeleted): the filter
+	 * is one field read, and a missed path would be a stale grant. Runs synchronously under the repository's
+	 * listener monitor, so it only touches the map and never reads the repository.
+	 */
+	void onRepositoryEvent(RepositoryEventObject eventObject) {
+		if (!(eventObject.getSource() instanceof Entry source)) {
+			return;
+		}
+		switch (source.getGraphType()) {
+			case Group -> invalidateGroupCache();
+			case User -> {
+				if (eventObject.getEvent() == RepositoryEvent.EntryDeleted) {
+					evictFromGroupCache(source.getResourceURI());
+				}
+			}
+			default -> { }
+		}
+	}
+
+	private void invalidateGroupCache() {
+		userGroupsCacheEpoch.incrementAndGet();
+		userGroupsCache.clear();
+	}
+
+	private void evictFromGroupCache(URI userURI) {
+		userGroupsCacheEpoch.incrementAndGet();
+		userGroupsCache.remove(userURI);
+	}
+
 	public List<URI> getGroupEntryUris() {
 		Iterator < URI > entryIterator = getEntries().iterator();
 		List<URI> groupUris = new ArrayList<>();
@@ -408,6 +492,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			log.warn("Denying {} access: the authenticated principal could not be resolved to a user", prop);
 			return false;
 		}
+		URI userURI = currentUser.getURI();
 		Set<URI> principals = entry.getAllowedPrincipalsFor(prop);
 		if (!principals.isEmpty()) {
 
@@ -422,14 +507,12 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			}
 
 			//Check if user is in principals.
-			if (principals.contains(currentUser.getURI())) {
+			if (principals.contains(userURI)) {
 				return true;
 			}
 
 			//Check if any of the groups the user belongs to is in principals
-			Set<URI> groups = getGroupUris(currentUser.getURI());
-			groups.retainAll(principals);
-			if (!groups.isEmpty()) {
+			if (!Collections.disjoint(getGroupUrisCached(userURI), principals)) {
 				return true;
 			}
 		}
@@ -439,14 +522,12 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			if (!principals.isEmpty()) {
 
 				//Check if user is in principals.
-				if (principals.contains(currentUser.getURI())) {
+				if (principals.contains(userURI)) {
 					return true;
 				}
 
 				//Check if any of the groups the user belongs to is in principals
-				Set<URI> groups = getGroupUris(currentUser.getURI());
-				groups.retainAll(principals);
-				return !groups.isEmpty();
+				return !Collections.disjoint(getGroupUrisCached(userURI), principals);
 			}
 		}
 		return false;
