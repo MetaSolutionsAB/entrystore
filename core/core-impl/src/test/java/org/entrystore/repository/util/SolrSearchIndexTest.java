@@ -26,6 +26,10 @@ import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.params.SolrParams;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
@@ -57,6 +61,7 @@ import java.lang.reflect.Method;
 import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -72,11 +77,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.after;
@@ -919,6 +926,55 @@ public class SolrSearchIndexTest {
 		// undefined timezone must be interpreted as UTC, not the JVM default zone
 		XMLGregorianCalendar undefinedTimezone = factory.newXMLGregorianCalendar("2024-01-15T10:30:00.123");
 		assertEquals("2024-01-15T10:30:00.123Z", dateToSolrDateString.invoke(index, undefinedTimezone));
+	}
+
+	@Test
+	public void addGenericMetadataFieldsIndexesOneLiteralLTermPerLabelAndLanguage() {
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		IRI predicate = vf.createIRI("http://example.org/ns/place");
+		IRI subjectA = vf.createIRI("http://example.org/a");
+		IRI subjectB = vf.createIRI("http://example.org/b");
+		Model model = new LinkedHashModel();
+		model.add(subjectA, predicate, vf.createLiteral("Sverige", "sv"));
+		model.add(subjectB, predicate, vf.createLiteral("Sverige", "sv"));
+		model.add(subjectA, predicate, vf.createLiteral("Sverige", "nb"));
+		model.add(subjectA, predicate, vf.createLiteral("Sweden", "en"));
+		model.add(subjectB, predicate, vf.createLiteral("Sverige"));
+		String hash = Hashing.hash(predicate.stringValue(), HashType.MD5).substring(0, 8);
+		SolrInputDocument doc = new SolrInputDocument();
+
+		index.addGenericMetadataFields(doc, model, false);
+
+		// literal_s keeps collapsing the same label across languages
+		assertEquals(Set.of("Sverige", "Sweden"), Set.copyOf(doc.getFieldValues("metadata.predicate.literal_s." + hash)));
+		// literal_l keeps one term per (label, language); the repeated "Sverige"@sv is deduplicated
+		Collection<Object> langTerms = doc.getFieldValues("metadata.predicate.literal_l." + hash);
+		assertEquals(4, langTerms.size());
+		Set<LangFacetValue> decoded = langTerms.stream()
+				.map(Object::toString)
+				.map(LangFacetValue::decode)
+				.collect(Collectors.toSet());
+		assertEquals(Set.of(
+				new LangFacetValue("Sverige", "sv"),
+				new LangFacetValue("Sverige", "nb"),
+				new LangFacetValue("Sweden", "en"),
+				new LangFacetValue("Sverige", null)), decoded);
+	}
+
+	@Test
+	public void addGenericMetadataFieldsWritesRelatedLiteralLFieldForRelatedGraph() {
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		IRI predicate = vf.createIRI("http://example.org/ns/place");
+		Model model = new LinkedHashModel();
+		model.add(vf.createIRI("http://example.org/a"), predicate, vf.createLiteral("Sweden", "en"));
+		String hash = Hashing.hash(predicate.stringValue(), HashType.MD5).substring(0, 8);
+		SolrInputDocument doc = new SolrInputDocument();
+
+		index.addGenericMetadataFields(doc, model, true);
+
+		assertEquals(new LangFacetValue("Sweden", "en"),
+				LangFacetValue.decode(doc.getFieldValue("related.metadata.predicate.literal_l." + hash).toString()));
+		assertNull(doc.getFieldValues("metadata.predicate.literal_l." + hash));
 	}
 
 	@Disabled("To be implemented")

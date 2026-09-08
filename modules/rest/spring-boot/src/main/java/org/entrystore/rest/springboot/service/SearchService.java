@@ -31,6 +31,7 @@ import org.entrystore.Group;
 import org.entrystore.Resource;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.util.LangFacetValue;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.configuration.SyndicationProperties;
@@ -185,7 +186,13 @@ public class SearchService {
 					q.setParam("facet.matches", facetSettings.matches);
 				}
 				for (String ff : facetSettings.fields.split(",")) {
-					q.addFacetField(ff.replace("metadata.predicate.literal.", "metadata.predicate.literal_s."));
+					String field = ff.trim().replace("metadata.predicate.literal.", "metadata.predicate.literal_s.");
+					q.addFacetField(field);
+					if (facetSettings.matches != null && LangFacetValue.isLangFacetField(field)) {
+						// facet.matches is a full-term regex; literal_l terms carry a trailing separator and tag
+						q.setParam("f." + field + ".facet.matches",
+								LangFacetValue.labelMatchesRegex(facetSettings.matches));
+					}
 				}
 			}
 
@@ -284,17 +291,35 @@ public class SearchService {
 			JSONObject ffObj = new JSONObject();
 			ffObj.put("name", ff.getName());
 			ffObj.put("valueCount", ff.getValueCount());
+			boolean langTagged = LangFacetValue.isLangFacetField(ff.getName());
 			JSONArray ffValArr = new JSONArray();
 			for (FacetField.Count ffVal : ff.getValues()) {
-				JSONObject ffValObj = new JSONObject();
-				ffValObj.put("name", ffVal.getName());
-				ffValObj.put("count", ffVal.getCount());
-				ffValArr.put(ffValObj);
+				ffValArr.put(toFacetValueJson(ffVal, langTagged));
 			}
 			ffObj.put("values", ffValArr);
 			facetFieldsArr.put(ffObj);
 		}
 		return facetFieldsArr;
+	}
+
+	/**
+	 * Serialises one facet bucket. A {@code literal_l} term is split into {@code name} and {@code lang}; every
+	 * other field keeps the raw term as {@code name}. The {@code facet.missing} bucket has a {@code null} name,
+	 * which {@code JSONObject.put} drops, so it carries {@code count} only.
+	 */
+	private static JSONObject toFacetValueJson(FacetField.Count bucket, boolean langTagged) {
+		JSONObject value = new JSONObject();
+		value.put("count", bucket.getCount());
+		if (bucket.getName() == null || !langTagged) {
+			value.put("name", bucket.getName());
+			return value;
+		}
+		LangFacetValue decoded = LangFacetValue.decode(bucket.getName());
+		value.put("name", decoded.label());
+		if (decoded.lang() != null) {
+			value.put("lang", decoded.lang());
+		}
+		return value;
 	}
 
 	/**
