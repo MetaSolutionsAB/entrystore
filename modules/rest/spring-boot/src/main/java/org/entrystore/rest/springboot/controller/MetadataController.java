@@ -105,7 +105,8 @@ public class MetadataController {
 	@Operation(
 			summary = "Sets an entry's metadata graph.",
 			description = "Replaces the entry's local or cached external metadata with the graph in the request " +
-					"body; the merged graph is read-only. 'rev' is accepted but historic revisions cannot be modified.")
+					"body; the merged graph is read-only. 'rev' is not supported on writes: with provenance enabled " +
+					"the request fails, without it the parameter is ignored and the current graph is replaced.")
 	@PutMapping(path = "/{context-id}/{type:metadata|cached-external-metadata|merged-metadata}/{entry-id}")
 	public ResponseEntity<Void> setMetadata(
 			@PathVariable("context-id") String contextId,
@@ -134,7 +135,8 @@ public class MetadataController {
 	@Operation(
 			summary = "Deletes an entry's metadata graph.",
 			description = "Clears the entry's local or cached external metadata graph; the merged graph cannot be " +
-					"deleted. 'rev' is accepted but historic revisions cannot be modified.")
+					"deleted. 'rev' is not supported on writes: with provenance enabled the request fails, without " +
+					"it the parameter is ignored and the current graph is replaced.")
 	@DeleteMapping(path = "/{context-id}/{type:metadata|cached-external-metadata|merged-metadata}/{entry-id}")
 	public ResponseEntity<Void> deleteMetadata(
 			@PathVariable("context-id") String contextId,
