@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.springboot.security;
+package org.entrystore.rest.springboot.filter;
 
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;

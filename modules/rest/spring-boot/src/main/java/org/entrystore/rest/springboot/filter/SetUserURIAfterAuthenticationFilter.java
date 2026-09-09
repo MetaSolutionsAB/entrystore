@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.springboot.security;
+package org.entrystore.rest.springboot.filter;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -25,6 +25,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
+import org.entrystore.rest.springboot.security.ESUserDetailsService;
+import org.entrystore.rest.springboot.security.ESUserSessionDetails;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;

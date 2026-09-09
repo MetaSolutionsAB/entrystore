@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.springboot.util;
+package org.entrystore.rest.springboot.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,13 +36,14 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.EntryUtil;
-import org.entrystore.rest.springboot.model.api.ListFilter;
+import org.entrystore.rest.springboot.model.dto.ListParams;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
+import org.entrystore.rest.springboot.util.GraphUtil;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import java.net.URI;
 import java.time.Instant;
@@ -53,7 +54,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.entrystore.EntryType.Link;
@@ -63,9 +63,9 @@ import static org.entrystore.EntryType.Reference;
 import static org.entrystore.GraphType.SystemContext;
 
 @Slf4j
-@Component
+@Service
 @RequiredArgsConstructor
-public class ResourceJsonSerializer {
+public class ResourceSerializationService {
 
 	public final static JSONObject IMMUTABLE_EMPTY_JSONOBJECT = new JSONObject(Collections.EMPTY_MAP);
 
@@ -434,33 +434,5 @@ public class ResourceJsonSerializer {
 			}
 		});
 		return resourceObj;
-	}
-
-	public record ListParams(
-		String sort,
-		String lang,
-		String prio,
-		String desc,
-		boolean ascendingOrder,
-		int offset,
-		int limit) {
-
-		public ListParams(ListFilter filter) {
-			this(
-				filter.sort(),
-				filter.lang(),
-				filter.prio(),
-				filter.desc(),
-				!"desc".equalsIgnoreCase(filter.order()),
-				Integer.parseInt(Optional.ofNullable(filter.offset()).orElse("0")),
-				Integer.parseInt(Optional.ofNullable(filter.limit()).orElse("0"))
-			);
-		}
-
-		/** Params with offset/limit left unparsed (defaulted to 0) — for callers that ignore pagination. */
-		public static ListParams withoutPagination(ListFilter filter) {
-			return new ListParams(filter.sort(), filter.lang(), filter.prio(), filter.desc(),
-					!"desc".equalsIgnoreCase(filter.order()), 0, 0);
-		}
 	}
 }

@@ -96,7 +96,8 @@ public class ContextController {
 			throw new BadRequestException("Pipeline results may only be created by Pipelines");
 		}
 
-		Entry entry = entryService.createEntry(contextId, entryId, entryType, graphType, resourceUri, listUri,
+		Context context = contextService.getContextOrThrow(contextId);
+		Entry entry = entryService.createEntry(context, entryId, entryType, graphType, resourceUri, listUri,
 				groupURI, cachedExternalMetadataUri, informationResource, templateUri, body);
 
 

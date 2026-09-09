@@ -53,13 +53,13 @@ import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.model.api.CreateEntryRequestBody;
 import org.entrystore.rest.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.springboot.model.api.ListFilter;
+import org.entrystore.rest.springboot.model.dto.ListParams;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.RDFJSON;
-import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -78,7 +78,7 @@ import static org.entrystore.EntryType.Link;
 import static org.entrystore.EntryType.LinkReference;
 import static org.entrystore.EntryType.Local;
 import static org.entrystore.EntryType.Reference;
-import static org.entrystore.rest.springboot.util.ResourceJsonSerializer.IMMUTABLE_EMPTY_JSONOBJECT;
+import static org.entrystore.rest.springboot.service.ResourceSerializationService.IMMUTABLE_EMPTY_JSONOBJECT;
 
 @Slf4j
 @Service
@@ -92,7 +92,7 @@ public class EntryService {
 	private final RepositoryManagerImpl repositoryManager;
 	private final ContextService contextService;
 	private final ReservedNamesService reservedNamesService;
-	private final ResourceJsonSerializer resourceSerializer;
+	private final ResourceSerializationService resourceSerializationService;
 
 	private final ObjectMapper objectMapper;
 
@@ -105,14 +105,7 @@ public class EntryService {
 		return ENTRY_ID_PATTERN.matcher(id).matches();
 	}
 
-	public GetEntryResponse getEntryInJsonFormat(String contextId, String entryId, String rdfFormat, boolean includeAll, ListFilter listFilter) {
-		Entry entry = getEntryByContextIdAndEntryId(contextId, entryId);
-		return convertEntryToResponseModel(entry, rdfFormat, includeAll, listFilter);
-	}
-
-	public String getEntryInRdfFormat(String contextId, String entryId, String mediaType) {
-		Entry entry = getEntryByContextIdAndEntryId(contextId, entryId);
-
+	public String getEntryInRdfFormat(Entry entry, String mediaType) {
 		return GraphUtil.serializeGraph(entry.getGraph(), mediaType);
 	}
 
@@ -142,7 +135,8 @@ public class EntryService {
 		principalManager.checkAuthenticatedUserAuthorized(entry, accessProperty);
 	}
 
-	private GetEntryResponse convertEntryToResponseModel(Entry entry, String rdfFormat, boolean includeAll, ListFilter listFilter) throws JSONException {
+	public GetEntryResponse getEntryInJsonFormat(Entry entry, String rdfFormat, boolean includeAll,
+												 ListFilter listFilter) {
 
 		ContextManager cm = repositoryManager.getContextManager();
 
@@ -237,7 +231,7 @@ public class EntryService {
 		/*
 		 * Rights
 		 */
-		JSONArray rights = resourceSerializer.serializeRights(entry);
+		JSONArray rights = resourceSerializationService.serializeRights(entry);
 		responseBuilder.rights(rights.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE));
 
 		/*
@@ -265,10 +259,10 @@ public class EntryService {
 
 	private String serializeResourceToRawJsonString(Resource resource, GraphType graphType, String rdfFormat, ListFilter listFilter) {
 		if (graphType == GraphType.String) {
-			return resourceSerializer.serializeResourceString(resource);
+			return resourceSerializationService.serializeResourceString(resource);
 		}
 		if (graphType == GraphType.Context || graphType == GraphType.SystemContext) {
-			return resourceSerializer.serializeResourceContext(resource)
+			return resourceSerializationService.serializeResourceContext(resource)
 					.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE);
 		}
 		JSONObject jsonObject = serializeResourceToJson(resource, graphType, rdfFormat, listFilter);
@@ -284,24 +278,22 @@ public class EntryService {
 			return IMMUTABLE_EMPTY_JSONOBJECT;
 		}
 		return switch (graphType) {
-			case List ->
-					resourceSerializer.serializeResourceList(resource, new ResourceJsonSerializer.ListParams(listFilter), rdfFormat);
-			case User -> resourceSerializer.serializeResourceUser(resource);
-			case Group -> resourceSerializer.serializeResourceGroup(resource, rdfFormat);
-			case None -> resourceSerializer.serializeResourceNone(resource);
-			case Graph -> resourceSerializer.serializeResourceGraph(resource, rdfFormat);
-			case Pipeline -> resourceSerializer.serializeResourcePipeline(resource, rdfFormat);
+			case List -> resourceSerializationService.serializeResourceList(resource,
+					new ListParams(listFilter), rdfFormat);
+			case User -> resourceSerializationService.serializeResourceUser(resource);
+			case Group -> resourceSerializationService.serializeResourceGroup(resource, rdfFormat);
+			case None -> resourceSerializationService.serializeResourceNone(resource);
+			case Graph -> resourceSerializationService.serializeResourceGraph(resource, rdfFormat);
+			case Pipeline -> resourceSerializationService.serializeResourcePipeline(resource, rdfFormat);
 			case String, Context, SystemContext -> null;
 			// TODO: other types, for example PrincipalManager, etc
 			case ResultList, PipelineResult -> IMMUTABLE_EMPTY_JSONOBJECT;
 		};
 	}
 
-	public Entry createEntry(String contextId, String entryId, EntryType entryType, GraphType graphType,
+	public Entry createEntry(Context context, String entryId, EntryType entryType, GraphType graphType,
 							 URI resourceUri, URI listUri, URI groupUri, URI cachedExternalMetadataUri,
 							 String informationResource, URI templateUri, CreateEntryRequestBody body) {
-
-		Context context = contextService.getContextOrThrow(contextId);
 
 		if (entryId != null) {
 			if (!EntryService.isEntryIdValid(entryId)) {
@@ -541,11 +533,6 @@ public class EntryService {
 		return entry;
 	}
 
-	public Entry modifyEntry(String contextId, String entryId, String body, String mediaType, boolean applyACLtoChildren) throws AuthorizationException {
-		Entry entry = getEntryByContextIdAndEntryId(contextId, entryId);
-		return modifyEntry(entry, body, mediaType, applyACLtoChildren);
-	}
-
 	public Entry modifyEntry(Entry entry, String body, String mediaType, boolean applyACLtoChildren) throws AuthorizationException {
 
 		Model deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
@@ -558,10 +545,7 @@ public class EntryService {
 		return entry;
 	}
 
-	public void deleteEntry(String contextId, String entryId, boolean recursive) {
-
-		Entry entry = getEntryByContextIdAndEntryId(contextId, entryId);
-
+	public void deleteEntry(Entry entry, boolean recursive) {
 		try {
 			if (GraphType.List.equals(entry.getGraphType()) && recursive) {
 				org.entrystore.List l = (org.entrystore.List) entry.getResource();

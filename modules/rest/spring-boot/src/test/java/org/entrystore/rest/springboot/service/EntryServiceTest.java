@@ -29,7 +29,6 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.rest.springboot.model.api.CreateEntryRequestBody;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
-import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -70,7 +69,7 @@ class EntryServiceTest {
 	private ReservedNamesService reservedNamesService;
 
 	@Mock
-	private ResourceJsonSerializer resourceSerializer;
+	private ResourceSerializationService resourceSerializationService;
 
 	@Mock
 	private Context context;
@@ -87,7 +86,7 @@ class EntryServiceTest {
 	void setUp() {
 		service = new EntryService(
 				principalManager, repositoryManager, contextService,
-				reservedNamesService, resourceSerializer, new JsonMapper());
+				reservedNamesService, resourceSerializationService, new JsonMapper());
 	}
 
 	@Test

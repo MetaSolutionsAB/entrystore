@@ -21,9 +21,13 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.net.URLDecoder;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * Boundary validation for the Solr-backed {@code /search?type=solr} endpoint. The endpoint is
@@ -134,7 +138,24 @@ public class SolrSearchInputValidator {
 		}
 	}
 
-	public void validateFilterQueries(List<String> filterQueries, String rawFilterQuery) {
+	/**
+	 * Splits the raw {@code filterQuery} parameter into individual Solr filter queries and validates them.
+	 * The comma separator is matched before URL-decoding so that an unencoded comma separates filter
+	 * queries while an encoded one ({@code %2C}) stays inside a filter query.
+	 *
+	 * @return the decoded filter queries; empty when the parameter is absent (a blank value yields one empty query)
+	 * @throws BadRequestException if the raw value exceeds {@code entrystore.solr.search.filter-query.max-length} or
+	 *                             splits into more than {@code entrystore.solr.search.filter-query.max-count} entries
+	 */
+	public List<String> parseFilterQueries(String rawFilterQuery) {
+		List<String> filterQueries = rawFilterQuery == null
+				? List.of()
+				: Arrays.stream(rawFilterQuery.split(",")).map(fq -> URLDecoder.decode(fq, UTF_8)).toList();
+		validateFilterQueries(filterQueries, rawFilterQuery);
+		return filterQueries;
+	}
+
+	void validateFilterQueries(List<String> filterQueries, String rawFilterQuery) {
 		if (rawFilterQuery == null || rawFilterQuery.isEmpty()) {
 			return;
 		}
@@ -146,10 +167,8 @@ public class SolrSearchInputValidator {
 			throw new BadRequestException(
 					"Query parameter 'filterQuery' contains more than " + maxFilterQueryCount + " entries");
 		}
-		// Defense-in-depth per-entry cap. Currently unreachable from the controller flow
-		// (URLDecoder.decode only shrinks length, and rawFilterQuery is already length-capped
-		// above), but kept so a future caller that supplies pre-decoded entries from a different
-		// source cannot bypass the cap.
+		// Per-entry backstop. Unreachable via parseFilterQueries (decode only shrinks the already
+		// length-capped raw value); kept for same-package callers passing pre-decoded entries.
 		for (String fq : filterQueries) {
 			if (fq != null && fq.length() > maxFilterQueryLength) {
 				throw new BadRequestException(

@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.springboot.security;
+package org.entrystore.rest.springboot.filter;
 
 import jakarta.servlet.http.HttpServletResponse;
 import org.apereo.cas.client.validation.Assertion;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
+import org.entrystore.rest.springboot.security.ESUserDetailsService;
+import org.entrystore.rest.springboot.security.ESUserSessionDetails;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;

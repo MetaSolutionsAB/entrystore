@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.springboot.configuration;
+package org.entrystore.rest.springboot.filter;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;

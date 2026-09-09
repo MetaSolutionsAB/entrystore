@@ -60,16 +60,17 @@ entrystore/
 
 ```
 springboot/
-├── configuration/         # App config, MVC config, content negotiation, SAML, request logging
+├── configuration/         # App config, MVC config, content negotiation, SAML, @ConfigurationProperties records
 ├── controller/            # REST controllers + AppExceptionHandler (@ControllerAdvice)
+├── filter/                # Servlet filters (cache control, JSONP, request logging, CSRF cookie, auth post-processing)
 ├── model/
-│   ├── api/               # Request/response records (e.g., GetEntryResponse, ErrorResponse)
+│   ├── api/               # Request/response records (e.g., GetEntryResponse, ErrorResponse) + converter/ (MVC Converters)
 │   ├── auth/              # Auth-related models
 │   ├── dto/               # Internal DTOs (e.g., ProxyResponse, QueryResultsDto)
 │   ├── exception/         # Custom exception classes (BadRequestException, ForbiddenException, etc.)
 │   └── serializer/        # Custom JSON serializers
-├── security/              # Spring Security config, filters, SAML handlers, UserDetailsService
-├── service/               # Business logic services
+├── security/              # Spring Security config, SAML/OIDC/CAS handlers, UserDetailsService, SSRF guards
+├── service/               # Business logic services (incl. ResourceSerializationService)
 └── util/                  # Utility classes
 ```
 

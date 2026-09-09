@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.springboot.util;
+package org.entrystore.rest.springboot.service;
 
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.AuthorizationException;
@@ -28,6 +28,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.rest.springboot.model.dto.ListParams;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.json.JSONArray;
@@ -56,7 +57,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class ResourceJsonSerializerTest {
+class ResourceSerializationServiceTest {
 
 	@Mock
 	private PrincipalManager pm;
@@ -70,11 +71,11 @@ class ResourceJsonSerializerTest {
 	@Mock
 	private User user;
 
-	private ResourceJsonSerializer serializer;
+	private ResourceSerializationService serializer;
 
 	@BeforeEach
 	void setUp() {
-		serializer = new ResourceJsonSerializer(pm, repositoryManager, loginAttemptService);
+		serializer = new ResourceSerializationService(pm, repositoryManager, loginAttemptService);
 		// only the serializeResourceUser tests reach this stub
 		lenient().when(user.getCustomProperties()).thenReturn(Map.of());
 	}
@@ -155,7 +156,7 @@ class ResourceJsonSerializerTest {
 		Entry a = mockListChild("a", new Date(3000));
 		Entry b = mockListChild("b", new Date(1000));
 		Entry c = mockListChild("c", new Date(2000));
-		var params = new ResourceJsonSerializer.ListParams("modified", null, null, null, true, 0, 0);
+		var params = new ListParams("modified", null, null, null, true, 0, 0);
 
 		JSONObject result = serializeList(List.of(a, b, c), params);
 
@@ -171,7 +172,7 @@ class ResourceJsonSerializerTest {
 		for (int i = 0; i < 500; i++) {
 			children.add(mockListChild("filler" + i, new Date(i)));
 		}
-		var params = new ResourceJsonSerializer.ListParams("modified", null, null, null, true, 0, 1);
+		var params = new ListParams("modified", null, null, null, true, 0, 1);
 
 		JSONObject result = serializeList(children, params);
 
@@ -186,7 +187,7 @@ class ResourceJsonSerializerTest {
 		Entry b = mockListChild("b", new Date(2000));
 		Entry c = mockListChild("c", new Date(3000));
 		Entry d = mockListChild("d", new Date(4000));
-		var params = new ResourceJsonSerializer.ListParams(null, null, null, null, true, 1, 2);
+		var params = new ListParams(null, null, null, null, true, 1, 2);
 
 		JSONObject result = serializeList(List.of(a, b, c, d), params);
 
@@ -201,7 +202,7 @@ class ResourceJsonSerializerTest {
 		Entry a = mockListChild("a", new Date(1000));
 		Entry b = mockListChild("b", new Date(2000));
 		Entry c = mockListChild("c", new Date(3000));
-		var params = new ResourceJsonSerializer.ListParams(null, null, null, null, true, 0, 0);
+		var params = new ListParams(null, null, null, null, true, 0, 0);
 
 		JSONObject result = serializeList(List.of(a, b, c), params);
 
@@ -212,7 +213,7 @@ class ResourceJsonSerializerTest {
 	void serializeResourceList_authorizationExceptionOnMetadata_isSwallowedWithoutNoAccessFlag() {
 		Entry child = mockListChild("a", new Date(1000));
 		when(child.getLocalMetadata()).thenThrow(new AuthorizationException(null, null, null));
-		var params = new ResourceJsonSerializer.ListParams(null, null, null, null, true, 0, 0);
+		var params = new ListParams(null, null, null, null, true, 0, 0);
 
 		JSONObject result = serializeList(List.of(child), params);
 
@@ -225,7 +226,7 @@ class ResourceJsonSerializerTest {
 	@Test
 	void serializeResourceList_alwaysEmitsRightsKeyEvenWhenEmpty() {
 		Entry child = mockListChild("a", new Date(1000));
-		var params = new ResourceJsonSerializer.ListParams(null, null, null, null, true, 0, 0);
+		var params = new ListParams(null, null, null, null, true, 0, 0);
 
 		JSONObject result = serializeList(List.of(child), params);
 
@@ -238,7 +239,7 @@ class ResourceJsonSerializerTest {
 	void serializeResourceList_childWithRelations_emitsRelationKey() {
 		Entry child = mockListChild("a", new Date(1000));
 		when(child.getRelations()).thenReturn(new LinkedHashModel());
-		var params = new ResourceJsonSerializer.ListParams(null, null, null, null, true, 0, 0);
+		var params = new ListParams(null, null, null, null, true, 0, 0);
 
 		JSONObject result = serializeList(List.of(child), params);
 
@@ -286,9 +287,9 @@ class ResourceJsonSerializerTest {
 		Entry a = mockListChild("a", new Date(3000));
 		Entry b = mockListChild("b", new Date(1000));
 		List<Entry> children = new ArrayList<>(List.of(a, b));
-		var params = new ResourceJsonSerializer.ListParams("banana", null, null, null, true, 0, 0);
+		var params = new ListParams("banana", null, null, null, true, 0, 0);
 
-		ResourceJsonSerializer.sortChildrenEntries(children, params);
+		ResourceSerializationService.sortChildrenEntries(children, params);
 
 		assertEquals(List.of(a, b), children);
 	}
@@ -296,10 +297,10 @@ class ResourceJsonSerializerTest {
 	@Test
 	void sortChildrenEntries_invalidPrio_throwsBadRequest() {
 		List<Entry> children = new ArrayList<>();
-		var params = new ResourceJsonSerializer.ListParams("modified", null, "NotAGraphType", null, true, 0, 0);
+		var params = new ListParams("modified", null, "NotAGraphType", null, true, 0, 0);
 
 		var ex = assertThrows(BadRequestException.class,
-				() -> ResourceJsonSerializer.sortChildrenEntries(children, params));
+				() -> ResourceSerializationService.sortChildrenEntries(children, params));
 		assertEquals("Invalid value for parameter 'prio': NotAGraphType", ex.getMessage());
 	}
 
@@ -307,7 +308,7 @@ class ResourceJsonSerializerTest {
 	 * Wires a mocked {@link org.entrystore.List} whose children resolve through the list's
 	 * context and runs {@code serializeResourceList} with an empty-rights default.
 	 */
-	private JSONObject serializeList(List<Entry> children, ResourceJsonSerializer.ListParams params) {
+	private JSONObject serializeList(List<Entry> children, ListParams params) {
 		when(repositoryManager.getContextManager()).thenReturn(mock(ContextManager.class));
 		lenient().when(pm.getRights(any(Entry.class))).thenReturn(Set.of());
 
