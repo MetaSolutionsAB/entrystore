@@ -73,16 +73,27 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	private static final String ENV_ADMIN_PASSWORD = "ENTRYSTORE_ADMIN_PASSWORD";
 
 	/**
-	 * User resource URI to the resource URIs of the groups that user belongs to, as {@link #getGroupUris(URI)}
-	 * would return them. Values are shared, so callers must not mutate them; {@link #onRepositoryEvent} keeps
-	 * them current. Package-private for tests.
+	 * A user's group set together with the invalidation epoch it was computed under. A reader serves it only
+	 * while that epoch is current, so correctness rests on the stamp, not on clearing the map.
 	 */
-	final Map<URI, Set<URI>> userGroupsCache = new ConcurrentHashMap<>();
+	record CachedGroups(long epoch, Set<URI> groups) {
+	}
+
+	/** The result of one principals-context scan; only an authoritative scan may be cached. Package-private for tests. */
+	record GroupScan(Set<URI> groups, boolean authoritative) {
+	}
 
 	/**
-	 * Bumped on every invalidation. A loader records the epoch before scanning and publishes only while it is
-	 * unchanged, re-checking after the put, so a scan that started before a membership change committed can
-	 * never park pre-change state in the cache.
+	 * User resource URI to that user's {@link CachedGroups}: the immutable set {@link #getGroupUris(URI)} would
+	 * return, stamped with the epoch it was scanned under. An entry stamped with an older epoch is ignored and
+	 * overwritten by the next decision, so the map holds at most one entry per user and is never cleared.
+	 */
+	private final Map<URI, CachedGroups> userGroupsCache = new ConcurrentHashMap<>();
+
+	/**
+	 * Bumped by every group-sourced repository event. A reader compares a cached stamp against it after reading
+	 * the value, so a decision that starts after an invalidation can never accept a set computed before it, however
+	 * the two interleave; a loader also publishes only while the epoch it read before scanning is still current.
 	 */
 	private final AtomicLong userGroupsCacheEpoch = new AtomicLong();
 
@@ -265,67 +276,76 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	}
 
 	public Set <URI> getGroupUris(URI userUri) {
-		Iterator <URI> entryIterator = getEntries().iterator();
-		Set <URI> groupUris = new HashSet<>();
+		return new HashSet<>(scanGroups(userUri).groups());
+	}
+
+	/**
+	 * Scans the principals context for the groups {@code userUri} belongs to. The scan is authoritative only when
+	 * the user resolved, every listed entry loaded and {@link #isIndexComplete()} holds: a short listing
+	 * (ENTRYSTORE-1095) or an unresolvable principal is a per-decision denial, and caching it would make the denial
+	 * permanent because index repair fires no repository event. Package-private so a test can hold a scan back.
+	 */
+	GroupScan scanGroups(URI userUri) {
+		Set<URI> groupUris = new HashSet<>();
+		boolean skippedEntry = false;
 
 		User user = getUser(userUri);
 		if (user != null) {
-			while(entryIterator.hasNext()) {
-				URI nextURI = entryIterator.next();
+			for (URI nextURI : getEntries()) {
 				Entry nextEntry = getByEntryURI(nextURI);
-				// Skip if the entry was removed by a concurrent delete between getEntries()
-				// returning the URI and getByEntryURI(URI) being called for it. Sibling iterations
-				// elsewhere in this class share the same race shape; this guard targets only the
-				// access-control hot path.
+				// Removed by a concurrent delete between getEntries() and getByEntryURI(); sibling iterations in
+				// this class share the race shape, this guard targets the access-control hot path.
 				if (nextEntry == null) {
 					log.debug("Skipping null entry for URI {} in getGroupUris (likely concurrent delete)", nextURI);
+					skippedEntry = true;
 					continue;
 				}
-				if(GraphType.Group.equals(nextEntry.getGraphType())) {
-					Group nextGroup = (Group) nextEntry.getResource();
-					if(nextGroup != null) {
-						if(nextGroup.isMember(user)) {
-							groupUris.add(nextGroup.getURI());
-						}
-					}
+				if (GraphType.Group.equals(nextEntry.getGraphType())
+						&& nextEntry.getResource() instanceof Group nextGroup && nextGroup.isMember(user)) {
+					groupUris.add(nextGroup.getURI());
 				}
 			}
 		}
-
-		return groupUris;
+		return new GroupScan(groupUris, user != null && !skippedEntry && isIndexComplete());
 	}
 
 	/**
 	 * Cache-fronted {@link #getGroupUris(URI)}: scans the principals context at most once per user and
-	 * invalidation window. The returned set must not be mutated.
+	 * invalidation epoch. The returned set is immutable in both branches. A cached set is served only while its
+	 * stamp equals the current epoch (value read first, epoch second), and a fresh scan is published only when it
+	 * is authoritative and the epoch did not move while it ran; a scan that overlaps a group write is therefore
+	 * either not published or stamped with an epoch the write's own event has already left behind.
 	 */
 	Set<URI> getGroupUrisCached(URI userURI) {
 		if (!groupCacheEnabled) {
-			return getGroupUris(userURI);
+			return Set.copyOf(getGroupUris(userURI));
 		}
-		Set<URI> cached = userGroupsCache.get(userURI);
-		if (cached != null) {
-			return cached;
+		CachedGroups cached = userGroupsCache.get(userURI);
+		if (cached != null && cached.epoch() == userGroupsCacheEpoch.get()) {
+			return cached.groups();
 		}
 		long epochBefore = userGroupsCacheEpoch.get();
-		Set<URI> groups = Set.copyOf(getGroupUris(userURI));
-		if (userGroupsCacheEpoch.get() == epochBefore) {
-			userGroupsCache.putIfAbsent(userURI, groups);
-			if (userGroupsCacheEpoch.get() != epochBefore) {
-				// An invalidation raced the put, so this snapshot may predate the mutation.
-				userGroupsCache.remove(userURI);
-			}
+		GroupScan scan = scanGroups(userURI);
+		Set<URI> groups = Set.copyOf(scan.groups());
+		if (scan.authoritative() && userGroupsCacheEpoch.get() == epochBefore) {
+			userGroupsCache.put(userURI, new CachedGroups(epochBefore, groups));
 		}
 		return groups;
 	}
 
+	/** Read-only view for tests; keys are user resource URIs, a value may carry a stale epoch. */
+	Map<URI, CachedGroups> cachedGroupsView() {
+		return Collections.unmodifiableMap(userGroupsCache);
+	}
+
 	/**
 	 * Keeps {@link #userGroupsCache} consistent with the repository. A {@link RepositoryEventObject} carries no
-	 * previous state, so any event sourced from a Group entry clears everything (directory mutations are rare
-	 * next to decisions), while a deleted User evicts only its own key. Subscribed to every post-commit event a
-	 * group entry emits (ResourceDeleted fires inside the transaction and is followed by EntryDeleted): the filter
-	 * is one field read, and a missed path would be a stale grant. Runs synchronously under the repository's
-	 * listener monitor, so it only touches the map and never reads the repository.
+	 * previous state, so any event sourced from a Group entry invalidates every cached set by bumping the epoch
+	 * (directory mutations are rare next to decisions), while a deleted User drops only its own key. Subscribed to
+	 * every post-commit event a group entry emits (ResourceDeleted fires inside the transaction and is followed by
+	 * EntryDeleted); {@code ListImpl} also fires ResourceUpdated from a failed member-list write, so a scan that
+	 * read the uncommitted list is invalidated as well. Runs synchronously under the repository's listener
+	 * monitor, so it only touches the map and the counter and never reads the repository.
 	 */
 	void onRepositoryEvent(RepositoryEventObject eventObject) {
 		if (!(eventObject.getSource() instanceof Entry source)) {
@@ -344,11 +364,13 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 
 	private void invalidateGroupCache() {
 		userGroupsCacheEpoch.incrementAndGet();
-		userGroupsCache.clear();
 	}
 
+	/**
+	 * A loader racing this removal may re-publish the deleted user's set; that entry is inert, because
+	 * {@link #hasAccess} fails closed before consulting the cache once the principal no longer resolves.
+	 */
 	private void evictFromGroupCache(URI userURI) {
-		userGroupsCacheEpoch.incrementAndGet();
 		userGroupsCache.remove(userURI);
 	}
 
@@ -506,13 +528,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 				return true;
 			}
 
-			//Check if user is in principals.
-			if (principals.contains(userURI)) {
-				return true;
-			}
-
-			//Check if any of the groups the user belongs to is in principals
-			if (!Collections.disjoint(getGroupUrisCached(userURI), principals)) {
+			if (matchesUserOrItsGroups(userURI, principals)) {
 				return true;
 			}
 		}
@@ -521,16 +537,15 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			principals = entry.getAllowedPrincipalsFor(AccessProperty.Administer);
 			if (!principals.isEmpty()) {
 
-				//Check if user is in principals.
-				if (principals.contains(userURI)) {
-					return true;
-				}
-
-				//Check if any of the groups the user belongs to is in principals
-				return !Collections.disjoint(getGroupUrisCached(userURI), principals);
+				return matchesUserOrItsGroups(userURI, principals);
 			}
 		}
 		return false;
+	}
+
+	/** The one rule both ACL branches of {@link #hasAccess} apply: the principals name the user or one of its groups. */
+	private boolean matchesUserOrItsGroups(URI userURI, Set<URI> principals) {
+		return principals.contains(userURI) || !Collections.disjoint(getGroupUrisCached(userURI), principals);
 	}
 
 	public Set<AccessProperty> getRights(Entry entry) {

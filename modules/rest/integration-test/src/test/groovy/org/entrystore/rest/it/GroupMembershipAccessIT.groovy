@@ -54,7 +54,7 @@ class GroupMembershipAccessIT extends BaseSpec {
 		]])
 		assert EntryStoreClient.putRequest(entryPath, aclBody).getResponseCode() == HTTP_NO_CONTENT
 		// The entry ACL now overrides whatever the context grants. Not a member yet: denied, and this
-		// decision is the one that caches the user's empty group set.
+		// decision is the one that caches the user's group set (only the built-in _users group).
 		assert readAsUser() == HTTP_FORBIDDEN
 
 		when: 'the user is added to the group'

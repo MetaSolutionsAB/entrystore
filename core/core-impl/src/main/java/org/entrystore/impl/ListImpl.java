@@ -151,7 +151,8 @@ public class ListImpl extends RDFResource implements List {
 		}
 	}
 
-	private void saveChildren(RepositoryConnection rc) throws RepositoryException {
+	/** Package-private so a same-package test can make a member-list write fail and exercise the recovery path. */
+	void saveChildren(RepositoryConnection rc) throws RepositoryException {
 		saveChildren(children, rc);
 	}
 
@@ -561,6 +562,8 @@ public class ListImpl extends RDFResource implements List {
 						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 					}
 					children = oldChildrenList;
+					// A concurrent authorization scan may have read the uncommitted list; tell the group cache.
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 					throw new org.entrystore.repository.RepositoryException("Cannot set the list since: " + e.getMessage());
 				} finally {
 					rc.close();
@@ -634,12 +637,15 @@ public class ListImpl extends RDFResource implements List {
 
 			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(child);
 			if (canRemove(checkOrphaned, childEntry, isOwnerOfContext)) {
-				children.remove(child);
+				int index = children.indexOf(child);
+				boolean removedInMemory = false;
 				try {
 					RepositoryConnection rc = entry.repository.getConnection();
 					ValueFactory vf = entry.repository.getValueFactory();
 					try {
 						rc.begin();
+						children.remove(child);
+						removedInMemory = true;
 						if (checkOrphaned && isOwnerOfContext) {
 							childEntry.setOriginalListSynchronized(null, rc, vf); //remains to do the same for list case.
 						}
@@ -649,9 +655,14 @@ public class ListImpl extends RDFResource implements List {
 						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 					} catch (Exception e) {
-						log.error(e.getMessage());
+						log.error("Failed to remove child {} from list {}", child, entry.getEntryURI(), e);
 						rc.rollback();
 						childEntry.refreshFromRepository(rc);
+						if (removedInMemory) {
+							children.add(index, child);
+						}
+						// A concurrent authorization scan may have read the shortened list; tell the group cache.
+						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 						return false;
 					} finally {
 						rc.close();
@@ -671,7 +682,10 @@ public class ListImpl extends RDFResource implements List {
 	 * writes go through the supplied connection only, so earlier uncommitted removals in the same transaction
 	 * are seen and nothing uncommitted is published to concurrent readers; the in-memory children are cleared
 	 * so they are reloaded on next access whatever the transaction outcome. The list entry's modification date
-	 * and contributors are updated in memory, so after a rollback the caller must refresh it.
+	 * and contributors are updated in memory, so after a rollback the caller must refresh it. No repository event
+	 * is fired here either, so the caller must publish the list's change after commit ({@code importContext} fires
+	 * ResourceUpdated per pruned list), or the user-to-groups cache would keep a stale membership for a pruned
+	 * member that survives the import.
 	 */
 	protected void removeChildrenInTransaction(Collection<URI> childrenToRemove, RepositoryConnection rc) throws RepositoryException {
 		synchronized (this.entry.repository) {

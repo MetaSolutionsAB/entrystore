@@ -22,10 +22,15 @@ import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
+import org.entrystore.repository.RepositoryListener;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -35,9 +40,12 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
 
 /**
@@ -85,7 +93,7 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 	@Test
 	public void addMemberGrantsAccessImmediately() {
 		assertFalse(isAuthorized(user, target, AccessProperty.ReadMetadata),
-				"non-member must not be authorized (this decision caches the empty group set)");
+				"non-member must not be authorized (this decision caches the group set, which holds only _users)");
 
 		group.addMember(user);
 		assertTrue(isAuthorized(user, target, AccessProperty.ReadMetadata),
@@ -136,13 +144,131 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 	public void userDeleteEvictsCache() {
 		group.addMember(user);
 		isAuthorized(user, target, AccessProperty.ReadMetadata);
-		assertTrue(pmi.userGroupsCache.containsKey(user.getURI()),
+		assertTrue(pmi.cachedGroupsView().containsKey(user.getURI()),
 				"precondition: a group-consulting decision populates the cache");
 
 		pm.remove(userEntry.getEntryURI());
 
-		assertFalse(pmi.userGroupsCache.containsKey(user.getURI()),
+		assertFalse(pmi.cachedGroupsView().containsKey(user.getURI()),
 				"deleting a user must evict their cached group set");
+	}
+
+	@Test
+	public void staleStampIsNotServedAfterInvalidation() {
+		group.addMember(user);
+		assertTrue(isAuthorized(user, target, AccessProperty.ReadMetadata));
+		assertTrue(pmi.cachedGroupsView().containsKey(user.getURI()), "precondition: the decision cached the set");
+
+		group.removeMember(user);
+
+		// Invalidation only bumps the epoch, so the entry is still mapped and must be rejected by its stamp.
+		assertTrue(pmi.cachedGroupsView().containsKey(user.getURI()), "precondition: the stale entry is still mapped");
+		assertFalse(isAuthorized(user, target, AccessProperty.ReadMetadata),
+				"a set stamped with an older epoch must not be served after the revocation");
+	}
+
+	@Test
+	public void invalidationSurvivesAThrowingPeerListener() {
+		group.addMember(user);
+		assertTrue(isAuthorized(user, target, AccessProperty.ReadMetadata));
+		RepositoryListener thrower = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				throw new IllegalStateException("best-effort peer listener failed");
+			}
+		};
+		// removeChild fires the member's EntryUpdated before the group's ResourceUpdated: a throw on the first
+		// used to abort the dispatch before the invalidator ever saw the group event.
+		RepositoryManagerImpl rmi = (RepositoryManagerImpl) rm;
+		rmi.registerListener(thrower, RepositoryEvent.EntryUpdated);
+		rmi.registerListener(thrower, RepositoryEvent.ResourceUpdated);
+		try {
+			group.removeMember(user);
+
+			assertFalse(isAuthorized(user, target, AccessProperty.ReadMetadata),
+					"a peer listener's failure must not skip the group-cache invalidation");
+		} finally {
+			rmi.unregisterListener(thrower, RepositoryEvent.EntryUpdated);
+			rmi.unregisterListener(thrower, RepositoryEvent.ResourceUpdated);
+		}
+	}
+
+	@Test
+	public void incompleteIndexScanIsNotCached() {
+		group.addMember(user);
+		PrincipalManagerImpl spied = spy(pmi);
+		doReturn(false).when(spied).isIndexComplete();
+
+		Set<URI> groups = spied.getGroupUrisCached(user.getURI());
+
+		assertTrue(groups.contains(group.getURI()), "the scan itself still answers from what it could see");
+		assertFalse(pmi.cachedGroupsView().containsKey(user.getURI()),
+				"a scan over an incomplete index is a denial, not a fact, and must not be published");
+	}
+
+	@Test
+	public void unresolvableUserIsNotCached() {
+		URI unknownUser = URI.create("http://localhost:8181/_principals/resource/does-not-exist");
+
+		assertTrue(pmi.getGroupUrisCached(unknownUser).isEmpty());
+		assertFalse(pmi.cachedGroupsView().containsKey(unknownUser),
+				"an unresolvable principal must not get an empty set parked in the cache");
+	}
+
+	@Test
+	public void failedSetChildrenNotifiesListenersAndRestoresMembers() {
+		group.addMember(user);
+		GroupImpl spied = spy((GroupImpl) group);
+		doThrow(new org.eclipse.rdf4j.repository.RepositoryException("simulated write failure"))
+				.when(spied).saveChildren(any(RepositoryConnection.class));
+		RecordingListener recorder = RecordingListener.register((RepositoryManagerImpl) rm);
+		try {
+			assertThrows(org.entrystore.repository.RepositoryException.class, () -> spied.setChildren(List.of()));
+
+			assertTrue(spied.getChildren().contains(userEntry.getEntryURI()), "the in-memory member list must be restored");
+			assertTrue(recorder.sources.contains(groupEntry.getEntryURI()),
+					"a failed member-list write must still publish a group-sourced ResourceUpdated");
+		} finally {
+			recorder.unregister((RepositoryManagerImpl) rm);
+		}
+	}
+
+	@Test
+	public void failedRemoveChildNotifiesListenersAndRestoresMembers() {
+		group.addMember(user);
+		GroupImpl spied = spy((GroupImpl) group);
+		doThrow(new org.eclipse.rdf4j.repository.RepositoryException("simulated write failure"))
+				.when(spied).saveChildren(any(RepositoryConnection.class));
+		RecordingListener recorder = RecordingListener.register((RepositoryManagerImpl) rm);
+		try {
+			assertFalse(spied.removeChild(userEntry.getEntryURI()), "the failed removal must be reported");
+
+			assertTrue(spied.getChildren().contains(userEntry.getEntryURI()), "the in-memory member list must be restored");
+			assertTrue(recorder.sources.contains(groupEntry.getEntryURI()),
+					"a failed member removal must still publish a group-sourced ResourceUpdated");
+		} finally {
+			recorder.unregister((RepositoryManagerImpl) rm);
+		}
+	}
+
+	/** Captures the entry URIs of every ResourceUpdated dispatched while registered. */
+	private static final class RecordingListener extends RepositoryListener {
+		final List<URI> sources = new ArrayList<>();
+
+		static RecordingListener register(RepositoryManagerImpl rm) {
+			RecordingListener recorder = new RecordingListener();
+			rm.registerListener(recorder, RepositoryEvent.ResourceUpdated);
+			return recorder;
+		}
+
+		void unregister(RepositoryManagerImpl rm) {
+			rm.unregisterListener(this, RepositoryEvent.ResourceUpdated);
+		}
+
+		@Override
+		public void repositoryUpdated(RepositoryEventObject eventObject) {
+			sources.add(((Entry) eventObject.getSource()).getEntryURI());
+		}
 	}
 
 	@Test
@@ -163,7 +289,7 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 				throw new IllegalStateException("loader was never released");
 			}
 			return preMutationGroups;
-		}).when(spied).getGroupUris(any(URI.class));
+		}).when(spied).scanGroups(any(URI.class));
 
 		ExecutorService loader = Executors.newSingleThreadExecutor();
 		try {
@@ -179,7 +305,7 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 
 			assertTrue(staleGroups.contains(group.getURI()),
 					"precondition: the loader really did capture the pre-mutation group set");
-			assertFalse(pmi.userGroupsCache.containsKey(user.getURI()),
+			assertFalse(pmi.cachedGroupsView().containsKey(user.getURI()),
 					"a scan that started before the membership change committed must not be published");
 			assertFalse(isAuthorized(user, target, AccessProperty.ReadMetadata),
 					"the next decision must see the revocation, not the racing loader's snapshot");

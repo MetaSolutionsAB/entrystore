@@ -579,7 +579,15 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			try {
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(removedEntry, RepositoryEvent.EntryDeleted));
 			} catch (Exception e) {
-				log.error("Failed to fire EntryDeleted event for {}, search index may be stale until reindex", removedEntry.getEntryURI(), e);
+				log.error("Failed to fire EntryDeleted for {}; search index and group cache may be stale until reindex or the next group change", removedEntry.getEntryURI(), e);
+			}
+		}
+		// a pruned surviving list changed its members inside the transaction without firing anything
+		for (EntryImpl prunedList : prunedSurvivingLists) {
+			try {
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(prunedList, RepositoryEvent.ResourceUpdated));
+			} catch (Exception e) {
+				log.error("Failed to fire ResourceUpdated for pruned list {}; search index and group cache may be stale", prunedList.getEntryURI(), e);
 			}
 		}
 		for (DataImpl removedData : deferredFileDeletions) {
