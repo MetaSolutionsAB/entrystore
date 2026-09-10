@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,6 +47,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 
 /**
@@ -72,17 +73,7 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterModificationDate(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType) {
-		entries.sort((e1, e2) -> {
-			int result = 0;
-			if (e1 != null && e2 != null) {
-				result = e1.getModifiedDate().compareTo(e2.getModifiedDate());
-				if (!ascending) {
-					result *= -1;
-				}
-			}
-			return result;
-		});
-		prioritizeBuiltinType(entries, prioritizedResourceType, true);
+		sortAfterDate(entries, ascending, prioritizedResourceType, Entry::getModifiedDate);
 	}
 
 	/**
@@ -97,10 +88,26 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterCreationDate(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType) {
+		sortAfterDate(entries, ascending, prioritizedResourceType, Entry::getCreationDate);
+	}
+
+	/**
+	 * Sorts a list of entries after a date read from each entry.
+	 * <p>
+	 * Callers must pass neither a null entry nor an entry whose date is absent. A null entry compares
+	 * equal to every other element, which makes the comparator intransitive, so {@code List.sort}
+	 * rejects it with IllegalArgumentException once the list is long enough to reach TimSort's merge
+	 * path; a null date throws NullPointerException, and {@link Entry#getModifiedDate()} does return
+	 * null for an entry whose graph carries no parseable date. Every current caller filters both.
+	 *
+	 * @param dateExtractor reads the date to sort on from an entry.
+	 */
+	private static void sortAfterDate(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType,
+									  Function<Entry, Date> dateExtractor) {
 		entries.sort((e1, e2) -> {
 			int result = 0;
 			if (e1 != null && e2 != null) {
-				result = e1.getCreationDate().compareTo(e2.getCreationDate());
+				result = dateExtractor.apply(e1).compareTo(dateExtractor.apply(e2));
 				if (!ascending) {
 					result *= -1;
 				}

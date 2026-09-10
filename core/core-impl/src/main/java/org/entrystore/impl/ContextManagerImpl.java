@@ -86,6 +86,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TimeZone;
@@ -974,50 +975,63 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	}
 
 	public Set<Entry> getLinks(URI resourceURI) {
-		return getLinksOrReferences(resourceURI, true);
+		return getEntriesFromIndex(resourceURI, RepositoryProperties.resHasEntry, EntryType.Link);
 	}
 
 	public Set<Entry> getReferences(URI metadataURI) {
-		return getLinksOrReferences(metadataURI, false);
+		return getEntriesFromIndex(metadataURI, RepositoryProperties.mdHasEntry, EntryType.Reference);
 	}
 
-	private Set<Entry> getLinksOrReferences(URI uri, boolean findLinks) {
-		HashSet<Entry> entries = new HashSet<>();
-		try {
-			try (RepositoryConnection rc = entry.repository.getConnection()) {
-				ValueFactory vf = entry.repository.getValueFactory();
-				IRI resource = vf.createIRI(uri.toString());
-				if (findLinks) {
-					RepositoryResult<Statement> resources = rc.getStatements(resource, RepositoryProperties.resHasEntry, null, false);
-					while (resources.hasNext()) {
-						Statement statement = resources.next();
-						try {
-							Entry entry = getItemInRepositoryByMMdURI(URI.create(statement.getObject().stringValue()));
-							if (entry.getEntryType() == EntryType.Link) {
-								entries.add(entry);
-							}
-						} catch (AuthorizationException ae) {
-						}
+	/**
+	 * Looks up the entries an index property points at from the given URI, keeping only those of the
+	 * wanted entry type.
+	 * <p>
+	 * A single unusable index triple never fails the whole lookup: this enumeration is fed straight
+	 * from the store, so it also sees objects that are not IRIs at all, that {@code java.net.URI}
+	 * rejects, or that do not sit under the current repository base URL (a restored backup, or a
+	 * changed base URL). Each such triple is counted and skipped.
+	 * <p>
+	 * Entries the current user may not read metadata for are excluded, but only where
+	 * {@code getItemInRepositoryByMMdURI} checks — its soft-cache-miss path does not, so this is not
+	 * a guarantee the caller can rely on for access control.
+	 *
+	 * @param uri the subject of the index triples: a resource URI for resHasEntry, a metadata URI
+	 * for mdHasEntry.
+	 * @param indexProperty {@code RepositoryProperties.resHasEntry} or {@code mdHasEntry}.
+	 * @param wantedEntryType the entry type to keep: Link for resHasEntry, Reference for mdHasEntry.
+	 * @return the matching entries, never null.
+	 */
+	private Set<Entry> getEntriesFromIndex(URI uri, IRI indexProperty, EntryType wantedEntryType) {
+		Set<Entry> entries = new HashSet<>();
+		int unusableTriples = 0;
+		IRI subject = entry.repository.getValueFactory().createIRI(uri.toString());
+		try (RepositoryConnection rc = entry.repository.getConnection();
+			 RepositoryResult<Statement> indexTriples = rc.getStatements(subject, indexProperty, null, false)) {
+			while (indexTriples.hasNext()) {
+				Value object = indexTriples.next().getObject();
+				if (!(object instanceof IRI entryIRI)) {
+					unusableTriples++;
+					continue;
+				}
+				try {
+					Entry indexedEntry = getItemInRepositoryByMMdURI(URI.create(entryIRI.stringValue()));
+					if (indexedEntry == null) {
+						unusableTriples++;
+					} else if (indexedEntry.getEntryType() == wantedEntryType) {
+						entries.add(indexedEntry);
 					}
-					resources.close();
-				} else {
-					RepositoryResult<Statement> resources = rc.getStatements(resource, RepositoryProperties.mdHasEntry, null, false);
-					while (resources.hasNext()) {
-						Statement statement = resources.next();
-						try {
-							Entry entry = getItemInRepositoryByMMdURI(URI.create(statement.getObject().stringValue()));
-							if (entry.getEntryType() == EntryType.Reference) {
-								entries.add(entry);
-							}
-						} catch (AuthorizationException ae) {
-						}
-					}
-					resources.close();
+				} catch (AuthorizationException ae) {
+					// excluded rather than reported, per the interface contract
+				} catch (IllegalArgumentException | IndexOutOfBoundsException | NoSuchElementException e) {
+					unusableTriples++;
 				}
 			}
 		} catch (RepositoryException e) {
 			log.error("Repository error", e);
 			throw new org.entrystore.repository.RepositoryException("Repository error", e);
+		}
+		if (unusableTriples > 0) {
+			log.warn("Skipped {} unusable {} triple(s) for {}", unusableTriples, indexProperty, uri);
 		}
 		return entries;
 	}
@@ -1030,6 +1044,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		}
 
 		Entry contextItem = getByEntryURI(Util.getContextMMdURIFromURI(this.entry.getRepositoryManager(), mmdURI));
+		if (contextItem == null) {
+			return null;
+		}
 		return ((Context) contextItem.getResource()).getByEntryURI(mmdURI);
 	}
 

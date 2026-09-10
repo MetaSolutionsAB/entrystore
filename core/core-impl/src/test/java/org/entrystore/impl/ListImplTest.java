@@ -17,15 +17,26 @@
 package org.entrystore.impl;
 
 import org.entrystore.Context;
+import org.entrystore.Data;
 import org.entrystore.Entry;
+import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.List;
 import org.entrystore.QuotaException;
+import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryException;
+import org.entrystore.repository.config.Settings;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -167,6 +178,121 @@ public class ListImplTest extends AbstractCoreTest {
 		assertNull(duck.getByEntryURI(linkEntry.getEntryURI()));
 		assertEquals(newEntry.getContext(), mouse);
 		assertEquals(1, ((List) listE2.getResource()).getChildren().size());
+	}
+
+	/**
+	 * Creates an entry of the given type in the given list. The four create methods differ in arity, so
+	 * the cross-context copy and move tests share this one dispatch rather than repeating it.
+	 * <p>
+	 * Local entries are NamedResource so these tests need no data folder;
+	 * {@link #moveFileEntryBetweenContexts_carriesTheDataFileOver} covers the InformationResource path.
+	 */
+	private Entry createOfType(Context context, EntryType entryType, URI listURI) {
+		return switch (entryType) {
+			case Local -> context.createResource(null, GraphType.None, ResourceType.NamedResource, listURI);
+			case Link -> context.createLink(null, URI.create("https://slashdot.org/"), listURI);
+			case Reference -> context.createReference(null, URI.create("https://reddit.com/"),
+				URI.create("https://example.com/md1"), listURI);
+			case LinkReference -> context.createLinkReference(null, URI.create("https://digg.com/"),
+				URI.create("https://example.com/md2"), listURI);
+		};
+	}
+
+	/** The two lists a cross-context copy or move runs between, as Donald, who owns both contexts. */
+	private record CrossContextLists(Context source, Context target, Entry sourceList, Entry targetList) {}
+
+	private CrossContextLists listsInTwoContexts() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Context mouse = cm.getContext("mouse");
+		return new CrossContextLists(duck, mouse,
+			duck.createResource(null, GraphType.List, null, null),   // since owner
+			mouse.createResource(null, GraphType.List, null, null)); // since owner
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@EnumSource(value = EntryType.class, names = {"Local", "Link", "LinkReference"})
+	public void moveEntryBetweenContexts_preservesEntryType(EntryType entryType) throws IOException, QuotaException {
+		CrossContextLists lists = listsInTwoContexts();
+		Entry original = createOfType(lists.source(), entryType, lists.sourceList().getResourceURI());
+
+		Entry moved = ((List) lists.targetList().getResource())
+			.moveEntryHere(original.getEntryURI(), lists.sourceList().getEntryURI(), true);
+
+		assertEquals(entryType, moved.getEntryType());
+		assertEquals(lists.target(), moved.getContext());
+		assertNull(lists.source().getByEntryURI(original.getEntryURI()));
+		assertTrue(((List) lists.targetList().getResource()).getChildren().contains(moved.getEntryURI()));
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@EnumSource(value = EntryType.class, names = {"Local", "Link", "LinkReference"})
+	public void copyEntryBetweenContexts_preservesEntryTypeAndLeavesTheOriginal(EntryType entryType) {
+		CrossContextLists lists = listsInTwoContexts();
+		Entry original = createOfType(lists.source(), entryType, lists.sourceList().getResourceURI());
+
+		Entry copy = ((ListImpl) lists.targetList().getResource()).copyEntryHere((EntryImpl) original);
+
+		assertEquals(entryType, copy.getEntryType());
+		assertEquals(lists.target(), copy.getContext());
+		assertNotNull(lists.source().getByEntryURI(original.getEntryURI()));
+	}
+
+	@Test
+	public void copyReferenceBetweenContexts_failsBecauseAReferenceHasNoLocalMetadata() {
+		CrossContextLists lists = listsInTwoContexts();
+		Entry original = createOfType(lists.source(), EntryType.Reference, lists.sourceList().getResourceURI());
+
+		// pins today's behaviour, not the intended one: copyGraphs dereferences getLocalMetadata(),
+		// which initMetadataObjects never creates for a Reference, and _copyEntryHere wraps the
+		// resulting NPE. Pre-existing, tracked separately - asserted here so the Reference arm of
+		// createCopyHere is exercised at all.
+		assertThrows(RepositoryException.class,
+			() -> ((ListImpl) lists.targetList().getResource()).copyEntryHere((EntryImpl) original));
+	}
+
+	@Test
+	public void moveLinkBetweenContexts_keepsTheExternalResourceURI() throws IOException, QuotaException {
+		CrossContextLists lists = listsInTwoContexts();
+		Entry original = createOfType(lists.source(), EntryType.Link, lists.sourceList().getResourceURI());
+		URI resourceURI = original.getResourceURI();
+
+		Entry moved = ((List) lists.targetList().getResource())
+			.moveEntryHere(original.getEntryURI(), lists.sourceList().getEntryURI(), true);
+
+		// a link points at a resource outside the context, so the move must not rewrite it;
+		// a Local entry's resource URI is context-local and is regenerated instead
+		assertEquals(resourceURI, moved.getResourceURI());
+	}
+
+	@Test
+	public void moveLinkReferenceBetweenContexts_keepsTheExternalMetadataURI() throws IOException, QuotaException {
+		CrossContextLists lists = listsInTwoContexts();
+		Entry original = createOfType(lists.source(), EntryType.LinkReference, lists.sourceList().getResourceURI());
+		URI externalMetadataURI = original.getExternalMetadataURI();
+
+		Entry moved = ((List) lists.targetList().getResource())
+			.moveEntryHere(original.getEntryURI(), lists.sourceList().getEntryURI(), true);
+
+		// the external metadata URI must survive the create dispatch the move goes through
+		assertEquals(externalMetadataURI, moved.getExternalMetadataURI());
+	}
+
+	@Test
+	public void moveFileEntryBetweenContexts_carriesTheDataFileOver(@TempDir Path tempDataDir) throws IOException, QuotaException {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		CrossContextLists lists = listsInTwoContexts();
+		Entry original = lists.source().createResource(null, GraphType.None,
+			ResourceType.InformationResource, lists.sourceList().getResourceURI());
+		((Data) original.getResource()).setData(new ByteArrayInputStream("payload".getBytes(StandardCharsets.UTF_8)));
+
+		Entry moved = ((List) lists.targetList().getResource())
+			.moveEntryHere(original.getEntryURI(), lists.sourceList().getEntryURI(), true);
+
+		// the only test that reaches createCopyHere's useData branch, which needs InformationResource
+		try (InputStream movedData = ((Data) moved.getResource()).getData()) {
+			assertEquals("payload", new String(movedData.readAllBytes(), StandardCharsets.UTF_8));
+		}
 	}
 
 	@Test
