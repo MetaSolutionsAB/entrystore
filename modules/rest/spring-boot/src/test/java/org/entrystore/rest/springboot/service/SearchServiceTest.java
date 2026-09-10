@@ -17,10 +17,7 @@
 package org.entrystore.rest.springboot.service;
 
 import org.apache.solr.client.solrj.request.SolrQuery;
-import org.apache.solr.client.solrj.response.FacetField;
-import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
-import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -31,11 +28,12 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.RepositoryProperties;
-import org.entrystore.repository.util.LangFacetValue;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.configuration.SyndicationProperties;
 import org.entrystore.rest.springboot.model.api.FacetSettingsRequestParams;
+import org.entrystore.rest.springboot.model.dto.FacetValueDto;
+import org.entrystore.rest.springboot.model.dto.FacetValuesDto;
 import org.entrystore.rest.springboot.model.dto.QueryResultsDto;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.json.JSONArray;
@@ -58,11 +56,9 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
@@ -310,106 +306,52 @@ class SearchServiceTest {
 				"an unknown template name must not fall back to the default template; got: " + feed);
 	}
 
-	private static final ValueFactory VF = SimpleValueFactory.getInstance();
-
 	@Test
-	void generateJson_langFacetField_decodesNameAndLang() {
-		FacetField facetField = new FacetField("metadata.predicate.literal_l.abc12345");
-		facetField.add(LangFacetValue.encode(VF.createLiteral("Sweden", "en")), 10);
-		var service = new SearchService(repositoryManager, syndicationProperties, realSerializer());
-
-		JSONObject facet = firstFacetField(service.generateJson(0, 10, facetsOnly(facetField), null));
-		JSONObject value = facet.getJSONArray("values").getJSONObject(0);
-
-		assertEquals("metadata.predicate.literal_l.abc12345", facet.getString("name"));
-		assertEquals("Sweden", value.getString("name"));
-		assertEquals(10, value.getLong("count"));
-		assertEquals("en", value.getString("lang"));
-	}
-
-	@Test
-	void generateJson_langFacetFieldWithoutLanguage_omitsLangKey() {
-		FacetField facetField = new FacetField("metadata.predicate.literal_l.abc12345");
-		facetField.add(LangFacetValue.encode(VF.createLiteral("Stockholm")), 3);
-		var service = new SearchService(repositoryManager, syndicationProperties, realSerializer());
-
-		JSONObject value = firstFacetField(service.generateJson(0, 10, facetsOnly(facetField), null))
-				.getJSONArray("values").getJSONObject(0);
-
-		assertEquals("Stockholm", value.getString("name"));
-		assertEquals(3, value.getLong("count"));
-		assertFalse(value.has("lang"));
-	}
-
-	@Test
-	void generateJson_literalSFacetField_isNotDecoded() {
-		FacetField facetField = new FacetField("metadata.predicate.literal_s.abc12345");
-		facetField.add("Sweden", 10);
-		var service = new SearchService(repositoryManager, syndicationProperties, realSerializer());
-
-		JSONObject value = firstFacetField(service.generateJson(0, 10, facetsOnly(facetField), null))
-				.getJSONArray("values").getJSONObject(0);
-
-		assertEquals("Sweden", value.getString("name"));
-		assertEquals(10, value.getLong("count"));
-		assertFalse(value.has("lang"));
-	}
-
-	@Test
-	void generateJson_langFacetFieldMissingBucket_keepsNamelessShape() {
-		// facet.missing=true yields a bucket whose name is null; it has always been emitted as {count} only
-		FacetField facetField = new FacetField("metadata.predicate.literal_l.abc12345");
-		facetField.add(null, 2);
-		var service = new SearchService(repositoryManager, syndicationProperties, realSerializer());
-
-		JSONObject value = firstFacetField(service.generateJson(0, 10, facetsOnly(facetField), null))
-				.getJSONArray("values").getJSONObject(0);
-
-		assertEquals(2, value.getLong("count"));
-		assertFalse(value.has("name"));
-		assertFalse(value.has("lang"));
-	}
-
-	@Test
-	void findEntriesSolr_facetMatchesOnLangField_isAnchoredToLabelPerField() {
+	void findEntriesSolr_literalFacet_addsTheUnlimitedCompanionField() {
 		SolrSearchIndex index = mock(SolrSearchIndex.class);
 		when(repositoryManager.getIndex()).thenReturn(index);
 		when(index.sendQuery(any(SolrQuery.class))).thenReturn(new QueryResult(Set.of(), 0, List.of()));
 		var service = new SearchService(repositoryManager, syndicationProperties, realSerializer());
 
 		service.findEntriesSolr("*:*", null, 0, 10, List.of(),
-				facetSettings("rdfType,metadata.predicate.literal_l.abc12345", "Sver-1"));
+				facetSettings("rdfType,metadata.predicate.literal_s.abc12345", null, "sv"));
 
 		SolrQuery query = capturedQuery(index);
-		assertEquals("Sver-1", query.get("facet.matches"));
-		assertNull(query.get("f.rdfType.facet.matches"));
-		Pattern perField = Pattern.compile(query.get("f.metadata.predicate.literal_l.abc12345.facet.matches"));
-		assertTrue(perField.matcher(LangFacetValue.encode(VF.createLiteral("Sver-1", "sv"))).matches());
-		assertFalse(perField.matcher(LangFacetValue.encode(VF.createLiteral("Sver-10", "sv"))).matches());
+		assertEquals(List.of("rdfType", "metadata.predicate.literal_s.abc12345", "metadata.predicate.literal_l.abc12345"),
+				List.of(query.getFacetFields()));
+		assertEquals("-1", query.get("f.metadata.predicate.literal_l.abc12345.facet.limit"));
+		assertEquals("-1", query.get("f.metadata.predicate.literal_s.abc12345.facet.limit"),
+				"with facetLang the client field is unlimited so the top-N is taken after the language filter");
 	}
 
 	@Test
-	void findEntriesSolr_noFacetMatches_setsNoPerFieldOverride() {
-		SolrSearchIndex index = mock(SolrSearchIndex.class);
-		when(repositoryManager.getIndex()).thenReturn(index);
-		when(index.sendQuery(any(SolrQuery.class))).thenReturn(new QueryResult(Set.of(), 0, List.of()));
+	void generateJson_literalFacet_carriesLangArraysPerBucket() {
+		var facet = new FacetValuesDto("metadata.predicate.literal_s.abc12345", List.of(
+				new FacetValueDto("Sverige", 2, List.of("nb", "sv")),
+				new FacetValueDto("Stockholm", 1, List.of()),
+				new FacetValueDto(null, 4, List.of())));
 		var service = new SearchService(repositoryManager, syndicationProperties, realSerializer());
 
-		service.findEntriesSolr("*:*", null, 0, 10, List.of(),
-				facetSettings("rdfType,metadata.predicate.literal_l.abc12345", null));
+		JSONObject facetJson = firstFacetField(service.generateJson(0, 10, new QueryResultsDto(List.of(), 0, List.of(facet)), null));
 
-		SolrQuery query = capturedQuery(index);
-		assertNull(query.get("facet.matches"));
-		List<String> perFieldMatches = query.getParameterNames().stream()
-				.filter(name -> name.startsWith("f.") && name.endsWith(".facet.matches"))
-				.toList();
-		assertTrue(perFieldMatches.isEmpty(), "unexpected per-field facet.matches params: " + perFieldMatches);
+		assertEquals("metadata.predicate.literal_s.abc12345", facetJson.getString("name"));
+		assertEquals(3, facetJson.getInt("valueCount"));
+		JSONObject sverige = facetJson.getJSONArray("values").getJSONObject(0);
+		assertEquals("Sverige", sverige.getString("name"));
+		assertEquals(2, sverige.getLong("count"));
+		assertEquals(List.of("nb", "sv"), sverige.getJSONArray("lang").toList());
+		JSONObject stockholm = facetJson.getJSONArray("values").getJSONObject(1);
+		assertFalse(stockholm.has("lang"), "an untagged-only label carries no lang array");
+		JSONObject missing = facetJson.getJSONArray("values").getJSONObject(2);
+		assertFalse(missing.has("name"), "the facet.missing bucket stays nameless");
+		assertEquals(4, missing.getLong("count"));
 	}
 
-	private static SolrSearchIndex.FacetSettings facetSettings(String fields, String matches) {
+	private static SolrSearchIndex.FacetSettings facetSettings(String fields, String matches, String lang) {
 		var settings = new SolrSearchIndex.FacetSettings();
 		settings.fields = fields;
 		settings.matches = matches;
+		settings.lang = lang;
 		settings.minCount = 1;
 		settings.limit = 100;
 		return settings;
@@ -419,10 +361,6 @@ class SearchServiceTest {
 		ArgumentCaptor<SolrQuery> captor = ArgumentCaptor.forClass(SolrQuery.class);
 		verify(index).sendQuery(captor.capture());
 		return captor.getValue();
-	}
-
-	private static QueryResultsDto facetsOnly(FacetField facetField) {
-		return new QueryResultsDto(List.of(), 0, List.of(facetField));
 	}
 
 	private static JSONObject firstFacetField(String generatedJson) {

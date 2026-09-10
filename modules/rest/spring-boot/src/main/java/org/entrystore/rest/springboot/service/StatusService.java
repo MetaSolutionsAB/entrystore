@@ -153,7 +153,8 @@ public class StatusService {
 			"status", searchIndex.isUp() ? "online" : "offline",
 			"postQueueSize", searchIndex.getPostQueueSize(),
 			"deleteQueueSize", searchIndex.getDeleteQueueSize(),
-			"indexingContexts", searchIndex.getIndexingContexts()
+			"indexingContexts", searchIndex.getIndexingContexts(),
+			"rejectedDocuments", searchIndex.getRejectedDocumentCount()
 		);
 	}
 

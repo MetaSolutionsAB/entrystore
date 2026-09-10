@@ -21,7 +21,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.solr.client.solrj.request.SolrQuery;
-import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.common.SolrException;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
@@ -31,11 +30,12 @@ import org.entrystore.Group;
 import org.entrystore.Resource;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.util.LangFacetValue;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.configuration.SyndicationProperties;
 import org.entrystore.rest.springboot.model.api.FacetSettingsRequestParams;
+import org.entrystore.rest.springboot.model.dto.FacetValueDto;
+import org.entrystore.rest.springboot.model.dto.FacetValuesDto;
 import org.entrystore.rest.springboot.model.dto.QueryResultsDto;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
@@ -145,7 +145,7 @@ public class SearchService {
 
 			List<Entry> entries;
 			long results;
-			List<FacetField> responseFacetFields;
+			List<FacetValuesDto> responseFacetFields;
 
 			if (repositoryManager.getIndex() == null) {
 				throw new CustomResponseException("Solr search is deactivated", HttpStatus.SERVICE_UNAVAILABLE);
@@ -178,22 +178,7 @@ public class SearchService {
 			}
 
 			if (facetSettings.fields != null) {
-				q.setFacet(true);
-				q.setFacetMinCount(facetSettings.minCount);
-				q.setFacetLimit(facetSettings.limit);
-				q.setFacetMissing(facetSettings.missing);
-				if (facetSettings.matches != null) {
-					q.setParam("facet.matches", facetSettings.matches);
-				}
-				for (String ff : facetSettings.fields.split(",")) {
-					String field = ff.trim().replace("metadata.predicate.literal.", "metadata.predicate.literal_s.");
-					q.addFacetField(field);
-					if (facetSettings.matches != null && LangFacetValue.isLangFacetField(field)) {
-						// facet.matches is a full-term regex; literal_l terms carry a trailing separator and tag
-						q.setParam("f." + field + ".facet.matches",
-								LangFacetValue.labelMatchesRegex(facetSettings.matches));
-					}
-				}
+				LanguageAwareFacets.configure(q, facetSettings);
 			}
 
 			for (String fq : filterQueries) {
@@ -204,7 +189,7 @@ public class SearchService {
 				QueryResult qResult = ((SolrSearchIndex) repositoryManager.getIndex()).sendQuery(q);
 				entries = new LinkedList<>(qResult.getEntries());
 				results = qResult.getHits();
-				responseFacetFields = qResult.getFacetFields();
+				responseFacetFields = LanguageAwareFacets.merge(qResult.getFacetFields(), facetSettings);
 			} catch (SolrException se) {
 				log.warn("SolrException: {}", se.getMessage());
 				throw new BadRequestException("Search failed due to wrong parameters");
@@ -285,41 +270,31 @@ public class SearchService {
 		return result.toString(2);
 	}
 
+	/**
+	 * Serialises the client-facing facet fields. A bucket carries {@code name}, {@code count} and, for a literal
+	 * label that occurs with language tags, a {@code lang} array; the {@code facet.missing} bucket has a
+	 * {@code null} name, which {@code JSONObject.put} drops, so it carries {@code count} only.
+	 */
 	private static @NotNull JSONArray getFacetFieldsArr(QueryResultsDto queryResults) {
 		JSONArray facetFieldsArr = new JSONArray();
-		for (FacetField ff : queryResults.responseFacetFields()) {
+		for (FacetValuesDto facet : queryResults.responseFacetFields()) {
 			JSONObject ffObj = new JSONObject();
-			ffObj.put("name", ff.getName());
-			ffObj.put("valueCount", ff.getValueCount());
-			boolean langTagged = LangFacetValue.isLangFacetField(ff.getName());
+			ffObj.put("name", facet.name());
+			ffObj.put("valueCount", facet.values().size());
 			JSONArray ffValArr = new JSONArray();
-			for (FacetField.Count ffVal : ff.getValues()) {
-				ffValArr.put(toFacetValueJson(ffVal, langTagged));
+			for (FacetValueDto value : facet.values()) {
+				JSONObject valueObj = new JSONObject();
+				valueObj.put("name", value.name());
+				valueObj.put("count", value.count());
+				if (!value.langs().isEmpty()) {
+					valueObj.put("lang", new JSONArray(value.langs()));
+				}
+				ffValArr.put(valueObj);
 			}
 			ffObj.put("values", ffValArr);
 			facetFieldsArr.put(ffObj);
 		}
 		return facetFieldsArr;
-	}
-
-	/**
-	 * Serialises one facet bucket. A {@code literal_l} term is split into {@code name} and {@code lang}; every
-	 * other field keeps the raw term as {@code name}. The {@code facet.missing} bucket has a {@code null} name,
-	 * which {@code JSONObject.put} drops, so it carries {@code count} only.
-	 */
-	private static JSONObject toFacetValueJson(FacetField.Count bucket, boolean langTagged) {
-		JSONObject value = new JSONObject();
-		value.put("count", bucket.getCount());
-		if (bucket.getName() == null || !langTagged) {
-			value.put("name", bucket.getName());
-			return value;
-		}
-		LangFacetValue decoded = LangFacetValue.decode(bucket.getName());
-		value.put("name", decoded.label());
-		if (decoded.lang() != null) {
-			value.put("lang", decoded.lang());
-		}
-		return value;
 	}
 
 	/**
