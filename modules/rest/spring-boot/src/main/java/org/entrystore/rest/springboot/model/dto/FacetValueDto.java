@@ -16,18 +16,12 @@
 
 package org.entrystore.rest.springboot.model.dto;
 
-import org.entrystore.Entry;
-
-import java.util.Collections;
 import java.util.List;
 
-/** Result of a Solr search: the accessible entries, the total hit count and the client-facing facet fields. */
-public record QueryResultsDto(
-		List<Entry> entries,
-		long resultsCount,
-		List<FacetValuesDto> responseFacetFields) {
-
-	public QueryResultsDto(List<Entry> entries) {
-		this(entries, entries.size(), Collections.emptyList());
-	}
+/**
+ * One facet bucket. {@code name} is {@code null} for the {@code facet.missing} bucket. {@code langs} lists, in
+ * natural order, the normalised language tags a literal label occurs in within the result set; it is empty for a
+ * label that only occurs untagged and for every non-literal facet.
+ */
+public record FacetValueDto(String name, long count, List<String> langs) {
 }

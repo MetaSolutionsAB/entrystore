@@ -65,20 +65,18 @@ public class SolrSearchInputValidator {
 	 * facet field; the rewrite does NOT apply to sort clauses, so passing
 	 * {@code metadata.predicate.literal.<tail>} in {@code sort=} reaches Solr unrewritten. The
 	 * {@code title.} prefix covers the sort form {@code title.<lang>}, which {@code SearchService}
-	 * rewrites to {@code title_sort.<lang>}. The {@code metadata.predicate.literal_l.} prefix and its
-	 * {@code related.} twin are the language-aware facet family; see
-	 * {@link org.entrystore.repository.util.LangFacetValue}.
+	 * rewrites to {@code title_sort.<lang>}. The {@code metadata.predicate.literal_l.} family is the internal
+	 * companion the server facets on for language information (see {@code LangFacetValue}) and is deliberately
+	 * absent here, so clients can neither facet nor sort on it.
 	 */
 	private static final List<String> ALLOWED_DYNAMIC_PREFIXES = List.of(
 			"metadata.predicate.uri.",
 			"metadata.predicate.literal_s.",
 			"metadata.predicate.literal_t.",
-			"metadata.predicate.literal_l.",
 			"metadata.predicate.literal.",
 			"related.metadata.predicate.uri.",
 			"related.metadata.predicate.literal_s.",
 			"related.metadata.predicate.literal_t.",
-			"related.metadata.predicate.literal_l.",
 			"title.");
 
 	/**
@@ -95,6 +93,14 @@ public class SolrSearchInputValidator {
 	 * {@code *}, {@code +}, parentheses) reopens the ReDoS surface this class was added to close.
 	 */
 	private static final Pattern FACET_MATCHES = Pattern.compile("^[\\w-]{1,64}$");
+
+	/**
+	 * Constrains {@code facetLang} to the BCP 47 alphabet (alphanumerics and dash, at most 35 characters, the
+	 * length limit of a well-formed tag). The value is only compared against index terms in memory, but the same
+	 * literal-only discipline as {@link #FACET_MATCHES} keeps it safe to echo in error messages and to hand to Solr
+	 * should a future implementation push the filter into a regex.
+	 */
+	private static final Pattern FACET_LANG = Pattern.compile("^[A-Za-z0-9-]{1,35}$");
 
 	@Value("${entrystore.solr.search.query.max-length:1024}")
 	private int maxQueryLength;
@@ -186,6 +192,7 @@ public class SolrSearchInputValidator {
 		String facetMatches = request.getFacetMatches();
 		validateFacetFields(facetFields);
 		validateFacetMatches(facetMatches, facetFields);
+		validateFacetLang(request.getFacetLang(), facetFields);
 	}
 
 	private void validateFacetFields(String facetFields) {
@@ -219,6 +226,21 @@ public class SolrSearchInputValidator {
 		if (!FACET_MATCHES.matcher(matches).matches()) {
 			throw new BadRequestException(
 					"Query parameter 'facetMatches' must match pattern " + FACET_MATCHES.pattern());
+		}
+	}
+
+	private static void validateFacetLang(String facetLang, String facetFields) {
+		if (facetLang == null || facetLang.isEmpty()) {
+			// An empty value is equivalent to omitting the parameter, like an empty facetMatches.
+			return;
+		}
+		if (facetFields == null || facetFields.isEmpty()) {
+			throw new BadRequestException(
+					"Query parameter 'facetLang' requires 'facetFields' to be set");
+		}
+		if (!FACET_LANG.matcher(facetLang).matches()) {
+			throw new BadRequestException(
+					"Query parameter 'facetLang' must be a BCP 47 language tag matching pattern " + FACET_LANG.pattern());
 		}
 	}
 

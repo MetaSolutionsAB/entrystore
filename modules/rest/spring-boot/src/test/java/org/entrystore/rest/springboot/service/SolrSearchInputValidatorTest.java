@@ -213,10 +213,8 @@ class SolrSearchInputValidatorTest {
 			"metadata.predicate.uri.0123abcd",
 			"metadata.predicate.literal_s.deadbeef",
 			"metadata.predicate.literal_t.cafebabe",
-			"metadata.predicate.literal_l.0123abcd",
 			"metadata.predicate.literal.shorthand_form",
 			"related.metadata.predicate.uri.0123abcd",
-			"related.metadata.predicate.literal_l.0123abcd",
 			"rdfType,lang,status"
 	})
 	void validateFacetSettingsAcceptsAllowedFields(String facetFields) {
@@ -230,7 +228,9 @@ class SolrSearchInputValidatorTest {
 			"secretField",
 			"unknown.predicate.uri.xyz",
 			"metadata.predicate.uri.",                  // empty tail
-			"metadata.predicate.uri.has spaces"         // disallowed char
+			"metadata.predicate.uri.has spaces",        // disallowed char
+			"metadata.predicate.literal_l.0123abcd",    // internal language companion, never client-visible
+			"related.metadata.predicate.literal_l.0123abcd"
 	})
 	void validateFacetSettingsRejectsDisallowedFields(String facetFields) {
 		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
@@ -332,5 +332,46 @@ class SolrSearchInputValidatorTest {
 		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
 		req.setFacetMatches("abc");
 		assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
+	}
+
+	@Test
+	void validateSortRejectsTheInternalLanguageCompanionField() {
+		// The companion is server-internal; the shared allowlist keeps it out of sort= as well as facetFields=.
+		assertThrows(BadRequestException.class,
+				() -> validator.validateSort("metadata.predicate.literal_l.0123abcd asc"));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"sv", "en-GB", "zh-Hant-TW", "x-private-1"})
+	void validateFacetSettingsAcceptsWellFormedFacetLang(String facetLang) {
+		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
+		req.setFacetFields("metadata.predicate.literal_s.deadbeef");
+		req.setFacetLang(facetLang);
+		assertDoesNotThrow(() -> validator.validateFacetSettings(req));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"sv_SE", ".*", "sv,nb", "en GB", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
+	void validateFacetSettingsRejectsMalformedFacetLang(String facetLang) {
+		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
+		req.setFacetFields("metadata.predicate.literal_s.deadbeef");
+		req.setFacetLang(facetLang);
+		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
+		assertTrue(ex.getMessage().contains("'facetLang'"), ex.getMessage());
+	}
+
+	@Test
+	void validateFacetSettingsRejectsFacetLangWithoutFacetFields() {
+		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
+		req.setFacetLang("sv");
+		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
+		assertTrue(ex.getMessage().contains("'facetLang'"), ex.getMessage());
+	}
+
+	@Test
+	void validateFacetSettingsAcceptsEmptyFacetLangEvenWithoutFacetFields() {
+		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
+		req.setFacetLang("");
+		assertDoesNotThrow(() -> validator.validateFacetSettings(req));
 	}
 }

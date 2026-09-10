@@ -16,6 +16,8 @@
 
 package org.entrystore.repository.util;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import org.apache.solr.client.solrj.RemoteSolrException;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.UpdateRequest;
@@ -61,6 +63,7 @@ import static org.mockito.Mockito.when;
 public class SolrSearchIndexTest {
 
 	private SolrSearchIndex index;
+	private SolrClient solrServer;
 	private Map<URI, Future> reindexingMap;
 
 	@BeforeEach
@@ -70,7 +73,7 @@ public class SolrSearchIndexTest {
 		Config config = new PropertiesConfiguration("EntryStore Test Configuration");
 		when(rm.getConfiguration()).thenReturn(config);
 		when(rm.getValueFactory()).thenReturn(SimpleValueFactory.getInstance());
-		SolrClient solrServer = mock(SolrClient.class);
+		solrServer = mock(SolrClient.class);
 
 		index = new SolrSearchIndex(rm, solrServer);
 
@@ -240,6 +243,65 @@ public class SolrSearchIndexTest {
 		assertEquals(new LangFacetValue("Sweden", "en"),
 				LangFacetValue.decode(doc.getFieldValue("related.metadata.predicate.literal_l." + hash).toString()));
 		assertNull(doc.getFieldValues("metadata.predicate.literal_l." + hash));
+	}
+
+	@Test
+	public void addGenericMetadataFieldsNormalisesTheCompanionLanguageTag() {
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		IRI predicate = vf.createIRI("http://example.org/ns/place");
+		Model model = new LinkedHashModel();
+		model.add(vf.createIRI("http://example.org/a"), predicate, vf.createLiteral("Colour", "en-gb"));
+		model.add(vf.createIRI("http://example.org/a"), predicate, vf.createLiteral("F\u00e4rg", "SV"));
+		String hash = Hashing.hash(predicate.stringValue(), HashType.MD5).substring(0, 8);
+		SolrInputDocument doc = new SolrInputDocument();
+
+		index.addGenericMetadataFields(doc, model, false);
+
+		Set<LangFacetValue> decoded = doc.getFieldValues("metadata.predicate.literal_l." + hash).stream()
+				.map(Object::toString)
+				.map(LangFacetValue::decode)
+				.collect(Collectors.toSet());
+		assertEquals(Set.of(new LangFacetValue("Colour", "en-GB"), new LangFacetValue("F\u00e4rg", "sv")), decoded);
+	}
+
+	@Test
+	public void addGenericMetadataFieldsSkipsTheCompanionForLabelsOverTheCap() {
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		IRI predicate = vf.createIRI("http://example.org/ns/description");
+		String longLabel = "x".repeat(LangFacetValue.MAX_LABEL_LENGTH + 1);
+		Model model = new LinkedHashModel();
+		model.add(vf.createIRI("http://example.org/a"), predicate, vf.createLiteral(longLabel, "en"));
+		model.add(vf.createIRI("http://example.org/a"), predicate, vf.createLiteral("short", "en"));
+		String hash = Hashing.hash(predicate.stringValue(), HashType.MD5).substring(0, 8);
+		SolrInputDocument doc = new SolrInputDocument();
+
+		index.addGenericMetadataFields(doc, model, false);
+
+		// literal_s still carries the long label; only the language companion is capped
+		assertEquals(Set.of(longLabel, "short"), Set.copyOf(doc.getFieldValues("metadata.predicate.literal_s." + hash)));
+		Collection<Object> langTerms = doc.getFieldValues("metadata.predicate.literal_l." + hash);
+		assertEquals(1, langTerms.size());
+		assertEquals(new LangFacetValue("short", "en"), LangFacetValue.decode(langTerms.iterator().next().toString()));
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	public void rejectedDocumentCountGrowsWhenSolrRejectsAnAddBatch() throws Exception {
+		// An HTTP 400 (for example an unknown field under an outdated schema) discards the batch; the count is
+		// what lets startup tell a rejected reindex from a successful one.
+		when(solrServer.request(any(), any()))
+				.thenThrow(new RemoteSolrException("localhost", 400, "unknown field metadata.predicate.literal_l.x", null));
+		Field f = SolrSearchIndex.class.getDeclaredField("postQueue");
+		f.setAccessible(true);
+		Cache<URI, SolrInputDocument> postQueue = (Cache<URI, SolrInputDocument>) f.get(index);
+		SolrInputDocument doc = new SolrInputDocument();
+		doc.addField("uri", "http://example.org/e1");
+		assertEquals(0, index.getRejectedDocumentCount());
+
+		postQueue.put(URI.create("http://example.org/e1"), doc);
+
+		assertTrue(index.waitForQueueDrain(), "a discarded batch leaves the queue empty");
+		assertEquals(1, index.getRejectedDocumentCount());
 	}
 
 	@Disabled("To be implemented")

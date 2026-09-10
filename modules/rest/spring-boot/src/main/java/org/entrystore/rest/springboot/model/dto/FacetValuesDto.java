@@ -16,18 +16,8 @@
 
 package org.entrystore.rest.springboot.model.dto;
 
-import org.entrystore.Entry;
-
-import java.util.Collections;
 import java.util.List;
 
-/** Result of a Solr search: the accessible entries, the total hit count and the client-facing facet fields. */
-public record QueryResultsDto(
-		List<Entry> entries,
-		long resultsCount,
-		List<FacetValuesDto> responseFacetFields) {
-
-	public QueryResultsDto(List<Entry> entries) {
-		this(entries, entries.size(), Collections.emptyList());
-	}
+/** One facet field as returned to the client: the field name and its buckets in response order. */
+public record FacetValuesDto(String name, List<FacetValueDto> values) {
 }

@@ -56,6 +56,7 @@ import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.DataCorrection;
+import org.entrystore.repository.util.LangFacetValue;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.repository.util.StringUtils;
@@ -647,6 +648,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			throw new IllegalStateException("Embedded Solr is no longer supported; '" + Settings.SOLR_URL + "' must be an http(s) URL");
 		}
 		if (solrServer != null) {
+			SolrSchemaCheck.requireDynamicFields(solrServer, solrURL,
+					List.of(LangFacetValue.FIELD_PREFIX + "*", "related." + LangFacetValue.FIELD_PREFIX + "*"));
 			solrIndex = new SolrSearchIndex(this, solrServer);
 			boolean reindexSucceeded = false;
 			if (reindex) {
@@ -654,10 +657,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					if (!solrIndex.clearSolrIndex(solrServer)) {
 						log.error("Initial Solr full-wipe failed; skipping reindex to avoid serving a dirty index. Next restart will retry.");
 					} else {
+						long rejectedBefore = solrIndex.getRejectedDocumentCount();
 						solrIndex.reindexSync(false);
-						reindexSucceeded = solrIndex.waitForQueueDrain();
-						if (!reindexSucceeded) {
+						boolean drained = solrIndex.waitForQueueDrain();
+						long rejected = solrIndex.getRejectedDocumentCount() - rejectedBefore;
+						reindexSucceeded = drained && rejected == 0;
+						if (!drained) {
 							log.warn("Solr submission queue did not drain; skipping version-marker write so the next restart re-triggers reindex.");
+						} else if (rejected > 0) {
+							log.error("Solr rejected {} documents during the initial reindex; skipping version-marker write so the next restart re-triggers reindex. Check that the Solr schema matches this EntryStore version.", rejected);
 						}
 					}
 				} else {
