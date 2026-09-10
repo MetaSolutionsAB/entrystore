@@ -19,8 +19,10 @@ package org.entrystore.impl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
@@ -35,9 +37,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntConsumer;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.List;
+import org.entrystore.repository.RepositoryException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -289,6 +297,45 @@ public class ContextImplTest extends AbstractCoreTest {
 		}
 		if (relationURI != null) {
 			assertNull(cache.getByURI(relationURI), "Zombie in relation reverse index after remove");
+		}
+	}
+
+	@Test
+	public void loadingEntryGraphWithoutResourceStatementNamesEntryAndGraph() {
+		Entry entry = context.createResource(null, GraphType.None, null, null);
+		URI entryURI = entry.getEntryURI();
+		removeFromEntryGraph(entryURI, RepositoryProperties.resource);
+		evictFromSoftCache(entry);
+
+		RepositoryException e = assertThrows(RepositoryException.class, () -> context.getByEntryURI(entryURI));
+
+		assertEquals("Unable to load entry " + entryURI, e.getMessage());
+		assertInstanceOf(RepositoryException.class, e.getCause());
+		String causeMessage = e.getCause().getMessage();
+		assertTrue(causeMessage.startsWith("Entry graph <" + entryURI + "> is corrupt"), causeMessage);
+		assertTrue(causeMessage.contains("no <" + RepositoryProperties.resource + ">"), causeMessage);
+		assertTrue(causeMessage.contains(RepositoryProperties.Created.stringValue()), causeMessage);
+	}
+
+	@Test
+	public void loadingEntryGraphWithOnlyLeftoverStatementsFailsWithCorruptionMessageInsteadOfNpe() {
+		Entry entry = context.createResource(null, GraphType.None, null, null);
+		URI entryURI = entry.getEntryURI();
+		removeFromEntryGraph(entryURI, RepositoryProperties.resource);
+		removeFromEntryGraph(entryURI, RDF.TYPE);
+		evictFromSoftCache(entry);
+
+		RepositoryException e = assertThrows(RepositoryException.class, () -> context.getByEntryURI(entryURI));
+
+		assertInstanceOf(RepositoryException.class, e.getCause());
+		assertTrue(e.getCause().getMessage().startsWith("Entry graph <" + entryURI + "> is corrupt"),
+				e.getCause().getMessage());
+	}
+
+	private void removeFromEntryGraph(URI entryURI, IRI predicate) {
+		IRI graph = SimpleValueFactory.getInstance().createIRI(entryURI.toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.remove((Resource) null, predicate, null, graph);
 		}
 	}
 

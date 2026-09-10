@@ -662,11 +662,14 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					if (!solrIndex.clearSolrIndex(solrServer)) {
 						log.error("Initial Solr full-wipe failed; skipping reindex to avoid serving a dirty index. Next restart will retry.");
 					} else {
-						solrIndex.reindexSync(false);
-						reindexSucceeded = solrIndex.waitForQueueDrain();
-						if (!reindexSucceeded) {
+						boolean allContextsReindexed = solrIndex.reindexSync(false);
+						boolean queueDrained = solrIndex.waitForQueueDrain();
+						if (!allContextsReindexed) {
+							log.error("Solr reindex failed for one or more contexts (logged above); skipping version-marker write so the next restart re-triggers reindex.");
+						} else if (!queueDrained) {
 							log.warn("Solr submission queue did not drain; skipping version-marker write so the next restart re-triggers reindex.");
 						}
+						reindexSucceeded = allContextsReindexed && queueDrained;
 					}
 				} else {
 					log.info("Async reindex started; Solr version markers will not be persisted on this run because '{}=false' means reindex runs on every boot.",

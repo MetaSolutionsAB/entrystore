@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -129,8 +129,7 @@ public class MetadataImpl implements Metadata {
 					throw ae;
 				} catch (Exception e) {
 					rc.rollback();
-					log.error(e.getMessage());
-					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.repository.RepositoryException("Unable to set metadata graph " + uri + " of entry " + entry.getEntryURI(), e);
 				} finally {
 					rc.close();
 				}

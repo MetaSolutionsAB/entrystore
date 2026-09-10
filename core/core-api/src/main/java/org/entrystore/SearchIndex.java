@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +31,12 @@ public interface SearchIndex {
 
 	public void reindex(boolean purgeAllBeforeReindex);
 
-	public void reindexSync(boolean purgeAllBeforeReindex);
+	/**
+	 * Re-indexes all contexts in the calling thread; a context that fails is skipped.
+	 *
+	 * @return false if the reindex of at least one context failed
+	 */
+	public boolean reindexSync(boolean purgeAllBeforeReindex);
 
 	public void reindex(URI contextURI, boolean purgeAllBeforeReindex);
 

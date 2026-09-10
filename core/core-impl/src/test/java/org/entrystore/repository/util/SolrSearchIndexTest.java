@@ -20,7 +20,10 @@ import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
+import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.PropertiesConfiguration;
@@ -37,6 +40,8 @@ import java.lang.reflect.Method;
 import java.net.URI;
 import java.time.Instant;
 import java.util.Date;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -51,13 +56,17 @@ import static org.mockito.Mockito.when;
 
 public class SolrSearchIndexTest {
 
+	private static final URI CONTEXT_1 = URI.create("http://localhost:8181/_contexts/entry/1");
+	private static final URI CONTEXT_2 = URI.create("http://localhost:8181/_contexts/entry/2");
+
+	private RepositoryManager rm;
 	private SolrSearchIndex index;
 	private Map<URI, Future> reindexingMap;
 
 	@BeforeEach
 	@SuppressWarnings("unchecked")
 	public void setUp() throws Exception {
-		RepositoryManager rm = mock(RepositoryManager.class);
+		rm = mock(RepositoryManager.class);
 		Config config = new PropertiesConfiguration("EntryStore Test Configuration");
 		when(rm.getConfiguration()).thenReturn(config);
 		when(rm.getValueFactory()).thenReturn(SimpleValueFactory.getInstance());
@@ -108,6 +117,45 @@ public class SolrSearchIndexTest {
 		reindexingMap.put(ctx, CompletableFuture.completedFuture(null));
 
 		assertFalse(index.isIndexing(null));
+	}
+
+	@Test
+	public void reindexSyncContinuesWithRemainingContextsWhenOneContextFails() {
+		ContextManager cm = contextManagerListing(CONTEXT_1, CONTEXT_2);
+		when(cm.getByEntryURI(CONTEXT_1)).thenThrow(new org.entrystore.repository.RepositoryException("Unable to load entry " + CONTEXT_1));
+
+		boolean allContextsReindexed = index.reindexSync(false);
+
+		assertFalse(allContextsReindexed, "A failed context must be reported so the version markers are not persisted");
+		verify(cm).getByEntryURI(CONTEXT_2);
+	}
+
+	@Test
+	public void reindexSyncReportsSuccessWhenNoContextFails() {
+		ContextManager cm = contextManagerListing(CONTEXT_1, CONTEXT_2);
+
+		boolean allContextsReindexed = index.reindexSync(false);
+
+		assertTrue(allContextsReindexed);
+		verify(cm).getByEntryURI(CONTEXT_1);
+		verify(cm).getByEntryURI(CONTEXT_2);
+	}
+
+	/**
+	 * Stubs a context manager listing the given contexts, none of which resolves to a context, so that
+	 * reindexing each of them completes without posting documents.
+	 */
+	private ContextManager contextManagerListing(URI... contextURIs) {
+		PrincipalManager pm = mock(PrincipalManager.class);
+		User admin = mock(User.class);
+		when(admin.getURI()).thenReturn(URI.create("http://localhost:8181/_principals/resource/_admin"));
+		when(pm.getAdminUser()).thenReturn(admin);
+		when(rm.getPrincipalManager()).thenReturn(pm);
+
+		ContextManager cm = mock(ContextManager.class);
+		when(cm.getEntries()).thenReturn(new LinkedHashSet<>(List.of(contextURIs)));
+		when(rm.getContextManager()).thenReturn(cm);
+		return cm;
 	}
 
 	@Disabled("To be implemented")

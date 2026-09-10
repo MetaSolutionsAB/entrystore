@@ -171,8 +171,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 					rc.commit();
 				} catch (Exception e) {
 					rc.rollback();
-					log.error(e.getMessage());
-					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.repository.RepositoryException("Unable to rebuild the entry index of context " + this.resourceURI, e);
 				} finally {
 					rc.close();
 				}
@@ -504,7 +503,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 					if (newEntry != null) {
 						newEntry.refreshFromRepository(rc);
 					}
-					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.repository.RepositoryException(newEntry != null
+							? "Unable to create entry " + newEntry.getEntryURI()
+							: "Unable to create entry in context " + this.resourceURI, e);
 				}
 			}
 		} catch (RepositoryException e) {
@@ -747,8 +748,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		} catch (AuthorizationException ae) {
 			throw ae;
 		} catch (Exception e) {
-			log.error(e.getMessage());
-			throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+			throw new org.entrystore.repository.RepositoryException("Unable to load entry " + entryURI, e);
 		}
 		return newEntry;
 	}
@@ -862,7 +862,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 					throw new org.entrystore.repository.RepositoryException("Error when rolling back transaction", e);
 				}
 				log.error(e.getMessage(), e);
-				throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+				throw new org.entrystore.repository.RepositoryException("Unable to remove entry " + entryURI, e);
 			} finally {
 				try {
 					rc.close();

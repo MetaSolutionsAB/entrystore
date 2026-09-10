@@ -63,6 +63,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.eclipse.rdf4j.model.util.Values.iri;
 
@@ -343,6 +344,10 @@ public class EntryImpl implements Entry {
 			}
 		}
 
+		if (resURI == null) {
+			throw new org.entrystore.repository.RepositoryException(describeGraphWithoutResource(existingStatements));
+		}
+
 		//Detect types.
 		for (Statement statement : existingStatements) {
 			org.eclipse.rdf4j.model.Resource subject = statement.getSubject();
@@ -394,6 +399,22 @@ public class EntryImpl implements Entry {
 		this.invRelations = invRelations;
 
 		return true;
+	}
+
+	/**
+	 * Describes an entry graph that has statements but no {@code es:resource} statement, which leaves the
+	 * entry without a resource URI. Such a graph is typically the leftover of an incompletely removed entry;
+	 * the message names the graph and its predicates so the operator can locate and repair it.
+	 */
+	private static String describeGraphWithoutResource(List<Statement> statements) {
+		String predicates = statements.stream()
+				.map(s -> s.getPredicate().stringValue())
+				.distinct()
+				.sorted()
+				.collect(Collectors.joining(", "));
+		return "Entry graph <" + statements.getFirst().getContext() + "> is corrupt: it contains "
+				+ statements.size() + " statement(s) but no <" + RepositoryProperties.resource
+				+ "> statement; predicates present: " + predicates;
 	}
 
 	private ResourceType getResourceType(Value rt) {

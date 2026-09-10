@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -144,14 +144,14 @@ public class EntryNamesContext extends ContextImpl {
 						((EntryImpl) forEntry).updateModifiedDateSynchronized(rc, vf);
 					}
 					rc.commit();
+					log.info("Successfully set the name {} for entry with URI: {}", newName, entryURI);
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(forEntry, RepositoryEvent.ResourceUpdated));
 					return true;
 				} catch (Exception e) {
 					rc.rollback();
-					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.repository.RepositoryException("Unable to set the name " + newName + " for entry " + entryURI, e);
 				} finally {
-					log.info("Successfully set the name " + newName + " for entry with URI: " + entryURI);
 					rc.close();
 				}
 			}
@@ -177,8 +177,7 @@ public class EntryNamesContext extends ContextImpl {
 							names2EntryURI.put(name, entryURI);
 							entryURI2Name.put(entryURI, name);
 						} catch (Exception e) {
-							log.error(e.getMessage());
-							throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+							throw new org.entrystore.repository.RepositoryException("Unable to read name statement " + statement + " of context " + this.resourceURI, e);
 						}
 					}
 				}

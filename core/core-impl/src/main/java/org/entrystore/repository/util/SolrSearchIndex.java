@@ -618,18 +618,33 @@ public class SolrSearchIndex implements SearchIndex {
 				reindexing.remove(contextURI);
 			}
 			Future indexer = reindexExecutor.submit(() -> {
-				reindexSync(contextURI, false);
+				try {
+					reindexSync(contextURI, false);
+				} catch (RuntimeException e) {
+					// The Future is never inspected, so without this the failure would vanish without a trace.
+					log.error("Reindexing of context {} failed", contextURI, e);
+				}
 				reindexing.remove(contextURI);
 			});
 			reindexing.put(contextURI, indexer);
 		}
 	}
 
-	public void reindexSync(boolean purgeAllBeforeReindex) {
-		reindex(purgeAllBeforeReindex, true);
+	/**
+	 * Re-indexes all contexts in the calling thread. A context whose reindex fails is logged and skipped so
+	 * that a single corrupt context does not prevent the remaining contexts from being indexed.
+	 *
+	 * @return false if the reindex of at least one context failed
+	 */
+	public boolean reindexSync(boolean purgeAllBeforeReindex) {
+		return reindex(purgeAllBeforeReindex, true);
 	}
 
-	private void reindex(boolean purgeAllBeforeReindex, boolean sync) {
+	/**
+	 * @return false if the synchronous reindex of at least one context failed; always true when {@code sync}
+	 * is false, as failures of the asynchronous per-context reindex are only logged
+	 */
+	private boolean reindex(boolean purgeAllBeforeReindex, boolean sync) {
 		Set<URI> contexts;
 		PrincipalManager pm = rm.getPrincipalManager();
 		URI currentUser = pm.getAuthenticatedUserURI();
@@ -640,13 +655,20 @@ public class SolrSearchIndex implements SearchIndex {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
 
+		boolean allContextsReindexed = true;
 		for (URI contextURI : contexts) {
 			if (sync) {
-				reindexSync(contextURI, purgeAllBeforeReindex);
+				try {
+					reindexSync(contextURI, purgeAllBeforeReindex);
+				} catch (RuntimeException e) {
+					log.error("Reindexing of context {} failed, continuing with the remaining contexts", contextURI, e);
+					allContextsReindexed = false;
+				}
 			} else {
 				reindex(contextURI, purgeAllBeforeReindex);
 			}
 		}
+		return allContextsReindexed;
 	}
 
 	public void reindexSync(URI contextURI, boolean purgeAllBeforeReindex) {
@@ -836,7 +858,7 @@ public class SolrSearchIndex implements SearchIndex {
 					try {
 						entry = cm.getEntry(entryURI);
 					} catch (Exception e) {
-						log.error("Unable to load entry with URI {} due to error: {}", entryURI, e.getMessage());
+						log.error("Unable to load entry with URI {}", entryURI, e);
 						continue;
 					}
 					if (entry == null) {
@@ -849,7 +871,7 @@ public class SolrSearchIndex implements SearchIndex {
 							try {
 								postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
 							} catch (Exception e) {
-								log.error("Not indexing {} due to error: {}", entryURI, e.getMessage());
+								log.error("Not indexing {}", entryURI, e);
 							}
 						} else {
 							log.debug("Not adding deleted entry to post queue: {}", entryURI);
@@ -1272,7 +1294,7 @@ public class SolrSearchIndex implements SearchIndex {
 					try {
 						postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
 					} catch (Exception e) {
-						log.error("Not indexing {} due to error: {}", entryURI, e.getMessage());
+						log.error("Not indexing {}", entryURI, e);
 					}
 				} else {
 					log.debug("Not adding deleted entry to post queue: {}", entryURI);
