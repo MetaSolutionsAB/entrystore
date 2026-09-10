@@ -407,7 +407,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				if (!newBaseURI.endsWith("/")) {
 					newBaseURI += "/";
 				}
-				String oldContextID = srcContextResourceURI.substring(srcContextResourceURI.lastIndexOf("/") + 1);
+				String oldContextID = URISplit.getLastSegment(srcContextResourceURI);
 				String newContextID = contextEntry.getId();
 
 				String oldContextResourceURI = srcContextResourceURI;
@@ -454,7 +454,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 							predicate.equals(RepositoryProperties.Read) ||
 							predicate.equals(RepositoryProperties.Write) ||
 							predicate.equals(RepositoryProperties.DeletedBy)) {
-						String oldUserID = object.stringValue().substring(object.stringValue().lastIndexOf("/") + 1);
+						String oldUserID = URISplit.getLastSegment(object.stringValue());
 						log.info("Old user URI: {}", object);
 						log.info("Old user ID: {}", oldUserID);
 						String oldUserName = id2name.get(oldUserID);
@@ -817,7 +817,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 		// TODO use URIStr instead - but we don't have the baseURL
 
-		String pfId = helper.substring(helper.lastIndexOf("/")+1);
+		String pfId = URISplit.getLastSegment(helper);
 		if (!backupFolder.endsWith("/")) {
 			backupFolder += "/";
 		}
@@ -928,7 +928,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		if (contextURI == null) {
 			throw new IllegalArgumentException("Parameter must not be null");
 		}
-		String contextID = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
+		String contextID = URISplit.getLastSegment(contextURI.toString());
 		return getContext(contextID);
 	}
 
@@ -974,45 +974,42 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	}
 
 	public Set<Entry> getLinks(URI resourceURI) {
-		return getLinksOrReferences(resourceURI, true);
+		return getEntriesFromIndex(resourceURI, RepositoryProperties.resHasEntry, EntryType.Link);
 	}
 
 	public Set<Entry> getReferences(URI metadataURI) {
-		return getLinksOrReferences(metadataURI, false);
+		return getEntriesFromIndex(metadataURI, RepositoryProperties.mdHasEntry, EntryType.Reference);
 	}
 
-	private Set<Entry> getLinksOrReferences(URI uri, boolean findLinks) {
+	/**
+	 * Looks up the entries an index property points at from the given URI, keeping only those of the
+	 * wanted entry type.
+	 *
+	 * @param uri the subject of the index triples: a resource URI for resHasEntry, a metadata URI
+	 * for mdHasEntry.
+	 * @return the matching entries the current user may read metadata for, never null.
+	 */
+	private Set<Entry> getEntriesFromIndex(URI uri, IRI indexProperty, EntryType wantedEntryType) {
 		HashSet<Entry> entries = new HashSet<>();
 		try {
 			try (RepositoryConnection rc = entry.repository.getConnection()) {
 				ValueFactory vf = entry.repository.getValueFactory();
 				IRI resource = vf.createIRI(uri.toString());
-				if (findLinks) {
-					RepositoryResult<Statement> resources = rc.getStatements(resource, RepositoryProperties.resHasEntry, null, false);
+				try (RepositoryResult<Statement> resources = rc.getStatements(resource, indexProperty, null, false)) {
 					while (resources.hasNext()) {
 						Statement statement = resources.next();
+						URI entryURI = URI.create(statement.getObject().stringValue());
 						try {
-							Entry entry = getItemInRepositoryByMMdURI(URI.create(statement.getObject().stringValue()));
-							if (entry.getEntryType() == EntryType.Link) {
-								entries.add(entry);
+							Entry indexedEntry = getItemInRepositoryByMMdURI(entryURI);
+							if (indexedEntry == null) {
+								log.warn("Index property {} for {} points at entry {} which cannot be resolved", indexProperty, uri, entryURI);
+							} else if (indexedEntry.getEntryType() == wantedEntryType) {
+								entries.add(indexedEntry);
 							}
 						} catch (AuthorizationException ae) {
+							// entries the current user may not read metadata for are excluded, per the interface contract
 						}
 					}
-					resources.close();
-				} else {
-					RepositoryResult<Statement> resources = rc.getStatements(resource, RepositoryProperties.mdHasEntry, null, false);
-					while (resources.hasNext()) {
-						Statement statement = resources.next();
-						try {
-							Entry entry = getItemInRepositoryByMMdURI(URI.create(statement.getObject().stringValue()));
-							if (entry.getEntryType() == EntryType.Reference) {
-								entries.add(entry);
-							}
-						} catch (AuthorizationException ae) {
-						}
-					}
-					resources.close();
 				}
 			}
 		} catch (RepositoryException e) {
@@ -1030,6 +1027,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		}
 
 		Entry contextItem = getByEntryURI(Util.getContextMMdURIFromURI(this.entry.getRepositoryManager(), mmdURI));
+		if (contextItem == null) {
+			return null;
+		}
 		return ((Context) contextItem.getResource()).getByEntryURI(mmdURI);
 	}
 

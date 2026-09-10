@@ -29,6 +29,7 @@ import org.entrystore.User;
 import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.FileOperations;
+import org.entrystore.repository.util.URISplit;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
@@ -94,7 +95,7 @@ public class ContextService {
 			return context.getDeletedEntries().keySet()
 					.stream()
 					.map(URI::toString)
-					.map(uri -> uri.substring(uri.lastIndexOf("/") + 1))
+					.map(URISplit::getLastSegment)
 					.collect(Collectors.toList());
 
 		} else if (context instanceof EntryNamesContext namesContext && entryName != null) {
@@ -220,7 +221,7 @@ public class ContextService {
 				StringBuilder userList = new StringBuilder();
 				for (URI uri : users) {
 					String uriStr = uri.toString();
-					String userID = uriStr.substring(uriStr.lastIndexOf("/") + 1);
+					String userID = URISplit.getLastSegment(uriStr);
 					userList.append(userID);
 					User u = principalManager.getUser(uri);
 					if (u != null) {

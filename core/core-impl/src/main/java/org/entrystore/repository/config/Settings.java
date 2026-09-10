@@ -137,15 +137,9 @@ public interface Settings {
 	String HARVESTER_OAI_MULTITHREADED = "entrystore.harvester.oai.multithreaded";
 	String HARVESTER_OAI_METADATA_POLICY = "entrystore.harvester.oai.policy"; // skip | replace
 	String HARVESTER_OAI_FROM_AUTO_DETECT = "entrystore.harvester.oai.from.auto-detect";
-	String HARVESTER_FAO = "entrystore.harvester.fao";
-
-	String HARVESTING_TARGET_OAI_BASE_URI = "Identify.scam.baseuri";
 
 	String STORE_USER = "entrystore.repository.store.user";
 	String STORE_PWD = "entrystore.repository.store.password";
-	String STORE_DBNAME = "entrystore.repository.store.database.name";
-	String STORE_PORTNR = "entrystore.repository.store.port.number";
-	String STORE_SERVERNAME = "entrystore.repository.store.server.name";
 	String STORE_PATH = "entrystore.repository.store.path";
 	String STORE_URL = "entrystore.repository.store.url";
 	String STORE_ENDPOINT_QUERY = "entrystore.repository.store.endpoint-query";
@@ -153,9 +147,6 @@ public interface Settings {
 	String STORE_INDEXES = "entrystore.repository.store.indexes";
 	String STORE_TYPE = "entrystore.repository.store.type";
 	String STORE_INIT_WITH_TEST_DATA = "entrystore.repository.store.init-with-test-data";
-
-	String STOREJS_JS = "entrystore.repository.storejs.js";
-	String STOREJS_CSS = "entrystore.repository.storejs.css";
 
 	String SOLR = "entrystore.solr";
 	String SOLR_URL = "entrystore.solr.url";

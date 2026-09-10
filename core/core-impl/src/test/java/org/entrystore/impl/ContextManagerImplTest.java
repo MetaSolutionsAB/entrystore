@@ -20,6 +20,7 @@ import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.query.MalformedQueryException;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.Context;
 import org.entrystore.Data;
@@ -313,6 +314,49 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		references = cm.getReferences(refEntry.getExternalMetadataURI());
 		assertTrue(references.size() == 1 && references.contains(refEntry));
 
+	}
+
+	@Test
+	public void getLinks_excludesLinksTheUserMayNotRead() {
+		URI sharedResource = URI.create("http://slashdot.org/shared");
+
+		// the Disney fixture grants guest ReadMetadata on both duck and mouse, and checkAccess consults
+		// the context before the entry, so an unreadable entry needs a context that grants guest nothing
+		Context duck = cm.getContext("duck");
+		Context privateContext = (Context) cm.createResource(null, GraphType.Context, null, null).getResource();
+		Entry readable = duck.createLink(null, sharedResource, null);
+		Entry unreadable = privateContext.createLink(null, sharedResource, null);
+
+		rm.setCheckForAuthorization(true);
+		pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+		Set<Entry> links = cm.getLinks(sharedResource);
+
+		assertEquals(1, links.size());
+		assertTrue(links.contains(readable));
+		assertFalse(links.contains(unreadable));
+	}
+
+	@Test
+	public void getLinks_skipsIndexTriplesThatResolveToNoEntry() {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		Entry linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
+		URI resourceURI = linkEntry.getResourceURI();
+
+		// a stale index triple, as left behind by a failed index update, naming an entry that is gone
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			rc.add(vf.createIRI(resourceURI.toString()),
+				RepositoryProperties.resHasEntry,
+				vf.createIRI(contextEntry.getResourceURI() + "/entry/no-such-entry"),
+				vf.createIRI(contextEntry.getResourceURI().toString()));
+		}
+
+		Set<Entry> links = cm.getLinks(resourceURI);
+
+		// the live link still comes back rather than the whole call failing on the stale triple
+		assertEquals(1, links.size());
+		assertTrue(links.contains(linkEntry));
 	}
 
 }

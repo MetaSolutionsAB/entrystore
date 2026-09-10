@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,6 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -93,6 +92,34 @@ public class PrincipalManagerImplTest extends AbstractCoreTest {
 
 	}
 
+
+	@Test
+	public void createInList_asNonOwnerRecordsTheOriginalList() {
+		// Mickey owns mouse and makes a list Daisy may write to, without giving her the context
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
+		Context mouse = cm.getContext("mouse");
+		Entry listEntry = mouse.createResource(null, GraphType.List, ResourceType.InformationResource, null);
+		Entry daisy = pm.getPrincipalEntry("Daisy");
+		listEntry.addAllowedPrincipalsFor(AccessProperty.WriteResource, daisy.getResourceURI());
+
+		pm.setAuthenticatedUserURI(daisy.getResourceURI());
+		EntryImpl created = (EntryImpl) mouse.createLink(null, URI.create("http://www.daisy.org"), listEntry.getResourceURI());
+
+		// Daisy only had access through the list, so the list is recorded as where the entry came from
+		assertEquals(listEntry.getResourceURI().toString(), created.getOriginalList());
+	}
+
+	@Test
+	public void createInList_asContextOwnerDoesNotRecordAnOriginalList() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
+		Context mouse = cm.getContext("mouse");
+		Entry listEntry = mouse.createResource(null, GraphType.List, ResourceType.InformationResource, null);
+
+		EntryImpl created = (EntryImpl) mouse.createLink(null, URI.create("http://www.mickey.org"), listEntry.getResourceURI());
+
+		// Mickey has write access on the context itself, so nothing needs recording
+		assertNull(created.getOriginalList());
+	}
 
 	@Test
 	public void ownerCheck() {

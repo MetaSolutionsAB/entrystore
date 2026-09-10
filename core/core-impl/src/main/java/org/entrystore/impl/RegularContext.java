@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,18 +39,14 @@ public class RegularContext extends ContextImpl {
 
 	@Override
 	public Entry createResource(String entryId, GraphType buiType, ResourceType repType, URI listURI) {
-		switch (buiType) {
-		case List:
-		case ResultList:
-		case Graph:
-		case String:
-		case None:
-		case Pipeline:
-		case PipelineResult:
-			return super.createResource(entryId, buiType, repType, listURI);			
-		default:
-			throw new IllegalArgumentException("Regular context only support Lists, ResultLists and None as BuiltinTypes");
-		}
+		return switch (buiType) {
+			case List, ResultList, Graph, String, None, Pipeline, PipelineResult ->
+				super.createResource(entryId, buiType, repType, listURI);
+			// the message understates the whitelist above, but it reaches the client and LocalEntryIT
+			// pins it, so correcting it is a behaviour change and belongs in its own issue
+			default -> throw new IllegalArgumentException(
+				"Regular context only support Lists, ResultLists and None as BuiltinTypes");
+		};
 	}
 
 }

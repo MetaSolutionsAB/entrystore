@@ -18,11 +18,16 @@ package org.entrystore.impl;
 
 import org.entrystore.Context;
 import org.entrystore.Entry;
+import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.List;
 import org.entrystore.QuotaException;
+import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryException;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.io.IOException;
 import java.net.URI;
@@ -167,6 +172,115 @@ public class ListImplTest extends AbstractCoreTest {
 		assertNull(duck.getByEntryURI(linkEntry.getEntryURI()));
 		assertEquals(newEntry.getContext(), mouse);
 		assertEquals(1, ((List) listE2.getResource()).getChildren().size());
+	}
+
+	/**
+	 * Creates an entry of the given type in the given list. The four create methods differ in arity, so
+	 * the cross-context copy and move tests share this one dispatch rather than repeating it.
+	 */
+	private Entry createOfType(Context context, EntryType entryType, URI listURI) {
+		return switch (entryType) {
+			case Local -> context.createResource(null, GraphType.None, ResourceType.NamedResource, listURI);
+			case Link -> context.createLink(null, URI.create("https://slashdot.org/"), listURI);
+			case Reference -> context.createReference(null, URI.create("https://reddit.com/"),
+				URI.create("https://example.com/md1"), listURI);
+			case LinkReference -> context.createLinkReference(null, URI.create("https://digg.com/"),
+				URI.create("https://example.com/md2"), listURI);
+		};
+	}
+
+	/**
+	 * Records why EntryType.Reference is left out of the cross-context tests that follow: moving or
+	 * copying a Reference entry between contexts throws NullPointerException, because copyGraphs
+	 * dereferences getLocalMetadata() and initMetadataObjects only ever creates local metadata for
+	 * Local, Link and LinkReference. This predates the create-method consolidation and is not fixed
+	 * by it, so the test is kept disabled rather than deleted; enable it with the fix.
+	 */
+	@Disabled("copyGraphs NPEs on a Reference entry, which has no local metadata - pre-existing, needs its own issue")
+	@Test
+	public void moveReferenceBetweenContexts_currentlyFailsOnMissingLocalMetadata() throws IOException, QuotaException {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Context mouse = cm.getContext("mouse");
+		Entry sourceList = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry targetList = mouse.createResource(null, GraphType.List, null, null); // since owner
+		Entry original = createOfType(duck, EntryType.Reference, sourceList.getResourceURI());
+
+		Entry moved = ((List) targetList.getResource())
+			.moveEntryHere(original.getEntryURI(), sourceList.getEntryURI(), true);
+
+		assertEquals(EntryType.Reference, moved.getEntryType());
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@EnumSource(value = EntryType.class, names = {"Local", "Link", "LinkReference"})
+	public void moveEntryBetweenContexts_preservesEntryType(EntryType entryType) throws IOException, QuotaException {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Context mouse = cm.getContext("mouse");
+		Entry sourceList = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry targetList = mouse.createResource(null, GraphType.List, null, null); // since owner
+		Entry original = createOfType(duck, entryType, sourceList.getResourceURI());
+
+		Entry moved = ((List) targetList.getResource())
+			.moveEntryHere(original.getEntryURI(), sourceList.getEntryURI(), true);
+
+		assertEquals(entryType, moved.getEntryType());
+		assertEquals(mouse, moved.getContext());
+		assertNull(duck.getByEntryURI(original.getEntryURI()));
+		assertTrue(((List) targetList.getResource()).getChildren().contains(moved.getEntryURI()));
+	}
+
+	@Test
+	public void moveLinkBetweenContexts_keepsTheExternalResourceURI() throws IOException, QuotaException {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Context mouse = cm.getContext("mouse");
+		Entry sourceList = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry targetList = mouse.createResource(null, GraphType.List, null, null); // since owner
+		Entry original = createOfType(duck, EntryType.Link, sourceList.getResourceURI());
+		URI resourceURI = original.getResourceURI();
+
+		Entry moved = ((List) targetList.getResource())
+			.moveEntryHere(original.getEntryURI(), sourceList.getEntryURI(), true);
+
+		// a link points at a resource outside the context, so the move must not rewrite it;
+		// a Local entry's resource URI is context-local and is regenerated instead
+		assertEquals(resourceURI, moved.getResourceURI());
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@EnumSource(value = EntryType.class, names = {"Local", "Link", "LinkReference"})
+	public void copyEntryBetweenContexts_preservesEntryTypeAndLeavesTheOriginal(EntryType entryType) {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Context mouse = cm.getContext("mouse");
+		Entry sourceList = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry targetList = mouse.createResource(null, GraphType.List, null, null); // since owner
+		Entry original = createOfType(duck, entryType, sourceList.getResourceURI());
+
+		Entry copy = ((ListImpl) targetList.getResource()).copyEntryHere((EntryImpl) original);
+
+		assertEquals(entryType, copy.getEntryType());
+		assertEquals(mouse, copy.getContext());
+		assertNotNull(duck.getByEntryURI(original.getEntryURI()));
+	}
+
+	@Test
+	public void moveLinkReferenceBetweenContexts_keepsTheExternalMetadataURI() throws IOException, QuotaException {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Context mouse = cm.getContext("mouse");
+		Entry sourceList = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry targetList = mouse.createResource(null, GraphType.List, null, null); // since owner
+		Entry original = createOfType(duck, EntryType.LinkReference, sourceList.getResourceURI());
+		URI externalMetadataURI = original.getExternalMetadataURI();
+
+		Entry moved = ((List) targetList.getResource())
+			.moveEntryHere(original.getEntryURI(), sourceList.getEntryURI(), true);
+
+		// the external metadata URI must survive the create dispatch the move goes through
+		assertEquals(externalMetadataURI, moved.getExternalMetadataURI());
 	}
 
 	@Test

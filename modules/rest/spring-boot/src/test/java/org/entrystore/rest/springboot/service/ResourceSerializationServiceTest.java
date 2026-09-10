@@ -28,6 +28,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.repository.util.URISplit;
 import org.entrystore.rest.springboot.model.dto.ListParams;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
@@ -321,7 +322,7 @@ class ResourceSerializationServiceTest {
 		List<URI> childUris = new ArrayList<>();
 		for (Entry child : children) {
 			String uri = child.getEntryURI().toString();
-			String id = uri.substring(uri.lastIndexOf('/') + 1);
+			String id = URISplit.getLastSegment(uri);
 			childUris.add(child.getEntryURI());
 			lenient().when(context.get(id)).thenReturn(child);
 		}

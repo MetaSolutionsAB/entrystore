@@ -67,7 +67,7 @@ import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.stream.Collectors;
+import java.util.function.Consumer;
 
 import static org.eclipse.rdf4j.model.util.Values.iri;
 import static org.eclipse.rdf4j.model.util.Values.literal;
@@ -249,6 +249,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	private static final Logger log = LoggerFactory.getLogger(ContextImpl.class);
 
+	/** Only local resources need work done on the new entry inside the monitor; links and references do not. */
+	private static final Consumer<EntryImpl> NO_POST_PROCESSING = newEntry -> {};
+
 	public static final IRI DCModified;
 	public static final IRI DCTermsModified;
 
@@ -267,13 +270,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 	protected ContextImpl(EntryImpl entry, String uri, SoftCache softCache) {
 		super(entry, uri);
 		this.softCache = softCache;
-		this.id = uri.substring(uri.lastIndexOf('/') + 1);
+		this.id = URISplit.getLastSegment(uri);
 	}
 
 	public ContextImpl(EntryImpl entry, IRI contextUri, SoftCache softCache) {
 		super(entry, contextUri);
 		this.softCache = softCache;
-		this.id = resourceURI.toString().substring(resourceURI.toString().lastIndexOf('/') + 1);
+		this.id = URISplit.getLastSegment(resourceURI.toString());
 	}
 
 	/**
@@ -954,10 +957,21 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
+	/**
+	 * Resolves the list an entry is being created into.
+	 *
+	 * @param listURI the resource URI of the list, or null to create directly in the context.
+	 * @return the list, or null when listURI is null or names an entry that is not a local list.
+	 * A null return means "create directly in the context", which also selects the stricter
+	 * authorization tier in {@link #create}.
+	 */
 	private ListImpl getList(URI listURI) {
 		if (listURI != null) {
 			URI listEntryURI = new URISplit(listURI, this.entry.getRepositoryManager().getRepositoryURL()).getMetaMetadataURI();
 			Entry listItem = getByEntryURI(listEntryURI);
+			if (listItem == null) {
+				throw new org.entrystore.repository.RepositoryException("No entry found for list URI " + listURI);
+			}
 			if (listItem.getGraphType() == GraphType.List &&
 				listItem.getEntryType() == EntryType.Local) {
 				return (ListImpl) listItem.getResource();
@@ -990,90 +1004,72 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
-	public Entry createLinkReference(String entryId, URI resourceURI, URI metadataURI, URI listURI) throws AuthorizationException {
+	/**
+	 * Creates an entry in this context, optionally as a child of one of its lists.
+	 * <p>
+	 * Authorization has two tiers, selected by whether listURI resolves to a list. Without a list the
+	 * caller must hold WriteResource on the context itself; with one, write access on either the
+	 * context or the list suffices, and a caller who only had it on the list gets the list recorded
+	 * as the entry's original list. {@link #checkAccess} is therefore called before the repository
+	 * monitor is acquired, so that an AuthorizationException is thrown without holding it.
+	 *
+	 * @param afterCreate runs on the new entry inside the repository monitor, for post-creation work
+	 * that must not be observable as a separate critical section.
+	 * @return the newly created entry, never null.
+	 */
+	private EntryImpl create(String entryId, URI resourceURI, URI metadataURI, EntryType entryType,
+							 GraphType graphType, ResourceType resourceType, URI listURI,
+							 Consumer<EntryImpl> afterCreate) {
 		ListImpl list = getList(listURI);
 		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, EntryType.LinkReference, GraphType.None, null, entryId);
+			EntryImpl newEntry = createNewMinimalItem(resourceURI, metadataURI, entryType, graphType, resourceType, entryId);
 			if (list != null) {
-				list.addChild(entry.getEntryURI());
-				copyACL(list, entry);
+				list.addChild(newEntry.getEntryURI());
+				copyACL(list, newEntry);
 				if (!isOwner) {
-					entry.setOriginalListSynchronized(listURI.toString());
+					newEntry.setOriginalListSynchronized(listURI.toString());
 				}
 			}
-			return entry;
+			afterCreate.accept(newEntry);
+			return newEntry;
 		}
+	}
+
+	public Entry createLinkReference(String entryId, URI resourceURI, URI metadataURI, URI listURI) throws AuthorizationException {
+		return create(entryId, resourceURI, metadataURI, EntryType.LinkReference, GraphType.None, null, listURI, NO_POST_PROCESSING);
 	}
 
 	public Entry createReference(String entryId, URI resourceURI, URI metadataURI, URI listURI) {
-		ListImpl list = getList(listURI);
-		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
-		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, EntryType.Reference, GraphType.None, null, entryId);
-			if (list != null) {
-				list.addChild(entry.getEntryURI());
-				copyACL(list, entry);
-				if (!isOwner) {
-					entry.setOriginalListSynchronized(listURI.toString());
-				}
-			}
-			return entry;
-		}
+		return create(entryId, resourceURI, metadataURI, EntryType.Reference, GraphType.None, null, listURI, NO_POST_PROCESSING);
 	}
 
 	public Entry createLink(String entryId, URI resourceURI, URI listURI) {
-		ListImpl list = getList(listURI);
-		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
-		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(resourceURI, null, EntryType.Link, GraphType.None, null, entryId);
-			if (list != null) {
-				list.addChild(entry.getEntryURI());
-				copyACL(list, entry);
-				if (!isOwner) {
-					entry.setOriginalListSynchronized(listURI.toString());
-				}
-			}
-
-			return entry;
-		}
+		return create(entryId, resourceURI, null, EntryType.Link, GraphType.None, null, listURI, NO_POST_PROCESSING);
 	}
 
 	public Entry createResource(String entryId, GraphType buiType, ResourceType repType, URI listURI) {
-		ListImpl list = getList(listURI);
-		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
+		return create(entryId, null, null, EntryType.Local, buiType, repType, listURI,
+			newEntry -> initializeBuiltinResource(newEntry, buiType));
+	}
 
-		// TODO externalize this into a setting
-		boolean allowUserGroupToReadMetadata = true;
-
-		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(null, null, EntryType.Local, buiType, repType, entryId);
-			if (list != null) {
-				log.info("Adding entry {} to list {}", entry.getEntryURI(), list.getURI());
-				list.addChild(entry.getEntryURI());
-				log.info("Copying ACL from list {} to entry {}", list.getURI(), entry.getEntryURI());
-				copyACL(list, entry);
-				if (!isOwner) {
-					entry.setOriginalListSynchronized(listURI.toString());
-				}
-			}
-
-			if (GraphType.Context.equals(buiType)) {
-				((Context) entry.getResource()).initializeSystemEntries();
-			} else if (GraphType.User.equals(buiType)) {
-				entry.addAllowedPrincipalsFor(AccessProperty.WriteResource, entry.getResourceURI());
-				entry.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, entry.getResourceURI());
-				entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getUserGroup().getURI());
-			} else if (GraphType.Group.equals(buiType)) {
-				entry.addAllowedPrincipalsFor(AccessProperty.ReadResource, entry.getResourceURI());
-				if (allowUserGroupToReadMetadata) {
-					entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getUserGroup().getURI());
-				} else {
-					entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, entry.getResourceURI());
-				}
-			}
-
-			return entry;
+	/**
+	 * Grants the access a newly created builtin resource needs on itself, and populates a new
+	 * context's system entries. Runs inside the repository monitor held by {@link #create}.
+	 * <p>
+	 * The User and Group branches cast this context to PrincipalManager, so they only work on the
+	 * principal context; any other context reaching them is a programming error.
+	 */
+	private void initializeBuiltinResource(EntryImpl newEntry, GraphType buiType) {
+		if (GraphType.Context.equals(buiType)) {
+			((Context) newEntry.getResource()).initializeSystemEntries();
+		} else if (GraphType.User.equals(buiType)) {
+			newEntry.addAllowedPrincipalsFor(AccessProperty.WriteResource, newEntry.getResourceURI());
+			newEntry.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, newEntry.getResourceURI());
+			newEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getUserGroup().getURI());
+		} else if (GraphType.Group.equals(buiType)) {
+			newEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, newEntry.getResourceURI());
+			newEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getUserGroup().getURI());
 		}
 	}
 

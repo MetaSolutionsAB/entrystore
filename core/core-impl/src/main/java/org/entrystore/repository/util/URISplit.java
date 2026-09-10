@@ -184,4 +184,21 @@ public class URISplit {
 			return uri;
 		} else throw new IllegalArgumentException("URI is malformed or encoded");
 	}
+
+	/**
+	 * Extracts the trailing path segment of a URI, which for EntryStore URIs is the context or entry
+	 * identifier. Unlike the constructor this neither needs nor validates against the repository base
+	 * URL, so it is safe on URIs that do not belong to this repository.
+	 * <p>
+	 * The caller decides how to render the URI as a string, since {@code toString()} and
+	 * {@code toASCIIString()} differ for URIs carrying non-ASCII characters and call sites rely on
+	 * one or the other. A URI with a trailing slash yields an empty string, and a URI with no slash
+	 * at all is returned unchanged.
+	 *
+	 * @param uri the URI to take the last segment of, already rendered as a string.
+	 * @return the substring after the last slash, never null.
+	 */
+	public static String getLastSegment(String uri) {
+		return uri.substring(uri.lastIndexOf(SLASH_DELIMITER) + 1);
+	}
 }

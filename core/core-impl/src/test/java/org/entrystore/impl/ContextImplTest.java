@@ -46,14 +46,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
-import java.util.function.IntConsumer;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Data;
 import org.entrystore.Entry;
+import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.List;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
 import org.entrystore.repository.config.Settings;
 import org.junit.jupiter.api.BeforeEach;
@@ -117,6 +118,109 @@ public class ContextImplTest extends AbstractCoreTest {
 		assertEquals(refEntry, context.getByResourceURI(refEntry.getResourceURI()).iterator().next());
 		assertEquals(refEntry, context.getByExternalMdURI(refEntry.getExternalMetadataURI()).iterator().next());
 		assertEquals(refEntry, context.getByEntryURI(refEntry.getEntryURI()));
+	}
+
+	@Test
+	public void createResource_intoListAddsChildAndCopiesACL() {
+		Entry listEntry = context.createResource(null, GraphType.List, null, null);
+		URI reader = pm.getPrincipalEntry("Daisy").getResourceURI();
+		listEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, reader);
+		List list = (List) listEntry.getResource();
+
+		Entry created = context.createResource(null, GraphType.None, ResourceType.InformationResource, listEntry.getResourceURI());
+
+		assertTrue(list.getChildren().contains(created.getEntryURI()));
+		assertTrue(created.getAllowedPrincipalsFor(AccessProperty.ReadMetadata).contains(reader));
+	}
+
+	@Test
+	public void createLink_intoListAddsChildAndCopiesACL() {
+		Entry listEntry = context.createResource(null, GraphType.List, null, null);
+		URI reader = pm.getPrincipalEntry("Daisy").getResourceURI();
+		listEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, reader);
+		List list = (List) listEntry.getResource();
+
+		Entry created = context.createLink(null, URI.create("http://slashdot.org/"), listEntry.getResourceURI());
+
+		assertTrue(list.getChildren().contains(created.getEntryURI()));
+		assertTrue(created.getAllowedPrincipalsFor(AccessProperty.ReadMetadata).contains(reader));
+		assertEquals(EntryType.Link, created.getEntryType());
+	}
+
+	@Test
+	public void createReference_intoListAddsChildAndCopiesACL() {
+		Entry listEntry = context.createResource(null, GraphType.List, null, null);
+		URI reader = pm.getPrincipalEntry("Daisy").getResourceURI();
+		listEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, reader);
+		List list = (List) listEntry.getResource();
+
+		Entry created = context.createReference(null, URI.create("http://reddit.com/"),
+			URI.create("http://example.com/md1"), listEntry.getResourceURI());
+
+		assertTrue(list.getChildren().contains(created.getEntryURI()));
+		assertTrue(created.getAllowedPrincipalsFor(AccessProperty.ReadMetadata).contains(reader));
+		assertEquals(EntryType.Reference, created.getEntryType());
+	}
+
+	@Test
+	public void createLinkReference_intoListAddsChildAndCopiesACL() {
+		Entry listEntry = context.createResource(null, GraphType.List, null, null);
+		URI reader = pm.getPrincipalEntry("Daisy").getResourceURI();
+		listEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, reader);
+		List list = (List) listEntry.getResource();
+
+		Entry created = context.createLinkReference(null, URI.create("http://reddit.com/"),
+			URI.create("http://example.com/md2"), listEntry.getResourceURI());
+
+		assertTrue(list.getChildren().contains(created.getEntryURI()));
+		assertTrue(created.getAllowedPrincipalsFor(AccessProperty.ReadMetadata).contains(reader));
+		assertEquals(EntryType.LinkReference, created.getEntryType());
+	}
+
+	@Test
+	public void create_withoutListLeavesTheEntryUnparented() {
+		EntryImpl created = (EntryImpl) context.createLink(null, URI.create("http://slashdot.org/"), null);
+
+		assertNull(created.getOriginalList());
+		assertTrue(created.getReferringListsInSameContext().isEmpty());
+	}
+
+	@Test
+	public void create_listURINamingNoEntryIsRejected() {
+		URI missingList = URI.create("http://localhost:8181/" + context.getEntry().getId() + "/resource/no-such-list");
+
+		assertThrows(org.entrystore.repository.RepositoryException.class,
+			() -> context.createLink(null, URI.create("http://slashdot.org/"), missingList));
+	}
+
+	@Test
+	public void create_listURINamingSomethingOtherThanAListCreatesFreeInContext() {
+		// must be a local resource URI: getList resolves it through URISplit, which rejects a URI
+		// that does not sit under the repository base before it can be recognised as a non-list
+		Entry notAList = context.createResource(null, GraphType.None, ResourceType.InformationResource, null);
+
+		// a non-list listURI is ignored rather than rejected, so the entry lands directly in the context
+		Entry created = context.createLink(null, URI.create("http://example.org/"), notAList.getResourceURI());
+
+		assertNotNull(created);
+		assertTrue(created.getReferringListsInSameContext().isEmpty());
+	}
+
+	@Test
+	public void createResource_userGrantsWriteOnItselfAndReadToTheUserGroup() {
+		Entry userEntry = pm.createResource(null, GraphType.User, null, null);
+
+		assertTrue(userEntry.getAllowedPrincipalsFor(AccessProperty.WriteResource).contains(userEntry.getResourceURI()));
+		assertTrue(userEntry.getAllowedPrincipalsFor(AccessProperty.WriteMetadata).contains(userEntry.getResourceURI()));
+		assertTrue(userEntry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata).contains(pm.getUserGroup().getURI()));
+	}
+
+	@Test
+	public void createResource_groupGrantsReadOnItselfAndReadToTheUserGroup() {
+		Entry groupEntry = pm.createResource(null, GraphType.Group, null, null);
+
+		assertTrue(groupEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(groupEntry.getResourceURI()));
+		assertTrue(groupEntry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata).contains(pm.getUserGroup().getURI()));
 	}
 
 	@Disabled("not ready yet")

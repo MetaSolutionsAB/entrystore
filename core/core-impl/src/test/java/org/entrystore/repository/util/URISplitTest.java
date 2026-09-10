@@ -261,4 +261,47 @@ public class URISplitTest {
 		URISplit uriSplit = new URISplit(anyURI, URI.create(anyURIStringBase).toURL());
 		assertEquals(URISplit.createURI(uriSplit.getBase(), uriSplit.getContextId(), null, null), URI.create("https://slashdot.org/_contexts"));
 	}
+
+	@Test
+	public void getLastSegment_entryURI() {
+		assertEquals("13", URISplit.getLastSegment(entryURIString));
+	}
+
+	@Test
+	public void getLastSegment_resourceAndMetadataURI() {
+		assertEquals("13", URISplit.getLastSegment(resourceURIString));
+		assertEquals("13", URISplit.getLastSegment(metadataURIString));
+	}
+
+	@Test
+	public void getLastSegment_contextURIWithTrailingSlashIsEmpty() {
+		assertEquals("", URISplit.getLastSegment(contextURIString));
+	}
+
+	@Test
+	public void getLastSegment_withoutSlashReturnsWholeString() {
+		assertEquals("_guest", URISplit.getLastSegment("_guest"));
+	}
+
+	@Test
+	public void getLastSegment_emptyString() {
+		assertEquals("", URISplit.getLastSegment(""));
+	}
+
+	@Test
+	public void getLastSegment_leavesPercentEncodingUntouched() {
+		assertEquals("peter%3Cpan", URISplit.getLastSegment(encodedURIStringPart));
+	}
+
+	@Test
+	public void getLastSegment_fullyEncodedURIHasNoSlashToSplitOn() {
+		assertEquals(encodedURIStringFull, URISplit.getLastSegment(encodedURIStringFull));
+	}
+
+	@Test
+	public void getLastSegment_keepsQueryStringInLastSegment() {
+		// a query string is not separated off; no call site passes a URI carrying one
+		assertEquals("search?type=solr&query=rdfType:http%5C%3A%2F%2Fpurl.org%2Fdc%2Fdcmitype%2FText",
+			URISplit.getLastSegment(baseFollowedByParamsURIString));
+	}
 }
