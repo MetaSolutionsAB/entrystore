@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
@@ -86,7 +87,19 @@ public class SearchController {
 				urlTemplate, feedTitle, rdfFormat);
 	}
 
-	@Operation(summary = "Searches the repository and returns entries")
+	@Operation(
+			summary = "Searches the repository and returns entries",
+			description = "Solr search. A facet on a literal field (metadata.predicate.literal_s.<hash> or the "
+					+ "metadata.predicate.literal.<hash> shorthand) returns one bucket per label; each bucket carries a "
+					+ "\"lang\" array with the languages the label occurs in within the result set, omitted when the "
+					+ "label only occurs untagged.",
+			parameters = {
+					@Parameter(name = "facetLang", description = "BCP 47 language tag, e.g. sv or en-GB. Keeps only the "
+							+ "buckets of literal facet fields whose label occurs in that language (prefix match, so en also "
+							+ "matches en-GB) or untagged, selected before facetLimit is applied; counts are unchanged. "
+							+ "Requires facetFields.")
+			}
+	)
 	@GetMapping(
 			params = "type=solr"
 	)

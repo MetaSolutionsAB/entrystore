@@ -175,6 +175,18 @@ class SearchIT extends BaseSpec {
 						 ]]]
 		assert getOrCreateEntry(contextId, langParams2, langBody2).length() > 0
 
+		// Third entry: makes "Sweden" the most frequent label (3) so a facetLimit=1 spec can show that the
+		// language filter is applied before the limit, and adds a label that exists only in a regional subtag.
+		def langParams3 = [id: 'searchLangEntryId3', graphtype: 'string']
+		def langBody3 = [resource: 'Lang text 3',
+						 metadata: [(newResourceIri): [
+							 (LANG_MARKER_IRI): [
+								 [type: 'literal', value: 'Sweden', lang: 'en'],
+								 [type: 'literal', value: 'Britain', lang: 'en-GB']
+							 ]
+						 ]]]
+		assert getOrCreateEntry(contextId, langParams3, langBody3).length() > 0
+
 		// Entry whose DECIMAL_PREDICATE_IRI value is typed xsd:double but has a non-numeric lexical
 		// form. The indexer's isDecimalLiteral guard matches (datatype is xsd:double), l.doubleValue()
 		// throws NumberFormatException, and the decimal field is skipped — but the rest of the entry
@@ -1084,26 +1096,7 @@ class SearchIT extends BaseSpec {
 		conn.getContentType().contains('application/json')
 	}
 
-	def "GET /search?type=solr faceting on a literal_l field should return one bucket per label and language"() {
-		when:
-		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
-			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', facetFields: LANG_MARKER_FIELD_L]))
-
-		then:
-		conn.getResponseCode() == HTTP_OK
-		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
-		respJson['results'] == 2
-		def facetField = respJson['facetFields'].find { it['name'] == LANG_MARKER_FIELD_L }
-		facetField != null
-		facetField['values'] as Set == [
-			[name: 'Sweden', count: 2, lang: 'en'],
-			[name: 'Sverige', count: 2, lang: 'sv'],
-			[name: 'Sverige', count: 1, lang: 'nb'],
-			[name: 'Sverige', count: 1]
-		] as Set
-	}
-
-	def "GET /search?type=solr faceting on the literal_s field of the same predicate should stay language-agnostic"() {
+	def "GET /search?type=solr faceting on a literal_s field should carry the languages of each label"() {
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
 			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', facetFields: LANG_MARKER_FIELD_S]))
@@ -1111,40 +1104,155 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		respJson['results'] == 3
 		def facetField = respJson['facetFields'].find { it['name'] == LANG_MARKER_FIELD_S }
 		facetField != null
-		// one "Sverige" bucket regardless of language, and no "lang" key anywhere
-		facetField['values'] as Set == [[name: 'Sweden', count: 2], [name: 'Sverige', count: 2]] as Set
-	}
-
-	def "GET /search?type=solr with facetMatches on a literal_l field should filter by label"() {
-		when:
-		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
-			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', facetFields: LANG_MARKER_FIELD_L, facetMatches: 'Sverige']))
-
-		then:
-		conn.getResponseCode() == HTTP_OK
-		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
-		def facetField = respJson['facetFields'].find { it['name'] == LANG_MARKER_FIELD_L }
-		facetField != null
+		facetField['valueCount'] == 3
+		// one bucket per label with the per-label count; "lang" lists every language the label occurs in and is
+		// absent when the label only occurs untagged (the untagged "Sverige" is not listed as a language)
 		facetField['values'] as Set == [
-			[name: 'Sverige', count: 2, lang: 'sv'],
-			[name: 'Sverige', count: 1, lang: 'nb'],
-			[name: 'Sverige', count: 1]
+			[name: 'Sweden', count: 3, lang: ['en']],
+			[name: 'Sverige', count: 2, lang: ['nb', 'sv']],
+			[name: 'Britain', count: 1, lang: ['en-GB']]
 		] as Set
+		// the internal companion field never reaches the client
+		respJson['facetFields'].every { !(it['name'] as String).contains('literal_l') }
 	}
 
-	def "GET /search?type=solr with a related literal_l facet field should be accepted"() {
+	def "GET /search?type=solr faceting via the metadata.predicate.literal shorthand should carry the same languages"() {
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
-			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', facetFields: 'related.' + LANG_MARKER_FIELD_L]))
+			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', facetFields: 'metadata.predicate.literal.' + LANG_MARKER_HASH]))
 
 		then:
 		conn.getResponseCode() == HTTP_OK
 		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
-		def facetField = respJson['facetFields'].find { it['name'] == 'related.' + LANG_MARKER_FIELD_L }
+		def facetField = respJson['facetFields'].find { it['name'] == LANG_MARKER_FIELD_S }
 		facetField != null
-		// related-graph indexing is off in the IT configuration, so the field exists in the schema but holds no terms
+		facetField['values'].find { it['name'] == 'Sverige' }['lang'] == ['nb', 'sv']
+	}
+
+	def "GET /search?type=solr with facetLang should keep only labels that occur in that language"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', facetFields: LANG_MARKER_FIELD_S, facetLang: 'sv']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		def facetField = respJson['facetFields'].find { it['name'] == LANG_MARKER_FIELD_S }
+		// "Sweden" (en only) and "Britain" (en-GB only) are gone; the count and the lang list are unchanged
+		facetField['values'] == [[name: 'Sverige', count: 2, lang: ['nb', 'sv']]]
+	}
+
+	def "GET /search?type=solr with facetLang should match regional subtags by prefix"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', facetFields: LANG_MARKER_FIELD_S, facetLang: 'en']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		def names = respJson['facetFields'].find { it['name'] == LANG_MARKER_FIELD_S }['values'].collect { it['name'] }
+		// "Britain" exists only as en-GB and is matched by "en"; "Sverige" stays because it also occurs untagged
+		names == ['Sweden', 'Sverige', 'Britain']
+	}
+
+	def "GET /search?type=solr with facetLang should always include labels that occur untagged"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', facetFields: LANG_MARKER_FIELD_S, facetLang: 'de']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		def facetField = respJson['facetFields'].find { it['name'] == LANG_MARKER_FIELD_S }
+		// nothing is tagged "de", but the untagged "Sverige" is language-neutral and stays
+		facetField['values'] == [[name: 'Sverige', count: 2, lang: ['nb', 'sv']]]
+	}
+
+	def "GET /search?type=solr facet count of a label should equal the hits of the literal_s drill-down"() {
+		when:
+		def facetConn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', facetFields: LANG_MARKER_FIELD_S, facetLang: 'sv']))
+		def drillDownConn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sverige']))
+
+		then:
+		facetConn.getResponseCode() == HTTP_OK
+		drillDownConn.getResponseCode() == HTTP_OK
+		def facetJson = JSON_PARSER.parseText(facetConn.inputStream.text)
+		def drillDownJson = JSON_PARSER.parseText(drillDownConn.inputStream.text)
+		def sverige = facetJson['facetFields'].find { it['name'] == LANG_MARKER_FIELD_S }['values'].find { it['name'] == 'Sverige' }
+		sverige['count'] == drillDownJson['results']
+	}
+
+	def "GET /search?type=solr with facetLimit=1 should take the top bucket within facetLang, not overall"() {
+		when:
+		def overall = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', facetFields: LANG_MARKER_FIELD_S, facetLimit: '1']))
+		def swedish = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', facetFields: LANG_MARKER_FIELD_S, facetLimit: '1', facetLang: 'sv']))
+
+		then:
+		overall.getResponseCode() == HTTP_OK
+		swedish.getResponseCode() == HTTP_OK
+		def overallNames = JSON_PARSER.parseText(overall.inputStream.text)['facetFields'].find { it['name'] == LANG_MARKER_FIELD_S }['values'].collect { it['name'] }
+		def swedishNames = JSON_PARSER.parseText(swedish.inputStream.text)['facetFields'].find { it['name'] == LANG_MARKER_FIELD_S }['values'].collect { it['name'] }
+		// "Sweden" (3 hits, English only) wins overall but must not take the single slot within "sv"
+		overallNames == ['Sweden']
+		swedishNames == ['Sverige']
+	}
+
+	def "GET /search?type=solr faceting on a related literal_s field should be accepted"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', facetFields: 'related.' + LANG_MARKER_FIELD_S, facetLang: 'sv']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		def facetField = respJson['facetFields'].find { it['name'] == 'related.' + LANG_MARKER_FIELD_S }
+		facetField != null
+		// related-graph indexing is off in the IT configuration, so the field and its companion hold no terms
 		facetField['values'] == []
+	}
+
+	@Unroll
+	def "GET /search?type=solr with the internal literal_l field in '#parameter' should reply with Bad Request 400"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', (parameter): value]), '')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('application/json')
+		conn.errorStream.text.contains("'" + parameter + "'")
+
+		where:
+		parameter     | value
+		'facetFields' | LANG_MARKER_FIELD_L
+		'sort'        | LANG_MARKER_FIELD_L + ' asc'
+	}
+
+	@Unroll
+	def "GET /search?type=solr with facetLang '#facetLang' and facetFields '#facetFields' should reply with Bad Request 400"() {
+		when:
+		def params = [type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', facetLang: facetLang]
+		if (facetFields) {
+			params.facetFields = facetFields
+		}
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(params), '')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('application/json')
+		conn.errorStream.text.contains("'facetLang'")
+
+		where:
+		facetLang | facetFields
+		'sv_SE'   | LANG_MARKER_FIELD_S
+		'.*'      | LANG_MARKER_FIELD_S
+		'sv'      | ''
 	}
 }

@@ -85,6 +85,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.Thread.interrupted;
 
@@ -142,6 +143,10 @@ public class SolrSearchIndex implements SearchIndex {
 	// True while the submitter is between drain and process/requeue — observers awaiting a quiescent
 	// queue must wait for this to clear too, otherwise an in-flight batch can be missed.
 	private final AtomicBoolean submitterInFlight = new AtomicBoolean();
+
+	// Documents Solr rejected on an add batch. Startup compares it around the initial reindex so a schema
+	// mismatch cannot end with an empty index whose version markers say it is current.
+	private final AtomicLong rejectedDocuments = new AtomicLong();
 
 	private final Map<URI, DelayedContextIndexerInfo> delayedReindex = Collections.synchronizedMap(new HashMap<>());
 
@@ -283,6 +288,7 @@ public class SolrSearchIndex implements SearchIndex {
 					} catch (RemoteSolrException e) {
 						log.error("Solr rejected {} entries (HTTP {}, discarding batch). URIs: {}",
 								addBatch.size(), e.code(), addBatch.keySet(), e);
+						rejectedDocuments.addAndGet(addBatch.size());
 						return false;
 					} catch (RuntimeException e) {
 						requeueAdds(addBatch);
@@ -400,6 +406,9 @@ public class SolrSearchIndex implements SearchIndex {
 		public String matches;
 
 		public boolean missing;
+
+		/** Optional BCP 47 language range: literal facets keep only labels occurring in it, or untagged. */
+		public String lang;
 
 	}
 
@@ -756,6 +765,11 @@ public class SolrSearchIndex implements SearchIndex {
 	public long getPostQueueSize() {
 		postQueue.cleanUp();
 		return postQueue.estimatedSize();
+	}
+
+	/** Documents Solr has rejected since startup; a growing value means documents are silently missing from the index. */
+	public long getRejectedDocumentCount() {
+		return rejectedDocuments.get();
 	}
 
 	public long getDeleteQueueSize() {
@@ -1203,7 +1217,9 @@ public class SolrSearchIndex implements SearchIndex {
 
 				// predicate value is included in the parameter name, the object value is the field value
 				addFieldValueOnce(doc,prefix + "metadata.predicate.literal_s." + predMD5Trunc8, l.getLabel());
-				addFieldValueOnce(doc, prefix + LangFacetValue.FIELD_PREFIX + predMD5Trunc8, LangFacetValue.encode(l));
+				if (!LangFacetValue.exceedsLabelCap(l.getLabel())) {
+					addFieldValueOnce(doc, prefix + LangFacetValue.FIELD_PREFIX + predMD5Trunc8, LangFacetValue.encode(l));
+				}
 
 				// special handling of integer values, to be used for e.g., sorting
 				if (MetadataUtil.isIntegerLiteral(l)) {
@@ -1367,7 +1383,8 @@ public class SolrSearchIndex implements SearchIndex {
 		try {
 			r = solrServer.query(query);
 			r.getElapsedTime();
-			if (r.getFacetFields() != null) {
+			// Facets are identical on every result-fill pass of sendQuery; taking them once keeps each field single.
+			if (r.getFacetFields() != null && facetFields.isEmpty()) {
 				facetFields.addAll(r.getFacetFields());
 			}
 			SolrDocumentList docs = r.getResults();

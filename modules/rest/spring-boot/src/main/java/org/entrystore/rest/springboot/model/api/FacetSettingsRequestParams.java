@@ -38,6 +38,8 @@ public class FacetSettingsRequestParams {
 
 	private Boolean facetMissing = false;
 
+	/** BCP 47 language tag; validated by SolrSearchInputValidator, applied by LanguageAwareFacets. */
+	private String facetLang;
 
 	public SolrSearchIndex.FacetSettings toSolrFacetSettings(int maxFacetLimit, int defaultFacetLimit) {
 
@@ -58,6 +60,7 @@ public class FacetSettingsRequestParams {
 
 		facetSettings.matches = this.facetMatches;
 		facetSettings.missing = Boolean.TRUE.equals(this.facetMissing);
+		facetSettings.lang = this.facetLang == null || this.facetLang.isBlank() ? null : this.facetLang.trim();
 
 		return facetSettings;
 	}

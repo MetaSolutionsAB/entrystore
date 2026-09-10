@@ -17,25 +17,37 @@
 package org.entrystore.repository.util;
 
 import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.util.Literals;
+
+import java.util.IllformedLocaleException;
+import java.util.Locale;
 
 /**
- * A facet value of the {@code metadata.predicate.literal_l.*} Solr field family: the label of a literal together
- * with its language tag.
+ * One term of the internal {@code metadata.predicate.literal_l.*} Solr field family: the label of a literal together
+ * with its normalised language tag. The family is the companion of {@code metadata.predicate.literal_s.*}: the REST
+ * layer facets on it server-side to attach the languages a label occurs in and to filter labels by language. It is
+ * never accepted from clients as a facet or sort field and never returned to them.
  *
- * <p>The indexer stores every literal as {@code label + U+001F + language} (empty language for untagged and typed
- * literals), so one Solr term exists per distinct (label, language) pair and faceting on the field yields one
- * bucket per pair. The separator is always present: a BCP 47 language tag can never contain it, so
- * {@link #decode(String)} splits at the last occurrence and recovers the label even when the label itself contains
- * the separator. The separator never reaches clients; the REST layer decodes each bucket before serialising it.
+ * <p>The indexer stores every literal whose label is at most {@link #MAX_LABEL_LENGTH} characters as
+ * {@code label + U+001F + language} (empty language for untagged and typed literals), so one Solr term exists per
+ * distinct (label, language) pair. The separator is always present and a BCP 47 language tag can never contain it,
+ * so {@link #decode(String)} splits at the last occurrence and recovers a label that itself contains the separator.
+ * Language tags are normalised with {@link Literals#normalizeLanguageTag(String)} at index time, so {@code en-gb}
+ * and {@code en-GB} share one term.
  *
  * @param label the lexical form of the literal
- * @param lang  the language tag as stored, or {@code null} when the literal has none
+ * @param lang  the normalised language tag, or {@code null} when the literal has none
  */
 public record LangFacetValue(String label, String lang) {
 
 	public static final String FIELD_PREFIX = "metadata.predicate.literal_l.";
 
-	private static final String RELATED_FIELD_PREFIX = "related." + FIELD_PREFIX;
+	/** Labels longer than this get no companion term: they are descriptions, not facet values. */
+	public static final int MAX_LABEL_LENGTH = 256;
+
+	private static final String RELATED_PREFIX = "related.";
+
+	private static final String LITERAL_S_PREFIX = "metadata.predicate.literal_s.";
 
 	private static final char SEPARATOR = '\u001F';
 
@@ -48,7 +60,11 @@ public record LangFacetValue(String label, String lang) {
 	}
 
 	public static String encode(Literal literal) {
-		return literal.getLabel() + SEPARATOR + literal.getLanguage().orElse("");
+		return literal.getLabel() + SEPARATOR + literal.getLanguage().map(LangFacetValue::normalizeLanguageTag).orElse("");
+	}
+
+	public static boolean exceedsLabelCap(String label) {
+		return label.length() > MAX_LABEL_LENGTH;
 	}
 
 	/**
@@ -65,7 +81,52 @@ public record LangFacetValue(String label, String lang) {
 
 	public static boolean isLangFacetField(String fieldName) {
 		return fieldName != null
-				&& (fieldName.startsWith(FIELD_PREFIX) || fieldName.startsWith(RELATED_FIELD_PREFIX));
+				&& (fieldName.startsWith(FIELD_PREFIX) || fieldName.startsWith(RELATED_PREFIX + FIELD_PREFIX));
+	}
+
+	/**
+	 * The internal companion of a client-visible literal facet field: {@code [related.]metadata.predicate.literal_s.<tail>}
+	 * maps to {@code [related.]metadata.predicate.literal_l.<tail>}. Every other field, including the
+	 * {@code metadata.predicate.literal.} shorthand before its rewrite, yields {@code null}, so callers can test for a
+	 * literal facet and derive its companion in one step.
+	 */
+	public static String companionField(String facetField) {
+		if (facetField == null) {
+			return null;
+		}
+		boolean related = facetField.startsWith(RELATED_PREFIX);
+		String base = related ? facetField.substring(RELATED_PREFIX.length()) : facetField;
+		if (!base.startsWith(LITERAL_S_PREFIX) || base.length() == LITERAL_S_PREFIX.length()) {
+			return null;
+		}
+		String companion = FIELD_PREFIX + base.substring(LITERAL_S_PREFIX.length());
+		return related ? RELATED_PREFIX + companion : companion;
+	}
+
+	/**
+	 * Canonical BCP 47 casing via RDF4J ({@code en-gb} becomes {@code en-GB}, {@code SV} becomes {@code sv}). An
+	 * ill-formed tag is kept verbatim rather than dropping the literal from the companion field.
+	 */
+	public static String normalizeLanguageTag(String tag) {
+		try {
+			return Literals.normalizeLanguageTag(tag);
+		} catch (IllformedLocaleException e) {
+			return tag;
+		}
+	}
+
+	/**
+	 * RFC 4647 basic filtering, case-insensitive: {@code facetLang} matches a tag that equals it or that continues it
+	 * with a subtag separator, so {@code en} matches {@code en} and {@code en-GB} but not {@code eng}.
+	 */
+	public static boolean matchesLanguage(String tag, String facetLang) {
+		if (tag == null || facetLang == null) {
+			return false;
+		}
+		String candidate = tag.toLowerCase(Locale.ROOT);
+		String range = facetLang.toLowerCase(Locale.ROOT);
+		return candidate.equals(range)
+				|| (candidate.length() > range.length() && candidate.startsWith(range) && candidate.charAt(range.length()) == '-');
 	}
 
 	/**
