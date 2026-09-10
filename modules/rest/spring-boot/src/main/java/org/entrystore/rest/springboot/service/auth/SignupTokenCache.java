@@ -38,18 +38,22 @@ import java.util.function.Predicate;
  * Holds the pending sign-up and password-reset records, keyed by the one-time token mailed to the
  * user, until the user confirms or the record's own {@link SignupInfo#getExpirationDate() deadline}
  * passes (set by {@code AuthService}, currently 24 hours). Every mutation runs under one lock so
- * {@link #confirmAttempt} can verify, count and remove atomically; reads are lock-free.
+ * {@link #confirmAttempt} can verify, count and remove atomically; a read takes the lock only to
+ * drop a record it finds past its deadline (see {@code pastDeadline}).
  *
- * <p>Tokens are minted by anonymous requests, so {@code maximumSize} bounds the heap and
- * {@link CapacityEvictionWarning} reports when the bound bites. The per-IP rate limiters bound
- * legitimate creation; the cap only matters under a many-source flood.
+ * <p>Tokens are minted by anonymous requests, so {@code maximumSize} caps the entry count (not the
+ * bytes held) and {@link CapacityEvictionWarning} reports when the cap bites. Caffeine evicts by
+ * W-TinyLFU, not by age: under a flood of write-once entries the victim is a recently admitted entry,
+ * so legitimate tokens minted during a flood can be evicted before their deadline while flood entries
+ * persist to theirs. The per-IP rate limiters bound legitimate creation; the cap only matters under a
+ * many-source flood, and the WARN is the signal to look for one.
  */
 @Slf4j
 @Service
 public class SignupTokenCache implements CaffeineCacheSource {
 
-	// Cardinality bound: a day of entries at a few hundred bytes each stays well within heap, while a
-	// cap this generous never evicts a legitimate user's pending confirmation early.
+	// Entry-count cap, not a byte bound: a day of legitimate traffic stays far below it, and when a
+	// flood makes it bite the victims are recently admitted tokens, not the oldest (see class Javadoc).
 	static final long MAX_ENTRIES = 100_000;
 
 	private final Object lock = new Object();
@@ -60,9 +64,8 @@ public class SignupTokenCache implements CaffeineCacheSource {
 		this.tokens = Caffeine.newBuilder()
 				.ticker(ticker)
 				.maximumSize(MAX_ENTRIES)
-				// Each record carries its own deadline: the remaining time is measured on the wall clock
-				// while Caffeine measures elapsed time on the ticker (see the Expiry Javadoc). A record
-				// already past its deadline gets a non-positive duration and is expired on insert.
+				// Remaining time is measured on the wall clock, elapsed time on the ticker; a record already
+				// past its deadline gets a non-positive duration and expires on insert.
 				.expireAfter(Expiry.writing((String token, SignupInfo info) ->
 						Duration.between(Instant.now(), info.getExpirationDate().toInstant())))
 				.evictionListener(capacityWarning.listener())
@@ -83,8 +86,23 @@ public class SignupTokenCache implements CaffeineCacheSource {
 		}
 	}
 
+	/**
+	 * Returns the pending record for {@code token}, or {@code null} when the token is unknown, already
+	 * consumed, or past its deadline. The deadline is re-checked on the wall clock because Caffeine's
+	 * expiry runs on the ticker (see {@code pastDeadline}); a record found past it is removed here, so
+	 * the legacy confirm paths and the confirmation-form checks in {@code AuthService}, which read
+	 * through this method, never honour a stale token.
+	 */
 	public SignupInfo getTokenValue(String token) {
-		return (token == null) ? null : tokens.getIfPresent(token);
+		if (token == null) {
+			return null;
+		}
+		SignupInfo info = tokens.getIfPresent(token);
+		if (info != null && pastDeadline(info)) {
+			removeToken(token);
+			return null;
+		}
+		return info;
 	}
 
 	public void removeToken(String token) {
@@ -126,9 +144,8 @@ public class SignupTokenCache implements CaffeineCacheSource {
 			if (info == null) {
 				return ConfirmAttemptResult.tokenNotFound();
 			}
-			// Belt-and-braces over Caffeine's per-entry expiry, which is fixed at insert and measured on the
-			// ticker: covers a deadline moved after insert and wall-clock drift against the ticker.
-			if (info.getExpirationDate().before(new Date())) {
+			// Wall-clock re-check over the ticker-based Caffeine expiry, see pastDeadline.
+			if (pastDeadline(info)) {
 				tokens.invalidate(token);
 				return ConfirmAttemptResult.tokenNotFound();
 			}
@@ -143,5 +160,16 @@ public class SignupTokenCache implements CaffeineCacheSource {
 			}
 			return ConfirmAttemptResult.invalidCredentials(maxAttempts - attempts);
 		}
+	}
+
+	/**
+	 * Whether the record's wall-clock deadline has passed. Caffeine fixes each entry's expiry at insert
+	 * and measures elapsed time on the ticker ({@code System.nanoTime}, which is monotonic and does not
+	 * advance while the host or VM is suspended), so after a suspend an entry can outlive its deadline
+	 * in the cache. The deadline the user was promised is the wall-clock one, so every read path
+	 * re-checks it and drops the record once it has passed.
+	 */
+	private static boolean pastDeadline(SignupInfo info) {
+		return info.getExpirationDate().before(new Date());
 	}
 }

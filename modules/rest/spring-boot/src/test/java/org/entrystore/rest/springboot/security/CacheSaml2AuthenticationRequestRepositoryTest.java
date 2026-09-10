@@ -121,7 +121,7 @@ class CacheSaml2AuthenticationRequestRepositoryTest {
 		repository.saveAuthenticationRequest(authnRequest, acsRequest(null), new MockHttpServletResponse());
 
 		assertSame(authnRequest, repository.removeAuthenticationRequest(acsRequest(RELAY_STATE), new MockHttpServletResponse()));
-		// A replayed ACS POST with the same RelayState must not find the request again.
+		// A second remove for the same RelayState finds nothing.
 		assertNull(repository.removeAuthenticationRequest(acsRequest(RELAY_STATE), new MockHttpServletResponse()));
 	}
 
@@ -132,10 +132,8 @@ class CacheSaml2AuthenticationRequestRepositoryTest {
 		assertNull(repository.removeAuthenticationRequest(acsRequest(null), new MockHttpServletResponse()));
 	}
 
-	// The single-use guard must hold under concurrency, not only sequentially: two ACS POSTs replaying
-	// the same RelayState at the same instant must not both observe the request, or the replay defence
-	// degrades to the IdP's own assertion single-use alone. Deterministic on a correct implementation
-	// (an atomic map remove has exactly one winner); a getIfPresent + invalidate pair can admit several.
+	// Exactly one of N concurrent removes for the same RelayState may return the request: an atomic map
+	// remove has one winner, whereas a getIfPresent + invalidate pair can hand the request to several.
 	@Test
 	void concurrentRemovesOfTheSameRelayStateAdmitExactlyOne() {
 		repository.saveAuthenticationRequest(authnRequest(RELAY_STATE), acsRequest(null), new MockHttpServletResponse());
@@ -157,7 +155,7 @@ class CacheSaml2AuthenticationRequestRepositoryTest {
 			start.countDown();
 		}
 
-		assertEquals(1, winners.size(), "exactly one concurrent remove may observe the request");
+		assertEquals(1, winners.size(), "exactly one concurrent remove may return the request");
 	}
 
 	// The maximumSize bound and its throttled SIZE-eviction warn are the DoS defences on this

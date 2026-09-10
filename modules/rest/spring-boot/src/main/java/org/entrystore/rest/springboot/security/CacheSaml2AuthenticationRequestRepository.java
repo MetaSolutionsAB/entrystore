@@ -45,9 +45,8 @@ import java.util.concurrent.TimeUnit;
 public class CacheSaml2AuthenticationRequestRepository
 		implements Saml2AuthenticationRequestRepository<AbstractSaml2AuthenticationRequest>, CaffeineCacheSource {
 
-	// Cardinality bound: every anonymous GET /auth/saml mints an entry, and expireAfterWrite bounds
-	// only lifetime — without a cap, request-rate × 120 s of entries could exhaust the heap. 10k
-	// entries ≈ a few MB, far above legitimate concurrent logins.
+	// expireAfterWrite bounds lifetime only, so request-rate × 120 s of anonymous entries needs a cap;
+	// 10k entries ≈ a few MB, far above legitimate concurrent logins.
 	static final long MAX_ENTRIES = 10_000;
 
 	private final CapacityEvictionWarning capacityWarning =
@@ -80,13 +79,19 @@ public class CacheSaml2AuthenticationRequestRepository
 		}
 	}
 
+	/**
+	 * Removes and returns the request for the {@code RelayState} of this ACS POST. The atomic
+	 * {@code asMap().remove} guarantees that of two concurrent POSTs carrying the same RelayState only
+	 * one takes the request out of the cache; a {@code getIfPresent} + {@code invalidate} pair would
+	 * hand it to both. This is not a replay guard on its own: {@code Saml2WebSsoAuthenticationFilter}
+	 * obtains the request through the converter's non-destructive {@link #loadAuthenticationRequest}
+	 * before calling this method and discards the value returned here. The atomic form matches
+	 * {@link CacheOAuth2AuthorizationRequestRepository}, whose filter does consume the removed value.
+	 */
 	@Override
 	public AbstractSaml2AuthenticationRequest removeAuthenticationRequest(
 			HttpServletRequest request, HttpServletResponse response) {
 		String relayState = request.getParameter("RelayState");
-		// Atomic retrieve-and-remove: a getIfPresent + invalidate pair would let two concurrent ACS
-		// POSTs carrying the same RelayState both observe the request, weakening the single-use
-		// replay guard to the IdP's assertion single-use alone.
 		return (relayState != null) ? cache.asMap().remove(relayState) : null;
 	}
 }

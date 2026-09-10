@@ -136,19 +136,39 @@ class SignupTokenCacheTest {
 		assertEquals(ConfirmAttemptResult.Status.TOKEN_NOT_FOUND, afterInvalidation.status());
 	}
 
+	// Simulates a host suspend: the wall clock passes the deadline while the monotonic ticker stands
+	// still, so Caffeine still holds the record and only the wall-clock re-check can reject it.
 	@Test
-	void confirmAttempt_returnsTokenNotFoundAndRemoves_whenTokenExpired() {
-		var cache = newCache();
+	void confirmAttempt_returnsTokenNotFoundAndRemoves_whenDeadlinePassesWhileTickerStandsStill() {
+		var cache = new SignupTokenCache(new AtomicLong()::get);
 		SignupInfo info = pendingInfo();
-		info.setExpirationDate(new Date(System.currentTimeMillis() - 1000)); // already expired
 		cache.putToken("tok", info);
+		assertNotNull(cache.getTokenValue("tok"));
+		info.setExpirationDate(new Date(System.currentTimeMillis() - 1000));
 
 		// Even matching credentials must not confirm an expired token.
 		ConfirmAttemptResult result = cache.confirmAttempt("tok", ALWAYS_MATCH, 3);
 
 		assertEquals(ConfirmAttemptResult.Status.TOKEN_NOT_FOUND, result.status(),
 				"an expired token must confirm as not-found even with matching credentials");
+		// Restoring the deadline proves the record was removed rather than merely filtered.
+		info.setExpirationDate(new Date(System.currentTimeMillis() + 3600_000));
 		assertNull(cache.getTokenValue("tok"), "an expired token must be removed");
+	}
+
+	@Test
+	void getTokenValue_returnsNullAndRemoves_whenDeadlinePassesWhileTickerStandsStill() {
+		var cache = new SignupTokenCache(new AtomicLong()::get);
+		SignupInfo info = pendingInfo();
+		cache.putToken("tok", info);
+		assertNotNull(cache.getTokenValue("tok"));
+		info.setExpirationDate(new Date(System.currentTimeMillis() - 1000));
+
+		assertNull(cache.getTokenValue("tok"), "a token past its wall-clock deadline must read as absent");
+
+		// Restoring the deadline proves the record was removed rather than merely filtered.
+		info.setExpirationDate(new Date(System.currentTimeMillis() + 3600_000));
+		assertNull(cache.getTokenValue("tok"));
 	}
 
 	@Test
