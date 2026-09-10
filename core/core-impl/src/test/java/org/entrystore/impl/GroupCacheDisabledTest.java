@@ -55,7 +55,7 @@ public class GroupCacheDisabledTest extends AbstractCoreTest {
 		group.addMember(user);
 
 		assertTrue(isAuthorized(user, target, AccessProperty.ReadMetadata));
-		assertTrue(pmi.userGroupsCache.isEmpty(), "disabled cache must never be populated");
+		assertTrue(pmi.cachedGroupsView().isEmpty(), "disabled cache must never be populated");
 
 		group.removeMember(user);
 		assertFalse(isAuthorized(user, target, AccessProperty.ReadMetadata));

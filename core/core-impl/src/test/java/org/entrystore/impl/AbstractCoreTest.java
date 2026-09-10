@@ -88,6 +88,14 @@ public abstract class AbstractCoreTest {
 			pm.checkAuthenticatedUserAuthorized(entry, prop);
 			return true;
 		} catch (AuthorizationException e) {
+			// A denial for another reason (unresolvable principal, other entry or property) is broken test setup,
+			// not the revocation under test, and must not read as a passing assertFalse.
+			boolean sameDecision = e.getUser() != null && user.getURI().equals(e.getUser().getURI())
+					&& e.getEntry() != null && entry.getEntryURI().equals(e.getEntry().getEntryURI())
+					&& e.getAccessProperty() == prop;
+			if (!sameDecision) {
+				throw new AssertionError("denied for another reason than the decision under test: " + e.getMessage(), e);
+			}
 			return false;
 		} finally {
 			pm.setAuthenticatedUserURI(previous);
