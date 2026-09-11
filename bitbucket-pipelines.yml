@@ -1,7 +1,7 @@
 image: eclipse-temurin:25-jdk-noble
 
 options:
-  max-time: 12
+  max-time: 15
 
 stepdefinitions:
   - build: &build
@@ -55,6 +55,8 @@ stepdefinitions:
         - if [ $BITBUCKET_BRANCH == "develop" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/develop.version" ; elif [ $BITBUCKET_BRANCH == "master" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/latest.version" ; fi
   - dockerhub: &dockerhub
       name: Docker Hub
+      # Grype spends most of its time importing the vulnerability DB, which is CPU- and IO-bound.
+      size: 2x
       script:
         - docker version
         - export VERSION=`cat VERSION.txt` && echo $VERSION
@@ -65,7 +67,9 @@ stepdefinitions:
         # We export to TAR because on Bitbucket Grype cannot access the image directly through the Docker daemon's /var/run/docker.sock
         - docker save metasolutions/entrystore:$VERSION > "$BITBUCKET_CLONE_DIR/image.tar"
         # We scan for OS vulnerabilities with Grype before we push to the registry, code scanning is covered by Snyk
-        - docker run --rm -v $BITBUCKET_CLONE_DIR/image.tar:/image.tar:ro anchore/grype --only-fixed --fail-on high --exclude "/srv/entrystore/**" docker-archive:/image.tar
+        - docker run --rm -v $BITBUCKET_CLONE_DIR/image.tar:/image.tar:ro -v $BITBUCKET_CLONE_DIR/grype-db:/grype-db -e GRYPE_DB_CACHE_DIR=/grype-db anchore/grype --only-fixed --fail-on high --exclude "/srv/entrystore/**" docker-archive:/image.tar
+        # Bitbucket silently skips uploading a cache over 1 GB, so keep the DB size visible in the log.
+        - du -sh $BITBUCKET_CLONE_DIR/grype-db
         # Release branches publish candidates only; a snapshot tag from a release branch would be misleading.
         - if [[ $BITBUCKET_BRANCH != release/* ]]; then docker push metasolutions/entrystore:$VERSION ; fi
         - if [[ $BITBUCKET_BRANCH == release/* ]]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:${VERSION_MAJOR_MINOR}-rc ; docker push metasolutions/entrystore:${VERSION_MAJOR_MINOR}-rc ; fi
@@ -80,6 +84,7 @@ stepdefinitions:
         - docker
       caches:
         - docker
+        - grype-db
   # trivy was activated as a step before build, but it took a long time to run (~7 mins) and we also have Snyk
   # which is not as intrusive as a mandatory scanning step in the repo; deactivating it for now
   #- trivy: &trivy
@@ -112,6 +117,7 @@ pipelines:
 definitions:
   caches:
     maven-wrapper-dists: ~/.m2/wrapper/dists
+    grype-db: grype-db
   services:
     docker-large:
       # this seems to not be multiplied with the "size" value above
