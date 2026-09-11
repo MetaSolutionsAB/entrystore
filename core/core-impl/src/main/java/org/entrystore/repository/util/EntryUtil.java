@@ -97,8 +97,11 @@ public class EntryUtil {
 	 * Callers must pass neither a null entry nor an entry whose date is absent. A null entry compares
 	 * equal to every other element, which makes the comparator intransitive, so {@code List.sort}
 	 * rejects it with IllegalArgumentException once the list is long enough to reach TimSort's merge
-	 * path; a null date throws NullPointerException, and {@link Entry#getModifiedDate()} does return
-	 * null for an entry whose graph carries no parseable date. Every current caller filters both.
+	 * path.
+	 * <p>
+	 * A null date throws NullPointerException, and {@link Entry#getModifiedDate()} does return null
+	 * for an entry whose graph carries no parseable date. Both preconditions bind only from two
+	 * elements up, since {@code List.sort} never invokes the comparator below that.
 	 *
 	 * @param dateExtractor reads the date to sort on from an entry.
 	 */

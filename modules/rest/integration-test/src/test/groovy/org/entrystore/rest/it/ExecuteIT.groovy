@@ -17,6 +17,7 @@
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
+import org.entrystore.repository.util.URISplit
 import org.entrystore.rest.it.util.EntryStoreClient
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -175,7 +176,7 @@ class ExecuteIT extends BaseSpec {
 		resultUri.startsWith(EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/entry/')
 		resultUri != sourceEntryUri
 		resultUri != pipelineEntryUri
-		def resultEntryId = resultUri.substring(resultUri.lastIndexOf('/') + 1)
+		def resultEntryId = URISplit.getLastSegment(resultUri)
 		def resultEntryConn = EntryStoreClient.getRequest('/' + CONTEXT_ID + '/entry/' + resultEntryId)
 		resultEntryConn.getResponseCode() == HTTP_OK
 	}

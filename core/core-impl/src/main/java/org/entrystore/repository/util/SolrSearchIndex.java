@@ -833,7 +833,7 @@ public class SolrSearchIndex implements SearchIndex {
 	 * since a purge is not safe in that case either.
 	 */
 	private boolean indexIsComplete(URI contextURI) {
-		String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
+		String id = URISplit.getLastSegment(contextURI.toString());
 		Context context = rm.getContextManager().getContext(id);
 		if (context == null) {
 			log.warn("Context {} could not be resolved; skipping the reindex purge", contextURI);
@@ -849,7 +849,7 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	private URI postContextEntriesToQueue(URI contextURI) {
-		String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
+		String id = URISplit.getLastSegment(contextURI.toString());
 		ContextManager cm = rm.getContextManager();
 		Context context = cm.getContext(id);
 		if (context != null) {
