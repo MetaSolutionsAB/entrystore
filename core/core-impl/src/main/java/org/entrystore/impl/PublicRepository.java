@@ -40,6 +40,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.util.URISplit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -397,7 +398,7 @@ public class PublicRepository {
 		// entries, just in case the ACL has changed
 		if (GraphType.Context.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
 			String contextURI = e.getResourceURI().toString();
-			String id = contextURI.substring(contextURI.lastIndexOf("/") + 1);
+			String id = URISplit.getLastSegment(contextURI);
 			Context context = rm.getContextManager().getContext(id);
 			if (context != null) {
 				Set<URI> entries = context.getEntries();
@@ -507,7 +508,7 @@ public class PublicRepository {
 				Set<URI> contexts = cm.getEntries();
 
 				for (URI contextURI : contexts) {
-					String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
+					String id = URISplit.getLastSegment(contextURI.toString());
 					Context context = cm.getContext(id);
 					if (context != null) {
 						log.info("Adding context " + contextURI + " to public repository");

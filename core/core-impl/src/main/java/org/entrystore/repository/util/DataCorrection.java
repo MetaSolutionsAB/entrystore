@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -102,11 +102,11 @@ public class DataCorrection {
 				continue;
 			}
 			String contextURI = uri.toString();
-			String contextId = contextURI.substring(contextURI.toString().lastIndexOf("/") + 1);
+			String contextId = URISplit.getLastSegment(contextURI);
 			Context context = cm.getContext(contextId);
 			Set<URI> contextEntries = context.getEntries();
 			for (URI entryURI : contextEntries) {
-				String entryId = entryURI.toString().substring(entryURI.toString().lastIndexOf("/") + 1);
+				String entryId = URISplit.getLastSegment(entryURI.toString());
 				Entry entry = context.get(entryId);
 				if (entry == null) {
 					log.warn("No entry found for URI: " + entryURI);

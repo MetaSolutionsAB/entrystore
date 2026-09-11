@@ -30,6 +30,7 @@ import org.entrystore.impl.ListImpl;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.util.FileOperations;
+import org.entrystore.repository.util.URISplit;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.dto.ListParams;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
@@ -218,7 +219,7 @@ public class ListResourceService {
 		List<URI> uris = l.getChildren();
 		Set<String> IDs = new HashSet<>();
 		for (URI u : uris) {
-			String id = (u.toASCIIString()).substring((u.toASCIIString()).lastIndexOf('/') + 1);
+			String id = URISplit.getLastSegment(u.toASCIIString());
 			IDs.add(id);
 		}
 
@@ -238,7 +239,7 @@ public class ListResourceService {
 
 			for (Entry childEntry : childrenEntries) {
 				URI childURI = childEntry.getEntryURI();
-				String id = (childURI.toASCIIString()).substring((childURI.toASCIIString()).lastIndexOf('/') + 1);
+				String id = URISplit.getLastSegment(childURI.toASCIIString());
 				array.put(id);
 			}
 		} else {

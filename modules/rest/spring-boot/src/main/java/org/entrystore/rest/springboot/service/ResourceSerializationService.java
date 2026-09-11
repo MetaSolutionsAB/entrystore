@@ -36,6 +36,7 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.EntryUtil;
+import org.entrystore.repository.util.URISplit;
 import org.entrystore.rest.springboot.model.dto.ListParams;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
@@ -184,8 +185,7 @@ public class ResourceSerializationService {
 				List<Entry> childrenEntries = new ArrayList<>();
 
 				for (URI uri : childrenURIs) {
-					String u = uri.toString();
-					String id = u.substring(u.lastIndexOf('/') + 1);
+					String id = URISplit.getLastSegment(uri.toString());
 					childrenIDs.add(id);
 					Entry childEntry = list.getEntry().getContext().get(id);
 					if (childEntry != null) {
@@ -212,8 +212,7 @@ public class ResourceSerializationService {
 					JSONArray rights = this.serializeRights(childEntry);
 					childJSON.put("rights", rights);
 
-					String uri = childEntry.getEntryURI().toString();
-					String entryId = uri.substring(uri.lastIndexOf('/') + 1);
+					String entryId = URISplit.getLastSegment(childEntry.getEntryURI().toString());
 					childJSON.put("entryId", entryId);
 					GraphType childGraphType = childEntry.getGraphType();
 					EntryType childEntryType = childEntry.getEntryType();
@@ -408,8 +407,7 @@ public class ResourceSerializationService {
 		if (resource instanceof Context context) {
 			Set<URI> uris = context.getEntries();
 			for (URI u : uris) {
-				String uriString = u.toASCIIString();
-				array.put(uriString.substring(uriString.lastIndexOf('/') + 1));
+				array.put(URISplit.getLastSegment(u.toASCIIString()));
 			}
 		} else {
 			throw new IllegalArgumentException("Resource not instance of Context");

@@ -18,14 +18,19 @@ package org.entrystore.repository.util;
 
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 public class URISplitTest {
 
@@ -260,5 +265,29 @@ public class URISplitTest {
 	public void createURI_noPathNoId() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(anyURI, URI.create(anyURIStringBase).toURL());
 		assertEquals(URISplit.createURI(uriSplit.getBase(), uriSplit.getContextId(), null, null), URI.create("https://slashdot.org/_contexts"));
+	}
+
+	@ParameterizedTest(name = "[{index}] {0} -> \"{1}\"")
+	@MethodSource("lastSegmentCases")
+	public void getLastSegment(String uri, String expected) {
+		assertEquals(expected, URISplit.getLastSegment(uri));
+	}
+
+	private static Stream<Arguments> lastSegmentCases() {
+		return Stream.of(
+			arguments(entryURIString, "13"),
+			arguments(resourceURIString, "13"),
+			arguments(metadataURIString, "13"),
+			// the shape the five context-id call sites actually pass: a context resource URI, no trailing slash
+			arguments(anyURIStringBase + "12", "12"),
+			arguments(contextURIString, ""),
+			arguments("_guest", "_guest"),
+			arguments("", ""),
+			arguments(encodedURIStringPart, "peter%3Cpan"),
+			// no literal slash survives full encoding, so there is nothing to split on
+			arguments(encodedURIStringFull, encodedURIStringFull),
+			// a query string is not separated off; no call site passes a URI carrying one
+			arguments(baseFollowedByParamsURIString,
+				"search?type=solr&query=rdfType:http%5C%3A%2F%2Fpurl.org%2Fdc%2Fdcmitype%2FText"));
 	}
 }
