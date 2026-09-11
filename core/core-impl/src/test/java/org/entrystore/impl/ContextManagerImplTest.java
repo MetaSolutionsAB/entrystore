@@ -20,6 +20,7 @@ import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.query.MalformedQueryException;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.Context;
 import org.entrystore.Data;
@@ -313,6 +314,91 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		references = cm.getReferences(refEntry.getExternalMetadataURI());
 		assertTrue(references.size() == 1 && references.contains(refEntry));
 
+	}
+
+	@Test
+	public void getLinks_excludesLinksTheUserMayNotRead() {
+		URI sharedResource = URI.create("http://slashdot.org/shared");
+
+		// ContextImpl.checkAccess asks for ReadMetadata on the context entry first and returns as soon
+		// as that grants, and the Disney fixture grants guest exactly that on both duck and mouse, so
+		// an unreadable entry needs a context that grants guest nothing rather than an entry-level ACL
+		Context duck = cm.getContext("duck");
+		Context privateContext = (Context) cm.createResource(null, GraphType.Context, null, null).getResource();
+		Entry readable = duck.createLink(null, sharedResource, null);
+		Entry unreadable = privateContext.createLink(null, sharedResource, null);
+
+		rm.setCheckForAuthorization(true);
+		pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+		Set<Entry> links = cm.getLinks(sharedResource);
+
+		assertEquals(1, links.size());
+		assertTrue(links.contains(readable));
+		assertFalse(links.contains(unreadable));
+	}
+
+	/**
+	 * Adds a resHasEntry triple naming the given object into the context's own named graph, the way
+	 * ContextImpl writes the index, so a stale or unusable index entry can be observed.
+	 */
+	private void addIndexTriple(Entry contextEntry, URI subject, String object) {
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			rc.add(vf.createIRI(subject.toString()),
+				RepositoryProperties.resHasEntry,
+				vf.createIRI(object),
+				vf.createIRI(contextEntry.getResourceURI().toString()));
+		}
+	}
+
+	@Test
+	public void getLinks_skipsIndexTriplesThatResolveToNoEntry() {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		Entry linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
+		URI resourceURI = linkEntry.getResourceURI();
+
+		// a stale index triple, as left behind by a failed index update, naming an entry that is gone
+		addIndexTriple(contextEntry, resourceURI, contextEntry.getResourceURI() + "/entry/no-such-entry");
+
+		Set<Entry> links = cm.getLinks(resourceURI);
+
+		// the live link still comes back rather than the whole call failing on the stale triple
+		assertEquals(1, links.size());
+		assertTrue(links.contains(linkEntry));
+	}
+
+	@Test
+	public void getLinks_skipsIndexTriplesNamingAContextThatDoesNotExist() {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		Entry linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
+		URI resourceURI = linkEntry.getResourceURI();
+
+		// resolves no context at all, which is the branch a missing context id takes
+		addIndexTriple(contextEntry, resourceURI, rm.getRepositoryURL() + "no-such-ctx/entry/no-such-entry");
+
+		Set<Entry> links = cm.getLinks(resourceURI);
+
+		assertEquals(1, links.size());
+		assertTrue(links.contains(linkEntry));
+	}
+
+	@Test
+	public void getLinks_skipsIndexTriplesWhoseObjectIsNotUnderTheRepositoryBase() {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		Entry linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
+		URI resourceURI = linkEntry.getResourceURI();
+
+		// shorter than the repository base URL, which is what a restored backup or a changed
+		// entrystore.baseurl.folder leaves behind; resolving it used to throw out of the whole call
+		addIndexTriple(contextEntry, resourceURI, "urn:x");
+
+		Set<Entry> links = cm.getLinks(resourceURI);
+
+		assertEquals(1, links.size());
+		assertTrue(links.contains(linkEntry));
 	}
 
 }

@@ -307,29 +307,7 @@ public class ListImpl extends RDFResource implements List {
 				}
 				return newEntry;
 			}
-			Context c = this.entry.getContext();
-			switch (e.getEntryType()) {
-				case Local:
-					newEntry = (EntryImpl) c.createResource(null, e.getGraphType(), e.getResourceType(), getURI());
-					if (e.getGraphType() == GraphType.None && e.getResourceType() == ResourceType.InformationResource) {
-						// FIXME if a QuotaException is thrown here we have already lost the original entry, this should be fixed
-						try {
-							((DataImpl) newEntry.getResource()).useData(((DataImpl) e.getResource()).getDataFile());
-						} catch (IOException ex) {
-							log.error(ex.getMessage(), ex);
-						}
-					}
-					break;
-				case Link:
-					newEntry = (EntryImpl) c.createLink(null, e.getResourceURI(), getURI());
-					break;
-				case LinkReference:
-					newEntry = (EntryImpl) c.createLinkReference(null, e.getResourceURI(), e.getExternalMetadataURI(), getURI());
-					break;
-				case Reference:
-					newEntry = (EntryImpl) c.createReference(null, e.getResourceURI(), e.getExternalMetadataURI(), getURI());
-					break;
-			}
+			newEntry = createCopyHere(e);
 			copyGraphs(e, newEntry);
 			if (removeFromAllLists || (nrOfRefLists == 1 && e.getReferringListsInSameContext().isEmpty())) {
 				e.getContext().remove(e.getEntryURI()); //Remove the old entry, it has been successfully copied into the new list in the new context.
@@ -339,6 +317,38 @@ public class ListImpl extends RDFResource implements List {
 			}
 			return newEntry;
 		}
+	}
+
+	/**
+	 * Creates an entry of the same kind as the given one as a child of this list, without copying any
+	 * graphs — the caller does that through {@link #copyGraphs}.
+	 * <p>
+	 * For a local information resource the new entry gets its own byte copy of the source's data file
+	 * (DataImpl.useData copies it), charged against this list's context quota.
+	 *
+	 * @return the new entry, never null.
+	 */
+	private EntryImpl createCopyHere(EntryImpl source) {
+		Context c = this.entry.getContext();
+		return switch (source.getEntryType()) {
+			case Local -> {
+				EntryImpl newEntry = (EntryImpl) c.createResource(null, source.getGraphType(), source.getResourceType(), getURI());
+				if (source.getGraphType() == GraphType.None
+					&& source.getResourceType() == ResourceType.InformationResource) {
+					try {
+						((DataImpl) newEntry.getResource()).useData(((DataImpl) source.getResource()).getDataFile());
+					} catch (IOException ex) {
+						// FIXME data loss on the move path: this leaves the copy empty and _moveEntryHere
+						// then removes the source. Propagate instead of logging (_copyEntryHere is safe).
+						log.error(ex.getMessage(), ex);
+					}
+				}
+				yield newEntry;
+			}
+			case Link -> (EntryImpl) c.createLink(null, source.getResourceURI(), getURI());
+			case LinkReference -> (EntryImpl) c.createLinkReference(null, source.getResourceURI(), source.getExternalMetadataURI(), getURI());
+			case Reference -> (EntryImpl) c.createReference(null, source.getResourceURI(), source.getExternalMetadataURI(), getURI());
+		};
 	}
 
 	protected EntryImpl copyEntryHere(EntryImpl entryToCopy) {
@@ -353,29 +363,7 @@ public class ListImpl extends RDFResource implements List {
 				return null;
 			}
 
-			Context c = this.entry.getContext();
-			switch (entryToCopy.getEntryType()) {
-				case Local:
-					newEntry = (EntryImpl) c.createResource(null, entryToCopy.getGraphType(), entryToCopy.getResourceType(), getURI());
-					if (entryToCopy.getGraphType() == GraphType.None && entryToCopy.getResourceType() == ResourceType.InformationResource) {
-						// FIXME if a QuotaException is thrown here we have already lost the original entry, this should be fixed
-						try {
-							((DataImpl) newEntry.getResource()).useData(((DataImpl) entryToCopy.getResource()).getDataFile());
-						} catch (IOException ex) {
-							log.error(ex.getMessage(), ex);
-						}
-					}
-					break;
-				case Link:
-					newEntry = (EntryImpl) c.createLink(null, entryToCopy.getResourceURI(), getURI());
-					break;
-				case LinkReference:
-					newEntry = (EntryImpl) c.createLinkReference(null, entryToCopy.getResourceURI(), entryToCopy.getExternalMetadataURI(), getURI());
-					break;
-				case Reference:
-					newEntry = (EntryImpl) c.createReference(null, entryToCopy.getResourceURI(), entryToCopy.getExternalMetadataURI(), getURI());
-					break;
-			}
+			newEntry = createCopyHere(entryToCopy);
 			copyGraphs(entryToCopy, newEntry);
 			if (bt == GraphType.List) {
 				ListImpl newList = (ListImpl) newEntry.getResource();
