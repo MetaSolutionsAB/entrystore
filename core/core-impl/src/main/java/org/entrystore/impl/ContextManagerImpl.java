@@ -329,6 +329,24 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		}
 	}
 
+	/**
+	 * Publishes lists whose members were pruned inside a transaction that fired nothing ({@code importContext}).
+	 * Each list's in-memory members are dropped first, because a reader that did not hold the transaction may have
+	 * reloaded the pre-prune list while it was open, and the ResourceUpdated that follows makes the user-to-groups
+	 * cache re-scan: that scan must read the committed list, not the reader's stale copy. Failure-isolated per list.
+	 * Package-private for tests.
+	 */
+	void publishPrunedLists(List<EntryImpl> prunedLists) {
+		for (EntryImpl prunedList : prunedLists) {
+			try {
+				((ListImpl) prunedList.getResource()).invalidateChildren();
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(prunedList, RepositoryEvent.ResourceUpdated));
+			} catch (Exception e) {
+				log.error("Failed to publish pruned list {}", prunedList.getEntryURI(), e);
+			}
+		}
+	}
+
 	private void importContextFromUnzippedDir(Entry contextEntry, File srcFile, File unzippedDir) throws RepositoryException, IOException {
 		Date before = new Date();
 		FileOperations.unzipFile(srcFile, unzippedDir);
@@ -586,17 +604,10 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			try {
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(removedEntry, RepositoryEvent.EntryDeleted));
 			} catch (Exception e) {
-				log.error("Failed to fire EntryDeleted for {}; search index and group cache may be stale until reindex or the next group change", removedEntry.getEntryURI(), e);
+				log.error("Failed to fire EntryDeleted for {}", removedEntry.getEntryURI(), e);
 			}
 		}
-		// a pruned surviving list changed its members inside the transaction without firing anything
-		for (EntryImpl prunedList : prunedSurvivingLists) {
-			try {
-				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(prunedList, RepositoryEvent.ResourceUpdated));
-			} catch (Exception e) {
-				log.error("Failed to fire ResourceUpdated for pruned list {}; search index and group cache may be stale", prunedList.getEntryURI(), e);
-			}
-		}
+		publishPrunedLists(prunedSurvivingLists);
 		for (DataImpl removedData : deferredFileDeletions) {
 			try {
 				if (!removedData.deleteFile()) {

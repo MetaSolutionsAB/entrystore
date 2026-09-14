@@ -73,10 +73,15 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	private static final String ENV_ADMIN_PASSWORD = "ENTRYSTORE_ADMIN_PASSWORD";
 
 	/**
-	 * A user's group set together with the invalidation epoch it was computed under. A reader serves it only
-	 * while that epoch is current, so correctness rests on the stamp, not on clearing the map.
+	 * A user's group set together with the invalidation epoch it was computed under. {@link #groupsIfCurrent(long)}
+	 * is the only way a reader should obtain the set: it hands the set out while the stamp is current and null once
+	 * an invalidation has moved the epoch on, so correctness rests on the stamp, not on clearing the map.
 	 */
 	record CachedGroups(long epoch, Set<URI> groups) {
+
+		Set<URI> groupsIfCurrent(long currentEpoch) {
+			return epoch == currentEpoch ? groups : null;
+		}
 	}
 
 	/** The result of one principals-context scan; only an authoritative scan may be cached. Package-private for tests. */
@@ -84,9 +89,10 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	}
 
 	/**
-	 * User resource URI to that user's {@link CachedGroups}: the immutable set {@link #getGroupUris(URI)} would
-	 * return, stamped with the epoch it was scanned under. An entry stamped with an older epoch is ignored and
-	 * overwritten by the next decision, so the map holds at most one entry per user and is never cleared.
+	 * User resource URI to that user's {@link CachedGroups}: the immutable set {@link #scanGroups(URI)} found,
+	 * stamped with the epoch it was scanned under. An entry stamped with an older epoch is never served and is
+	 * replaced by that user's next authoritative scan; the map is never cleared, so it holds at most one entry per
+	 * principal that has made a group-consulting decision since startup, and a deleted user's entry is evicted.
 	 */
 	private final Map<URI, CachedGroups> userGroupsCache = new ConcurrentHashMap<>();
 
@@ -275,54 +281,64 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		return groupUris;
 	}
 
-	public Set <URI> getGroupUris(URI userUri) {
+	/**
+	 * Mutable snapshot of a fresh scan, regardless of whether it was authoritative. Production decisions go through
+	 * {@link #getGroupUrisCached(URI)}; this is for the cache's disabled branch and for tests.
+	 */
+	Set<URI> getGroupUris(URI userUri) {
 		return new HashSet<>(scanGroups(userUri).groups());
 	}
 
 	/**
 	 * Scans the principals context for the groups {@code userUri} belongs to. The scan is authoritative only when
-	 * the user resolved, every listed entry loaded and {@link #isIndexComplete()} holds: a short listing
-	 * (ENTRYSTORE-1095) or an unresolvable principal is a per-decision denial, and caching it would make the denial
-	 * permanent because index repair fires no repository event. Package-private so a test can hold a scan back.
+	 * the user resolved and {@link #isIndexComplete()} held both before the listing was taken and after it was
+	 * consumed, so the two samples bracket the listing: a short listing (ENTRYSTORE-1095) or an unresolvable
+	 * principal is a per-decision denial, and caching it would make the denial permanent because index repair
+	 * fires no repository event. An entry the index names but the store does not hold cannot contribute a
+	 * membership and does not affect the verdict; a group deleted while the scan runs fires EntryDeleted, which
+	 * bumps the epoch and rejects the scan's publication. Package-private so a test can hold a scan back.
 	 */
 	GroupScan scanGroups(URI userUri) {
 		Set<URI> groupUris = new HashSet<>();
-		boolean skippedEntry = false;
 
 		User user = getUser(userUri);
-		if (user != null) {
-			for (URI nextURI : getEntries()) {
-				Entry nextEntry = getByEntryURI(nextURI);
-				// Removed by a concurrent delete between getEntries() and getByEntryURI(); sibling iterations in
-				// this class share the race shape, this guard targets the access-control hot path.
-				if (nextEntry == null) {
-					log.debug("Skipping null entry for URI {} in getGroupUris (likely concurrent delete)", nextURI);
-					skippedEntry = true;
-					continue;
-				}
-				if (GraphType.Group.equals(nextEntry.getGraphType())
-						&& nextEntry.getResource() instanceof Group nextGroup && nextGroup.isMember(user)) {
-					groupUris.add(nextGroup.getURI());
-				}
+		if (user == null) {
+			return new GroupScan(groupUris, false);
+		}
+		boolean indexCompleteBeforeListing = isIndexComplete();
+		for (URI nextURI : getEntries()) {
+			Entry nextEntry = getByEntryURI(nextURI);
+			if (nextEntry == null) {
+				log.warn("Entry {} is listed in the principals index but could not be loaded (deleted concurrently, "
+						+ "or a stale index mapping); skipping it in the group scan", nextURI);
+				continue;
+			}
+			if (GraphType.Group.equals(nextEntry.getGraphType())
+					&& nextEntry.getResource() instanceof Group nextGroup && nextGroup.isMember(user)) {
+				groupUris.add(nextGroup.getURI());
 			}
 		}
-		return new GroupScan(groupUris, user != null && !skippedEntry && isIndexComplete());
+		return new GroupScan(groupUris, indexCompleteBeforeListing && isIndexComplete());
 	}
 
 	/**
-	 * Cache-fronted {@link #getGroupUris(URI)}: scans the principals context at most once per user and
-	 * invalidation epoch. The returned set is immutable in both branches. A cached set is served only while its
-	 * stamp equals the current epoch (value read first, epoch second), and a fresh scan is published only when it
-	 * is authoritative and the epoch did not move while it ran; a scan that overlaps a group write is therefore
-	 * either not published or stamped with an epoch the write's own event has already left behind.
+	 * Cache-fronted {@link #scanGroups(URI)}. The returned set is immutable in both branches. A cached set is served
+	 * only while its stamp equals the current epoch (value read first, epoch second); otherwise the principals
+	 * context is scanned again, and the result is published only when the scan is authoritative and the epoch did
+	 * not move while it ran, so a scan that overlaps a group write is either not published or stamped with an epoch
+	 * the write's own event has already left behind. Concurrent misses for one user may scan in parallel, and a
+	 * scan that was not authoritative is repeated on that user's next decision.
 	 */
 	Set<URI> getGroupUrisCached(URI userURI) {
 		if (!groupCacheEnabled) {
 			return Set.copyOf(getGroupUris(userURI));
 		}
 		CachedGroups cached = userGroupsCache.get(userURI);
-		if (cached != null && cached.epoch() == userGroupsCacheEpoch.get()) {
-			return cached.groups();
+		if (cached != null) {
+			Set<URI> current = cached.groupsIfCurrent(userGroupsCacheEpoch.get());
+			if (current != null) {
+				return current;
+			}
 		}
 		long epochBefore = userGroupsCacheEpoch.get();
 		GroupScan scan = scanGroups(userURI);
@@ -341,11 +357,13 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	/**
 	 * Keeps {@link #userGroupsCache} consistent with the repository. A {@link RepositoryEventObject} carries no
 	 * previous state, so any event sourced from a Group entry invalidates every cached set by bumping the epoch
-	 * (directory mutations are rare next to decisions), while a deleted User drops only its own key. Subscribed to
-	 * every post-commit event a group entry emits (ResourceDeleted fires inside the transaction and is followed by
-	 * EntryDeleted); {@code ListImpl} also fires ResourceUpdated from a failed member-list write, so a scan that
-	 * read the uncommitted list is invalidated as well. Runs synchronously under the repository's listener
-	 * monitor, so it only touches the map and the counter and never reads the repository.
+	 * (directory mutations are rare next to decisions), while a deleted User drops only its own key. Registered for
+	 * EntryCreated, EntryUpdated, ResourceUpdated, RelationsUpdated and EntryDeleted: the post-commit events through
+	 * which a group's member list can change, including the ResourceUpdated {@code ListImpl} fires from a failed
+	 * member-list write and {@code importContext} fires for a pruned list. Metadata-only events cannot change
+	 * membership and are not subscribed; ResourceDeleted fires inside the transaction and is followed by
+	 * EntryDeleted. Runs synchronously under the repository's listener monitor, so it only touches the map and the
+	 * counter and never reads the repository.
 	 */
 	void onRepositoryEvent(RepositoryEventObject eventObject) {
 		if (!(eventObject.getSource() instanceof Entry source)) {

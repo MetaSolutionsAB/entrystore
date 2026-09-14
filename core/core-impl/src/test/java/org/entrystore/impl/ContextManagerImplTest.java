@@ -29,6 +29,9 @@ import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
+import org.entrystore.repository.RepositoryListener;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.CommonQueries;
 import org.junit.jupiter.api.BeforeEach;
@@ -455,5 +458,42 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		assertTrue(cm.getLinks(externalMetadata).isEmpty());
 		// and a LinkReference sits in the resource index without being a Link
 		assertTrue(cm.getLinks(linkReference.getResourceURI()).isEmpty());
+	}
+
+	@Test
+	public void publishPrunedLists_dropsMembersAReaderReloadedDuringTheTransaction() throws Exception {
+		Context mouse = cm.getContext("mouse");
+		Entry listEntry = mouse.createResource(null, GraphType.List, null, null);
+		ListImpl list = (ListImpl) listEntry.getResource();
+		Entry kept = mouse.createResource(null, GraphType.None, null, null);
+		Entry pruned = mouse.createResource(null, GraphType.None, null, null);
+		list.setChildren(List.of(kept.getEntryURI(), pruned.getEntryURI()));
+		List<URI> published = new ArrayList<>();
+		RepositoryListener recorder = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				published.add(((Entry) eventObject.getSource()).getEntryURI());
+			}
+		};
+		RepositoryManagerImpl rmi = (RepositoryManagerImpl) rm;
+		rmi.registerListener(recorder, RepositoryEvent.ResourceUpdated);
+		try {
+			try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+				rc.begin();
+				list.removeChildrenInTransaction(Set.of(pruned.getEntryURI()), rc);
+				// a reader that does not hold the transaction reloads the still-committed, pre-prune member list
+				assertTrue(list.getChildren().contains(pruned.getEntryURI()),
+						"precondition: a concurrent reader cached the pre-prune list while the transaction was open");
+				rc.commit();
+			}
+
+			((ContextManagerImpl) cm).publishPrunedLists(List.of((EntryImpl) listEntry));
+
+			assertFalse(list.getChildren().contains(pruned.getEntryURI()),
+					"after publishing, a read must reflect the committed prune rather than the reader's stale copy");
+			assertTrue(published.contains(listEntry.getEntryURI()), "the pruned list's ResourceUpdated must be dispatched");
+		} finally {
+			rmi.unregisterListener(recorder, RepositoryEvent.ResourceUpdated);
+		}
 	}
 }

@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -38,8 +39,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -47,6 +50,8 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 /**
  * The cross-request user-to-groups cache must never grant access after a membership revocation: every mutation
@@ -216,6 +221,65 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void secondDecisionIsServedFromTheCache() {
+		group.addMember(user);
+		PrincipalManagerImpl spied = spy(pmi);
+
+		Set<URI> first = spied.getGroupUrisCached(user.getURI());
+		Set<URI> second = spied.getGroupUrisCached(user.getURI());
+
+		assertTrue(first.contains(group.getURI()));
+		assertSame(first, second, "while the epoch is unchanged the cached set itself must be served");
+		verify(spied, times(1)).scanGroups(user.getURI());
+	}
+
+	@Test
+	public void absentIndexedEntryDoesNotDisableTheCache() {
+		group.addMember(user);
+		Set<URI> listing = new HashSet<>(pmi.getEntries());
+		// a stale index mapping, as a tolerated post-commit failure in ContextImpl.remove leaves behind
+		listing.add(URI.create("http://localhost:8181/_principals/entry/does-not-exist"));
+		PrincipalManagerImpl spied = spy(pmi);
+		doReturn(listing).when(spied).getEntries();
+
+		Set<URI> groups = spied.getGroupUrisCached(user.getURI());
+
+		assertTrue(groups.contains(group.getURI()), "the scan still sees every group that does exist");
+		assertTrue(pmi.cachedGroupsView().containsKey(user.getURI()),
+				"an index mapping without an entry cannot hold a membership and must not stop the scan from being cached");
+	}
+
+	@Test
+	public void indexIncompleteWhenListedIsNotCached() {
+		group.addMember(user);
+		PrincipalManagerImpl spied = spy(pmi);
+		// incomplete while the listing is taken; the repair lands as getEntries() returns, before any later check
+		AtomicBoolean indexComplete = new AtomicBoolean(false);
+		doAnswer(invocation -> indexComplete.get()).when(spied).isIndexComplete();
+		doAnswer(invocation -> {
+			Object listing = invocation.callRealMethod();
+			indexComplete.set(true);
+			return listing;
+		}).when(spied).getEntries();
+
+		spied.getGroupUrisCached(user.getURI());
+
+		assertFalse(pmi.cachedGroupsView().containsKey(user.getURI()),
+				"a listing taken over an incomplete index may be short and a later repair must not certify it");
+	}
+
+	@Test
+	public void deletedUserIsDeniedRatherThanFailingTheTest() {
+		group.addMember(user);
+		assertTrue(isAuthorized(user, target, AccessProperty.ReadMetadata));
+
+		pm.remove(userEntry.getEntryURI());
+
+		assertFalse(isAuthorized(user, target, AccessProperty.ReadMetadata),
+				"a deleted principal is denied in production, so the helper must report that as a denial");
+	}
+
+	@Test
 	public void failedSetChildrenNotifiesListenersAndRestoresMembers() {
 		group.addMember(user);
 		GroupImpl spied = spy((GroupImpl) group);
@@ -228,6 +292,11 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 			assertTrue(spied.getChildren().contains(userEntry.getEntryURI()), "the in-memory member list must be restored");
 			assertTrue(recorder.sources.contains(groupEntry.getEntryURI()),
 					"a failed member-list write must still publish a group-sourced ResourceUpdated");
+			int invalidation = recorder.indexOf(RepositoryEvent.ResourceUpdated, groupEntry.getEntryURI());
+			int recovery = recorder.indexOf(RepositoryEvent.EntryUpdated, userEntry.getEntryURI());
+			assertTrue(recovery >= 0, "the recovery must still refresh and publish the removed member");
+			assertTrue(invalidation < recovery,
+					"the invalidation must fire before the recovery, which is what fails on a broken connection");
 		} finally {
 			recorder.unregister((RepositoryManagerImpl) rm);
 		}
@@ -251,22 +320,36 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 		}
 	}
 
-	/** Captures the entry URIs of every ResourceUpdated dispatched while registered. */
+	/** Captures every ResourceUpdated and EntryUpdated dispatched while registered, in dispatch order. */
 	private static final class RecordingListener extends RepositoryListener {
 		final List<URI> sources = new ArrayList<>();
+		private final List<RepositoryEvent> events = new ArrayList<>();
 
 		static RecordingListener register(RepositoryManagerImpl rm) {
 			RecordingListener recorder = new RecordingListener();
 			rm.registerListener(recorder, RepositoryEvent.ResourceUpdated);
+			rm.registerListener(recorder, RepositoryEvent.EntryUpdated);
 			return recorder;
 		}
 
 		void unregister(RepositoryManagerImpl rm) {
 			rm.unregisterListener(this, RepositoryEvent.ResourceUpdated);
+			rm.unregisterListener(this, RepositoryEvent.EntryUpdated);
+		}
+
+		/** Dispatch position of the first {@code event} sourced from {@code source}, or -1 if it never arrived. */
+		int indexOf(RepositoryEvent event, URI source) {
+			for (int i = 0; i < events.size(); i++) {
+				if (events.get(i) == event && sources.get(i).equals(source)) {
+					return i;
+				}
+			}
+			return -1;
 		}
 
 		@Override
 		public void repositoryUpdated(RepositoryEventObject eventObject) {
+			events.add(eventObject.getEvent());
 			sources.add(((Entry) eventObject.getSource()).getEntryURI());
 		}
 	}

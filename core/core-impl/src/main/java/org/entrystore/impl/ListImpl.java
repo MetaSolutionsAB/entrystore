@@ -537,22 +537,19 @@ public class ListImpl extends RDFResource implements List {
 					}
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 				} catch (Exception e) {
-					log.error(e.getMessage());
-					rc.rollback();
-					for (URI uri : toAdd) {
-						EntryImpl childEntry = ((EntryImpl) this.entry.getContext().getByEntryURI(uri));
-						childEntry.refreshFromRepository(rc);
-						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
-					}
-					for (URI uri : toRemove) {
-						EntryImpl childEntry = ((EntryImpl) this.entry.getContext().getByEntryURI(uri));
-						childEntry.refreshFromRepository(rc);
-						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
-					}
+					log.error("Failed to set children of list {}", entry.getEntryURI(), e);
+					// Restore and invalidate before anything that can throw: a concurrent authorization scan may have
+					// read the uncommitted list, and the recovery below is exactly what fails on a broken connection.
 					children = oldChildrenList;
-					// A concurrent authorization scan may have read the uncommitted list; tell the group cache.
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
-					throw new org.entrystore.repository.RepositoryException("Cannot set the list since: " + e.getMessage());
+					try {
+						rc.rollback();
+						refreshAndPublish(toAdd, rc);
+						refreshAndPublish(toRemove, rc);
+					} catch (Exception recoveryFailure) {
+						e.addSuppressed(recoveryFailure);
+					}
+					throw new org.entrystore.repository.RepositoryException("Cannot set the list since: " + e.getMessage(), e);
 				} finally {
 					rc.close();
 				}
@@ -561,6 +558,20 @@ public class ListImpl extends RDFResource implements List {
 			throw new org.entrystore.repository.RepositoryException("Failed to obtain repository connection for entry " + entry.getId(), e);
 		}
 		return true;
+	}
+
+	/**
+	 * Reloads each listed child that still exists from the store and publishes it, so an indexer sees the rolled-back
+	 * state; a member whose entry is gone is skipped, as the pre-transaction validation tolerates it.
+	 */
+	private void refreshAndPublish(Collection<URI> childURIs, RepositoryConnection rc) throws RepositoryException {
+		for (URI uri : childURIs) {
+			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
+			if (childEntry != null) {
+				childEntry.refreshFromRepository(rc);
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
+			}
+		}
 	}
 
 	public java.util.List<URI> getChildren() {
@@ -624,43 +635,56 @@ public class ListImpl extends RDFResource implements List {
 			}
 
 			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(child);
-			if (canRemove(checkOrphaned, childEntry, isOwnerOfContext)) {
-				int index = children.indexOf(child);
-				boolean removedInMemory = false;
+			if (!canRemove(checkOrphaned, childEntry, isOwnerOfContext)) {
+				return false;
+			}
+			if (children == null) {
+				loadChildren();
+			}
+			// The contains check above ran outside the monitor; a concurrent write may have replaced the list since.
+			int index = children.indexOf(child);
+			if (index < 0) {
+				return false;
+			}
+			boolean removedInMemory = false;
+			try {
+				RepositoryConnection rc = entry.repository.getConnection();
+				ValueFactory vf = entry.repository.getValueFactory();
 				try {
-					RepositoryConnection rc = entry.repository.getConnection();
-					ValueFactory vf = entry.repository.getValueFactory();
+					rc.begin();
+					children.remove(child);
+					removedInMemory = true;
+					if (checkOrphaned && isOwnerOfContext) {
+						childEntry.setOriginalListSynchronized(null, rc, vf); //remains to do the same for list case.
+					}
+					saveChildren(rc);
+					childEntry.removeReferringList(this, rc);
+					rc.commit();
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
+				} catch (Exception e) {
+					log.error("Failed to remove child {} from list {}", child, entry.getEntryURI(), e);
+					// Restore and invalidate before anything that can throw: a concurrent authorization scan may have
+					// read the shortened list, and the recovery below is exactly what fails on a broken connection.
+					if (removedInMemory) {
+						children.add(index, child);
+					}
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 					try {
-						rc.begin();
-						children.remove(child);
-						removedInMemory = true;
-						if (checkOrphaned && isOwnerOfContext) {
-							childEntry.setOriginalListSynchronized(null, rc, vf); //remains to do the same for list case.
-						}
-						saveChildren(rc);
-						childEntry.removeReferringList(this, rc);
-						rc.commit();
-						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
-						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
-					} catch (Exception e) {
-						log.error("Failed to remove child {} from list {}", child, entry.getEntryURI(), e);
 						rc.rollback();
 						childEntry.refreshFromRepository(rc);
-						if (removedInMemory) {
-							children.add(index, child);
-						}
-						// A concurrent authorization scan may have read the shortened list; tell the group cache.
-						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
-						return false;
-					} finally {
-						rc.close();
+					} catch (Exception recoveryFailure) {
+						e.addSuppressed(recoveryFailure);
 					}
-				} catch (RepositoryException e) {
-					log.error(e.getMessage());
+					return false;
+				} finally {
+					rc.close();
 				}
-				return true;
+			} catch (RepositoryException e) {
+				log.error("Failed to obtain repository connection for list {}", entry.getEntryURI(), e);
+				return false;
 			}
-			return false;
+			return true;
 		}
 	}
 
@@ -671,9 +695,10 @@ public class ListImpl extends RDFResource implements List {
 	 * are seen and nothing uncommitted is published to concurrent readers; the in-memory children are cleared
 	 * so they are reloaded on next access whatever the transaction outcome. The list entry's modification date
 	 * and contributors are updated in memory, so after a rollback the caller must refresh it. No repository event
-	 * is fired here either, so the caller must publish the list's change after commit ({@code importContext} fires
-	 * ResourceUpdated per pruned list), or the user-to-groups cache would keep a stale membership for a pruned
-	 * member that survives the import.
+	 * is fired here either. After the commit the caller must call {@link #invalidateChildren()} and then publish the
+	 * list's change ({@code importContext} does both per pruned list): a reader that does not hold the transaction
+	 * can reload the pre-commit member list while it is open, and the user-to-groups cache would otherwise re-scan
+	 * that stale list as authoritative once the event has bumped its epoch.
 	 */
 	protected void removeChildrenInTransaction(Collection<URI> childrenToRemove, RepositoryConnection rc) throws RepositoryException {
 		synchronized (this.entry.repository) {
@@ -682,6 +707,17 @@ public class ListImpl extends RDFResource implements List {
 			if (inTransactionChildren.removeAll(childrenToRemove)) {
 				saveChildren(inTransactionChildren, rc);
 			}
+			children = null;
+		}
+	}
+
+	/**
+	 * Drops the in-memory member list so the next read reloads it from the committed store. For callers that changed
+	 * the list through their own transaction: a concurrent reader may have reloaded the pre-commit list while the
+	 * transaction was open, and that reader's copy must not outlive the commit.
+	 */
+	void invalidateChildren() {
+		synchronized (this.entry.repository) {
 			children = null;
 		}
 	}
