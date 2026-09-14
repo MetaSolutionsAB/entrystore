@@ -66,6 +66,8 @@ stepdefinitions:
         - docker build -f docker/Dockerfile --build-arg ENTRYSTORE_VERSION=$VERSION --pull --no-cache --tag metasolutions/entrystore:$VERSION .
         # We export to TAR because on Bitbucket Grype cannot access the image directly through the Docker daemon's /var/run/docker.sock
         - docker save metasolutions/entrystore:$VERSION > "$BITBUCKET_CLONE_DIR/image.tar"
+        # Grype writes the DB cache as a different uid than the build container, so the dir must exist and be world-writable.
+        - mkdir -p "$BITBUCKET_CLONE_DIR/grype-db" && chmod -R 777 "$BITBUCKET_CLONE_DIR/grype-db"
         # We scan for OS vulnerabilities with Grype before we push to the registry, code scanning is covered by Snyk
         - docker run --rm -v $BITBUCKET_CLONE_DIR/image.tar:/image.tar:ro -v $BITBUCKET_CLONE_DIR/grype-db:/grype-db -e GRYPE_DB_CACHE_DIR=/grype-db anchore/grype --only-fixed --fail-on high --exclude "/srv/entrystore/**" docker-archive:/image.tar
         # Bitbucket silently skips uploading a cache over 1 GB, so keep the DB size visible in the log.
