@@ -53,30 +53,16 @@ stepdefinitions:
         - scp -v ${DOWNLOAD_NAME} ${DOWNLOAD_NAME}.sha256.asc deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
         - scp -rv modules/rest/integration-test/target/site/jacoco-aggregate/* deploy@meta1.metasolutions.se:/var/www/entrystore.org/test-coverage/
         - if [ $BITBUCKET_BRANCH == "develop" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/develop.version" ; elif [ $BITBUCKET_BRANCH == "master" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/latest.version" ; fi
+  # Snapshot images (develop, develop-spring): build and push only, no vulnerability scan.
   - dockerhub: &dockerhub
       name: Docker Hub
-      # Grype spends most of its time importing the vulnerability DB, which is CPU- and IO-bound.
-      size: 2x
       script:
         - docker version
         - export VERSION=`cat VERSION.txt` && echo $VERSION
-        # Drop any prerelease suffix before taking the first two segments, so both x.y.z and x.y-SNAPSHOT yield x.y.
-        - export VERSION_MAJOR_MINOR=`echo ${VERSION%%-*} | cut -d. -f1,2` && echo $VERSION_MAJOR_MINOR
         - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
         - docker build -f docker/Dockerfile --build-arg ENTRYSTORE_VERSION=$VERSION --pull --no-cache --tag metasolutions/entrystore:$VERSION .
-        # We export to TAR because on Bitbucket Grype cannot access the image directly through the Docker daemon's /var/run/docker.sock
-        - docker save metasolutions/entrystore:$VERSION > "$BITBUCKET_CLONE_DIR/image.tar"
-        # Grype writes the DB cache as a different uid than the build container, so the dir must exist and be world-writable.
-        - mkdir -p "$BITBUCKET_CLONE_DIR/grype-db" && chmod -R 777 "$BITBUCKET_CLONE_DIR/grype-db"
-        # We scan for OS vulnerabilities with Grype before we push to the registry, code scanning is covered by Snyk
-        - docker run --rm -v $BITBUCKET_CLONE_DIR/image.tar:/image.tar:ro -v $BITBUCKET_CLONE_DIR/grype-db:/grype-db -e GRYPE_DB_CACHE_DIR=/grype-db anchore/grype --only-fixed --fail-on high --exclude "/srv/entrystore/**" docker-archive:/image.tar
-        # Bitbucket silently skips uploading a cache over 1 GB, so keep the DB size visible in the log.
-        - du -sh $BITBUCKET_CLONE_DIR/grype-db
-        # Release branches publish candidates only; a snapshot tag from a release branch would be misleading.
-        - if [[ $BITBUCKET_BRANCH != release/* ]]; then docker push metasolutions/entrystore:$VERSION ; fi
-        - if [[ $BITBUCKET_BRANCH == release/* ]]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:${VERSION_MAJOR_MINOR}-rc ; docker push metasolutions/entrystore:${VERSION_MAJOR_MINOR}-rc ; fi
+        - docker push metasolutions/entrystore:$VERSION
         - if [ $BITBUCKET_BRANCH == "develop" ]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:develop ; docker push metasolutions/entrystore:develop ; fi
-        - if [ $BITBUCKET_BRANCH == "master" ]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:$VERSION_MAJOR_MINOR ; docker push metasolutions/entrystore:$VERSION_MAJOR_MINOR ; fi
         # buildx is currently only supported with self-hosted runners, see https://confluence.atlassian.com/bbkb/building-multi-architecture-docker-images-with-bitbucket-pipelines-1252329371.html
         # - docker buildx create --use --platform=linux/arm64,linux/amd64 --name multi-platform-builder
         # - docker buildx build --build-arg ENTRYSTORE_VERSION=$VERSION --no-cache --pull --platform=linux/arm64,linux/amd64 --progress=plain --tag=$VERSION --push .
@@ -86,7 +72,29 @@ stepdefinitions:
         - docker
       caches:
         - docker
-        - grype-db
+  # Consumable images (master, release/*): scan runtime vulnerabilities with Grype before publishing; Snyk covers application dependencies.
+  - dockerhub-scanned: &dockerhub-scanned
+      name: Docker Hub (scanned)
+      # The 4 GB docker-medium service Grype needs only fits in a 2x step.
+      size: 2x
+      script:
+        - docker version
+        - export VERSION=`cat VERSION.txt` && echo $VERSION
+        # Drop any prerelease suffix before taking the first two segments, so both x.y.z and x.y-SNAPSHOT yield x.y.
+        - export VERSION_MAJOR_MINOR=`echo ${VERSION%%-*} | cut -d. -f1,2` && echo $VERSION_MAJOR_MINOR
+        - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
+        - docker build -f docker/Dockerfile --build-arg ENTRYSTORE_VERSION=$VERSION --pull --no-cache --tag metasolutions/entrystore:$VERSION .
+        # Export to TAR because Grype cannot access the Docker daemon's /var/run/docker.sock on Bitbucket.
+        - docker save metasolutions/entrystore:$VERSION > "$BITBUCKET_CLONE_DIR/image.tar"
+        - docker run --rm -v "$BITBUCKET_CLONE_DIR/image.tar:/image.tar:ro" anchore/grype --only-fixed --fail-on high --exclude "/srv/entrystore/**" docker-archive:/image.tar
+        # Release branches publish candidates only; a snapshot tag from a release branch would be misleading.
+        - if [[ $BITBUCKET_BRANCH == release/* ]]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:${VERSION_MAJOR_MINOR}-rc ; docker push metasolutions/entrystore:${VERSION_MAJOR_MINOR}-rc ; else docker push metasolutions/entrystore:$VERSION ; fi
+        - if [ $BITBUCKET_BRANCH == "master" ]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:$VERSION_MAJOR_MINOR ; docker push metasolutions/entrystore:$VERSION_MAJOR_MINOR ; fi
+      services:
+        # grype-db size is 2GB currently, hence the 4GB docker memory setup
+        - docker-medium
+      caches:
+        - docker
   # trivy was activated as a step before build, but it took a long time to run (~7 mins) and we also have Snyk
   # which is not as intrusive as a mandatory scanning step in the repo; deactivating it for now
   #- trivy: &trivy
@@ -104,10 +112,10 @@ pipelines:
     master:
       - step: *build
       - step: *deploy
-      - step: *dockerhub
+      - step: *dockerhub-scanned
     'release/*':
       - step: *build
-      - step: *dockerhub
+      - step: *dockerhub-scanned
     develop:
       - step: *build
       - step: *deploy
@@ -119,8 +127,10 @@ pipelines:
 definitions:
   caches:
     maven-wrapper-dists: ~/.m2/wrapper/dists
-    grype-db: grype-db
   services:
+    docker-medium:
+      memory: 4096
+      type: docker
     docker-large:
       # this seems to not be multiplied with the "size" value above
       memory: 8192
