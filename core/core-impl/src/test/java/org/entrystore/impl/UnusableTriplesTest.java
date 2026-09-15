@@ -20,10 +20,19 @@ import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.impl.ContextManagerImpl.UnusableTriples;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+
+import java.net.URI;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * Sampled objects come straight from the store, where a caller holding WriteMetadata can put a
@@ -48,38 +57,97 @@ public class UnusableTriplesTest {
 	}
 
 	@Test
-	public void truncatesALongLiteralSoOneObjectCannotFillTheLogLine() {
+	public void truncatesALongLiteralButKeepsTheReason() {
 		UnusableTriples unusable = new UnusableTriples();
 
 		unusable.skipped(VF.createLiteral("x".repeat(10_000)), "not an IRI");
 
-		// 200 chars of object plus the ellipsis, never the whole literal
-		assertEquals(203, unusable.getSample().getFirst().length());
-		assertTrue(unusable.getSample().getFirst().endsWith("..."));
+		String sampled = unusable.getSample().getFirst();
+		// the object is cut, but the reason is what tells an operator why it was skipped
+		assertTrue(sampled.contains("..."));
+		assertTrue(sampled.endsWith("(not an IRI)"));
+		assertTrue(sampled.length() < 300);
 	}
 
 	@Test
-	public void stripsLineBreaksSoALiteralCannotForgeALogRecord() {
+	public void truncatesALongReasonToo() {
 		UnusableTriples unusable = new UnusableTriples();
 
-		unusable.skipped(VF.createLiteral("a\r\n2026-09-11 WARN forged record"), "not an IRI");
+		// URI.create echoes the whole offending IRI in its message
+		unusable.skipped(VF.createIRI("http://example.com/x"), "IllegalArgumentException: " + "y".repeat(10_000));
+
+		assertTrue(unusable.getSample().getFirst().length() < 500);
+	}
+
+	@Test
+	public void stripsControlCharactersSoALiteralCannotForgeALogRecord() {
+		String escape = String.valueOf((char) 0x1B);
+		String lineSeparator = String.valueOf((char) 0x2028);
+		UnusableTriples unusable = new UnusableTriples();
+
+		unusable.skipped(VF.createLiteral("a\r\n" + escape + "[31m" + lineSeparator
+			+ "2026-09-15 WARN forged record"), "not an IRI");
 
 		String sampled = unusable.getSample().getFirst();
 		assertFalse(sampled.contains("\r"));
 		assertFalse(sampled.contains("\n"));
+		assertFalse(sampled.contains(escape));
+		assertFalse(sampled.contains(lineSeparator));
 		assertTrue(sampled.contains("forged record"));
 	}
 
 	@Test
-	public void rendersTheCauseOnlyWhileItCanStillBeSampled() {
+	public void neverCutsASurrogatePairInHalf() {
+		// sweeps the offsets around the cut, so the pair straddles it in at least one of these
+		for (int prefix = 195; prefix <= 205; prefix++) {
+			UnusableTriples unusable = new UnusableTriples();
+
+			unusable.skipped(VF.createLiteral("z".repeat(prefix) + Character.toString(0x1F600) + "z".repeat(50)),
+				"not an IRI");
+
+			String sampled = unusable.getSample().getFirst();
+			for (int i = 0; i < sampled.length(); i++) {
+				boolean loneSurrogate = Character.isHighSurrogate(sampled.charAt(i))
+					&& (i + 1 == sampled.length() || !Character.isLowSurrogate(sampled.charAt(i + 1)));
+				assertFalse(loneSurrogate, "lone surrogate at " + i + " for prefix " + prefix);
+			}
+		}
+	}
+
+	@Test
+	public void samplesTheReasonDerivedFromACause() {
 		UnusableTriples unusable = new UnusableTriples();
 
 		for (int i = 0; i < 7; i++) {
-			unusable.skipped(VF.createIRI("http://example.com/" + i), new IllegalArgumentException("boom"));
+			unusable.skipped(VF.createIRI("http://example.com/" + i),
+				new IllegalArgumentException("boom").toString());
 		}
 
 		assertEquals(7, unusable.getCount());
 		assertEquals(5, unusable.getSample().size());
 		assertTrue(unusable.getSample().getFirst().contains("boom"));
+	}
+
+	@Test
+	public void warnsNothingWhenNoTripleWasSkipped() {
+		Logger log = mock(Logger.class);
+
+		new UnusableTriples().warn(log, RepositoryProperties.resHasEntry, URI.create("http://example.com/r"));
+
+		verifyNoInteractions(log);
+	}
+
+	@Test
+	public void warnReportsTheTotalAndHowManyItSampled() {
+		Logger log = mock(Logger.class);
+		UnusableTriples unusable = new UnusableTriples();
+		for (int i = 0; i < 7; i++) {
+			unusable.skipped(VF.createIRI("http://example.com/" + i), "resolves to no entry");
+		}
+
+		unusable.warn(log, RepositoryProperties.resHasEntry, URI.create("http://example.com/r"));
+
+		// the "first {}" form, since more was skipped than could be sampled
+		verify(log).warn(contains("first"), eq(7), any(), any(), eq(5), any());
 	}
 }
