@@ -20,6 +20,8 @@ import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.impl.ContextManagerImpl.UnusableTriples;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 
 import java.net.URI;
@@ -28,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -96,21 +99,20 @@ public class UnusableTriplesTest {
 		assertTrue(sampled.contains("forged record"));
 	}
 
-	@Test
-	public void neverCutsASurrogatePairInHalf() {
-		// sweeps the offsets around the cut, so the pair straddles it in at least one of these
-		for (int prefix = 195; prefix <= 205; prefix++) {
-			UnusableTriples unusable = new UnusableTriples();
+	// the offsets around the cut, so the pair straddles it in at least one row
+	@ParameterizedTest(name = "prefix {0}")
+	@ValueSource(ints = {195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205})
+	public void neverCutsASurrogatePairInHalf(int prefix) {
+		UnusableTriples unusable = new UnusableTriples();
 
-			unusable.skipped(VF.createLiteral("z".repeat(prefix) + Character.toString(0x1F600) + "z".repeat(50)),
-				"not an IRI");
+		unusable.skipped(VF.createLiteral("z".repeat(prefix) + Character.toString(0x1F600) + "z".repeat(50)),
+			"not an IRI");
 
-			String sampled = unusable.getSample().getFirst();
-			for (int i = 0; i < sampled.length(); i++) {
-				boolean loneSurrogate = Character.isHighSurrogate(sampled.charAt(i))
-					&& (i + 1 == sampled.length() || !Character.isLowSurrogate(sampled.charAt(i + 1)));
-				assertFalse(loneSurrogate, "lone surrogate at " + i + " for prefix " + prefix);
-			}
+		String sampled = unusable.getSample().getFirst();
+		for (int i = 0; i < sampled.length(); i++) {
+			boolean loneSurrogate = Character.isHighSurrogate(sampled.charAt(i))
+				&& (i + 1 == sampled.length() || !Character.isLowSurrogate(sampled.charAt(i + 1)));
+			assertFalse(loneSurrogate, "lone surrogate at " + i);
 		}
 	}
 
@@ -149,5 +151,18 @@ public class UnusableTriplesTest {
 
 		// the "first {}" form, since more was skipped than could be sampled
 		verify(log).warn(contains("first"), eq(7), any(), any(), eq(5), any());
+	}
+
+	@Test
+	public void warnDoesNotClaimATruncationWhenEverySkipWasSampled() {
+		Logger log = mock(Logger.class);
+		UnusableTriples unusable = new UnusableTriples();
+		for (int i = 0; i < 3; i++) {
+			unusable.skipped(VF.createIRI("http://example.com/" + i), "resolves to no entry");
+		}
+
+		unusable.warn(log, RepositoryProperties.resHasEntry, URI.create("http://example.com/r"));
+
+		verify(log).warn(argThat((String message) -> !message.contains("first")), eq(3), any(), any(), any());
 	}
 }

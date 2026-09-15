@@ -48,6 +48,7 @@ import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.RepositoryException;
+import org.entrystore.repository.util.ModelUtil;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.model.api.CreateEntryRequestBody;
@@ -361,15 +362,11 @@ public class EntryService {
 								subjectBlackList.add(statement.getObject());
 								continue;
 							}
-							if (subjectBlackList.contains(statement.getSubject())) {
-								continue;
-							}
-							if (statement.getSubject().equals(oldResURI)) {
-								inheritedMD.add(newResURI, statement.getPredicate(), statement.getObject(), statement.getContext());
-							} else {
+							if (!subjectBlackList.contains(statement.getSubject())) {
 								inheritedMD.add(statement);
 							}
 						}
+						inheritedMD = ModelUtil.replaceSubject(inheritedMD, oldResURI, newResURI);
 					}
 					if (!inheritedMD.isEmpty() && entry.getLocalMetadata() != null) {
 						Model mergedGraph = new LinkedHashModel();
@@ -536,7 +533,11 @@ public class EntryService {
 	public Entry modifyEntry(Entry entry, String body, String mediaType, boolean applyACLtoChildren) throws AuthorizationException {
 
 		Model deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
-		entry.setGraph(deserializedGraph);
+		try {
+			entry.setGraph(deserializedGraph);
+		} catch (IllegalArgumentException iae) {
+			throw new BadRequestException(iae.getMessage(), iae); // Core exception — message is safe to return
+		}
 		if (applyACLtoChildren &&
 				GraphType.List.equals(entry.getGraphType()) &&
 				Local.equals(entry.getEntryType())) {

@@ -106,8 +106,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	/** Bounds one sampled object, which can be a store-fed literal of arbitrary length. */
 	private static final int UNUSABLE_TRIPLE_SAMPLE_MAX_CHARS = 200;
 
-	/** C0/C1 controls plus the Unicode line separators, none of which may reach a plain-text appender. */
-	private static final Pattern CONTROL_CHARACTERS = Pattern.compile("[\\p{Cc}\\u2028\\u2029]");
+	/** C0/C1 controls, format characters such as bidi overrides, and the Unicode line separators. */
+	private static final Pattern CONTROL_CHARACTERS = Pattern.compile("[\\p{Cc}\\p{Cf}\\u2028\\u2029]");
 
 	public ContextManagerImpl(RepositoryManagerImpl rman, Repository repo) {
 		super(new EntryImpl(rman,repo), URISplit.createURI(rman.getRepositoryURL().toString(),
@@ -1050,18 +1050,20 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	 * warning per call.
 	 * <p>
 	 * A sampled object comes from the store, where a caller holding WriteMetadata can put a literal
-	 * of any size and content under an index predicate, so the object and its reason are bounded
-	 * separately and the rendering is stripped of the control characters that would otherwise let it
-	 * forge whole log records. The reason is bounded too: URI.create echoes the whole offending IRI
-	 * in its message.
+	 * of any size and content under an index predicate, so the object and its reason are each
+	 * truncated (URI.create echoes the whole offending IRI in its message) and the rendering is
+	 * stripped of the control characters that would otherwise let it forge whole log records.
 	 */
 	static final class UnusableTriples {
 
 		@Getter
 		private int count;
 
-		@Getter
 		private final List<String> sample = new ArrayList<>();
+
+		List<String> getSample() {
+			return List.copyOf(sample);
+		}
 
 		void skipped(Value object, String reason) {
 			count++;

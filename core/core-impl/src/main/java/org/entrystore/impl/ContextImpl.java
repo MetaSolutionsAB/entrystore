@@ -1087,19 +1087,24 @@ public class ContextImpl extends ResourceImpl implements Context {
 					adminPrincipals.add(pm.getAuthenticatedUserURI());
 				}
 			}
-			entryImpl.updateAllowedPrincipalsFor(AccessProperty.Administer, adminPrincipals, false, true);
-			entryImpl.updateAllowedPrincipalsFor(AccessProperty.ReadMetadata, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.ReadMetadata), false, true);
-			entryImpl.updateAllowedPrincipalsFor(AccessProperty.ReadResource, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.ReadResource), false, true);
-			entryImpl.updateAllowedPrincipalsFor(AccessProperty.WriteMetadata, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.WriteMetadata), false, true);
-			entryImpl.updateAllowedPrincipalsFor(AccessProperty.WriteResource, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.WriteResource), false, true);
+			entryImpl.appendAllowedPrincipals(AccessProperty.Administer, adminPrincipals);
+			entryImpl.appendAllowedPrincipals(AccessProperty.ReadMetadata, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
+			entryImpl.appendAllowedPrincipals(AccessProperty.ReadResource, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.ReadResource));
+			entryImpl.appendAllowedPrincipals(AccessProperty.WriteMetadata, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.WriteMetadata));
+			entryImpl.appendAllowedPrincipals(AccessProperty.WriteResource, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.WriteResource));
 		} else {
 			log.warn("copyACL(fromList, toEntry): Not setting an ACL: toEntry is not an instance of EntryImpl");
 		}
 	}
 
 	public void copyACL(URI fromList, Entry toEntry) {
-		// null when fromList is not a local list, which NPEs below — see ENTRYSTORE-1116
-		copyACL(asLocalList(getListEntry(fromList)), toEntry);
+		ListImpl list = asLocalList(getListEntry(fromList));
+		if (list == null) {
+			// create ignores a listURI that is not a local list, and so does the ACL copy that follows it
+			log.warn("Not copying an ACL to {}: {} is not a local list", toEntry.getEntryURI(), fromList);
+			return;
+		}
+		copyACL(list, toEntry);
 	}
 
 	public Entry get(String entryId) {

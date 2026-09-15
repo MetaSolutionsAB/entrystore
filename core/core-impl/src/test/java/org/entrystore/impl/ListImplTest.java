@@ -16,6 +16,11 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -314,4 +319,23 @@ public class ListImplTest extends AbstractCoreTest {
 		assertNotNull(duck.getByEntryURI(linkEntry3.getEntryURI()));
 	}
 
+
+	@Test
+	public void copyStringEntryBetweenContexts_rekeysTheMetadataAndCarriesTheString() {
+		CrossContextLists lists = listsInTwoContexts();
+		Entry original = lists.source().createResource(null, GraphType.String, null, lists.sourceList().getResourceURI());
+		((StringResource) original.getResource()).setString("carried over");
+		ValueFactory vf = rm.getValueFactory();
+		IRI originalResource = vf.createIRI(original.getResourceURI().toString());
+		Model metadata = new LinkedHashModel();
+		metadata.add(originalResource, DCTERMS.TITLE, vf.createLiteral("a title"));
+		original.getLocalMetadata().setGraph(metadata);
+
+		Entry copy = ((ListImpl) lists.targetList().getResource()).copyEntryHere((EntryImpl) original);
+
+		Model copiedMetadata = copy.getLocalMetadata().getGraph();
+		assertTrue(copiedMetadata.contains(vf.createIRI(copy.getResourceURI().toString()), DCTERMS.TITLE, null));
+		assertFalse(copiedMetadata.contains(originalResource, null, null));
+		assertEquals("carried over", ((StringResource) copy.getResource()).getString());
+	}
 }
