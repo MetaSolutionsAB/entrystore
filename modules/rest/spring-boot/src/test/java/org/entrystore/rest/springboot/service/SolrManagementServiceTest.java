@@ -35,6 +35,7 @@ import java.net.URI;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -106,6 +107,7 @@ class SolrManagementServiceTest {
 
 		var result = service.reindex(null);
 		assertEquals("Full Solr reindex initiated", result);
+		verify(searchIndex).reindex();
 	}
 
 	@Test
@@ -137,5 +139,6 @@ class SolrManagementServiceTest {
 
 		var result = service.reindex(CONTEXT_URI);
 		assertEquals("Solr reindex initiated for context: " + CONTEXT_URI, result);
+		verify(searchIndex).reindex(CONTEXT_URI);
 	}
 }

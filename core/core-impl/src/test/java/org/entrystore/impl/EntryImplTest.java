@@ -21,11 +21,15 @@ import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
+import org.entrystore.List;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryException;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -216,6 +221,8 @@ public class EntryImplTest extends AbstractCoreTest {
 		// the package-private bootstrap constructor leaves entryURI null
 		EntryImpl uninitialized = new EntryImpl(rm, ((EntryImpl) linkEntry).getRepository());
 
+		// below needed bcos: with a null entryURI the field comparison can never match, so only the identity
+		// short-circuit keeps equals reflexive
 		assertEquals(uninitialized, uninitialized);
 		assertNotEquals(uninitialized, linkEntry);
 		assertNotEquals(linkEntry, uninitialized);
@@ -292,5 +299,176 @@ public class EntryImplTest extends AbstractCoreTest {
 		assertFalse(targetEntry.getRelations().isEmpty());
 		context.remove(sourceEntry.getEntryURI());
 		assertTrue(targetEntry.getRelations().isEmpty());
+	}
+
+	private boolean hasStatementsInNamedGraph(URI namedGraph) {
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			return rc.hasStatement(null, null, null, false, rc.getValueFactory().createIRI(namedGraph.toString()));
+		}
+	}
+
+	@Test
+	public void setResourceURI_onAListMovesTheListGraphAndKeepsTheChildren() {
+		((List) listEntry.getResource()).addChild(linkEntry.getEntryURI());
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		listEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		ValueFactory vf = rm.getValueFactory();
+		IRI oldResourceIRI = vf.createIRI(listEntry.getResourceURI().toString());
+		Model metadata = new LinkedHashModel();
+		metadata.add(oldResourceIRI, DCTERMS.TITLE, vf.createLiteral("kept across the rename"));
+		listEntry.getLocalMetadata().setGraph(metadata);
+		URI oldResourceURI = listEntry.getResourceURI();
+		URI newResourceURI = URI.create(oldResourceURI + "-renamed");
+
+		listEntry.setResourceURI(newResourceURI);
+
+		assertEquals(newResourceURI, listEntry.getResourceURI());
+		// both hang off the resource URI as subject inside the entry graph, so both follow the rename
+		assertEquals(GraphType.List, listEntry.getGraphType());
+		assertTrue(listEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
+		Model renamedMetadata = listEntry.getLocalMetadata().getGraph();
+		assertTrue(renamedMetadata.contains(vf.createIRI(newResourceURI.toString()), DCTERMS.TITLE, null));
+		assertFalse(renamedMetadata.contains(oldResourceIRI, null, null));
+		// the children live in the list's own named graph, so they only survive if that graph moved
+		assertTrue(((List) listEntry.getResource()).getChildren().contains(linkEntry.getEntryURI()));
+		assertFalse(hasStatementsInNamedGraph(oldResourceURI));
+		assertTrue(hasStatementsInNamedGraph(newResourceURI));
+		// the context index followed the rename
+		assertTrue(context.getByResourceURI(newResourceURI).contains(listEntry));
+		assertTrue(context.getByResourceURI(oldResourceURI).isEmpty());
+	}
+
+	@Test
+	public void setResourceURI_onAStringResourceMovesItsGraph() {
+		Entry stringEntry = context.createResource(null, GraphType.String, null, null);
+		((StringResource) stringEntry.getResource()).setString("kept across the rename");
+		URI oldResourceURI = stringEntry.getResourceURI();
+		URI newResourceURI = URI.create(oldResourceURI + "-renamed");
+
+		stringEntry.setResourceURI(newResourceURI);
+
+		assertEquals("kept across the rename", ((StringResource) stringEntry.getResource()).getString());
+		assertFalse(hasStatementsInNamedGraph(oldResourceURI));
+		assertTrue(hasStatementsInNamedGraph(newResourceURI));
+	}
+
+	@Test
+	public void setResourceURI_onAFileEntryLeavesNoResourceGraphBehind() {
+		URI oldResourceURI = resourceEntry.getResourceURI();
+		URI newResourceURI = URI.create(oldResourceURI + "-renamed");
+
+		resourceEntry.setResourceURI(newResourceURI);
+
+		assertEquals(newResourceURI, resourceEntry.getResourceURI());
+		assertFalse(hasStatementsInNamedGraph(oldResourceURI));
+		assertFalse(hasStatementsInNamedGraph(newResourceURI));
+	}
+
+	@Test
+	public void removeAllowedPrincipalsFor_reportsWhetherThePrincipalWasAllowed() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+
+		assertTrue(linkEntry.removeAllowedPrincipalsFor(AccessProperty.ReadResource, daisy));
+		assertFalse(linkEntry.removeAllowedPrincipalsFor(AccessProperty.ReadResource, daisy));
+		assertFalse(linkEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
+	}
+
+	@Test
+	public void setAllowedPrincipalsFor_replacesTheWholeSet() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+
+		linkEntry.setAllowedPrincipalsFor(AccessProperty.ReadResource, Set.of(donald));
+
+		assertEquals(Set.of(donald), linkEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource));
+		// the store, not the cache the call just installed, is what survives a reload
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			IRI entryIRI = ((EntryImpl) linkEntry).getSesameEntryURI();
+			assertFalse(rc.hasStatement(null, RepositoryProperties.Read, rc.getValueFactory().createIRI(daisy.toString()), false, entryIRI));
+			assertTrue(rc.hasStatement(null, RepositoryProperties.Read, rc.getValueFactory().createIRI(donald.toString()), false, entryIRI));
+		}
+	}
+
+	@Test
+	public void setGraph_renamingTheResourceKeepsTheResourceAclAndTheChildren() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		listEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		((List) listEntry.getResource()).addChild(linkEntry.getEntryURI());
+		EntryImpl impl = (EntryImpl) listEntry;
+		IRI oldResourceURI = impl.getSesameResourceURI();
+		IRI newResourceURI = rm.getValueFactory().createIRI(oldResourceURI + "-renamed");
+		// what a client PUTs back: the GET body with only es:resource changed
+		Model body = new LinkedHashModel(listEntry.getGraph());
+		body.remove(impl.getSesameEntryURI(), RepositoryProperties.resource, oldResourceURI);
+		body.add(impl.getSesameEntryURI(), RepositoryProperties.resource, newResourceURI);
+
+		listEntry.setGraph(body);
+
+		assertEquals(URI.create(newResourceURI.stringValue()), listEntry.getResourceURI());
+		assertTrue(listEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
+		assertTrue(((List) listEntry.getResource()).getChildren().contains(linkEntry.getEntryURI()));
+	}
+
+	@Test
+	public void setResourceURI_refusesAURIAlreadyInUse() {
+		URI taken = resourceEntry.getResourceURI();
+		URI before = listEntry.getResourceURI();
+
+		assertThrows(IllegalArgumentException.class, () -> listEntry.setResourceURI(taken));
+
+		assertEquals(before, listEntry.getResourceURI());
+		assertEquals(taken, resourceEntry.getResourceURI());
+	}
+
+	@Test
+	public void setResourceURI_refusesAContextAndAPrincipal() {
+		Entry contextEntry = context.getEntry();
+		Entry daisy = pm.getPrincipalEntry("Daisy");
+
+		assertThrows(IllegalArgumentException.class,
+			() -> contextEntry.setResourceURI(URI.create(contextEntry.getResourceURI() + "-renamed")));
+		assertThrows(IllegalArgumentException.class,
+			() -> daisy.setResourceURI(URI.create(daisy.getResourceURI() + "-renamed")));
+	}
+
+	@Test
+	public void setResourceURI_updatesTheInverseRelationOnTheTargetEntry() {
+		EntryImpl source = (EntryImpl) context.createResource(null, GraphType.None, null, null);
+		EntryImpl target = (EntryImpl) context.createResource(null, GraphType.None, null, null);
+		ValueFactory vf = source.getRepository().getValueFactory();
+		IRI related = vf.createIRI("http://example.com/related");
+		IRI oldResourceURI = source.getSesameResourceURI();
+		Model graph = source.getGraph();
+		graph.add(oldResourceURI, related, target.getSesameResourceURI());
+		source.setGraph(graph);
+		URI newResourceURI = URI.create(oldResourceURI + "-renamed");
+
+		source.setResourceURI(newResourceURI);
+
+		Model relations = target.getRelations();
+		assertTrue(relations.contains(vf.createIRI(newResourceURI.toString()), related, target.getSesameResourceURI()));
+		assertFalse(relations.contains(oldResourceURI, null, null));
+	}
+
+	@Test
+	public void addAllowedPrincipalsFor_leavesOtherPrincipalsAlone() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, donald);
+
+		assertEquals(Set.of(daisy, donald), linkEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource));
+	}
+
+	@Test
+	public void hasAllowedPrincipals_isFalseUntilAnAclIsSet() {
+		assertFalse(linkEntry.hasAllowedPrincipals());
+
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, pm.getPrincipalEntry("Daisy").getResourceURI());
+
+		assertTrue(linkEntry.hasAllowedPrincipals());
 	}
 }

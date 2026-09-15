@@ -43,6 +43,7 @@ import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
@@ -218,5 +219,12 @@ public class SolrSearchIndexTest {
 	@Test
 	public void testExtractFulltext() throws Exception {
 		// TODO
+	}
+
+	@Test
+	public void reindexWithANullContextFailsOnTheCallingThreadAndRegistersNothing() {
+		assertThrows(IllegalArgumentException.class, () -> index.reindex(null));
+
+		assertTrue(reindexingMap.isEmpty(), "a rejected reindex must not leave a dead entry that keeps isIndexing() true");
 	}
 }

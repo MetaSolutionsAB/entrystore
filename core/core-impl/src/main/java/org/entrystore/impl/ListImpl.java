@@ -21,7 +21,6 @@ import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
-import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
@@ -42,6 +41,7 @@ import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.security.DisallowedException;
+import org.entrystore.repository.util.ModelUtil;
 
 import java.io.IOException;
 import java.net.URI;
@@ -50,6 +50,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.Vector;
 
@@ -386,8 +387,7 @@ public class ListImpl extends RDFResource implements List {
 
 
 	private void copyGraphs(EntryImpl source, EntryImpl dest) {
-		Model eGraph = source.getGraph();
-		HashMap<IRI, IRI> map = new HashMap<>();
+		Map<IRI, IRI> map = new HashMap<>();
 		map.put(source.getSesameEntryURI(), dest.getSesameEntryURI());
 		map.put(source.getSesameLocalMetadataURI(), dest.getSesameLocalMetadataURI());
 		map.put(source.getSesameResourceURI(), dest.getSesameResourceURI());
@@ -395,54 +395,17 @@ public class ListImpl extends RDFResource implements List {
 			map.put(source.getSesameExternalMetadataURI(), dest.getSesameExternalMetadataURI());
 			map.put(source.getSesameCachedExternalMetadataURI(), dest.getSesameCachedExternalMetadataURI());
 		}
-		eGraph = replaceURIs(eGraph, map);
-		dest.setGraph(eGraph);
+		dest.setGraph(ModelUtil.replaceIRIs(source.getGraph(), map));
 
-		dest.getLocalMetadata().setGraph(replaceURI(source.getLocalMetadata().getGraph(), source.getSesameResourceURI(), dest.getSesameResourceURI()));
+		IRI oldResourceURI = source.getSesameResourceURI();
+		IRI newResourceURI = dest.getSesameResourceURI();
+		dest.getLocalMetadata().setGraph(ModelUtil.replaceIRI(source.getLocalMetadata().getGraph(), oldResourceURI, newResourceURI));
 		if (source.getCachedExternalMetadata() != null) {
-			dest.getCachedExternalMetadata().setGraph(replaceURI(source.getCachedExternalMetadata().getGraph(), source.getSesameResourceURI(), dest.getSesameResourceURI()));
+			dest.getCachedExternalMetadata().setGraph(ModelUtil.replaceIRI(source.getCachedExternalMetadata().getGraph(), oldResourceURI, newResourceURI));
 		}
-		Object obj = source.getResource();
-		if (obj instanceof RDFResource resource && !(obj instanceof List)) {
-			((RDFResource) dest.getResource()).setGraph(replaceURI(resource.getGraph(), source.getSesameResourceURI(), dest.getSesameResourceURI()));
+		if (source.getResource() instanceof RDFResource resource && !(resource instanceof List)) {
+			((RDFResource) dest.getResource()).setGraph(ModelUtil.replaceIRI(resource.getGraph(), oldResourceURI, newResourceURI));
 		}
-	}
-
-	private Model replaceURI(Model graph, IRI oUri, IRI nUri) {
-		Model nGraph = new LinkedHashModel();
-		for (Statement statement : graph) {
-			if (statement.getSubject().equals(oUri)) {
-				// replace subject URI
-				nGraph.add(nUri, statement.getPredicate(), statement.getObject());
-			} else if (statement.getObject().equals(oUri)) {
-				// replace object URI
-				nGraph.add(statement.getSubject(), statement.getPredicate(), nUri);
-			} else {
-				// leave everything else untouched
-				nGraph.add(statement);
-			}
-		}
-		return nGraph;
-	}
-
-	private Model replaceURIs(Model graph, HashMap<IRI, IRI> map) {
-		Model nGraph = new LinkedHashModel();
-		for (Statement statement : graph) {
-			org.eclipse.rdf4j.model.Resource subj = statement.getSubject();
-			IRI pred = statement.getPredicate();
-			Value obj = statement.getObject();
-			if (map.containsKey(subj)) {
-				subj = map.get(subj);
-			}
-			if (map.containsKey(pred)) {
-				pred = map.get(pred);
-			}
-			if (obj instanceof IRI && map.containsKey(obj)) {
-				obj = map.get(obj);
-			}
-			nGraph.add(subj, pred, obj);
-		}
-		return nGraph;
 	}
 
 	public boolean setChildren(java.util.List<URI> newChildren) {

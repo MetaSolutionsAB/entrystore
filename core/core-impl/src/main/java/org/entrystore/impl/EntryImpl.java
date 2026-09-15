@@ -48,6 +48,7 @@ import org.entrystore.User;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
+import org.entrystore.repository.util.ModelUtil;
 import org.entrystore.repository.util.URISplit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,6 +64,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.eclipse.rdf4j.model.util.Values.iri;
 
@@ -109,7 +111,7 @@ public class EntryImpl implements Entry {
 	private volatile String format;
 	private volatile long fileSize = -1;
 	private volatile String filename;
-	private Boolean readOrWrite;
+	private volatile Boolean hasExplicitAcl;
 	private String originalList;
 	private ProvenanceImpl provenance;
 	@Getter
@@ -661,132 +663,101 @@ public class EntryImpl implements Entry {
 
 		checkAdministerRights();
 
+		// a context's URI keys its index graph; a principal's URI is the object of every ACL naming it
+		GraphType graphType = getGraphType();
+		if (graphType == GraphType.Context || graphType == GraphType.SystemContext
+			|| graphType == GraphType.User || graphType == GraphType.Group) {
+			throw new IllegalArgumentException("The resource URI of a " + graphType + " cannot be changed");
+		}
+
 		ValueFactory vf = getRepositoryManager().getValueFactory();
 		IRI oldResourceURI = vf.createIRI(getResourceURI().toString());
 		IRI newResourceURI = vf.createIRI(resourceURI.toString());
 
-		// update entry graph
-//		Graph entryGraph = getGraph();
-//		Graph newEntryGraph = new GraphImpl();
-//		for (Statement statement : entryGraph) {
-//			if (statement.getSubject().equals(oldResourceURI)) {
-//				// replace subject URI
-//				newEntryGraph.add(newResourceURI, statement.getPredicate(), statement.getObject());
-//			} else if (statement.getObject().equals(oldResourceURI)) {
-//				// replace object URI
-//				newEntryGraph.add(statement.getSubject(), statement.getPredicate(), newResourceURI);
-//			} else {
-//				// leave everything else untouched
-//				newEntryGraph.add(statement);
-//			}
-//		}
-		Model entryGraph = getGraph();
-		Model newEntryGraph = new LinkedHashModel();
-		for (Statement stmnt : entryGraph) {
-			if (RepositoryProperties.resource.equals(stmnt.getPredicate())) {
-				newEntryGraph.add(stmnt.getSubject(), stmnt.getPredicate(), newResourceURI);
-			} else {
-				newEntryGraph.add(stmnt);
-			}
-		}
+		// the graph type, resource type and resource-level ACL hang off the resource URI as subject,
+		// so the object of es:resource is not the only thing to rewrite
+		Model newEntryGraph = ModelUtil.replaceIRI(getGraph(), oldResourceURI, newResourceURI);
+		Model newMetadataGraph = renamedGraph(getLocalMetadata(), oldResourceURI, newResourceURI);
+		Model newCachedExternalMetadataGraph = renamedGraph(getCachedExternalMetadata(), oldResourceURI, newResourceURI);
+		boolean hasBuiltinGraph = getResource() instanceof RDFResource;
 
-		// update metadata graph
-		Model newMetadataGraph = null;
-		if (getLocalMetadata() != null) {
-			Model metadataGraph = getLocalMetadata().getGraph();
-			if (metadataGraph != null && !metadataGraph.isEmpty()) {
-				newMetadataGraph = new LinkedHashModel();
-				for (Statement statement : metadataGraph) {
-					if (statement.getSubject().equals(oldResourceURI)) {
-						// replace subject URI
-						newMetadataGraph.add(newResourceURI, statement.getPredicate(), statement.getObject());
-					} else {
-						// leave everything else untouched
-						newMetadataGraph.add(statement);
-					}
-				}
-			}
-		}
-
-		// update cached external metadata graph
-		Model newCachedExternalMetadataGraph = null;
-		if (getCachedExternalMetadata() != null) {
-			Model metadataGraph = getCachedExternalMetadata().getGraph();
-			if (metadataGraph != null && !metadataGraph.isEmpty()) {
-				newCachedExternalMetadataGraph = new LinkedHashModel();
-				for (Statement statement : metadataGraph) {
-					if (statement.getSubject().equals(oldResourceURI)) {
-						// replace subject URI
-						newCachedExternalMetadataGraph.add(newResourceURI, statement.getPredicate(), statement.getObject());
-					} else {
-						// leave everything else untouched
-						newCachedExternalMetadataGraph.add(statement);
-					}
-				}
-			}
-		}
-
-		// update resource graph if resource is builtin
-		Model newResourceGraph = null;
-		if (!getGraphType().equals(GraphType.None)) {
-			Model resourceGraph = getResource().getEntry().getGraph();
-			if (resourceGraph != null && !resourceGraph.isEmpty()) {
-				newResourceGraph = new LinkedHashModel();
-				for (Statement statement : resourceGraph) {
-					if (statement.getSubject().equals(oldResourceURI)) {
-						// replace subject URI
-						newResourceGraph.add(newResourceURI, statement.getPredicate(), statement.getObject());
-					} else {
-						// leave everything else untouched
-						newResourceGraph.add(statement);
-					}
-				}
-			}
-		}
-
-		// update all graphs
-		setGraphRaw(newEntryGraph);
-		if (newMetadataGraph != null) {
-			getLocalMetadata().setGraph(newMetadataGraph);
-		}
-		if (newCachedExternalMetadataGraph != null) {
-			getCachedExternalMetadata().setGraph(newCachedExternalMetadataGraph);
-		}
-		if (newResourceGraph != null) {
-			getResource().getEntry().setGraph(newResourceGraph);
-		}
-
-		// update index of context with new triple
 		try {
 			synchronized (this.repository) {
-				RepositoryConnection rc = this.repository.getConnection();
-				try {
+				try (RepositoryConnection rc = this.repository.getConnection()) {
+					if (isResourceURIInUse(rc, newResourceURI)) {
+						throw new IllegalArgumentException("Resource URI " + resourceURI + " is already in use");
+					}
+
+					// metadata first: resURI is still the old one, so a failure below leaves the rename retryable
+					if (newMetadataGraph != null) {
+						getLocalMetadata().setGraph(newMetadataGraph);
+					}
+					if (newCachedExternalMetadataGraph != null) {
+						getCachedExternalMetadata().setGraph(newCachedExternalMetadataGraph);
+					}
+
 					rc.begin();
-					IRI contextURI = vf.createIRI(this.getContext().getEntry().getResourceURI().toString());
-					IRI entryURI = vf.createIRI(this.getEntryURI().toString());
-					rc.remove(vf.createStatement(oldResourceURI, RepositoryProperties.resHasEntry, entryURI, contextURI));
-					rc.add(vf.createStatement(newResourceURI, RepositoryProperties.resHasEntry, entryURI, contextURI));
-					rc.commit();
-				} catch (RepositoryException e) {
-					rc.rollback();
-					log.error(e.getMessage(), e);
-				} finally {
-					rc.close();
+					try {
+						removeInverseRelations(rc);
+						rc.clear(entryURI);
+						rc.add(newEntryGraph, entryURI);
+						registerEntryModified(rc, vf);
+						addInverseRelations(rc, newEntryGraph);
+
+						IRI contextURI = vf.createIRI(this.getContext().getEntry().getResourceURI().toString());
+						rc.remove(vf.createStatement(oldResourceURI, RepositoryProperties.resHasEntry, entryURI, contextURI));
+						rc.add(vf.createStatement(newResourceURI, RepositoryProperties.resHasEntry, entryURI, contextURI));
+
+						if (hasBuiltinGraph) {
+							// an RDFResource keeps its graph in a named graph keyed by its own URI
+							for (Statement statement : Iterations.asList(rc.getStatements(null, null, null, false, oldResourceURI))) {
+								org.eclipse.rdf4j.model.Resource subject =
+									oldResourceURI.equals(statement.getSubject()) ? newResourceURI : statement.getSubject();
+								rc.add(subject, statement.getPredicate(), statement.getObject(), newResourceURI);
+							}
+							rc.clear(oldResourceURI);
+						}
+						rc.commit();
+					} catch (Exception e) {
+						rc.rollback();
+						throw new org.entrystore.repository.RepositoryException("Failed to move resource " + oldResourceURI + " to " + newResourceURI, e);
+					}
+					loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, entryURI)));
+					initMetadataObjects();
 				}
 			}
-		} catch (RepositoryException re) {
-			log.error(re.getMessage(), re);
+		} catch (RepositoryException e) {
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 
-		// update local variable with new URI
-		this.resURI = newResourceURI;
-
-		// update index
+		// the resource object holds its URI from construction, so it is rebuilt on next access
+		this.resource = null;
+		getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
 		this.context.updateResource2EntryIndex(
 				URI.create(oldResourceURI.stringValue()),
-				URI.create(this.resURI.stringValue()),
+				URI.create(newResourceURI.stringValue()),
 				URI.create(this.entryURI.stringValue())
 		);
+	}
+
+	private static Model renamedGraph(Metadata metadata, IRI from, IRI to) {
+		if (metadata == null) {
+			return null;
+		}
+		Model graph = metadata.getGraph();
+		return graph == null || graph.isEmpty() ? null : ModelUtil.replaceIRI(graph, from, to);
+	}
+
+	/**
+	 * A builtin resource or a context keeps a named graph at its URI and a repository resource has an
+	 * index triple; an external URL has neither, and many Links may legitimately share one.
+	 */
+	private boolean isResourceURIInUse(RepositoryConnection rc, IRI candidate) throws RepositoryException {
+		if (rc.hasStatement(null, null, null, false, candidate)) {
+			return true;
+		}
+		boolean repositoryURI = candidate.stringValue().startsWith(repositoryManager.getRepositoryURL().toString());
+		return repositoryURI && rc.hasStatement(candidate, RepositoryProperties.resHasEntry, null, false);
 	}
 
 	public void setExternalMetadataURI(URI externalMetadataURI) {
@@ -822,23 +793,21 @@ public class EntryImpl implements Entry {
 		// update index of context with new triple
 		try {
 			synchronized (this.repository) {
-				RepositoryConnection rc = this.repository.getConnection();
-				try {
+				try (RepositoryConnection rc = this.repository.getConnection()) {
 					rc.begin();
-					IRI contextURI = vf.createIRI(this.getContext().getEntry().getResourceURI().toString());
-					IRI entryURI = vf.createIRI(this.getEntryURI().toString());
-					rc.remove(vf.createStatement(oldExternalMetadataURI, RepositoryProperties.mdHasEntry, entryURI, contextURI));
-					rc.add(vf.createStatement(newExternalMetadataURI, RepositoryProperties.mdHasEntry, entryURI, contextURI));
-					rc.commit();
-				} catch (RepositoryException e) {
-					rc.rollback();
-					log.error(e.getMessage(), e);
-				} finally {
-					rc.close();
+					try {
+						IRI contextURI = vf.createIRI(this.getContext().getEntry().getResourceURI().toString());
+						rc.remove(vf.createStatement(oldExternalMetadataURI, RepositoryProperties.mdHasEntry, entryURI, contextURI));
+						rc.add(vf.createStatement(newExternalMetadataURI, RepositoryProperties.mdHasEntry, entryURI, contextURI));
+						rc.commit();
+					} catch (Exception e) {
+						rc.rollback();
+						throw new org.entrystore.repository.RepositoryException("Failed to move external metadata " + oldExternalMetadataURI + " to " + newExternalMetadataURI, e);
+					}
 				}
 			}
-		} catch (RepositoryException re) {
-			log.error(re.getMessage(), re);
+		} catch (RepositoryException e) {
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 
 		// update local variable with new URI
@@ -887,21 +856,11 @@ public class EntryImpl implements Entry {
 
 	private void setCachedAllowedPrincipalsFor(AccessProperty prop, Set<URI> set) {
 		switch (prop) {
-		case Administer:
-			administerPrincipals = set;
-			break;
-		case ReadMetadata:
-			readMetadataPrincipals = set;
-			break;
-		case WriteMetadata:
-			writeMetadataPrincipals = set;
-			break;
-		case ReadResource:
-			readResourcePrincipals = set;
-			break;
-		case WriteResource:
-			writeResourcePrincipals = set;
-			break;
+			case Administer -> administerPrincipals = set;
+			case ReadMetadata -> readMetadataPrincipals = set;
+			case WriteMetadata -> writeMetadataPrincipals = set;
+			case ReadResource -> readResourcePrincipals = set;
+			case WriteResource -> writeResourcePrincipals = set;
 		}
 	}
 
@@ -931,81 +890,105 @@ public class EntryImpl implements Entry {
 
 	public void setAllowedPrincipalsFor(AccessProperty prop, Set<URI> principals) {
 		checkAdministerRights();
-		updateAllowedPrincipalsFor(prop, principals, true, false);
+		Set<IRI> principalIRIs = toIRIs(principals);
+		updateAcl(prop, principals, (rc, subject, predicate) -> {
+			rc.remove(subject, predicate, null, entryURI);
+			addPrincipals(rc, subject, predicate, principalIRIs);
+			return null;
+		});
 	}
 
 	public void addAllowedPrincipalsFor(AccessProperty prop, URI principal) {
 		checkAdministerRights();
-		HashSet<URI> principals = new HashSet<>();
-		principals.add(principal);
-		updateAllowedPrincipalsFor(prop, principals, false, true);
+		appendAllowedPrincipals(prop, Set.of(principal));
+	}
+
+	/**
+	 * Adds principals without an Administer check of its own. {@link #addAllowedPrincipalsFor} checks
+	 * before delegating here; {@link ContextImpl#copyACL} cannot, since during creation the entry has
+	 * no ACL yet and the check would fall back to the context ACL, denying the list-only writer that
+	 * copyACL exists to admit.
+	 */
+	void appendAllowedPrincipals(AccessProperty prop, Set<URI> principals) {
+		Set<IRI> principalIRIs = toIRIs(principals);
+		updateAcl(prop, null, (rc, subject, predicate) -> {
+			addPrincipals(rc, subject, predicate, principalIRIs);
+			return null;
+		});
 	}
 
 	public boolean removeAllowedPrincipalsFor(AccessProperty prop, URI principal) {
 		checkAdministerRights();
-		HashSet<URI> principals = new HashSet<>();
-		principals.add(principal);
-		return updateAllowedPrincipalsFor(prop, principals, false, false);
+		IRI principalIRI = this.repository.getValueFactory().createIRI(principal.toString());
+		return updateAcl(prop, null, (rc, subject, predicate) -> {
+			boolean listed = rc.hasStatement(subject, predicate, principalIRI, false, entryURI);
+			rc.remove(subject, predicate, principalIRI, entryURI);
+			return listed;
+		});
 	}
 
-	public boolean updateAllowedPrincipalsFor(AccessProperty prop, Set<URI> principals, boolean replace, boolean append) {
-		this.readOrWrite = null;
+	/** Converted before the transaction, so a malformed principal fails as bad input rather than as a store error. */
+	private Set<IRI> toIRIs(Set<URI> principals) {
+		ValueFactory vf = this.repository.getValueFactory();
+		return principals.stream().map(principal -> vf.createIRI(principal.toString())).collect(Collectors.toSet());
+	}
+
+	private void addPrincipals(RepositoryConnection rc, IRI subject, IRI predicate, Set<IRI> principals) throws RepositoryException {
+		for (IRI principal : principals) {
+			rc.add(subject, predicate, principal, entryURI);
+		}
+	}
+
+	/** One ACL change against a connection already in a transaction that {@link #updateAcl} commits or rolls back. */
+	@FunctionalInterface
+	private interface AclUpdate<T> {
+		T apply(RepositoryConnection rc, IRI subject, IRI predicate) throws RepositoryException;
+	}
+
+	/**
+	 * Runs one ACL change in a transaction under the repository monitor.
+	 *
+	 * @param cacheAfter what {@link #getAllowedPrincipalsFor} may answer once the change is committed,
+	 * or null to make it reload from the store.
+	 */
+	private <T> T updateAcl(AccessProperty prop, Set<URI> cacheAfter, AclUpdate<T> update) {
+		Set<URI> cached = cacheAfter == null ? null : Set.copyOf(cacheAfter);
 		try {
 			synchronized (this.repository) {
-				RepositoryConnection rc = this.repository.getConnection();
-				rc.begin();
-				try {
-					IRI subject = getAccessSubject(prop);
-					IRI predicate = getAccessPredicate(prop);
-
-					if (replace) {
-						rc.remove(subject, predicate, null, entryURI);
+				try (RepositoryConnection rc = this.repository.getConnection()) {
+					rc.begin();
+					T result;
+					try {
+						result = update.apply(rc, getAccessSubject(prop), getAccessPredicate(prop));
+						rc.commit();
+					} catch (Exception e) {
+						rc.rollback();
+						throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
 					}
-
-					for (URI principal : principals) {
-						IRI principalURI = this.repository.getValueFactory().createIRI(principal.toString());
-						if (replace || append) {
-							rc.add(subject, predicate, principalURI, entryURI);
-						} else {
-							rc.remove(subject, predicate, principalURI, entryURI);
-						}
-					}
-					rc.commit();
-					if (replace) {
-						setCachedAllowedPrincipalsFor(prop, principals);
-					} else {
-						setCachedAllowedPrincipalsFor(prop, null);
-					}
-				} catch (Exception e) {
-					rc.rollback();
-					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
-				} finally {
-					rc.close();
+					// only after the commit, or a concurrent reader re-caches the answer this change replaces
+					this.hasExplicitAcl = null;
+					setCachedAllowedPrincipalsFor(prop, cached);
+					return result;
 				}
 			}
 		} catch (RepositoryException e) {
 			log.error(e.getMessage(), e);
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
-		return false;
 	}
 
 	public boolean hasAllowedPrincipals() {
-		if (this.readOrWrite == null) {
-			try {
-				try (RepositoryConnection rc = this.repository.getConnection()) {
-					if (rc.hasStatement(null, RepositoryProperties.Write, null, false, entryURI) ||
-						rc.hasStatement(null, RepositoryProperties.Read, null, false, entryURI)) {
-						this.readOrWrite = Boolean.TRUE;
-					} else {
-						this.readOrWrite = Boolean.FALSE;
-					}
-				}
+		Boolean explicitAcl = this.hasExplicitAcl;
+		if (explicitAcl == null) {
+			try (RepositoryConnection rc = this.repository.getConnection()) {
+				explicitAcl = rc.hasStatement(null, RepositoryProperties.Write, null, false, entryURI)
+					|| rc.hasStatement(null, RepositoryProperties.Read, null, false, entryURI);
+				this.hasExplicitAcl = explicitAcl;
 			} catch (RepositoryException e) {
-				log.error(e.getMessage());
+				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 			}
 		}
-		return this.readOrWrite;
+		return explicitAcl;
 	}
 
 	private IRI getAccessSubject(AccessProperty prop) {
@@ -1221,8 +1204,11 @@ public class EntryImpl implements Entry {
 		Iterator<Statement> resourceURIStmnts = metametadata.filter(this.entryURI, RepositoryProperties.resource, null).iterator();
 		if (resourceURIStmnts.hasNext()) {
 			Value newResourceURI = resourceURIStmnts.next().getObject();
-			if (newResourceURI instanceof IRI) {
-				setResourceURI(URI.create(newResourceURI.toString()));
+			IRI oldResourceURI = this.resURI;
+			if (newResourceURI instanceof IRI newResourceIRI && !newResourceIRI.equals(oldResourceURI)) {
+				setResourceURI(URI.create(newResourceIRI.toString()));
+				// a client echoes the old resource URI as subject of the type and ACL triples it PUTs back
+				metametadata = ModelUtil.replaceIRI(metametadata, oldResourceURI, newResourceIRI);
 			}
 		}
 
@@ -1362,7 +1348,7 @@ public class EntryImpl implements Entry {
 					writeMetadataPrincipals = null;
 					readResourcePrincipals = null;
 					writeResourcePrincipals = null;
-					readOrWrite = null;
+					hasExplicitAcl = null;
 					format = null;
 					status = null;
 

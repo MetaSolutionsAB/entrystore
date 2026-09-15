@@ -178,8 +178,10 @@ public interface Entry {
 
 	/**
 	 * @param prop corresponds to which {@link org.entrystore.PrincipalManager.AccessProperty} allowed for.
-	 * @param principal a URI of principal that are not to be allowed according to the 
+	 * @param principal a URI of principal that are not to be allowed according to the
 	 * {@link org.entrystore.PrincipalManager.AccessProperty} prop.
+	 * @return true if the principal was listed in this entry's own ACL for prop, false if there was nothing
+	 * to remove. Group and context grants are not consulted.
 	 */
 	boolean removeAllowedPrincipalsFor(PrincipalManager.AccessProperty prop, URI principal);
 
