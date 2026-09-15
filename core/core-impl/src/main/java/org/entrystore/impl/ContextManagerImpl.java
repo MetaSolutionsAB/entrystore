@@ -45,6 +45,7 @@ import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import lombok.Getter;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
@@ -98,6 +99,11 @@ import java.util.TimeZone;
 public class ContextManagerImpl extends EntryNamesContext implements ContextManager {
 
 	Logger log = LoggerFactory.getLogger(ContextManagerImpl.class);
+
+	/** How many skipped objects a single call names in its warning, so a stale index cannot flood the log. */
+	private static final int UNUSABLE_TRIPLE_SAMPLE_SIZE = 5;
+	/** Bounds one sampled object, which can be a store-fed literal of arbitrary length. */
+	private static final int UNUSABLE_TRIPLE_SAMPLE_MAX_CHARS = 200;
 
 	public ContextManagerImpl(RepositoryManagerImpl rman, Repository repo) {
 		super(new EntryImpl(rman,repo), URISplit.createURI(rman.getRepositoryURL().toString(),
@@ -408,7 +414,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				if (!newBaseURI.endsWith("/")) {
 					newBaseURI += "/";
 				}
-				String oldContextID = srcContextResourceURI.substring(srcContextResourceURI.lastIndexOf("/") + 1);
+				String oldContextID = URISplit.getLastSegment(srcContextResourceURI);
 				String newContextID = contextEntry.getId();
 
 				String oldContextResourceURI = srcContextResourceURI;
@@ -455,7 +461,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 							predicate.equals(RepositoryProperties.Read) ||
 							predicate.equals(RepositoryProperties.Write) ||
 							predicate.equals(RepositoryProperties.DeletedBy)) {
-						String oldUserID = object.stringValue().substring(object.stringValue().lastIndexOf("/") + 1);
+						String oldUserID = URISplit.getLastSegment(object.stringValue());
 						log.info("Old user URI: {}", object);
 						log.info("Old user ID: {}", oldUserID);
 						String oldUserName = id2name.get(oldUserID);
@@ -818,7 +824,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 		// TODO use URIStr instead - but we don't have the baseURL
 
-		String pfId = helper.substring(helper.lastIndexOf("/")+1);
+		String pfId = URISplit.getLastSegment(helper);
 		if (!backupFolder.endsWith("/")) {
 			backupFolder += "/";
 		}
@@ -929,7 +935,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		if (contextURI == null) {
 			throw new IllegalArgumentException("Parameter must not be null");
 		}
-		String contextID = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
+		String contextID = URISplit.getLastSegment(contextURI.toString());
 		return getContext(contextID);
 	}
 
@@ -988,8 +994,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	 * <p>
 	 * A single unusable index triple never fails the whole lookup: this enumeration is fed straight
 	 * from the store, so it also sees objects that are not IRIs at all, that {@code java.net.URI}
-	 * rejects, or that do not sit under the current repository base URL (a restored backup, or a
-	 * changed base URL). Each such triple is counted and skipped.
+	 * rejects, that do not sit under the current repository base URL (a restored backup, or a changed
+	 * base URL), or that resolve to no entry because the entry has since been removed. Each such
+	 * triple is skipped and reported through one warning per call.
 	 * <p>
 	 * Entries the current user may not read metadata for are excluded, but only where
 	 * {@code getItemInRepositoryByMMdURI} checks — its soft-cache-miss path does not, so this is not
@@ -1003,37 +1010,81 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	 */
 	private Set<Entry> getEntriesFromIndex(URI uri, IRI indexProperty, EntryType wantedEntryType) {
 		Set<Entry> entries = new HashSet<>();
-		int unusableTriples = 0;
+		UnusableTriples unusable = new UnusableTriples();
 		IRI subject = entry.repository.getValueFactory().createIRI(uri.toString());
 		try (RepositoryConnection rc = entry.repository.getConnection();
 			 RepositoryResult<Statement> indexTriples = rc.getStatements(subject, indexProperty, null, false)) {
 			while (indexTriples.hasNext()) {
 				Value object = indexTriples.next().getObject();
 				if (!(object instanceof IRI entryIRI)) {
-					unusableTriples++;
+					unusable.skipped(object, "not an IRI");
 					continue;
 				}
 				try {
 					Entry indexedEntry = getItemInRepositoryByMMdURI(URI.create(entryIRI.stringValue()));
 					if (indexedEntry == null) {
-						unusableTriples++;
+						unusable.skipped(object, "resolves to no entry");
 					} else if (indexedEntry.getEntryType() == wantedEntryType) {
 						entries.add(indexedEntry);
 					}
 				} catch (AuthorizationException ae) {
 					// excluded rather than reported, per the interface contract
 				} catch (IllegalArgumentException | IndexOutOfBoundsException | NoSuchElementException e) {
-					unusableTriples++;
+					unusable.skipped(object, e);
 				}
 			}
 		} catch (RepositoryException e) {
 			log.error("Repository error", e);
 			throw new org.entrystore.repository.RepositoryException("Repository error", e);
 		}
-		if (unusableTriples > 0) {
-			log.warn("Skipped {} unusable {} triple(s) for {}", unusableTriples, indexProperty, uri);
-		}
+		unusable.warn(log, indexProperty, uri);
 		return entries;
+	}
+
+	/**
+	 * Counts the index triples a lookup had to skip and keeps a bounded sample of them for one
+	 * warning per call.
+	 * <p>
+	 * A sampled object comes from the store, where a caller holding WriteMetadata can put a literal
+	 * of any size and content under an index predicate, so each one is truncated and stripped of the
+	 * line breaks that would otherwise let it forge whole log records.
+	 */
+	static final class UnusableTriples {
+
+		@Getter
+		private int count;
+
+		@Getter
+		private final List<String> sample = new ArrayList<>();
+
+		void skipped(Value object, String reason) {
+			count++;
+			if (sample.size() < UNUSABLE_TRIPLE_SAMPLE_SIZE) {
+				String rendered = object + " (" + reason + ")";
+				if (rendered.length() > UNUSABLE_TRIPLE_SAMPLE_MAX_CHARS) {
+					rendered = rendered.substring(0, UNUSABLE_TRIPLE_SAMPLE_MAX_CHARS) + "...";
+				}
+				sample.add(rendered.replace('\r', ' ').replace('\n', ' '));
+			}
+		}
+
+		/** Renders the cause only while it can still be sampled, since most calls skip nothing. */
+		void skipped(Value object, Throwable cause) {
+			if (sample.size() < UNUSABLE_TRIPLE_SAMPLE_SIZE) {
+				skipped(object, cause.toString());
+			} else {
+				count++;
+			}
+		}
+
+		void warn(Logger log, IRI indexProperty, URI uri) {
+			if (count > sample.size()) {
+				log.warn("Skipped {} unusable {} triple(s) for {}, first {}: {}",
+					count, indexProperty, uri, sample.size(), sample);
+			} else if (count > 0) {
+				log.warn("Skipped {} unusable {} triple(s) for {}: {}", count, indexProperty, uri, sample);
+			}
+		}
 	}
 
 	protected Entry getItemInRepositoryByMMdURI(URI mmdURI) {

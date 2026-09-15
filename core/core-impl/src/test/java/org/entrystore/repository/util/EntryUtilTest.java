@@ -53,13 +53,9 @@ public class EntryUtilTest {
 		return entry;
 	}
 
-	private static String lastSegmentOf(String uri) {
-		return uri.substring(uri.lastIndexOf('/') + 1);
-	}
-
 	private static List<String> idsOf(List<Entry> entries) {
 		return entries.stream()
-			.map(e -> e == null ? null : lastSegmentOf(e.getEntryURI().toString()))
+			.map(e -> e == null ? null : URISplit.getLastSegment(e.getEntryURI().toString()))
 			.toList();
 	}
 

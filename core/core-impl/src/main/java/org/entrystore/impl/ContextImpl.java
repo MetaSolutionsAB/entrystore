@@ -266,13 +266,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 	protected ContextImpl(EntryImpl entry, String uri, SoftCache softCache) {
 		super(entry, uri);
 		this.softCache = softCache;
-		this.id = uri.substring(uri.lastIndexOf('/') + 1);
+		this.id = URISplit.getLastSegment(uri);
 	}
 
 	public ContextImpl(EntryImpl entry, IRI contextUri, SoftCache softCache) {
 		super(entry, contextUri);
 		this.softCache = softCache;
-		this.id = resourceURI.toString().substring(resourceURI.toString().lastIndexOf('/') + 1);
+		this.id = URISplit.getLastSegment(resourceURI.toString());
 	}
 
 	/**
@@ -954,26 +954,34 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	/**
-	 * Resolves the list an entry is being created into.
-	 * <p>
-	 * Deliberately null-tolerant: a listURI that names no entry is indistinguishable here from one
-	 * that names something other than a local list, because {@link #create} must not reveal which of
-	 * the two it was until the caller has passed authorization.
+	 * Resolves the list whose ACL is to be copied.
 	 *
-	 * @param listURI the resource URI of the list, or null to create directly in the context.
-	 * @return the list, or null when listURI is null, names no entry, or names an entry that is not a
-	 * local list. A null return means "create directly in the context", which also selects the
-	 * stricter authorization tier in {@link #create}.
+	 * @param listURI the resource URI of the list, or null.
+	 * @return the list, or null when listURI is null, names no entry, or names an entry that is not
+	 * a local list. Callers must handle null — {@link #copyACL(org.entrystore.List, Entry)} does not.
 	 * @throws IllegalArgumentException if listURI does not sit under the repository base URL.
 	 */
 	private ListImpl getList(URI listURI) {
-		if (listURI != null) {
-			Entry listItem = getByEntryURI(listEntryURI(listURI));
-			if (listItem != null
-				&& listItem.getGraphType() == GraphType.List
-				&& listItem.getEntryType() == EntryType.Local) {
-				return (ListImpl) listItem.getResource();
-			}
+		return asLocalList(getListEntry(listURI));
+	}
+
+	/**
+	 * @param listURI the resource URI of a list, or null.
+	 * @return the entry named by listURI, or null when listURI is null or names no entry.
+	 * @throws IllegalArgumentException if listURI does not sit under the repository base URL.
+	 */
+	private Entry getListEntry(URI listURI) {
+		return listURI == null ? null : getByEntryURI(listEntryURI(listURI));
+	}
+
+	/**
+	 * @return the resource of listItem when it is a local list, null otherwise.
+	 */
+	private static ListImpl asLocalList(Entry listItem) {
+		if (listItem != null
+			&& listItem.getGraphType() == GraphType.List
+			&& listItem.getEntryType() == EntryType.Local) {
+			return (ListImpl) listItem.getResource();
 		}
 		return null;
 	}
@@ -1023,9 +1031,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 */
 	private EntryImpl create(String entryId, URI resourceURI, URI metadataURI, EntryType entryType,
 							 GraphType graphType, ResourceType resourceType, URI listURI) {
-		ListImpl list = getList(listURI);
+		Entry listItem = getListEntry(listURI);
+		ListImpl list = asLocalList(listItem);
 		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
-		if (listURI != null && list == null && getByEntryURI(listEntryURI(listURI)) == null) {
+		if (listURI != null && listItem == null) {
 			throw new IllegalArgumentException("No entry found for list URI " + listURI);
 		}
 		synchronized (this.entry.repository) {

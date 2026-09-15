@@ -401,4 +401,59 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		assertTrue(links.contains(linkEntry));
 	}
 
+	/** Adds a resHasEntry triple whose object is a literal, which no index triple may ever be. */
+	private void addLiteralIndexTriple(Entry contextEntry, URI subject, String literal) {
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			rc.add(vf.createIRI(subject.toString()),
+				RepositoryProperties.resHasEntry,
+				vf.createLiteral(literal),
+				vf.createIRI(contextEntry.getResourceURI().toString()));
+		}
+	}
+
+	@Test
+	public void getLinks_skipsIndexTriplesWhoseObjectIsNotAnIRI() {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		Entry linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
+		URI resourceURI = linkEntry.getResourceURI();
+
+		// a literal object is what a caller holding WriteMetadata can write under an index predicate
+		addLiteralIndexTriple(contextEntry, resourceURI, "not an entry URI at all");
+
+		Set<Entry> links = cm.getLinks(resourceURI);
+
+		assertEquals(1, links.size());
+		assertTrue(links.contains(linkEntry));
+	}
+
+	@Test
+	public void getReferences_readsTheMetadataIndexAndKeepsOnlyReferences() {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		URI externalMetadata = URI.create("http://example.com/shared-md");
+		Entry reference = context.createReference(null, URI.create("http://reddit.com/a"), externalMetadata, null);
+		Entry linkReference = context.createLinkReference(null, URI.create("http://reddit.com/b"), externalMetadata, null);
+
+		// both entries index the same external metadata URI, so only the entry type separates them
+		Set<Entry> references = cm.getReferences(externalMetadata);
+
+		assertEquals(1, references.size());
+		assertTrue(references.contains(reference));
+		assertFalse(references.contains(linkReference));
+	}
+
+	@Test
+	public void getLinks_readsTheResourceIndexAndKeepsOnlyLinks() {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		URI externalMetadata = URI.create("http://example.com/shared-md");
+		Entry linkReference = context.createLinkReference(null, URI.create("http://reddit.com/b"), externalMetadata, null);
+
+		// resHasEntry is keyed by resource URI, so a metadata URI matches nothing in it
+		assertTrue(cm.getLinks(externalMetadata).isEmpty());
+		// and a LinkReference sits in the resource index without being a Link
+		assertTrue(cm.getLinks(linkReference.getResourceURI()).isEmpty());
+	}
 }
