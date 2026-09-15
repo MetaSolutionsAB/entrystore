@@ -91,6 +91,7 @@ import java.util.NoSuchElementException;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.regex.Pattern;
 
 /**
  * @author Matthias Palmer
@@ -104,6 +105,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	private static final int UNUSABLE_TRIPLE_SAMPLE_SIZE = 5;
 	/** Bounds one sampled object, which can be a store-fed literal of arbitrary length. */
 	private static final int UNUSABLE_TRIPLE_SAMPLE_MAX_CHARS = 200;
+
+	/** C0/C1 controls plus the Unicode line separators, none of which may reach a plain-text appender. */
+	private static final Pattern CONTROL_CHARACTERS = Pattern.compile("[\\p{Cc}\\u2028\\u2029]");
 
 	public ContextManagerImpl(RepositoryManagerImpl rman, Repository repo) {
 		super(new EntryImpl(rman,repo), URISplit.createURI(rman.getRepositoryURL().toString(),
@@ -1030,7 +1034,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				} catch (AuthorizationException ae) {
 					// excluded rather than reported, per the interface contract
 				} catch (IllegalArgumentException | IndexOutOfBoundsException | NoSuchElementException e) {
-					unusable.skipped(object, e);
+					unusable.skipped(object, e.toString());
 				}
 			}
 		} catch (RepositoryException e) {
@@ -1046,8 +1050,10 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	 * warning per call.
 	 * <p>
 	 * A sampled object comes from the store, where a caller holding WriteMetadata can put a literal
-	 * of any size and content under an index predicate, so each one is truncated and stripped of the
-	 * line breaks that would otherwise let it forge whole log records.
+	 * of any size and content under an index predicate, so the object and its reason are bounded
+	 * separately and the rendering is stripped of the control characters that would otherwise let it
+	 * forge whole log records. The reason is bounded too: URI.create echoes the whole offending IRI
+	 * in its message.
 	 */
 	static final class UnusableTriples {
 
@@ -1060,21 +1066,24 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		void skipped(Value object, String reason) {
 			count++;
 			if (sample.size() < UNUSABLE_TRIPLE_SAMPLE_SIZE) {
-				String rendered = object + " (" + reason + ")";
-				if (rendered.length() > UNUSABLE_TRIPLE_SAMPLE_MAX_CHARS) {
-					rendered = rendered.substring(0, UNUSABLE_TRIPLE_SAMPLE_MAX_CHARS) + "...";
-				}
-				sample.add(rendered.replace('\r', ' ').replace('\n', ' '));
+				sample.add(sanitize(truncate(String.valueOf(object)) + " (" + truncate(reason) + ")"));
 			}
 		}
 
-		/** Renders the cause only while it can still be sampled, since most calls skip nothing. */
-		void skipped(Value object, Throwable cause) {
-			if (sample.size() < UNUSABLE_TRIPLE_SAMPLE_SIZE) {
-				skipped(object, cause.toString());
-			} else {
-				count++;
+		/** Cuts on a code point boundary, so a truncated sample cannot end in a lone surrogate. */
+		private static String truncate(String text) {
+			if (text.length() <= UNUSABLE_TRIPLE_SAMPLE_MAX_CHARS) {
+				return text;
 			}
+			int end = UNUSABLE_TRIPLE_SAMPLE_MAX_CHARS;
+			if (Character.isHighSurrogate(text.charAt(end - 1))) {
+				end--;
+			}
+			return text.substring(0, end) + "...";
+		}
+
+		private static String sanitize(String rendered) {
+			return CONTROL_CHARACTERS.matcher(rendered).replaceAll(" ");
 		}
 
 		void warn(Logger log, IRI indexProperty, URI uri) {

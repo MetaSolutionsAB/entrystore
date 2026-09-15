@@ -954,18 +954,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	/**
-	 * Resolves the list whose ACL is to be copied.
-	 *
-	 * @param listURI the resource URI of the list, or null.
-	 * @return the list, or null when listURI is null, names no entry, or names an entry that is not
-	 * a local list. Callers must handle null — {@link #copyACL(org.entrystore.List, Entry)} does not.
-	 * @throws IllegalArgumentException if listURI does not sit under the repository base URL.
-	 */
-	private ListImpl getList(URI listURI) {
-		return asLocalList(getListEntry(listURI));
-	}
-
-	/**
 	 * @param listURI the resource URI of a list, or null.
 	 * @return the entry named by listURI, or null when listURI is null or names no entry.
 	 * @throws IllegalArgumentException if listURI does not sit under the repository base URL.
@@ -1110,7 +1098,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	public void copyACL(URI fromList, Entry toEntry) {
-		copyACL(getList(fromList), toEntry);
+		// null when fromList is not a local list, which NPEs below — see ENTRYSTORE-1116
+		copyACL(asLocalList(getListEntry(fromList)), toEntry);
 	}
 
 	public Entry get(String entryId) {
