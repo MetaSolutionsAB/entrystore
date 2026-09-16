@@ -249,6 +249,27 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 				"an index mapping without an entry cannot hold a membership and must not stop the scan from being cached");
 	}
 
+	/**
+	 * The scan treats a listed entry it cannot load as one that cannot hold a membership, which is only safe
+	 * because a failed store read reaches it as an exception rather than as null: {@code ContextImpl} catches
+	 * the RDF4J RepositoryException but rethrows the core one. Pins the scan's half of that contract, so
+	 * widening the catch, or adding a log-and-return-null path, cannot silently turn a read failure into a
+	 * short scan that is published as authoritative.
+	 */
+	@Test
+	public void unreadableIndexedEntryFailsTheDecisionAndIsNotCached() {
+		group.addMember(user);
+		PrincipalManagerImpl spied = spy(pmi);
+		doThrow(new org.entrystore.repository.RepositoryException("simulated store failure"))
+				.when(spied).getByEntryURI(groupEntry.getEntryURI());
+
+		assertThrows(org.entrystore.repository.RepositoryException.class,
+				() -> spied.getGroupUrisCached(user.getURI()));
+
+		assertFalse(pmi.cachedGroupsView().containsKey(user.getURI()),
+				"a scan that could not read a listed entry must fail the decision rather than be cached");
+	}
+
 	@Test
 	public void indexIncompleteWhenListedIsNotCached() {
 		group.addMember(user);
@@ -306,8 +327,13 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 	public void failedRemoveChildNotifiesListenersAndRestoresMembers() {
 		group.addMember(user);
 		GroupImpl spied = spy((GroupImpl) group);
-		doThrow(new org.eclipse.rdf4j.repository.RepositoryException("simulated write failure"))
-				.when(spied).saveChildren(any(RepositoryConnection.class));
+		// Closing the connection first makes the recovery's rollback fail too. That is the state the ordering
+		// exists for: a broken connection is what fails the write in the first place, and with the restore and
+		// the event sitting behind the rollback neither one would run.
+		doAnswer(invocation -> {
+			invocation.getArgument(0, RepositoryConnection.class).close();
+			throw new org.eclipse.rdf4j.repository.RepositoryException("simulated write failure");
+		}).when(spied).saveChildren(any(RepositoryConnection.class));
 		RecordingListener recorder = RecordingListener.register((RepositoryManagerImpl) rm);
 		try {
 			assertFalse(spied.removeChild(userEntry.getEntryURI()), "the failed removal must be reported");

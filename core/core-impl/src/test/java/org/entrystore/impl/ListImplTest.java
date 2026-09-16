@@ -16,6 +16,10 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -38,8 +42,15 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 
 public class ListImplTest extends AbstractCoreTest {
 
@@ -312,6 +323,81 @@ public class ListImplTest extends AbstractCoreTest {
 		assertNull(duck.getByEntryURI(linkEntry2.getEntryURI()));
 		assertNotNull(duck.getByEntryURI(listE3.getEntryURI()));
 		assertNotNull(duck.getByEntryURI(linkEntry3.getEntryURI()));
+	}
+
+	/**
+	 * A reader that is already loading the members when a prune commits must not publish its copy afterwards:
+	 * an authorization scan would then read a membership the store no longer holds. The reader and
+	 * {@link ListImpl#invalidateChildren()} therefore have to contend for one monitor.
+	 */
+	@Test
+	public void invalidateChildren_waitsForAReaderThatIsLoadingThePrePruneList() throws Exception {
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry kept = duck.createLink(null, URI.create("https://slashdot.org/"), listEntry.getResourceURI());
+		Entry pruned = duck.createLink(null, URI.create("https://digg.com/"), listEntry.getResourceURI());
+
+		ListImpl list = spy((ListImpl) listEntry.getResource());
+		list.invalidateChildren();
+		CountDownLatch readerHoldsPrePruneGraph = new CountDownLatch(1);
+		CountDownLatch pruneCommitted = new CountDownLatch(1);
+		doAnswer(invocation -> {
+			Model graph = (Model) invocation.callRealMethod();
+			readerHoldsPrePruneGraph.countDown();
+			if (!pruneCommitted.await(10, TimeUnit.SECONDS)) {
+				throw new IllegalStateException("the loading reader was never released");
+			}
+			return graph;
+		}).when(list).getGraph();
+
+		ExecutorService reader = Executors.newSingleThreadExecutor();
+		try {
+			Future<java.util.List<URI>> readerView = reader.submit(() -> {
+				pm.setAuthenticatedUserURI(donald);
+				return list.getChildren();
+			});
+			assertTrue(readerHoldsPrePruneGraph.await(10, TimeUnit.SECONDS),
+				"precondition: the reader must have loaded the graph as it was before the prune");
+
+			// commit the prune the way a transaction on another thread does: through its own connection,
+			// taking none of the monitors this class uses
+			ValueFactory vf = rm.getRepository().getValueFactory();
+			IRI listResource = vf.createIRI(listEntry.getResourceURI().toString());
+			try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+				rc.remove(listResource, null, vf.createIRI(pruned.getEntryURI().toString()), listResource);
+			}
+
+			Thread invalidator = new Thread(list::invalidateChildren, "invalidate-children");
+			invalidator.start();
+			assertEquals(Thread.State.BLOCKED, awaitBlockedOrTerminated(invalidator),
+				"invalidateChildren() must wait for the monitor the loading reader holds; on a different "
+					+ "monitor it drops the members before the reader publishes them again");
+
+			pruneCommitted.countDown();
+			assertTrue(readerView.get(10, TimeUnit.SECONDS).contains(pruned.getEntryURI()),
+				"precondition: the reader really did load the pre-prune members");
+			invalidator.join(TimeUnit.SECONDS.toMillis(10));
+
+			assertFalse(list.getChildren().contains(pruned.getEntryURI()),
+				"a read after the invalidation must reflect the committed prune, not the reader's copy");
+			assertTrue(list.getChildren().contains(kept.getEntryURI()), "the surviving member must remain");
+		} finally {
+			pruneCommitted.countDown();
+			reader.shutdownNow();
+		}
+	}
+
+	/** Waits until {@code thread} settles on a monitor or finishes, so a test can tell those two apart. */
+	private static Thread.State awaitBlockedOrTerminated(Thread thread) throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		Thread.State state = thread.getState();
+		while (state != Thread.State.BLOCKED && state != Thread.State.TERMINATED && System.nanoTime() < deadline) {
+			Thread.sleep(1);
+			state = thread.getState();
+		}
+		return state;
 	}
 
 }

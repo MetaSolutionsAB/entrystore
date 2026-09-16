@@ -103,6 +103,14 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	 */
 	private final AtomicLong userGroupsCacheEpoch = new AtomicLong();
 
+	/**
+	 * Entry URIs already reported by {@link #scanGroups(URI)} as listed in the index but not loadable. A dangling
+	 * index mapping persists until the index is repaired, and the scan runs on the authorization decision path, so
+	 * warning on every occurrence would put an unbounded log write there: each URI is warned about once and logged
+	 * at debug afterwards. Bounded by the number of distinct dangling mappings encountered.
+	 */
+	private final Set<URI> reportedUnloadableEntries = ConcurrentHashMap.newKeySet();
+
 	@Getter(AccessLevel.PACKAGE)
 	private final boolean groupCacheEnabled;
 
@@ -309,8 +317,14 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		for (URI nextURI : getEntries()) {
 			Entry nextEntry = getByEntryURI(nextURI);
 			if (nextEntry == null) {
-				log.warn("Entry {} is listed in the principals index but could not be loaded (deleted concurrently, "
-						+ "or a stale index mapping); skipping it in the group scan", nextURI);
+				if (reportedUnloadableEntries.add(nextURI)) {
+					log.warn("Entry {} is listed in the principals index but could not be loaded (deleted "
+							+ "concurrently, or a stale index mapping); it is skipped in every group scan until "
+							+ "the index is repaired, and further occurrences are logged at debug level", nextURI);
+				} else {
+					log.debug("Entry {} is listed in the principals index but could not be loaded; skipping it "
+							+ "in the group scan", nextURI);
+				}
 				continue;
 			}
 			if (GraphType.Group.equals(nextEntry.getGraphType())
