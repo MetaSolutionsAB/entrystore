@@ -301,67 +301,133 @@ public class EntryImplTest extends AbstractCoreTest {
 		assertTrue(targetEntry.getRelations().isEmpty());
 	}
 
-	private boolean hasStatementsInNamedGraph(URI namedGraph) {
-		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
-			return rc.hasStatement(null, null, null, false, rc.getValueFactory().createIRI(namedGraph.toString()));
-		}
+	@Test
+	public void setResourceURI_refusesALocalEntry() {
+		URI listURI = listEntry.getResourceURI();
+		assertThrows(IllegalArgumentException.class, () -> listEntry.setResourceURI(URI.create(listURI + "-renamed")));
+		URI fileURI = resourceEntry.getResourceURI();
+		assertThrows(IllegalArgumentException.class, () -> resourceEntry.setResourceURI(URI.create(fileURI + "-renamed")));
+		Entry contextEntry = context.getEntry();
+		assertThrows(IllegalArgumentException.class,
+			() -> contextEntry.setResourceURI(URI.create(contextEntry.getResourceURI() + "-renamed")));
+		Entry daisy = pm.getPrincipalEntry("Daisy");
+		assertThrows(IllegalArgumentException.class,
+			() -> daisy.setResourceURI(URI.create(daisy.getResourceURI() + "-renamed")));
+
+		assertEquals(listURI, listEntry.getResourceURI());
 	}
 
 	@Test
-	public void setResourceURI_onAListMovesTheListGraphAndKeepsTheChildren() {
-		((List) listEntry.getResource()).addChild(linkEntry.getEntryURI());
+	public void setResourceURI_onALinkKeepsTypeAclMetadataAndIndex() {
+		linkEntry.setGraphType(GraphType.List);
 		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
-		listEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
 		ValueFactory vf = rm.getValueFactory();
-		IRI oldResourceIRI = vf.createIRI(listEntry.getResourceURI().toString());
+		URI oldResourceURI = linkEntry.getResourceURI();
+		IRI oldResourceIRI = vf.createIRI(oldResourceURI.toString());
 		Model metadata = new LinkedHashModel();
 		metadata.add(oldResourceIRI, DCTERMS.TITLE, vf.createLiteral("kept across the rename"));
-		listEntry.getLocalMetadata().setGraph(metadata);
-		URI oldResourceURI = listEntry.getResourceURI();
-		URI newResourceURI = URI.create(oldResourceURI + "-renamed");
+		linkEntry.getLocalMetadata().setGraph(metadata);
+		URI newResourceURI = URI.create("http://slashdot.org/renamed");
 
-		listEntry.setResourceURI(newResourceURI);
+		linkEntry.setResourceURI(newResourceURI);
 
-		assertEquals(newResourceURI, listEntry.getResourceURI());
-		// both hang off the resource URI as subject inside the entry graph, so both follow the rename
-		assertEquals(GraphType.List, listEntry.getGraphType());
-		assertTrue(listEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
-		Model renamedMetadata = listEntry.getLocalMetadata().getGraph();
+		assertEquals(newResourceURI, linkEntry.getResourceURI());
+		// type and resource-level ACL hang off the resource URI as subject inside the entry graph
+		assertEquals(GraphType.List, linkEntry.getGraphType());
+		assertTrue(linkEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
+		Model renamedMetadata = linkEntry.getLocalMetadata().getGraph();
 		assertTrue(renamedMetadata.contains(vf.createIRI(newResourceURI.toString()), DCTERMS.TITLE, null));
 		assertFalse(renamedMetadata.contains(oldResourceIRI, null, null));
-		// the children live in the list's own named graph, so they only survive if that graph moved
-		assertTrue(((List) listEntry.getResource()).getChildren().contains(linkEntry.getEntryURI()));
-		assertFalse(hasStatementsInNamedGraph(oldResourceURI));
-		assertTrue(hasStatementsInNamedGraph(newResourceURI));
-		// the context index followed the rename
-		assertTrue(context.getByResourceURI(newResourceURI).contains(listEntry));
+		assertTrue(context.getByResourceURI(newResourceURI).contains(linkEntry));
 		assertTrue(context.getByResourceURI(oldResourceURI).isEmpty());
 	}
 
 	@Test
-	public void setResourceURI_onAStringResourceMovesItsGraph() {
-		Entry stringEntry = context.createResource(null, GraphType.String, null, null);
-		((StringResource) stringEntry.getResource()).setString("kept across the rename");
-		URI oldResourceURI = stringEntry.getResourceURI();
-		URI newResourceURI = URI.create(oldResourceURI + "-renamed");
+	public void setResourceURI_onALinkReferenceRewritesTheCachedExternalMetadata() {
+		ValueFactory vf = rm.getValueFactory();
+		IRI oldResourceIRI = vf.createIRI(refLinkEntry.getResourceURI().toString());
+		Model cached = new LinkedHashModel();
+		cached.add(oldResourceIRI, DCTERMS.TITLE, vf.createLiteral("cached"));
+		refLinkEntry.getCachedExternalMetadata().setGraph(cached);
+		URI newResourceURI = URI.create("http://vk.se/renamed");
 
-		stringEntry.setResourceURI(newResourceURI);
+		refLinkEntry.setResourceURI(newResourceURI);
 
-		assertEquals("kept across the rename", ((StringResource) stringEntry.getResource()).getString());
-		assertFalse(hasStatementsInNamedGraph(oldResourceURI));
-		assertTrue(hasStatementsInNamedGraph(newResourceURI));
+		Model renamed = refLinkEntry.getCachedExternalMetadata().getGraph();
+		assertTrue(renamed.contains(vf.createIRI(newResourceURI.toString()), DCTERMS.TITLE, null));
+		assertFalse(renamed.contains(oldResourceIRI, null, null));
 	}
 
 	@Test
-	public void setResourceURI_onAFileEntryLeavesNoResourceGraphBehind() {
-		URI oldResourceURI = resourceEntry.getResourceURI();
-		URI newResourceURI = URI.create(oldResourceURI + "-renamed");
+	public void setResourceURI_mayTargetAURLAnotherLinkAlreadyUses() {
+		URI shared = refLinkEntry.getResourceURI();
 
-		resourceEntry.setResourceURI(newResourceURI);
+		linkEntry.setResourceURI(shared);
 
-		assertEquals(newResourceURI, resourceEntry.getResourceURI());
-		assertFalse(hasStatementsInNamedGraph(oldResourceURI));
-		assertFalse(hasStatementsInNamedGraph(newResourceURI));
+		Set<Entry> holders = context.getByResourceURI(shared);
+		assertTrue(holders.contains(linkEntry));
+		assertTrue(holders.contains(refLinkEntry));
+	}
+
+	@Test
+	public void setResourceURI_keepsTheContributorTheMetadataWriteAdded() {
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		ValueFactory vf = rm.getValueFactory();
+		EntryImpl impl = (EntryImpl) linkEntry;
+		IRI admin = vf.createIRI(pm.getAdminUser().getURI().toString());
+		assertFalse(linkEntry.getGraph().contains(impl.getSesameEntryURI(), RepositoryProperties.Contributor, admin));
+		Model metadata = new LinkedHashModel();
+		metadata.add(impl.getSesameResourceURI(), DCTERMS.TITLE, vf.createLiteral("triggers a metadata write"));
+		linkEntry.getLocalMetadata().setGraph(metadata);
+
+		linkEntry.setResourceURI(URI.create("http://slashdot.org/renamed"));
+
+		// the metadata rewrite inside the rename adds the contributor to the entry graph; the entry-graph
+		// rewrite that follows must carry it rather than restore a snapshot taken before it
+		assertTrue(linkEntry.getGraph().contains(impl.getSesameEntryURI(), RepositoryProperties.Contributor, admin));
+	}
+
+	@Test
+	public void setGraph_renamingTheResourceKeepsTheTypeAndTheResourceAcl() {
+		linkEntry.setGraphType(GraphType.List);
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		EntryImpl impl = (EntryImpl) linkEntry;
+		IRI oldResourceURI = impl.getSesameResourceURI();
+		IRI newResourceURI = rm.getValueFactory().createIRI("http://slashdot.org/renamed");
+		// what a client PUTs back: the GET body with only es:resource changed
+		Model body = new LinkedHashModel(linkEntry.getGraph());
+		body.remove(impl.getSesameEntryURI(), RepositoryProperties.resource, oldResourceURI);
+		body.add(impl.getSesameEntryURI(), RepositoryProperties.resource, newResourceURI);
+
+		linkEntry.setGraph(body);
+
+		assertEquals(URI.create(newResourceURI.stringValue()), linkEntry.getResourceURI());
+		assertEquals(GraphType.List, linkEntry.getGraphType());
+		assertTrue(linkEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
+	}
+
+	@Test
+	public void setResourceURI_updatesTheInverseRelationOnTheTargetEntry() {
+		// only a statement between two repository resources is cached as an inverse relation, so the
+		// link points at a local resource and is renamed to another one
+		EntryImpl source = (EntryImpl) context.createLink(null, resourceEntry.getResourceURI(), null);
+		EntryImpl target = (EntryImpl) context.createResource(null, GraphType.None, null, null);
+		ValueFactory vf = source.getRepository().getValueFactory();
+		IRI related = vf.createIRI("http://example.com/related");
+		IRI oldResourceURI = source.getSesameResourceURI();
+		Model graph = source.getGraph();
+		graph.add(oldResourceURI, related, target.getSesameResourceURI());
+		source.setGraph(graph);
+		assertTrue(target.getRelations().contains(oldResourceURI, related, target.getSesameResourceURI()));
+		URI newResourceURI = listEntry.getResourceURI();
+
+		source.setResourceURI(newResourceURI);
+
+		Model relations = target.getRelations();
+		assertTrue(relations.contains(vf.createIRI(newResourceURI.toString()), related, target.getSesameResourceURI()));
+		assertFalse(relations.contains(oldResourceURI, null, null));
 	}
 
 	@Test
@@ -389,67 +455,6 @@ public class EntryImplTest extends AbstractCoreTest {
 			assertFalse(rc.hasStatement(null, RepositoryProperties.Read, rc.getValueFactory().createIRI(daisy.toString()), false, entryIRI));
 			assertTrue(rc.hasStatement(null, RepositoryProperties.Read, rc.getValueFactory().createIRI(donald.toString()), false, entryIRI));
 		}
-	}
-
-	@Test
-	public void setGraph_renamingTheResourceKeepsTheResourceAclAndTheChildren() {
-		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
-		listEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
-		((List) listEntry.getResource()).addChild(linkEntry.getEntryURI());
-		EntryImpl impl = (EntryImpl) listEntry;
-		IRI oldResourceURI = impl.getSesameResourceURI();
-		IRI newResourceURI = rm.getValueFactory().createIRI(oldResourceURI + "-renamed");
-		// what a client PUTs back: the GET body with only es:resource changed
-		Model body = new LinkedHashModel(listEntry.getGraph());
-		body.remove(impl.getSesameEntryURI(), RepositoryProperties.resource, oldResourceURI);
-		body.add(impl.getSesameEntryURI(), RepositoryProperties.resource, newResourceURI);
-
-		listEntry.setGraph(body);
-
-		assertEquals(URI.create(newResourceURI.stringValue()), listEntry.getResourceURI());
-		assertTrue(listEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
-		assertTrue(((List) listEntry.getResource()).getChildren().contains(linkEntry.getEntryURI()));
-	}
-
-	@Test
-	public void setResourceURI_refusesAURIAlreadyInUse() {
-		URI taken = resourceEntry.getResourceURI();
-		URI before = listEntry.getResourceURI();
-
-		assertThrows(IllegalArgumentException.class, () -> listEntry.setResourceURI(taken));
-
-		assertEquals(before, listEntry.getResourceURI());
-		assertEquals(taken, resourceEntry.getResourceURI());
-	}
-
-	@Test
-	public void setResourceURI_refusesAContextAndAPrincipal() {
-		Entry contextEntry = context.getEntry();
-		Entry daisy = pm.getPrincipalEntry("Daisy");
-
-		assertThrows(IllegalArgumentException.class,
-			() -> contextEntry.setResourceURI(URI.create(contextEntry.getResourceURI() + "-renamed")));
-		assertThrows(IllegalArgumentException.class,
-			() -> daisy.setResourceURI(URI.create(daisy.getResourceURI() + "-renamed")));
-	}
-
-	@Test
-	public void setResourceURI_updatesTheInverseRelationOnTheTargetEntry() {
-		EntryImpl source = (EntryImpl) context.createResource(null, GraphType.None, null, null);
-		EntryImpl target = (EntryImpl) context.createResource(null, GraphType.None, null, null);
-		ValueFactory vf = source.getRepository().getValueFactory();
-		IRI related = vf.createIRI("http://example.com/related");
-		IRI oldResourceURI = source.getSesameResourceURI();
-		Model graph = source.getGraph();
-		graph.add(oldResourceURI, related, target.getSesameResourceURI());
-		source.setGraph(graph);
-		URI newResourceURI = URI.create(oldResourceURI + "-renamed");
-
-		source.setResourceURI(newResourceURI);
-
-		Model relations = target.getRelations();
-		assertTrue(relations.contains(vf.createIRI(newResourceURI.toString()), related, target.getSesameResourceURI()));
-		assertFalse(relations.contains(oldResourceURI, null, null));
 	}
 
 	@Test

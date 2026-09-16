@@ -663,41 +663,36 @@ public class EntryImpl implements Entry {
 
 		checkAdministerRights();
 
-		// a context's URI keys its index graph; a principal's URI is the object of every ACL naming it
-		GraphType graphType = getGraphType();
-		if (graphType == GraphType.Context || graphType == GraphType.SystemContext
-			|| graphType == GraphType.User || graphType == GraphType.Group) {
-			throw new IllegalArgumentException("The resource URI of a " + graphType + " cannot be changed");
+		// a local resource URI is derived from the entry id and keys the resource's own graph
+		if (locType == EntryType.Local) {
+			throw new IllegalArgumentException("The resource URI of a local entry cannot be changed");
 		}
 
 		ValueFactory vf = getRepositoryManager().getValueFactory();
 		IRI oldResourceURI = vf.createIRI(getResourceURI().toString());
 		IRI newResourceURI = vf.createIRI(resourceURI.toString());
 
-		// the graph type, resource type and resource-level ACL hang off the resource URI as subject,
-		// so the object of es:resource is not the only thing to rewrite
-		Model newEntryGraph = ModelUtil.replaceIRI(getGraph(), oldResourceURI, newResourceURI);
+		// outside the transaction below: MetadataImpl.setGraph maintains other entries' relation caches,
+		// and resURI is still the old one, so a failure below leaves the rename retryable
 		Model newMetadataGraph = renamedGraph(getLocalMetadata(), oldResourceURI, newResourceURI);
+		if (newMetadataGraph != null) {
+			getLocalMetadata().setGraph(newMetadataGraph);
+		}
 		Model newCachedExternalMetadataGraph = renamedGraph(getCachedExternalMetadata(), oldResourceURI, newResourceURI);
-		boolean hasBuiltinGraph = getResource() instanceof RDFResource;
+		if (newCachedExternalMetadataGraph != null) {
+			getCachedExternalMetadata().setGraph(newCachedExternalMetadataGraph);
+		}
 
 		try {
 			synchronized (this.repository) {
 				try (RepositoryConnection rc = this.repository.getConnection()) {
-					if (isResourceURIInUse(rc, newResourceURI)) {
-						throw new IllegalArgumentException("Resource URI " + resourceURI + " is already in use");
-					}
-
-					// metadata first: resURI is still the old one, so a failure below leaves the rename retryable
-					if (newMetadataGraph != null) {
-						getLocalMetadata().setGraph(newMetadataGraph);
-					}
-					if (newCachedExternalMetadataGraph != null) {
-						getCachedExternalMetadata().setGraph(newCachedExternalMetadataGraph);
-					}
-
 					rc.begin();
 					try {
+						// read here, since the metadata writes above also touched this graph; the graph type,
+						// resource type and resource-level ACL hang off the resource URI as subject
+						Model newEntryGraph = ModelUtil.replaceIRI(
+							Iterations.addAll(rc.getStatements(null, null, null, false, entryURI), new LinkedHashModel()),
+							oldResourceURI, newResourceURI);
 						removeInverseRelations(rc);
 						rc.clear(entryURI);
 						rc.add(newEntryGraph, entryURI);
@@ -707,19 +702,9 @@ public class EntryImpl implements Entry {
 						IRI contextURI = vf.createIRI(this.getContext().getEntry().getResourceURI().toString());
 						rc.remove(vf.createStatement(oldResourceURI, RepositoryProperties.resHasEntry, entryURI, contextURI));
 						rc.add(vf.createStatement(newResourceURI, RepositoryProperties.resHasEntry, entryURI, contextURI));
-
-						if (hasBuiltinGraph) {
-							// an RDFResource keeps its graph in a named graph keyed by its own URI
-							for (Statement statement : Iterations.asList(rc.getStatements(null, null, null, false, oldResourceURI))) {
-								org.eclipse.rdf4j.model.Resource subject =
-									oldResourceURI.equals(statement.getSubject()) ? newResourceURI : statement.getSubject();
-								rc.add(subject, statement.getPredicate(), statement.getObject(), newResourceURI);
-							}
-							rc.clear(oldResourceURI);
-						}
 						rc.commit();
 					} catch (Exception e) {
-						rc.rollback();
+						rollbackQuietly(rc, e);
 						throw new org.entrystore.repository.RepositoryException("Failed to move resource " + oldResourceURI + " to " + newResourceURI, e);
 					}
 					loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, entryURI)));
@@ -730,8 +715,6 @@ public class EntryImpl implements Entry {
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 
-		// the resource object holds its URI from construction, so it is rebuilt on next access
-		this.resource = null;
 		getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
 		this.context.updateResource2EntryIndex(
 				URI.create(oldResourceURI.stringValue()),
@@ -748,16 +731,22 @@ public class EntryImpl implements Entry {
 		return graph == null || graph.isEmpty() ? null : ModelUtil.replaceIRI(graph, from, to);
 	}
 
-	/**
-	 * A builtin resource or a context keeps a named graph at its URI and a repository resource has an
-	 * index triple; an external URL has neither, and many Links may legitimately share one.
-	 */
-	private boolean isResourceURIInUse(RepositoryConnection rc, IRI candidate) throws RepositoryException {
-		if (rc.hasStatement(null, null, null, false, candidate)) {
-			return true;
+	/** Rolls back without losing the failure that made it necessary. */
+	private static void rollbackQuietly(RepositoryConnection rc, Exception cause) {
+		try {
+			rc.rollback();
+		} catch (RepositoryException e) {
+			cause.addSuppressed(e);
 		}
-		boolean repositoryURI = candidate.stringValue().startsWith(repositoryManager.getRepositoryURL().toString());
-		return repositoryURI && rc.hasStatement(candidate, RepositoryProperties.resHasEntry, null, false);
+	}
+
+	/** An IRI the store accepts is not always a java.net.URI, and the JDK's message must not reach the client. */
+	private static URI toURI(IRI iri, String what) {
+		try {
+			return URI.create(iri.stringValue());
+		} catch (IllegalArgumentException e) {
+			throw new IllegalArgumentException("Invalid " + what + " in entry graph", e);
+		}
 	}
 
 	public void setExternalMetadataURI(URI externalMetadataURI) {
@@ -801,7 +790,7 @@ public class EntryImpl implements Entry {
 						rc.add(vf.createStatement(newExternalMetadataURI, RepositoryProperties.mdHasEntry, entryURI, contextURI));
 						rc.commit();
 					} catch (Exception e) {
-						rc.rollback();
+						rollbackQuietly(rc, e);
 						throw new org.entrystore.repository.RepositoryException("Failed to move external metadata " + oldExternalMetadataURI + " to " + newExternalMetadataURI, e);
 					}
 				}
@@ -910,6 +899,9 @@ public class EntryImpl implements Entry {
 	 * copyACL exists to admit.
 	 */
 	void appendAllowedPrincipals(AccessProperty prop, Set<URI> principals) {
+		if (principals.isEmpty()) {
+			return;
+		}
 		Set<IRI> principalIRIs = toIRIs(principals);
 		updateAcl(prop, null, (rc, subject, predicate) -> {
 			addPrincipals(rc, subject, predicate, principalIRIs);
@@ -962,10 +954,11 @@ public class EntryImpl implements Entry {
 						result = update.apply(rc, getAccessSubject(prop), getAccessPredicate(prop));
 						rc.commit();
 					} catch (Exception e) {
-						rc.rollback();
+						rollbackQuietly(rc, e);
 						throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
 					}
-					// only after the commit, or a concurrent reader re-caches the answer this change replaces
+					// after the commit, so a reader loading between invalidation and commit cannot pin the old
+					// answer; one that loaded before the commit and stores after this line still can, briefly
 					this.hasExplicitAcl = null;
 					setCachedAllowedPrincipalsFor(prop, cached);
 					return result;
@@ -1206,7 +1199,7 @@ public class EntryImpl implements Entry {
 			Value newResourceURI = resourceURIStmnts.next().getObject();
 			IRI oldResourceURI = this.resURI;
 			if (newResourceURI instanceof IRI newResourceIRI && !newResourceIRI.equals(oldResourceURI)) {
-				setResourceURI(URI.create(newResourceIRI.toString()));
+				setResourceURI(toURI(newResourceIRI, "resource URI"));
 				// a client echoes the old resource URI as subject of the type and ACL triples it PUTs back
 				metametadata = ModelUtil.replaceIRI(metametadata, oldResourceURI, newResourceIRI);
 			}
@@ -1214,9 +1207,9 @@ public class EntryImpl implements Entry {
 
 		Iterator<Statement> externalMdURIStmnts = metametadata.filter(this.entryURI, RepositoryProperties.externalMetadata, null).iterator();
 		if (externalMdURIStmnts.hasNext()) {
-			Value newResourceURI = externalMdURIStmnts.next().getObject();
-			if (newResourceURI instanceof IRI) {
-				setExternalMetadataURI(URI.create(newResourceURI.toString()));
+			Value newExternalMetadataURI = externalMdURIStmnts.next().getObject();
+			if (newExternalMetadataURI instanceof IRI newExternalMetadataIRI) {
+				setExternalMetadataURI(toURI(newExternalMetadataIRI, "external metadata URI"));
 			}
 		}
 		String originalList = this.getOriginalList();

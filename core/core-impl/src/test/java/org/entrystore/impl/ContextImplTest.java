@@ -50,6 +50,7 @@ import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Data;
+import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
@@ -1324,4 +1325,15 @@ public class ContextImplTest extends AbstractCoreTest {
 		void accept(int index, BooleanSupplier keepRunning) throws Exception;
 	}
 
+
+	@Test
+	public void copyACL_skipsAListURIThatIsNotALocalList() {
+		Context context = (Context) cm.createResource(null, GraphType.Context, null, null).getResource();
+		Entry notAList = context.createResource(null, GraphType.None, null, null);
+		Entry entry = context.createResource(null, GraphType.None, null, null);
+
+		((ContextImpl) context).copyACL(notAList.getResourceURI(), entry);
+
+		assertTrue(entry.getAllowedPrincipalsFor(AccessProperty.Administer).isEmpty());
+	}
 }
