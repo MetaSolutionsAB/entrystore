@@ -552,10 +552,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	/**
 	 * Dispatches {@code eventObject} synchronously to every listener registered for its event and for
-	 * {@link RepositoryEvent#All}. Dispatch is failure-isolated: a listener that throws a RuntimeException is logged
-	 * and the remaining listeners still run, because the set includes the authorization cache invalidator and a
-	 * best-effort indexer must not be able to skip it. Callers therefore never see a listener's RuntimeException; an
-	 * Error still propagates.
+	 * {@link RepositoryEvent#All}. Dispatch is failure-isolated against a listener's RuntimeException: it is logged
+	 * and the remaining listeners still run, so callers never see one. An Error is not isolated — it propagates and
+	 * abandons the rest of the dispatch, which can leave the authorization cache invalidator unreached and its
+	 * cached group sets stale, since listener order is unspecified.
 	 */
 	public void fireRepositoryEvent(RepositoryEventObject eventObject) {
 		// because of concurrency problems the events are fired synchronously,

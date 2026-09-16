@@ -104,10 +104,12 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	private final AtomicLong userGroupsCacheEpoch = new AtomicLong();
 
 	/**
-	 * Entry URIs already reported by {@link #scanGroups(URI)} as listed in the index but not loadable. A dangling
-	 * index mapping persists until the index is repaired, and the scan runs on the authorization decision path, so
-	 * warning on every occurrence would put an unbounded log write there: each URI is warned about once and logged
-	 * at debug afterwards. Bounded by the number of distinct dangling mappings encountered.
+	 * Entry URIs currently reported by {@link #scanGroups(URI)} as listed in the index but not loadable. The scan
+	 * runs on the authorization decision path, so warning on every occurrence would put an unbounded log write
+	 * there: each URI is warned about once and logged at debug while it keeps failing. A URI is dropped again as
+	 * soon as a later scan loads it, which both bounds the set by the mappings that are dangling now — rather than
+	 * by every principal ever deleted mid-scan, since entry URIs are not reused — and re-arms the warning if the
+	 * same URI dangles again after a repair.
 	 */
 	private final Set<URI> reportedUnloadableEntries = ConcurrentHashMap.newKeySet();
 
@@ -319,13 +321,17 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			if (nextEntry == null) {
 				if (reportedUnloadableEntries.add(nextURI)) {
 					log.warn("Entry {} is listed in the principals index but could not be loaded (deleted "
-							+ "concurrently, or a stale index mapping); it is skipped in every group scan until "
-							+ "the index is repaired, and further occurrences are logged at debug level", nextURI);
+							+ "concurrently, or a stale index mapping); it is skipped in the group scan, and while "
+							+ "it keeps failing further occurrences are logged at debug level", nextURI);
 				} else {
 					log.debug("Entry {} is listed in the principals index but could not be loaded; skipping it "
 							+ "in the group scan", nextURI);
 				}
 				continue;
+			}
+			// it loaded, so it is no longer dangling: stop suppressing the warning and let the set shrink again
+			if (!reportedUnloadableEntries.isEmpty()) {
+				reportedUnloadableEntries.remove(nextURI);
 			}
 			if (GraphType.Group.equals(nextEntry.getGraphType())
 					&& nextEntry.getResource() instanceof Group nextGroup && nextGroup.isMember(user)) {

@@ -47,6 +47,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.doAnswer;
@@ -386,6 +387,64 @@ public class ListImplTest extends AbstractCoreTest {
 		} finally {
 			pruneCommitted.countDown();
 			reader.shutdownNow();
+		}
+	}
+
+	/**
+	 * {@code setChildren} must compute its diff while already holding the monitor it commits under. Diffed
+	 * outside it, two concurrent writes to the same list diff the same pre-state, and the loser rewrites the
+	 * member graph without calling {@code removeReferringList} for what the winner added — leaving a relation
+	 * naming a list that no longer contains the entry, which then blocks re-adding it anywhere else.
+	 */
+	@Test
+	public void setChildrenComputesItsDiffUnderTheRepositoryMonitor() throws Exception {
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry member = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+
+		ListImpl list = spy((ListImpl) listEntry.getResource());
+		list.invalidateChildren();
+		CountDownLatch writerIsDiffing = new CountDownLatch(1);
+		CountDownLatch releaseWriter = new CountDownLatch(1);
+		doAnswer(invocation -> {
+			Model graph = (Model) invocation.callRealMethod();
+			writerIsDiffing.countDown();
+			if (!releaseWriter.await(10, TimeUnit.SECONDS)) {
+				throw new IllegalStateException("the diffing writer was never released");
+			}
+			return graph;
+		}).when(list).getGraph();
+
+		ExecutorService writer = Executors.newSingleThreadExecutor();
+		try {
+			writer.submit(() -> {
+				pm.setAuthenticatedUserURI(donald);
+				list.setChildren(java.util.List.of(member.getEntryURI()));
+			});
+			assertTrue(writerIsDiffing.await(10, TimeUnit.SECONDS),
+				"precondition: the writer is loading the members it diffs against");
+
+			AtomicInteger reachedMonitor = new AtomicInteger();
+			Thread contender = new Thread(() -> {
+				synchronized (((EntryImpl) listEntry).repository) {
+					reachedMonitor.incrementAndGet();
+				}
+			}, "monitor-contender");
+			contender.start();
+
+			assertEquals(Thread.State.BLOCKED, awaitBlockedOrTerminated(contender),
+				"a second writer must not be able to take the repository monitor while setChildren is diffing; "
+					+ "if it can, both diff the same pre-state and the loser drops the winner's member");
+
+			releaseWriter.countDown();
+			contender.join(TimeUnit.SECONDS.toMillis(10));
+			assertEquals(1, reachedMonitor.get(), "the contender must get the monitor once the write completes");
+			assertTrue(list.getChildren().contains(member.getEntryURI()), "the write itself must still land");
+		} finally {
+			releaseWriter.countDown();
+			writer.shutdownNow();
 		}
 	}
 
