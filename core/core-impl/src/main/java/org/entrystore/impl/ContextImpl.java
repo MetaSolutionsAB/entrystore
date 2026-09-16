@@ -1078,7 +1078,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	public void copyACL(org.entrystore.List fromList, Entry toEntry) {
 		if (toEntry instanceof EntryImpl entryImpl) {
-			Set<URI> adminPrincipals = fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.Administer);
+			// a copy: the set returned is the source list's live ACL cache
+			Set<URI> adminPrincipals = new HashSet<>(fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.Administer));
 			if (toEntry.getGraphType() != GraphType.List || toEntry.getEntryType() != EntryType.Local) {
 				PrincipalManager pm = toEntry.getRepositoryManager().getPrincipalManager();
 				try {

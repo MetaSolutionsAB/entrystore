@@ -307,4 +307,21 @@ public class PrincipalManagerImplTest extends AbstractCoreTest {
 		}
 	}
 
+
+	@Test
+	public void createInList_asNonOwnerLeavesTheListsCachedAclUntouched() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
+		Context mouse = cm.getContext("mouse");
+		Entry listEntry = mouse.createResource(null, GraphType.List, ResourceType.InformationResource, null);
+		Entry daisy = pm.getPrincipalEntry("Daisy");
+		listEntry.addAllowedPrincipalsFor(AccessProperty.WriteResource, daisy.getResourceURI());
+		Set<URI> listAdmins = Set.copyOf(listEntry.getAllowedPrincipalsFor(AccessProperty.Administer));
+
+		pm.setAuthenticatedUserURI(daisy.getResourceURI());
+		Entry created = mouse.createLink(null, URI.create("http://www.daisy.org"), listEntry.getResourceURI());
+
+		// Daisy administers what she created, and the list she created it in is unchanged
+		assertTrue(created.getAllowedPrincipalsFor(AccessProperty.Administer).contains(daisy.getResourceURI()));
+		assertEquals(listAdmins, listEntry.getAllowedPrincipalsFor(AccessProperty.Administer));
+	}
 }

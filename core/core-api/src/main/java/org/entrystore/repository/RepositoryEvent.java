@@ -23,7 +23,7 @@ public enum RepositoryEvent {
 
 	All,
 	EntryCreated,
-	EntryUpdated, // TODO event firing only implemented for EntryImpl.setGraph()
+	EntryUpdated, // fired by EntryImpl.setGraph() and setResourceURI()
 	EntryDeleted,
 	EntryAclGuestUpdated, // implemented for EntryImpl.setGraph() and changes concerning _guest,
 						  // NOT for EntryImpl.setAllowedPrincipalsFor and its siblings
