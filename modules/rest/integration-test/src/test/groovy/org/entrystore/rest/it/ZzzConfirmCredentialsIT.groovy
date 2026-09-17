@@ -66,7 +66,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 	}
 
 	// Setup helper: performs the sign-up request that mints a confirmation token and returns it.
-	// Convention-consistent with the sibling ITs' given:-block setup (see CLAUDE.md testing guidelines).
+	// Convention-consistent with the sibling ITs' given:-block setup.
 	private static String startSignup(String email) {
 		def body = JsonOutput.toJson([
 			firstname         : firstName,
