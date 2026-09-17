@@ -253,8 +253,9 @@ class LanguageAwareFacetsTest {
 	}
 
 	@Test
-	void merge_withFacetLang_andNoCandidatesFallsBackToTheUnfilteredFacet() {
+	void merge_withFacetLang_andACompanionWithoutAnyTermFallsBackToTheUnfilteredFacet() {
 		SolrSearchIndex index = indexReturning(Map.of());
+		when(index.hasFacetTerms(any(), eq(COMPANION))).thenReturn(false);
 
 		List<FacetValueDto> values = onlyFacet(LanguageAwareFacets.merge(
 				List.of(clientFacet(), companionFacet()),
@@ -262,6 +263,20 @@ class LanguageAwareFacetsTest {
 
 		assertEquals(List.of("Sweden", "Sverige", "Britain", "Stockholm"), names(values),
 				"an index predating the companion field must still answer, unfiltered rather than empty");
+		verify(index, never()).facetCountsForLabels(any(), anyString(), any());
+	}
+
+	@Test
+	void merge_withFacetLang_andNoLabelInThatLanguageReturnsNoBuckets() {
+		SolrSearchIndex index = indexReturning(Map.of());
+		when(index.hasFacetTerms(any(), eq(COMPANION))).thenReturn(true);
+
+		List<FacetValueDto> values = onlyFacet(LanguageAwareFacets.merge(
+				List.of(clientFacet(), companionFacet()),
+				settings(FIELD, "Sweden", "sv", 10), new SolrQuery("*:*"), index));
+
+		assertEquals(List.of(), names(values),
+				"a populated companion that matched nothing is an answer, not a stale index");
 		verify(index, never()).facetCountsForLabels(any(), anyString(), any());
 	}
 

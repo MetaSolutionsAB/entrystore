@@ -1198,7 +1198,7 @@ class SearchIT extends BaseSpec {
 		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
 		def facetField = respJson['facetFields'].find { it['name'] == LANG_MARKER_FIELD_S }
 		// nothing is tagged "de", but the untagged "Sverige" is language-neutral and stays
-		facetField['values'] == [[name: 'Sverige', count: 2, lang: ['nb', 'sv']]]
+		facetField['values'] == [[name: 'Sverige', count: 2]]
 	}
 
 	def "GET /search?type=solr facet count of a label should equal the hits of the literal_s drill-down"() {

@@ -386,6 +386,41 @@ public class SolrSearchIndexTest {
 		}
 	}
 
+	/**
+	 * The language facet filter reads a negative answer here as "this index was built before the companion field
+	 * existed" and then answers unfiltered, so the probe must ask about the field as a whole: the result set of the
+	 * original query, but none of its term filters.
+	 */
+	@Test
+	public void hasFacetTermsProbesTheWholeFieldAndReportsAnEmptyOneAsEmpty() throws Exception {
+		String companion = "metadata.predicate.literal_l.abc12345";
+		QueryResponse response = mock(QueryResponse.class);
+		when(response.getFacetField(companion)).thenReturn(new FacetField(companion));
+		when(solrServer.query(any(SolrQuery.class))).thenReturn(response);
+		SolrQuery baseQuery = new SolrQuery("title:Sweden");
+		baseQuery.setFilterQueries("public:true");
+		baseQuery.setParam("facet.matches", "Sweden");
+
+		assertFalse(index.hasFacetTerms(baseQuery, companion));
+
+		ArgumentCaptor<SolrQuery> probe = ArgumentCaptor.forClass(SolrQuery.class);
+		verify(solrServer).query(probe.capture());
+		assertEquals("title:Sweden", probe.getValue().getQuery());
+		assertEquals(List.of("public:true"), List.of(probe.getValue().getFilterQueries()));
+		assertEquals(Integer.valueOf(0), probe.getValue().getRows(), "the probe must not fetch documents");
+		assertEquals(List.of(companion), List.of(probe.getValue().getFacetFields()));
+		assertEquals("1", probe.getValue().get("facet.limit"), "one term is enough to answer the question");
+		assertNull(probe.getValue().get("facet.matches"), "a term filter would defeat the purpose of the probe");
+	}
+
+	@Test
+	public void hasFacetTermsReportsThePopulatedFieldWhenSolrFails() throws Exception {
+		when(solrServer.query(any(SolrQuery.class))).thenThrow(new SolrServerException("Solr is down"));
+
+		assertTrue(index.hasFacetTerms(new SolrQuery("*:*"), "metadata.predicate.literal_l.abc12345"),
+				"a failed probe must not be read as an index predating the field");
+	}
+
 	@Disabled("To be implemented")
 	@Test
 	public void testExtractFulltext() throws Exception {
