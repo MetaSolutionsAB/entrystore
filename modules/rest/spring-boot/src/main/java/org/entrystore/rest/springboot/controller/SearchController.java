@@ -89,14 +89,17 @@ public class SearchController {
 
 	@Operation(
 			summary = "Searches the repository and returns entries",
-			description = "Solr search. A facet on a literal field (metadata.predicate.literal_s.<hash> or the "
-					+ "metadata.predicate.literal.<hash> shorthand) returns one bucket per label; each bucket carries a "
-					+ "\"lang\" array with the languages the label occurs in within the result set, omitted when the "
-					+ "label only occurs untagged.",
+			description = "Solr search. Facet buckets carry a name and a count; facetLang narrows the buckets of a "
+					+ "literal facet field to one language.",
 			parameters = {
 					@Parameter(name = "facetLang", description = "BCP 47 language tag, e.g. sv or en-GB. Keeps only the "
-							+ "buckets of literal facet fields whose label occurs in that language (prefix match, so en also "
-							+ "matches en-GB) or untagged, selected before facetLimit is applied; counts are unchanged. "
+							+ "buckets of literal facet fields (metadata.predicate.literal_s.<hash> or the "
+							+ "metadata.predicate.literal.<hash> shorthand) whose label occurs in that language (prefix "
+							+ "match, so en also matches en-GB) or untagged. The selection happens in Solr before "
+							+ "facetLimit is applied, and the counts returned are exact. Because the candidates are "
+							+ "gathered with a bounded overrequest, the last places of the top N are approximate, the "
+							+ "same contract Solr's own distributed faceting gives. Labels longer than 256 characters "
+							+ "are not selectable this way and are therefore absent whenever facetLang is set. "
 							+ "Requires facetFields.")
 			}
 	)

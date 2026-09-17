@@ -98,6 +98,34 @@ class SolrSchemaCheckTest {
 	}
 
 	@Test
+	void requireDynamicFields_refusesWhenSolrDeniesTheSchemaRequest() throws Exception {
+		for (int status : new int[] {401, 403}) {
+			SolrClient client = mock(SolrClient.class);
+			when(client.request(any(), any()))
+					.thenThrow(new RemoteSolrException("solr.example.org", status, "Unauthorized", null));
+
+			IllegalStateException thrown = assertThrows(IllegalStateException.class,
+					() -> SolrSchemaCheck.requireDynamicFields(client, "http://solr.example.org/entrystore",
+							List.of("metadata.predicate.literal_l.*")));
+
+			assertTrue(thrown.getMessage().contains(Integer.toString(status)), thrown.getMessage());
+			assertTrue(thrown.getMessage().contains("permission"),
+					"the operator needs to be told this is an access problem, not a schema one: " + thrown.getMessage());
+		}
+	}
+
+	@Test
+	void requireDynamicFields_letsAnUnexpectedSolrErrorThrough() throws Exception {
+		SolrClient client = mock(SolrClient.class);
+		when(client.request(any(), any()))
+				.thenThrow(new RemoteSolrException("solr.example.org", 500, "Internal Server Error", null));
+
+		assertDoesNotThrow(() -> SolrSchemaCheck.requireDynamicFields(client, "http://solr.example.org/entrystore",
+				List.of("metadata.predicate.literal_l.*")),
+				"a Solr fault is not evidence the schema is wrong, so startup keeps its established behaviour");
+	}
+
+	@Test
 	void dynamicFieldNames_listsTheDeclaredNames() throws Exception {
 		assertEquals(Set.of("a.*", "b.*"), SolrSchemaCheck.dynamicFieldNames(solrDeclaring("a.*", "b.*")));
 	}

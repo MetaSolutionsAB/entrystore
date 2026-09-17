@@ -59,8 +59,18 @@ public record LangFacetValue(String label, String lang) {
 		}
 	}
 
+	/**
+	 * A tag containing the separator is dropped and the literal encoded as untagged. {@code normalizeLanguageTag}
+	 * keeps an ill-formed tag verbatim, and a client-supplied {@code lang} reaches {@code createLiteral} unvalidated
+	 * ({@code RDFJSON}), so without this {@link #decode(String)} would split at the tag's own separator and report
+	 * part of it as the label.
+	 */
 	public static String encode(Literal literal) {
-		return literal.getLabel() + SEPARATOR + literal.getLanguage().map(LangFacetValue::normalizeLanguageTag).orElse("");
+		String lang = literal.getLanguage().map(LangFacetValue::normalizeLanguageTag).orElse("");
+		if (lang.indexOf(SEPARATOR) >= 0) {
+			lang = "";
+		}
+		return literal.getLabel() + SEPARATOR + lang;
 	}
 
 	public static boolean exceedsLabelCap(String label) {
@@ -136,5 +146,19 @@ public record LangFacetValue(String label, String lang) {
 	 */
 	public static String labelMatchesRegex(String labelRegex) {
 		return "(?:" + labelRegex + ")" + SEPARATOR_REGEX + "[^" + SEPARATOR_REGEX + "]*";
+	}
+
+	/**
+	 * Full-string regex selecting the encoded terms of one language range: the label part, the separator, then
+	 * either an empty tag (untagged labels are always included), the range itself, or the range followed by a
+	 * subtag. Case-insensitive, so it matches the way {@link #matchesLanguage(String, String)} does.
+	 *
+	 * @param labelRegex the client's {@code facetMatches}, or null to accept any label
+	 * @param range a normalised language tag, already restricted to {@code [A-Za-z0-9-]} by input validation and so
+	 * free of regex metacharacters
+	 */
+	public static String languageMatchesRegex(String labelRegex, String range) {
+		String label = labelRegex == null ? "[^" + SEPARATOR_REGEX + "]*" : "(?:" + labelRegex + ")";
+		return "(?i)" + label + SEPARATOR_REGEX + "(?:|" + range + "|" + range + "-[^" + SEPARATOR_REGEX + "]*)";
 	}
 }

@@ -19,9 +19,9 @@ package org.entrystore.rest.springboot.model.dto;
 import java.util.List;
 
 /**
- * One facet bucket. {@code name} is {@code null} for the {@code facet.missing} bucket. {@code langs} lists, in
- * natural order, the normalised language tags a literal label occurs in within the result set; it is empty for a
- * label that only occurs untagged and for every non-literal facet.
+ * One facet bucket. {@code name} is {@code null} for the {@code facet.missing} bucket. The count is Solr's, taken
+ * before the per-entry authorization filtering in {@code SolrSearchIndex.sendQuery}, so a drill-down on the label
+ * can return fewer hits than the count for a caller who may not read every matching entry.
  */
-public record FacetValueDto(String name, long count, List<String> langs) {
+public record FacetValueDto(String name, long count) {
 }
