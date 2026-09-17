@@ -19,10 +19,13 @@ package org.entrystore.rest.springboot.util;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -118,6 +121,42 @@ class SparqlResultFormatTest {
 				SparqlResultFormat.resolve(null, MediaType.APPLICATION_XML_VALUE));
 	}
 
+	@ParameterizedTest(name = "{0}")
+	@CsvSource(delimiter = '|', textBlock = """
+			CSV alias              | application/sparql-results+csv              | CSV
+			TSV                    | text/tab-separated-values                   | TSV
+			CSV alias with charset | APPLICATION/SPARQL-RESULTS+CSV;charset=UTF-8 | CSV
+			TSV with charset       | TEXT/TAB-SEPARATED-VALUES;charset=UTF-8      | TSV
+			""")
+	void resolve_acceptCsvAliasAndTsv_returnsExpectedFormat(
+			String description, String acceptHeader, SparqlResultFormat expected) {
+		assertEquals(expected, SparqlResultFormat.resolve(null, acceptHeader));
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@CsvSource(delimiter = '|', textBlock = """
+			CSV alias              | application/sparql-results+csv | CSV
+			CSV alias decoded plus | application/sparql-results csv | CSV
+			TSV                    | text/tab-separated-values      | TSV
+			TSV mixed case         | TEXT/TAB-SEPARATED-VALUES       | TSV
+			""")
+	void resolve_csvAliasAndTsvFormatParam_takesPrecedenceOverAcceptHeader(
+			String description, String formatParam, SparqlResultFormat expected) {
+		assertEquals(expected, SparqlResultFormat.resolve(formatParam, "application/sparql-results+json"));
+	}
+
+	@Test
+	void resolve_acceptTsvWithHigherQualityThanCsvAlias_returnsTsv() {
+		assertEquals(SparqlResultFormat.TSV, SparqlResultFormat.resolve(null,
+				"application/sparql-results+csv;q=0.5, text/tab-separated-values;q=0.9"));
+	}
+
+	@Test
+	void resolve_acceptCsvAliasWithHigherQualityThanTsv_returnsCsv() {
+		assertEquals(SparqlResultFormat.CSV, SparqlResultFormat.resolve(null,
+				"text/tab-separated-values;q=0.5, application/sparql-results+csv;q=0.9"));
+	}
+
 	@Test
 	void resolve_acceptUnsupportedTypeOnly_throwsNotAcceptable() {
 		CustomResponseException ex = assertThrows(CustomResponseException.class,
@@ -146,7 +185,7 @@ class SparqlResultFormatTest {
 
 	@Test
 	void resolve_acceptTextWildcard_returnsCsv() {
-		// CSV (text/csv) is the only supported text/* result type.
+		// Both CSV and TSV are text/*; CSV wins because it precedes TSV in PARTIAL_WILDCARD_PREFERENCE.
 		assertEquals(SparqlResultFormat.CSV, SparqlResultFormat.resolve(null, "text/*"));
 	}
 
@@ -176,18 +215,17 @@ class SparqlResultFormatTest {
 		assertEquals(SparqlResultFormat.SPARQL_RESULTS_JSON, SparqlResultFormat.fromOutputForm(null));
 	}
 
-	@Test
-	void fromOutputForm_mixedCase_normalisesToCanonical() {
-		assertEquals(SparqlResultFormat.SPARQL_RESULTS_JSON, SparqlResultFormat.fromOutputForm("JSON"));
-		assertEquals(SparqlResultFormat.SPARQL_RESULTS_XML, SparqlResultFormat.fromOutputForm("Xml"));
-		assertEquals(SparqlResultFormat.CSV, SparqlResultFormat.fromOutputForm(" csv "));
+	@ParameterizedTest(name = "{0} resolves to {1}")
+	@CsvSource({"JSON, SPARQL_RESULTS_JSON", "Xml, SPARQL_RESULTS_XML", "' csv ', CSV", "' TsV ', TSV"})
+	void fromOutputForm_mixedCase_normalisesToCanonical(String output, SparqlResultFormat expected) {
+		assertEquals(expected, SparqlResultFormat.fromOutputForm(output));
 	}
 
 	@Test
 	void fromOutputForm_unknownValue_throwsBadRequest() {
 		BadRequestException ex = assertThrows(BadRequestException.class,
 				() -> SparqlResultFormat.fromOutputForm("jsom"));
-		assertEquals("Unsupported SPARQL output format: jsom", ex.getMessage());
+		assertEquals("Unsupported SPARQL output format: jsom (supported: json, xml, csv, tsv)", ex.getMessage());
 	}
 
 	@Test
@@ -200,8 +238,8 @@ class SparqlResultFormatTest {
 		String longGarbage = "x".repeat(500);
 		BadRequestException ex = assertThrows(BadRequestException.class,
 				() -> SparqlResultFormat.fromOutputForm(longGarbage));
-		assertTrue(ex.getMessage().endsWith("…"),
-				"Expected truncation marker, got: " + ex.getMessage());
+		assertTrue(ex.getMessage().endsWith("… (supported: json, xml, csv, tsv)"),
+				"Expected truncation marker before the supported-values suffix, got: " + ex.getMessage());
 		assertTrue(ex.getMessage().length() < 200,
 				"Expected truncated message under 200 chars, got: " + ex.getMessage().length());
 	}
@@ -230,8 +268,7 @@ class SparqlResultFormatTest {
 		java.lang.reflect.InvocationTargetException ite = assertThrows(
 				java.lang.reflect.InvocationTargetException.class,
 				() -> putUnique.invoke(null, map, "text/csv", SparqlResultFormat.BINARY));
-		assertTrue(ite.getCause() instanceof IllegalStateException,
-				"Expected IllegalStateException from putUnique on collision, got: " + ite.getCause());
+		assertInstanceOf(IllegalStateException.class, ite.getCause(), "Expected IllegalStateException from putUnique on collision, got: " + ite.getCause());
 		assertTrue(ite.getCause().getMessage().contains("alias collision"),
 				"Expected 'alias collision' in message, got: " + ite.getCause().getMessage());
 	}
