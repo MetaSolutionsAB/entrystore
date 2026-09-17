@@ -34,6 +34,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.nio.charset.StandardCharsets;
+
 @RestController
 @RequiredArgsConstructor
 public class SparqlController {
@@ -100,6 +102,12 @@ public class SparqlController {
 
 	private ResponseEntity<StreamingResponseBody> buildResponse(SparqlResultFormat format, String query, String contextId) {
 		StreamingResponseBody body = out -> sparqlService.runQuery(format, query, contextId, out);
-		return ResponseEntity.ok().contentType(format.getMediaType()).body(body);
+		return ResponseEntity.ok().contentType(responseMediaType(format)).body(body);
+	}
+
+	private static MediaType responseMediaType(SparqlResultFormat format) {
+		MediaType mediaType = format.getMediaType();
+		// RDF4J writes UTF-8 (mandated by SPARQL 1.1 CSV/TSV); without the parameter clients default text/* to ISO-8859-1
+		return "text".equals(mediaType.getType()) ? new MediaType(mediaType, StandardCharsets.UTF_8) : mediaType;
 	}
 }
