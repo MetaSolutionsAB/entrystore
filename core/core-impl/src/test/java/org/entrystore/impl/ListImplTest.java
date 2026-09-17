@@ -43,6 +43,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -50,6 +51,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.spy;
 
@@ -391,13 +394,14 @@ public class ListImplTest extends AbstractCoreTest {
 	}
 
 	/**
-	 * {@code setChildren} must compute its diff while already holding the monitor it commits under. Diffed
-	 * outside it, two concurrent writes to the same list diff the same pre-state, and the loser rewrites the
-	 * member graph without calling {@code removeReferringList} for what the winner added — leaving a relation
-	 * naming a list that no longer contains the entry, which then blocks re-adding it anywhere else.
+	 * {@code setChildren} validates before taking the monitor, since each member costs a store read and the
+	 * member count is client-controlled, but it must then re-diff <em>under</em> the monitor it commits within.
+	 * Relying on the outside diff, two concurrent writes to the same list diff the same pre-state, and the loser
+	 * rewrites the member graph without calling {@code removeReferringList} for what the winner added — leaving a
+	 * relation naming a list that no longer contains the entry, which then blocks re-adding it anywhere else.
 	 */
 	@Test
-	public void setChildrenComputesItsDiffUnderTheRepositoryMonitor() throws Exception {
+	public void setChildrenReDiffsUnderTheRepositoryMonitor() throws Exception {
 		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
 		pm.setAuthenticatedUserURI(donald);
 		Context duck = cm.getContext("duck");
@@ -405,17 +409,19 @@ public class ListImplTest extends AbstractCoreTest {
 		Entry member = duck.createLink(null, URI.create("https://slashdot.org/"), null);
 
 		ListImpl list = spy((ListImpl) listEntry.getResource());
-		list.invalidateChildren();
 		CountDownLatch writerIsDiffing = new CountDownLatch(1);
 		CountDownLatch releaseWriter = new CountDownLatch(1);
+		AtomicInteger additionValidations = new AtomicInteger();
 		doAnswer(invocation -> {
-			Model graph = (Model) invocation.callRealMethod();
-			writerIsDiffing.countDown();
-			if (!releaseWriter.await(10, TimeUnit.SECONDS)) {
-				throw new IllegalStateException("the diffing writer was never released");
+			// the second call is the one under the monitor, on the delta the re-diff produced
+			if (additionValidations.incrementAndGet() == 2) {
+				writerIsDiffing.countDown();
+				if (!releaseWriter.await(10, TimeUnit.SECONDS)) {
+					throw new IllegalStateException("the diffing writer was never released");
+				}
 			}
-			return graph;
-		}).when(list).getGraph();
+			return invocation.callRealMethod();
+		}).when(list).validateAdditions(any(), anyBoolean());
 
 		ExecutorService writer = Executors.newSingleThreadExecutor();
 		try {
@@ -424,7 +430,7 @@ public class ListImplTest extends AbstractCoreTest {
 				list.setChildren(java.util.List.of(member.getEntryURI()));
 			});
 			assertTrue(writerIsDiffing.await(10, TimeUnit.SECONDS),
-				"precondition: the writer is loading the members it diffs against");
+				"precondition: the writer is re-diffing under the monitor");
 
 			AtomicInteger reachedMonitor = new AtomicInteger();
 			Thread contender = new Thread(() -> {
@@ -442,6 +448,113 @@ public class ListImplTest extends AbstractCoreTest {
 			contender.join(TimeUnit.SECONDS.toMillis(10));
 			assertEquals(1, reachedMonitor.get(), "the contender must get the monitor once the write completes");
 			assertTrue(list.getChildren().contains(member.getEntryURI()), "the write itself must still land");
+		} finally {
+			releaseWriter.countDown();
+			writer.shutdownNow();
+		}
+	}
+
+	/**
+	 * {@code invalidateChildren()} must not land inside another writer's open transaction. If it does, a reader
+	 * reloads the pre-commit membership into the field and nothing drops it afterwards, so the writer's change is
+	 * invisible to every later read — and on a group's member list the authorization cache then re-publishes the
+	 * stale membership as authoritative.
+	 */
+	@Test
+	public void invalidateChildrenWaitsForAWriterHoldingTheRepositoryMonitor() throws Exception {
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry member = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+
+		ListImpl list = spy((ListImpl) listEntry.getResource());
+		CountDownLatch writerIsInTheTransaction = new CountDownLatch(1);
+		CountDownLatch releaseWriter = new CountDownLatch(1);
+		doAnswer(invocation -> {
+			writerIsInTheTransaction.countDown();
+			if (!releaseWriter.await(10, TimeUnit.SECONDS)) {
+				throw new IllegalStateException("the writer was never released");
+			}
+			return invocation.callRealMethod();
+		}).when(list).saveChildren(any(), any(RepositoryConnection.class));
+
+		ExecutorService writer = Executors.newSingleThreadExecutor();
+		try {
+			writer.submit(() -> {
+				pm.setAuthenticatedUserURI(donald);
+				list.setChildren(java.util.List.of(member.getEntryURI()));
+			});
+			assertTrue(writerIsInTheTransaction.await(10, TimeUnit.SECONDS),
+				"precondition: the writer is inside its open transaction");
+
+			Thread invalidator = new Thread(list::invalidateChildren, "invalidate-children");
+			invalidator.start();
+
+			assertEquals(Thread.State.BLOCKED, awaitBlockedOrTerminated(invalidator),
+				"invalidateChildren() must wait for a writer holding the repository monitor; landing inside an "
+					+ "open transaction lets a reader republish the pre-commit membership with nothing to drop it");
+
+			releaseWriter.countDown();
+			invalidator.join(TimeUnit.SECONDS.toMillis(10));
+			assertTrue(list.getChildren().contains(member.getEntryURI()), "the write itself must still land");
+		} finally {
+			releaseWriter.countDown();
+			writer.shutdownNow();
+		}
+	}
+
+	/**
+	 * The diff is validated before the monitor is taken, then recomputed under it. Anything the recomputation
+	 * surfaces that the first pass never saw must still be validated, or a concurrent change lets an addition
+	 * through that the rules reject — here a list that acquired a parent in the meantime.
+	 */
+	@Test
+	public void setChildrenValidatesWhatOnlyTheReDiffUnderTheMonitorSurfaces() throws Exception {
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry otherListEntry = duck.createResource(null, GraphType.List, null, null);
+		Entry childList = duck.createResource(null, GraphType.List, null, null);
+		ListImpl list = (ListImpl) listEntry.getResource();
+		list.setChildren(java.util.List.of(childList.getEntryURI()));
+
+		ListImpl spied = spy(list);
+		CountDownLatch validatedOutside = new CountDownLatch(1);
+		CountDownLatch releaseWriter = new CountDownLatch(1);
+		AtomicInteger removalValidations = new AtomicInteger();
+		doAnswer(invocation -> {
+			// the last step before the monitor is taken; hold the writer here on its first pass only
+			if (removalValidations.incrementAndGet() == 1) {
+				validatedOutside.countDown();
+				if (!releaseWriter.await(10, TimeUnit.SECONDS)) {
+					throw new IllegalStateException("the writer was never released");
+				}
+			}
+			return invocation.callRealMethod();
+		}).when(spied).validateRemovals(any(), anyBoolean());
+
+		ExecutorService writer = Executors.newSingleThreadExecutor();
+		try {
+			// re-submitting the membership it already has, so the first pass sees nothing to add
+			Future<?> rewrite = writer.submit(() -> {
+				pm.setAuthenticatedUserURI(donald);
+				spied.setChildren(java.util.List.of(childList.getEntryURI()));
+			});
+			assertTrue(validatedOutside.await(10, TimeUnit.SECONDS), "precondition: the first pass has run");
+
+			// empty the list, then give the child a parent elsewhere, so the re-diff has to add it back
+			// and the addition is now one the single-parent rule must reject. Through the spy: a Mockito spy
+			// carries its own copy of the field, so mutating the original would leave the re-diff unchanged.
+			spied.setChildren(java.util.List.of());
+			((List) otherListEntry.getResource()).addChild(childList.getEntryURI());
+			releaseWriter.countDown();
+
+			ExecutionException thrown = assertThrows(ExecutionException.class, () -> rewrite.get(10, TimeUnit.SECONDS));
+			assertInstanceOf(RepositoryException.class, thrown.getCause(),
+				"the re-diff surfaced an addition the first pass never validated, so it must be validated now");
+			assertTrue(thrown.getCause().getMessage().contains("already have a parent"), thrown.getCause().getMessage());
 		} finally {
 			releaseWriter.countDown();
 			writer.shutdownNow();

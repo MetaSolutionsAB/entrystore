@@ -104,12 +104,15 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	private final AtomicLong userGroupsCacheEpoch = new AtomicLong();
 
 	/**
-	 * Entry URIs currently reported by {@link #scanGroups(URI)} as listed in the index but not loadable. The scan
+	 * Entry URIs {@link #scanGroups(URI)} has already reported as listed in the index but not loadable. The scan
 	 * runs on the authorization decision path, so warning on every occurrence would put an unbounded log write
-	 * there: each URI is warned about once and logged at debug while it keeps failing. A URI is dropped again as
-	 * soon as a later scan loads it, which both bounds the set by the mappings that are dangling now — rather than
-	 * by every principal ever deleted mid-scan, since entry URIs are not reused — and re-arms the warning if the
-	 * same URI dangles again after a repair.
+	 * there: each URI is warned about once per process and logged at debug afterwards.
+	 * <p>
+	 * It only grows, and is bounded by the number of distinct principal entries that have ever failed to load in
+	 * this process — not by the number dangling right now. Dropping a URI once it loads again would re-arm the
+	 * warning, but {@code ContextImpl.getByEntryURI} returns null both for a genuinely absent entry and for a
+	 * store read that failed, so on a store with intermittent failures that would re-emit the warning on every
+	 * scan, which is the flood this set exists to prevent.
 	 */
 	private final Set<URI> reportedUnloadableEntries = ConcurrentHashMap.newKeySet();
 
@@ -321,17 +324,13 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			if (nextEntry == null) {
 				if (reportedUnloadableEntries.add(nextURI)) {
 					log.warn("Entry {} is listed in the principals index but could not be loaded (deleted "
-							+ "concurrently, or a stale index mapping); it is skipped in the group scan, and while "
-							+ "it keeps failing further occurrences are logged at debug level", nextURI);
+							+ "concurrently, or a stale index mapping); it is skipped in the group scan, and "
+							+ "further occurrences of this URI are logged at debug level", nextURI);
 				} else {
 					log.debug("Entry {} is listed in the principals index but could not be loaded; skipping it "
 							+ "in the group scan", nextURI);
 				}
 				continue;
-			}
-			// it loaded, so it is no longer dangling: stop suppressing the warning and let the set shrink again
-			if (!reportedUnloadableEntries.isEmpty()) {
-				reportedUnloadableEntries.remove(nextURI);
 			}
 			if (GraphType.Group.equals(nextEntry.getGraphType())
 					&& nextEntry.getResource() instanceof Group nextGroup && nextGroup.isMember(user)) {
@@ -372,6 +371,11 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	/** Read-only view for tests; keys are user resource URIs, a value may carry a stale epoch. */
 	Map<URI, CachedGroups> cachedGroupsView() {
 		return Collections.unmodifiableMap(userGroupsCache);
+	}
+
+	/** Read-only view for tests, so the warn-once suppression is observable rather than only visible in a log. */
+	Set<URI> reportedUnloadableEntriesView() {
+		return Collections.unmodifiableSet(reportedUnloadableEntries);
 	}
 
 	/**

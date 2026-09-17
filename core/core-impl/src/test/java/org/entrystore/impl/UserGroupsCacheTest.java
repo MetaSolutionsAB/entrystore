@@ -41,6 +41,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -270,6 +271,29 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 				"a scan that could not read a listed entry must fail the decision rather than be cached");
 	}
 
+	/**
+	 * The scan runs on every authorization decision, so an index mapping it cannot load must be reported once
+	 * and then suppressed. Without an accessor the suppression is only visible in a log, and dropping it would
+	 * be a silent regression that puts an unbounded log write back on the decision path.
+	 */
+	@Test
+	public void anUnloadableIndexedEntryIsReportedOnlyOnce() {
+		group.addMember(user);
+		URI dangling = URI.create("http://localhost:8181/_principals/entry/does-not-exist");
+		Set<URI> listing = new HashSet<>(pmi.getEntries());
+		listing.add(dangling);
+		PrincipalManagerImpl spied = spy(pmi);
+		doReturn(listing).when(spied).getEntries();
+
+		spied.getGroupUrisCached(user.getURI());
+		spied.getGroupUrisCached(user.getURI());
+
+		assertTrue(pmi.reportedUnloadableEntriesView().contains(dangling),
+				"the unloadable mapping must be recorded so the warning is not repeated on every decision");
+		assertEquals(1, pmi.reportedUnloadableEntriesView().size(),
+				"only the entry that could not be loaded belongs in the set");
+	}
+
 	@Test
 	public void indexIncompleteWhenListedIsNotCached() {
 		group.addMember(user);
@@ -305,7 +329,7 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 		group.addMember(user);
 		GroupImpl spied = spy((GroupImpl) group);
 		doThrow(new org.eclipse.rdf4j.repository.RepositoryException("simulated write failure"))
-				.when(spied).saveChildren(any(RepositoryConnection.class));
+				.when(spied).saveChildren(any(), any(RepositoryConnection.class));
 		RecordingListener recorder = RecordingListener.register((RepositoryManagerImpl) rm);
 		try {
 			assertThrows(org.entrystore.repository.RepositoryException.class, () -> spied.setChildren(List.of()));
@@ -331,9 +355,9 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 		// exists for: a broken connection is what fails the write in the first place, and with the restore and
 		// the event sitting behind the rollback neither one would run.
 		doAnswer(invocation -> {
-			invocation.getArgument(0, RepositoryConnection.class).close();
+			invocation.getArgument(1, RepositoryConnection.class).close();
 			throw new org.eclipse.rdf4j.repository.RepositoryException("simulated write failure");
-		}).when(spied).saveChildren(any(RepositoryConnection.class));
+		}).when(spied).saveChildren(any(), any(RepositoryConnection.class));
 		RecordingListener recorder = RecordingListener.register((RepositoryManagerImpl) rm);
 		try {
 			assertFalse(spied.removeChild(userEntry.getEntryURI()), "the failed removal must be reported");
