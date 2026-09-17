@@ -1733,6 +1733,37 @@ public class SolrSearchIndex implements SearchIndex {
 		return counts;
 	}
 
+	/**
+	 * Whether {@code field} holds at least one term in the result set of {@code baseQuery}, as a bounded
+	 * {@code rows=0} request that facets the field with {@code facet.limit=1} and no term filter.
+	 *
+	 * <p>Callers use a negative answer to conclude that the index was built before the field existed, so a request
+	 * that fails reports the field as populated: a transient Solr error must not be read as a stale index.
+	 *
+	 * @param baseQuery the query whose result set is probed; only its query and filters are reused
+	 * @param field the field to probe
+	 */
+	public boolean hasFacetTerms(SolrQuery baseQuery, String field) {
+		SolrQuery probe = new SolrQuery(baseQuery.getQuery());
+		String[] filters = baseQuery.getFilterQueries();
+		if (filters != null) {
+			probe.setFilterQueries(filters);
+		}
+		probe.setRows(0);
+		probe.setFacet(true);
+		probe.addFacetField(field);
+		probe.setFacetLimit(1);
+		probe.setFacetMinCount(1);
+		probe.setFacetMissing(false);
+		try {
+			FacetField facetField = solrServer.query(probe).getFacetField(field);
+			return facetField != null && facetField.getValueCount() > 0;
+		} catch (SolrServerException | IOException | SolrException e) {
+			log.error("Failed to probe field {} for terms: {}", field, e.getMessage());
+			return true;
+		}
+	}
+
 	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, List<FacetField> facetFields, SolrClient solrServer, int offset) {
 		if (query == null) {
 			throw new IllegalArgumentException("Query object must not be null");

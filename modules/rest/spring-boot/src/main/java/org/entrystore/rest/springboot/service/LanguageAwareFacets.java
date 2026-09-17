@@ -170,9 +170,10 @@ final class LanguageAwareFacets {
 
 		FacetValueDto missing = missingBucket(facetField);
 		if (candidates.isEmpty()) {
-			if (facetField.getValueCount() > 0) {
-				// The companion is written by the indexer, so an index predating it has labels but no terms.
-				log.warn("facetLang matched no labels on {} although the facet has {} buckets; the index may predate "
+			// No overlap between the filters is an ordinary answer, so the stale index is told apart from it by
+			// asking whether the companion holds any term at all here; only this path pays for that request.
+			if (facetField.getValueCount() > 0 && !index.hasFacetTerms(executedQuery, companion.getName())) {
+				log.warn("facetLang found no language terms on {} although the facet has {} buckets; the index predates "
 								+ "the language companion field. Run a reindex to enable language filtering. Returning "
 								+ "the unfiltered facet.", facetField.getName(), facetField.getValueCount());
 				return plainValues(facetField);
