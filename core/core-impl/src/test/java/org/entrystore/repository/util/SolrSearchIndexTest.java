@@ -50,6 +50,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.apache.solr.client.solrj.response.FacetField;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
@@ -90,6 +91,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyBoolean;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
@@ -1257,10 +1259,54 @@ public class SolrSearchIndexTest {
 		when(solrServer.query(any(SolrParams.class))).thenReturn(response);
 	}
 
-	@Disabled("To be implemented")
+	/**
+	 * Facets depend on the query, not on the page, so the extra passes sendQuery makes to fill a page past the
+	 * authorization filter must not ask Solr to compute them again. Before this was fixed, a facet request on the
+	 * guest-reachable /search recomputed every bucket up to ten times and discarded all but the first.
+	 */
 	@Test
-	public void testSendQuery() throws Exception {
-		// TODO
+	public void sendQueryReportsFacetsOnceAndSwitchesThemOffAfterTheFirstPass() throws Exception {
+		ContextManager contextManager = mock(ContextManager.class);
+		when(contextManager.getEntry(any(URI.class))).thenReturn(null);
+		RepositoryManager rm = mock(RepositoryManager.class);
+		when(rm.getContextManager()).thenReturn(contextManager);
+		Config config = new PropertiesConfiguration("EntryStore Test Configuration");
+		when(rm.getConfiguration()).thenReturn(config);
+		when(rm.getValueFactory()).thenReturn(SimpleValueFactory.getInstance());
+		SolrClient server = mock(SolrClient.class);
+		SolrSearchIndex searchIndex = new SolrSearchIndex(rm, server);
+		try {
+			FacetField facetField = new FacetField("rdfType");
+			facetField.add("http://example.com/A", 7);
+			// Two documents the ACL check discards, and a hit count large enough to make sendQuery ask again.
+			SolrDocumentList documents = new SolrDocumentList();
+			documents.setNumFound(500);
+			for (String uri : List.of("http://localhost:8181/1/entry/1", "http://localhost:8181/1/entry/2")) {
+				SolrDocument document = new SolrDocument();
+				document.setField("uri", uri);
+				documents.add(document);
+			}
+			QueryResponse response = mock(QueryResponse.class);
+			when(response.getResults()).thenReturn(documents);
+			when(response.getFacetFields()).thenReturn(List.of(facetField));
+			when(server.query(any(SolrQuery.class))).thenReturn(response);
+
+			SolrQuery query = new SolrQuery("*:*");
+			query.setRows(50);
+			query.setStart(0);
+			query.setFacet(true);
+			query.addFacetField("rdfType");
+
+			QueryResult result = searchIndex.sendQuery(query);
+
+			assertEquals(1, result.getFacetFields().size(), "a facet field must be reported once, not once per pass");
+			assertEquals("rdfType", result.getFacetFields().getFirst().getName());
+			// SolrJ re-sends the same query object, so its state after the run is what every later pass carried.
+			verify(server, atLeast(2)).query(any(SolrQuery.class));
+			assertNull(query.get("facet"), "every pass after the first must ask Solr to skip faceting");
+		} finally {
+			searchIndex.shutdown();
+		}
 	}
 
 	@Disabled("To be implemented")

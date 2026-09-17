@@ -21,6 +21,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.solr.client.solrj.RemoteSolrException;
 import org.apache.solr.client.solrj.SolrClient;
+import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.SolrQuery;
 import org.apache.solr.client.solrj.request.UpdateRequest;
@@ -74,6 +75,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -1684,6 +1686,53 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
+	/**
+	 * Exact counts for the given labels of one facet field, as a second bounded request: {@code rows=0}, no ACL
+	 * filtering and one {@code facet.query} per label. The field query parser takes the label literally, so a label
+	 * containing commas, quotes or Solr syntax needs no escaping, and the request goes out as POST because labels
+	 * can be long. Labels the field does not hold are absent from the result rather than present with zero.
+	 *
+	 * @param baseQuery the query whose result set the counts apply to; only its query and filters are reused
+	 * @param field the client-facing facet field
+	 * @param labels the labels to count; the caller is responsible for bounding how many
+	 */
+	public Map<String, Long> facetCountsForLabels(SolrQuery baseQuery, String field, Collection<String> labels) {
+		Map<String, Long> counts = new LinkedHashMap<>();
+		if (labels.isEmpty()) {
+			return counts;
+		}
+		SolrQuery countQuery = new SolrQuery(baseQuery.getQuery());
+		String[] filters = baseQuery.getFilterQueries();
+		if (filters != null) {
+			countQuery.setFilterQueries(filters);
+		}
+		countQuery.setRows(0);
+		countQuery.setFacet(true);
+		countQuery.setFacetMinCount(1);
+		Map<String, String> labelByQuery = new LinkedHashMap<>();
+		for (String label : labels) {
+			String facetQuery = "{!field f=" + field + "}" + label;
+			labelByQuery.put(facetQuery, label);
+			countQuery.addFacetQuery(facetQuery);
+		}
+		try {
+			// POST: one facet.query per label, and a label can be long
+			QueryResponse response = solrServer.query(countQuery, SolrRequest.METHOD.POST);
+			Map<String, Integer> facetQueryCounts = response.getFacetQuery();
+			if (facetQueryCounts != null) {
+				facetQueryCounts.forEach((facetQuery, count) -> {
+					String label = labelByQuery.get(facetQuery);
+					if (label != null && count != null && count > 0) {
+						counts.put(label, count.longValue());
+					}
+				});
+			}
+		} catch (SolrServerException | IOException | SolrException e) {
+			log.error("Failed to fetch exact facet counts for {} labels on field {}: {}", labels.size(), field, e.getMessage());
+		}
+		return counts;
+	}
+
 	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, List<FacetField> facetFields, SolrClient solrServer, int offset) {
 		if (query == null) {
 			throw new IllegalArgumentException("Query object must not be null");
@@ -1755,6 +1804,9 @@ public class SolrSearchIndex implements SearchIndex {
 			}
 			Set<URI> entryURIs = new LinkedHashSet<>();
 			hits = sendQueryForEntryURIs(query, entryURIs, facetFields, solrServer, offset);
+			// Facets depend on the query, not on the page, so every further fill pass would recompute the same
+			// buckets and throw them away. Switching faceting off makes the extra passes cheaper for Solr.
+			query.setFacet(false);
 			Date before = new Date();
 			for (URI uri : entryURIs) {
 				URI referencedEntryURI = null;

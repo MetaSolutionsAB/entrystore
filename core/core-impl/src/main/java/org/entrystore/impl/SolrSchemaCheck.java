@@ -35,8 +35,10 @@ import java.util.TreeSet;
  * declares, and the schema has no catch-all field, so an outdated schema rejects nearly every document. Because the
  * first boot after an upgrade wipes and rebuilds the index, that outcome would be an empty index whose version
  * markers say it is current. The check therefore runs before the wipe and refuses to start when the schema
- * verifiably lacks a required field. A Solr that cannot be reached, or one without the Schema API, is reported and
- * let through: an outage keeps the established startup behaviour instead of becoming a startup failure.
+ * verifiably lacks a required field, and equally when Solr answers 401 or 403: Solr is up and reachable there, the
+ * check simply may not read the schema, so letting it through ends in exactly the empty index it exists to prevent.
+ * A Solr that cannot be reached, or one without the Schema API, is reported and let through: an outage keeps the
+ * established startup behaviour instead of becoming a startup failure.
  */
 final class SolrSchemaCheck {
 
@@ -57,14 +59,29 @@ final class SolrSchemaCheck {
 		return names;
 	}
 
+	/** HTTP statuses that mean Solr answered but refused to show the schema, rather than being unavailable. */
+	private static final int HTTP_UNAUTHORIZED = 401;
+
+	private static final int HTTP_FORBIDDEN = 403;
+
 	/**
-	 * @throws IllegalStateException when the schema could be read and lacks one of {@code required}
+	 * @throws IllegalStateException when the schema could be read and lacks one of {@code required}, or when Solr
+	 * refused the schema request with 401 or 403
 	 */
 	static void requireDynamicFields(SolrClient client, String solrUrl, Collection<String> required) {
 		Set<String> declared;
 		try {
 			declared = dynamicFieldNames(client);
-		} catch (SolrServerException | IOException | RemoteSolrException e) {
+		} catch (RemoteSolrException e) {
+			if (e.code() == HTTP_UNAUTHORIZED || e.code() == HTTP_FORBIDDEN) {
+				throw new IllegalStateException("The Solr schema at " + solrUrl + " could not be read: Solr answered HTTP "
+						+ e.code() + ". Grant the EntryStore Solr user permission to read the schema (the read-only Schema"
+						+ " API) and start again; starting without the check could rebuild an empty index.", e);
+			}
+			log.error("Could not verify the Solr schema at {}: Solr answered HTTP {}. Continuing without the check: {}",
+					solrUrl, e.code(), e.getMessage());
+			return;
+		} catch (SolrServerException | IOException e) {
 			log.warn("Could not verify the Solr schema at {}; continuing without the check: {}", solrUrl, e.getMessage());
 			return;
 		}

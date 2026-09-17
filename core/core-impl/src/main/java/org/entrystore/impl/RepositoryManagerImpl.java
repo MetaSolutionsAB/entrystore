@@ -665,9 +665,12 @@ public class RepositoryManagerImpl implements RepositoryManager {
 						reindexResult = solrIndex.reindexSync();
 						boolean complete = isReindexComplete(reindexResult, solrIndex::waitForQueueDrain);
 						long rejected = solrIndex.getRejectedDocumentCount() - rejectedBefore;
-						reindexSucceeded = complete && rejected == 0;
+						// Rejections are reported but do not block the markers: a document Solr rejects every time
+						// would otherwise wipe the index and reindex on every restart, for good (ENTRYSTORE-1033).
+						// SolrSchemaCheck above already refuses the schema mismatch this gate was added for.
+						reindexSucceeded = complete;
 						if (complete && rejected > 0) {
-							log.error("Solr rejected {} documents during the initial reindex; skipping version-marker write so the next restart re-triggers reindex. Check that the Solr schema matches this EntryStore version.", rejected);
+							log.error("Solr rejected {} documents during the initial reindex; they are missing from the index until the cause is fixed and a reindex is run. Check the earlier rejection logs for the reason, for example a literal too long for the field or a schema mismatch.", rejected);
 						}
 					}
 				} else {

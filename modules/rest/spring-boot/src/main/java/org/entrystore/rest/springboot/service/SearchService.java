@@ -178,7 +178,7 @@ public class SearchService {
 			}
 
 			if (facetSettings.fields != null) {
-				LanguageAwareFacets.configure(q, facetSettings);
+				LanguageAwareFacets.configure(q, facetSettings, solrMaxFacetLimit);
 			}
 
 			for (String fq : filterQueries) {
@@ -186,10 +186,11 @@ public class SearchService {
 			}
 
 			try {
-				QueryResult qResult = ((SolrSearchIndex) repositoryManager.getIndex()).sendQuery(q);
+				SolrSearchIndex index = (SolrSearchIndex) repositoryManager.getIndex();
+				QueryResult qResult = index.sendQuery(q);
 				entries = new LinkedList<>(qResult.getEntries());
 				results = qResult.getHits();
-				responseFacetFields = LanguageAwareFacets.merge(qResult.getFacetFields(), facetSettings);
+				responseFacetFields = LanguageAwareFacets.merge(qResult.getFacetFields(), facetSettings, q, index);
 			} catch (SolrException se) {
 				log.warn("SolrException: {}", se.getMessage());
 				throw new BadRequestException("Search failed due to wrong parameters");
@@ -271,9 +272,9 @@ public class SearchService {
 	}
 
 	/**
-	 * Serialises the client-facing facet fields. A bucket carries {@code name}, {@code count} and, for a literal
-	 * label that occurs with language tags, a {@code lang} array; the {@code facet.missing} bucket has a
-	 * {@code null} name, which {@code JSONObject.put} drops, so it carries {@code count} only.
+	 * Serialises the client-facing facet fields. A bucket carries {@code name} and {@code count}; the
+	 * {@code facet.missing} bucket has a {@code null} name, which {@code JSONObject.put} drops, so it carries
+	 * {@code count} only.
 	 */
 	private static @NotNull JSONArray getFacetFieldsArr(QueryResultsDto queryResults) {
 		JSONArray facetFieldsArr = new JSONArray();
@@ -286,9 +287,6 @@ public class SearchService {
 				JSONObject valueObj = new JSONObject();
 				valueObj.put("name", value.name());
 				valueObj.put("count", value.count());
-				if (!value.langs().isEmpty()) {
-					valueObj.put("lang", new JSONArray(value.langs()));
-				}
 				ffValArr.put(valueObj);
 			}
 			ffObj.put("values", ffValArr);

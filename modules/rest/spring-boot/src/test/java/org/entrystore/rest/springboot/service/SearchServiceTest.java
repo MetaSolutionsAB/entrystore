@@ -59,6 +59,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
@@ -307,7 +308,7 @@ class SearchServiceTest {
 	}
 
 	@Test
-	void findEntriesSolr_literalFacet_addsTheUnlimitedCompanionField() {
+	void findEntriesSolr_literalFacet_addsABoundedCompanionFieldOnlyWithFacetLang() {
 		SolrSearchIndex index = mock(SolrSearchIndex.class);
 		when(repositoryManager.getIndex()).thenReturn(index);
 		when(index.sendQuery(any(SolrQuery.class))).thenReturn(new QueryResult(Set.of(), 0, List.of()));
@@ -319,17 +320,34 @@ class SearchServiceTest {
 		SolrQuery query = capturedQuery(index);
 		assertEquals(List.of("rdfType", "metadata.predicate.literal_s.abc12345", "metadata.predicate.literal_l.abc12345"),
 				List.of(query.getFacetFields()));
-		assertEquals("-1", query.get("f.metadata.predicate.literal_l.abc12345.facet.limit"));
-		assertEquals("-1", query.get("f.metadata.predicate.literal_s.abc12345.facet.limit"),
-				"with facetLang the client field is unlimited so the top-N is taken after the language filter");
+		assertEquals("400", query.get("f.metadata.predicate.literal_l.abc12345.facet.limit"),
+				"the companion overrequest must stay bounded on this guest-reachable endpoint");
+		assertNull(query.get("f.metadata.predicate.literal_s.abc12345.facet.limit"),
+				"the client field must stay under the configured facet limit");
 	}
 
 	@Test
-	void generateJson_literalFacet_carriesLangArraysPerBucket() {
+	void findEntriesSolr_literalFacet_withoutFacetLang_addsNoCompanionField() {
+		SolrSearchIndex index = mock(SolrSearchIndex.class);
+		when(repositoryManager.getIndex()).thenReturn(index);
+		when(index.sendQuery(any(SolrQuery.class))).thenReturn(new QueryResult(Set.of(), 0, List.of()));
+		var service = new SearchService(repositoryManager, syndicationProperties, realSerializer());
+
+		service.findEntriesSolr("*:*", null, 0, 10, List.of(),
+				facetSettings("rdfType,metadata.predicate.literal_s.abc12345", null, null));
+
+		SolrQuery query = capturedQuery(index);
+		assertEquals(List.of("rdfType", "metadata.predicate.literal_s.abc12345"), List.of(query.getFacetFields()),
+				"without facetLang the request must be the one this endpoint sent before language support");
+		assertTrue(query.getParameterNames().stream().noneMatch(name -> name.startsWith("f.")));
+	}
+
+	@Test
+	void generateJson_literalFacet_carriesNameAndCountPerBucket() {
 		var facet = new FacetValuesDto("metadata.predicate.literal_s.abc12345", List.of(
-				new FacetValueDto("Sverige", 2, List.of("nb", "sv")),
-				new FacetValueDto("Stockholm", 1, List.of()),
-				new FacetValueDto(null, 4, List.of())));
+				new FacetValueDto("Sverige", 2),
+				new FacetValueDto("Stockholm", 1),
+				new FacetValueDto(null, 4)));
 		var service = new SearchService(repositoryManager, syndicationProperties, realSerializer());
 
 		JSONObject facetJson = firstFacetField(service.generateJson(0, 10, new QueryResultsDto(List.of(), 0, List.of(facet)), null));
@@ -339,9 +357,9 @@ class SearchServiceTest {
 		JSONObject sverige = facetJson.getJSONArray("values").getJSONObject(0);
 		assertEquals("Sverige", sverige.getString("name"));
 		assertEquals(2, sverige.getLong("count"));
-		assertEquals(List.of("nb", "sv"), sverige.getJSONArray("lang").toList());
+		assertFalse(sverige.has("lang"), "language information is not part of the bucket shape");
 		JSONObject stockholm = facetJson.getJSONArray("values").getJSONObject(1);
-		assertFalse(stockholm.has("lang"), "an untagged-only label carries no lang array");
+		assertEquals("Stockholm", stockholm.getString("name"));
 		JSONObject missing = facetJson.getJSONArray("values").getJSONObject(2);
 		assertFalse(missing.has("name"), "the facet.missing bucket stays nameless");
 		assertEquals(4, missing.getLong("count"));

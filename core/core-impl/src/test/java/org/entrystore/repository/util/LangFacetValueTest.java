@@ -36,6 +36,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LangFacetValueTest {
 
+	/** The unit separator LangFacetValue puts between label and language tag. */
+	private static final char SEPARATOR = (char) 0x1F;
+
 	private static final ValueFactory VF = SimpleValueFactory.getInstance();
 
 	static Stream<Arguments> literals() {
@@ -68,6 +71,21 @@ class LangFacetValueTest {
 		Literal literal = VF.createLiteral("a\u001Fb", "en");
 
 		assertEquals(new LangFacetValue("a\u001Fb", "en"), LangFacetValue.decode(LangFacetValue.encode(literal)));
+	}
+
+	/**
+	 * A client-supplied language reaches createLiteral unvalidated and normalizeLanguageTag keeps an ill-formed tag
+	 * as it is, so a tag carrying the separator would make decode split inside the tag and report part of it as the
+	 * label. Such a tag is dropped instead and the literal encoded as untagged.
+	 */
+	@Test
+	void encode_tagContainingTheSeparator_isDroppedRatherThanMisparsed() {
+		Literal literal = SimpleValueFactory.getInstance().createLiteral("Sverige", "x" + SEPARATOR + "y");
+
+		LangFacetValue decoded = LangFacetValue.decode(LangFacetValue.encode(literal));
+
+		assertEquals("Sverige", decoded.label(), "the label must survive intact");
+		assertNull(decoded.lang(), "a tag that cannot be encoded unambiguously is dropped");
 	}
 
 	@Test
