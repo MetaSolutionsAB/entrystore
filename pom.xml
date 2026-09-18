@@ -184,6 +184,33 @@
 										</excludes>
 										<message>Logback and spring-boot-starter-logging are banned — this project uses Log4j2. The global dependencyManagement exclusion on spring-boot-starter in the root pom should keep them off the classpath; this rule fails the build if a transitive pull somehow reintroduces them.</message>
 									</bannedDependencies>
+									<!-- Explicit patterns rather than javax.*: JCache (javax.cache), javax.measure and
+									     javax.money were never moved to Jakarta and stay legitimate. -->
+									<bannedDependencies>
+										<excludes>
+											<exclude>javax.servlet:*</exclude>
+											<exclude>javax.servlet.jsp:*</exclude>
+											<exclude>javax.mail:*</exclude>
+											<exclude>com.sun.mail:javax.mail</exclude>
+											<exclude>com.sun.mail:mailapi</exclude>
+											<exclude>javax.activation:*</exclude>
+											<exclude>com.sun.activation:javax.activation</exclude>
+											<exclude>javax.annotation:javax.annotation-api</exclude>
+											<exclude>javax.validation:*</exclude>
+											<exclude>javax.xml.bind:*</exclude>
+											<exclude>org.glassfish.jaxb:jaxb-runtime:[,3.0)</exclude>
+											<exclude>javax.inject:*</exclude>
+											<exclude>javax.ws.rs:*</exclude>
+											<exclude>javax.persistence:*</exclude>
+											<exclude>javax.transaction:*</exclude>
+											<exclude>javax.el:*</exclude>
+											<exclude>javax.json:*</exclude>
+											<exclude>javax.websocket:*</exclude>
+											<exclude>javax.enterprise:cdi-api</exclude>
+											<exclude>javax.interceptor:*</exclude>
+										</excludes>
+										<message>Legacy Java EE javax.* artifacts are banned — Spring Boot 4 and Jetty 12 are Jakarta EE only (ENTRYSTORE-911). Depend on the jakarta.* API artifact instead; if a transitive dependency pulls one of these in, exclude it at the declaring dependency.</message>
+									</bannedDependencies>
 									<!-- Fails the build when a transitive dependency requests a higher version than what
 									     resolves — turning a silently-forgotten version override (e.g. bouncycastle.version)
 									     into a build failure once upstream surpasses our pin, forcing a conscious review. -->
