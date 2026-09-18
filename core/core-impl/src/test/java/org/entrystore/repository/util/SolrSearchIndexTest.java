@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -139,6 +140,36 @@ public class SolrSearchIndexTest {
 		assertTrue(allContextsReindexed);
 		verify(cm).getByEntryURI(CONTEXT_1);
 		verify(cm).getByEntryURI(CONTEXT_2);
+	}
+
+	@Test
+	public void asyncReindexClearsIndexingStateWhenContextFails() throws Exception {
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		when(cm.getByEntryURI(CONTEXT_1)).thenThrow(new org.entrystore.repository.RepositoryException("Unable to load entry " + CONTEXT_1));
+
+		index.reindex(CONTEXT_1, false);
+		reindexingFutureOrCompleted(CONTEXT_1).get(10, TimeUnit.SECONDS);
+
+		assertFalse(index.isIndexing(CONTEXT_1), "A failed reindex must not leave the context marked as indexing");
+	}
+
+	@Test
+	public void asyncReindexClearsIndexingStateWhenContextFailsWithError() throws Exception {
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		when(cm.getByEntryURI(CONTEXT_1)).thenThrow(new OutOfMemoryError("simulated"));
+
+		index.reindex(CONTEXT_1, false);
+		reindexingFutureOrCompleted(CONTEXT_1).get(10, TimeUnit.SECONDS);
+
+		assertFalse(index.isIndexing(CONTEXT_1), "An Error must not leave the context marked as indexing");
+	}
+
+	/**
+	 * The indexer removes itself from the map when it finishes, so a missing future means it is already done.
+	 */
+	private Future<?> reindexingFutureOrCompleted(URI contextURI) {
+		Future<?> indexer = reindexingMap.get(contextURI);
+		return indexer != null ? indexer : CompletableFuture.completedFuture(null);
 	}
 
 	/**

@@ -19,6 +19,7 @@ package org.entrystore.repository.util;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.solr.client.solrj.RemoteSolrException;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -107,6 +108,12 @@ public class SolrSearchIndex implements SearchIndex {
 	private static final long EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS = 10;
 
 	private static final long MAX_PURGE_WAIT_NANOS = TimeUnit.MINUTES.toNanos(5);
+
+	/**
+	 * Number of entry failures per context reindex that are logged with a stack trace. Entries of one
+	 * context tend to fail for a shared cause, and one trace per entry would flood the log.
+	 */
+	private static final int MAX_ENTRY_FAILURE_TRACES = 5;
 
 	private static final DateTimeFormatter SOLR_DATE_FORMATTER =
 			DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
@@ -595,7 +602,9 @@ public class SolrSearchIndex implements SearchIndex {
 	 *                                 re-indexation is finished.
 	 */
 	public void reindex(boolean purgeAllBeforeReindex) {
-		reindex(purgeAllBeforeReindex, false);
+		for (URI contextURI : listContextsAsAdmin()) {
+			reindex(contextURI, purgeAllBeforeReindex);
+		}
 	}
 
 	/**
@@ -620,11 +629,12 @@ public class SolrSearchIndex implements SearchIndex {
 			Future indexer = reindexExecutor.submit(() -> {
 				try {
 					reindexSync(contextURI, false);
-				} catch (RuntimeException e) {
+				} catch (RuntimeException | Error e) {
 					// The Future is never inspected, so without this the failure would vanish without a trace.
 					log.error("Reindexing of context {} failed", contextURI, e);
+				} finally {
+					reindexing.remove(contextURI);
 				}
-				reindexing.remove(contextURI);
 			});
 			reindexing.put(contextURI, indexer);
 		}
@@ -634,41 +644,32 @@ public class SolrSearchIndex implements SearchIndex {
 	 * Re-indexes all contexts in the calling thread. A context whose reindex fails is logged and skipped so
 	 * that a single corrupt context does not prevent the remaining contexts from being indexed.
 	 *
-	 * @return false if the reindex of at least one context failed
+	 * @return false if the reindex of at least one context failed as a whole. Entries that could not be
+	 * indexed and contexts that could not be resolved are logged but do not affect the result: callers
+	 * use it to decide whether to repeat the full reindex, which would not repair either.
 	 */
 	public boolean reindexSync(boolean purgeAllBeforeReindex) {
-		return reindex(purgeAllBeforeReindex, true);
+		boolean allContextsReindexed = true;
+		for (URI contextURI : listContextsAsAdmin()) {
+			try {
+				reindexSync(contextURI, purgeAllBeforeReindex);
+			} catch (RuntimeException e) {
+				log.error("Reindexing of context {} failed, continuing with the remaining contexts", contextURI, e);
+				allContextsReindexed = false;
+			}
+		}
+		return allContextsReindexed;
 	}
 
-	/**
-	 * @return false if the synchronous reindex of at least one context failed; always true when {@code sync}
-	 * is false, as failures of the asynchronous per-context reindex are only logged
-	 */
-	private boolean reindex(boolean purgeAllBeforeReindex, boolean sync) {
-		Set<URI> contexts;
+	private Set<URI> listContextsAsAdmin() {
 		PrincipalManager pm = rm.getPrincipalManager();
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			contexts = rm.getContextManager().getEntries();
+			return rm.getContextManager().getEntries();
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
-
-		boolean allContextsReindexed = true;
-		for (URI contextURI : contexts) {
-			if (sync) {
-				try {
-					reindexSync(contextURI, purgeAllBeforeReindex);
-				} catch (RuntimeException e) {
-					log.error("Reindexing of context {} failed, continuing with the remaining contexts", contextURI, e);
-					allContextsReindexed = false;
-				}
-			} else {
-				reindex(contextURI, purgeAllBeforeReindex);
-			}
-		}
-		return allContextsReindexed;
 	}
 
 	public void reindexSync(URI contextURI, boolean purgeAllBeforeReindex) {
@@ -744,7 +745,7 @@ public class SolrSearchIndex implements SearchIndex {
 				}
 				log.info("Finished Solr reindexing of context {}, took {} ms; the Solr submission queue may still contain yet to be processed documents", contextURI, new Date().getTime() - reindexStart.getTime());
 			} else {
-				log.debug("Solr reindexing of context {} could not be completed, either the context could not be loaded or (most likely) another process started reindexing the same context before the ongoing process was complete", contextURI);
+				log.debug("Solr reindexing of context {} posted no entries: the context is empty, could not be resolved, or the reindexing was interrupted", contextURI);
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
@@ -848,6 +849,7 @@ public class SolrSearchIndex implements SearchIndex {
 		Context context = cm.getContext(id);
 		if (context != null) {
 			URI lastEntryURI = null;
+			int failedEntries = 0;
 			for (URI entryURI : context.getEntries()) {
 				if (interrupted()) {
 					log.info("Indexer thread received interrupt, stopping reindexing of " + contextURI);
@@ -858,7 +860,7 @@ public class SolrSearchIndex implements SearchIndex {
 					try {
 						entry = cm.getEntry(entryURI);
 					} catch (Exception e) {
-						log.error("Unable to load entry with URI {}", entryURI, e);
+						logEntryFailure("Unable to load entry", entryURI, e, ++failedEntries);
 						continue;
 					}
 					if (entry == null) {
@@ -871,7 +873,7 @@ public class SolrSearchIndex implements SearchIndex {
 							try {
 								postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
 							} catch (Exception e) {
-								log.error("Not indexing {}", entryURI, e);
+								logEntryFailure("Not indexing entry", entryURI, e, ++failedEntries);
 							}
 						} else {
 							log.debug("Not adding deleted entry to post queue: {}", entryURI);
@@ -880,9 +882,21 @@ public class SolrSearchIndex implements SearchIndex {
 					lastEntryURI = entryURI;
 				}
 			}
+			if (failedEntries > 0) {
+				log.error("{} entries of context {} could not be indexed", failedEntries, contextURI);
+			}
 			return lastEntryURI;
 		}
+		log.warn("Context {} could not be resolved; its entries were not reindexed", contextURI);
 		return null;
+	}
+
+	private void logEntryFailure(String message, URI entryURI, Exception e, int failureCount) {
+		if (failureCount <= MAX_ENTRY_FAILURE_TRACES) {
+			log.error("{} {}", message, entryURI, e);
+		} else {
+			log.error("{} {}: {}", message, entryURI, ExceptionUtils.getRootCauseMessage(e));
+		}
 	}
 
 	private void storeLiteralsWithLanguages(SolrInputDocument doc, Map<String, Set<String>> literals, String literalType) {
