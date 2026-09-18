@@ -58,6 +58,9 @@ import static org.mockito.Mockito.spy;
 
 public class ListImplTest extends AbstractCoreTest {
 
+	/** Names the second writer so the spy can tell the two threads' validation calls apart. */
+	private static final String CONTENDER = "monitor-contender";
+
 	@Test
 	public void singleOccurrenceOfChild() {
 		// Use the Donald user.
@@ -395,10 +398,12 @@ public class ListImplTest extends AbstractCoreTest {
 
 	/**
 	 * {@code setChildren} validates before taking the monitor, since each member costs a store read and the
-	 * member count is client-controlled, but it must then re-diff <em>under</em> the monitor it commits within.
-	 * Relying on the outside diff, two concurrent writes to the same list diff the same pre-state, and the loser
-	 * rewrites the member graph without calling {@code removeReferringList} for what the winner added — leaving a
-	 * relation naming a list that no longer contains the entry, which then blocks re-adding it anywhere else.
+	 * member count is client-controlled, but it must then re-diff and re-validate <em>under</em> the monitor it
+	 * commits within. Relying on the outside diff, two concurrent writes to the same list diff the same
+	 * pre-state, and the loser rewrites the member graph without calling {@code removeReferringList} for what the
+	 * winner added — leaving a relation naming a list that no longer contains the entry, which then blocks
+	 * re-adding it anywhere else. Asserted on that leftover relation rather than on the number of validation
+	 * calls, which a diff hoisted back above the monitor would keep satisfying.
 	 */
 	@Test
 	public void setChildrenReDiffsUnderTheRepositoryMonitor() throws Exception {
@@ -411,10 +416,14 @@ public class ListImplTest extends AbstractCoreTest {
 		ListImpl list = spy((ListImpl) listEntry.getResource());
 		CountDownLatch writerIsDiffing = new CountDownLatch(1);
 		CountDownLatch releaseWriter = new CountDownLatch(1);
+		CountDownLatch contenderHasDiffedOutside = new CountDownLatch(1);
 		AtomicInteger additionValidations = new AtomicInteger();
 		doAnswer(invocation -> {
-			// the second call is the one under the monitor, on the delta the re-diff produced
-			if (additionValidations.incrementAndGet() == 2) {
+			if (CONTENDER.equals(Thread.currentThread().getName())) {
+				// the contender's own pre-monitor pass: from here its only remaining wait is the monitor
+				contenderHasDiffedOutside.countDown();
+			} else if (additionValidations.incrementAndGet() == 2) {
+				// the writer's second call is the one under the monitor, on what the re-diff produced
 				writerIsDiffing.countDown();
 				if (!releaseWriter.await(10, TimeUnit.SECONDS)) {
 					throw new IllegalStateException("the diffing writer was never released");
@@ -432,13 +441,15 @@ public class ListImplTest extends AbstractCoreTest {
 			assertTrue(writerIsDiffing.await(10, TimeUnit.SECONDS),
 				"precondition: the writer is re-diffing under the monitor");
 
-			AtomicInteger reachedMonitor = new AtomicInteger();
+			// A second writer that emptied the list from the pre-state it saw before the first writer committed
+			// would rewrite the member graph without removing the member's relation to this list.
 			Thread contender = new Thread(() -> {
-				synchronized (((EntryImpl) listEntry).repository) {
-					reachedMonitor.incrementAndGet();
-				}
-			}, "monitor-contender");
+				pm.setAuthenticatedUserURI(donald);
+				list.setChildren(java.util.List.of());
+			}, CONTENDER);
 			contender.start();
+			assertTrue(contenderHasDiffedOutside.await(10, TimeUnit.SECONDS),
+				"precondition: the contender took its pre-monitor diff while the list was still empty");
 
 			assertEquals(Thread.State.BLOCKED, awaitBlockedOrTerminated(contender),
 				"a second writer must not be able to take the repository monitor while setChildren is diffing; "
@@ -446,8 +457,13 @@ public class ListImplTest extends AbstractCoreTest {
 
 			releaseWriter.countDown();
 			contender.join(TimeUnit.SECONDS.toMillis(10));
-			assertEquals(1, reachedMonitor.get(), "the contender must get the monitor once the write completes");
-			assertTrue(list.getChildren().contains(member.getEntryURI()), "the write itself must still land");
+
+			assertFalse(list.getChildren().contains(member.getEntryURI()),
+				"precondition: the second writer emptied the list after the first one had added the member");
+			assertTrue(((EntryImpl) member).getReferringListsInSameContext().isEmpty(),
+				"the second writer must re-diff against the committed membership and remove the relation it "
+					+ "inherited; a relation naming a list that no longer holds the entry blocks re-adding it "
+					+ "anywhere else");
 		} finally {
 			releaseWriter.countDown();
 			writer.shutdownNow();

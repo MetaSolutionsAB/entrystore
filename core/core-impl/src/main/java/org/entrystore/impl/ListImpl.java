@@ -187,9 +187,9 @@ public class ListImpl extends RDFResource implements List {
 
 	/**
 	 * Persists exactly the members the caller holds. It must never re-derive them from the field or the store: a
-	 * caller is inside an open transaction whose writes its own connection cannot see, so a re-read would persist
-	 * the pre-change membership. Package-private so a same-package test can fail a member-list write and exercise
-	 * the recovery path.
+	 * re-read goes through {@link #loadChildren()} and {@link #getGraph()}, which opens a connection of its own
+	 * and therefore cannot see the caller's uncommitted writes, so it would persist the pre-change membership.
+	 * Package-private so a same-package test can fail a member-list write and exercise the recovery path.
 	 */
 	void saveChildren(Vector<URI> childrenToSave, RepositoryConnection rc) throws RepositoryException {
 		ValueFactory vf = entry.repository.getValueFactory();
@@ -481,6 +481,15 @@ public class ListImpl extends RDFResource implements List {
 		return setChildren(newChildren, true, true);
 	}
 
+	/**
+	 * Replaces the membership of this list, in two passes. The pass outside {@code entry.repository} is a
+	 * fail-fast that also warms the repository-wide {@code SoftCache}; it decides nothing, because the rules it
+	 * runs read state that is not part of this list's diff — {@code validateAdditions}' single-parent rule and
+	 * {@code canRemove}'s orphan rule both read the <em>child's</em> referring lists, which a write to another
+	 * list changes. Only the pass under the monitor is authoritative: every member-write transaction in the
+	 * instance commits under that one monitor, so the re-diff and the validation it feeds observe every write
+	 * that has already committed, and no writer can commit between them and this call's own commit.
+	 */
 	public boolean setChildren(java.util.List<URI> newChildren, boolean singleParentForListsRequirement, boolean orderedSetRequirement) {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
 		boolean isOwnerOfContext = false;
@@ -501,23 +510,18 @@ public class ListImpl extends RDFResource implements List {
 			}
 		}
 
-		// Validated outside the monitor: each member costs its own store read, and N is client-controlled
-		// (deleteChildren puts every member in toRemove), so validating under the instance-wide write monitor
-		// would freeze every writer in the instance for the duration.
-		MemberDiff validated = diffChildren(loadChildren(), newChildren);
-		validateAdditions(validated.toAdd(), singleParentForListsRequirement);
-		validateRemovals(validated.toRemove(), isOwnerOfContext);
+		// Fail-fast only, and it warms the SoftCache the authoritative pass reads through.
+		MemberDiff prevalidated = diffChildren(loadChildren(), newChildren);
+		validateAdditions(prevalidated.toAdd(), singleParentForListsRequirement);
+		validateRemovals(prevalidated.toRemove(), isOwnerOfContext);
 
 		try {
 			synchronized (this.entry.repository) {
-				// Re-diff under the monitor that commits it. Using the diff computed above, two concurrent writers
-				// diff the same pre-state and the loser rewrites the member graph without calling removeReferringList
-				// for what the winner added, orphaning a referredIn statement.
+				// The authoritative pass: re-diff and re-validate in full under the monitor that commits them.
 				Vector<URI> oldChildrenList = loadChildren();
 				MemberDiff diff = diffChildren(oldChildrenList, newChildren);
-				// Normally empty: only what the pre-validation could not have seen needs a store read here.
-				validateAdditions(subtract(diff.toAdd(), validated.toAdd()), singleParentForListsRequirement);
-				validateRemovals(subtract(diff.toRemove(), validated.toRemove()), isOwnerOfContext);
+				validateAdditions(diff.toAdd(), singleParentForListsRequirement);
+				validateRemovals(diff.toRemove(), isOwnerOfContext);
 				java.util.List<URI> toAdd = diff.toAdd();
 				java.util.List<URI> toRemove = diff.toRemove();
 
@@ -586,22 +590,19 @@ public class ListImpl extends RDFResource implements List {
 	/**
 	 * Both sides hashed once: {@code removeAll} over a Vector is a linear scan per element, so a large list
 	 * reordered rather than changed costs O(n*m) comparisons to produce an empty diff.
+	 * <p>
+	 * {@code current} is copied before it is read, because the caller may pass the live {@link #children} vector
+	 * while holding neither lock: every mutator changes that vector in place under {@code entry.repository}
+	 * alone, and both traversals below are fail-fast. {@code Vector.toArray()} is synchronized, so the copy is an
+	 * atomic snapshot rather than one more unguarded traversal.
 	 */
 	private static MemberDiff diffChildren(java.util.List<URI> current, java.util.List<URI> wanted) {
+		java.util.List<URI> snapshot = new ArrayList<>(current);
 		HashSet<URI> wantedSet = new HashSet<>(wanted);
-		HashSet<URI> currentSet = new HashSet<>(current);
-		java.util.List<URI> toRemove = current.stream().filter(uri -> !wantedSet.contains(uri)).toList();
+		HashSet<URI> currentSet = new HashSet<>(snapshot);
+		java.util.List<URI> toRemove = snapshot.stream().filter(uri -> !wantedSet.contains(uri)).toList();
 		java.util.List<URI> toAdd = wanted.stream().filter(uri -> !currentSet.contains(uri)).toList();
 		return new MemberDiff(toAdd, toRemove);
-	}
-
-	/** The members of {@code candidates} that {@code alreadyChecked} does not cover. */
-	private static java.util.List<URI> subtract(java.util.List<URI> candidates, java.util.List<URI> alreadyChecked) {
-		if (alreadyChecked.isEmpty()) {
-			return candidates;
-		}
-		HashSet<URI> checked = new HashSet<>(alreadyChecked);
-		return candidates.stream().filter(uri -> !checked.contains(uri)).toList();
 	}
 
 	/** Package-private so a same-package test can hold a writer between the outside pass and the monitor. */
@@ -774,9 +775,7 @@ public class ListImpl extends RDFResource implements List {
 					boolean restorable = removedInMemory;
 					recoverFromFailedMemberWrite(e, committed, () -> {
 						if (restorable) {
-							synchronized (childrenLock) {
-								currentChildren.add(index, child);
-							}
+							currentChildren.add(index, child);
 						}
 					}, () -> {
 						rc.rollback();

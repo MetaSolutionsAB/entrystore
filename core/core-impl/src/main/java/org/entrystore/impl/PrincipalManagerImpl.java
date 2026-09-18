@@ -106,13 +106,13 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	/**
 	 * Entry URIs {@link #scanGroups(URI)} has already reported as listed in the index but not loadable. The scan
 	 * runs on the authorization decision path, so warning on every occurrence would put an unbounded log write
-	 * there: each URI is warned about once per process and logged at debug afterwards.
+	 * there: each URI is warned about once per {@code PrincipalManagerImpl} instance and logged at debug
+	 * afterwards.
 	 * <p>
-	 * It only grows, and is bounded by the number of distinct principal entries that have ever failed to load in
-	 * this process — not by the number dangling right now. Dropping a URI once it loads again would re-arm the
-	 * warning, but {@code ContextImpl.getByEntryURI} returns null both for a genuinely absent entry and for a
-	 * store read that failed, so on a store with intermittent failures that would re-emit the warning on every
-	 * scan, which is the flood this set exists to prevent.
+	 * It only grows, and is bounded by the number of distinct principal entries that have ever failed to load for
+	 * this instance — not by the number dangling right now. That bound is not attacker-drivable: it takes a
+	 * principal entry the index names but the store does not hold, and principal creation is administrator-gated,
+	 * while self-signup cannot produce one.
 	 */
 	private final Set<URI> reportedUnloadableEntries = ConcurrentHashMap.newKeySet();
 

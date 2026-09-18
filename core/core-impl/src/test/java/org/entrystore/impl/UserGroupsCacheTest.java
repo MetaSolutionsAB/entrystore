@@ -25,12 +25,21 @@ import org.entrystore.User;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryListener;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.config.Configurator;
+import org.apache.logging.log4j.core.config.Property;
+import org.apache.logging.log4j.core.layout.PatternLayout;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -272,12 +281,14 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 	}
 
 	/**
-	 * The scan runs on every authorization decision, so an index mapping it cannot load must be reported once
-	 * and then suppressed. Without an accessor the suppression is only visible in a log, and dropping it would
-	 * be a silent regression that puts an unbounded log write back on the decision path.
+	 * The scan runs on every authorization decision, so an index mapping it cannot load must be warned about
+	 * once and logged at debug afterwards. The suppression is observable only in the log: the set the scan keeps
+	 * cannot witness it, since {@code Set.add} is idempotent and leaves the same set behind whether the code
+	 * warns once or warns every time. Scans are driven directly because {@code getGroupUrisCached} would serve
+	 * the second call from the cache without scanning at all.
 	 */
 	@Test
-	public void anUnloadableIndexedEntryIsReportedOnlyOnce() {
+	public void anUnloadableIndexedEntryIsWarnedAboutOnlyOnce() {
 		group.addMember(user);
 		URI dangling = URI.create("http://localhost:8181/_principals/entry/does-not-exist");
 		Set<URI> listing = new HashSet<>(pmi.getEntries());
@@ -285,13 +296,15 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 		PrincipalManagerImpl spied = spy(pmi);
 		doReturn(listing).when(spied).getEntries();
 
-		spied.getGroupUrisCached(user.getURI());
-		spied.getGroupUrisCached(user.getURI());
+		try (LogCapture log = new LogCapture(PrincipalManagerImpl.class)) {
+			spied.scanGroups(user.getURI());
+			spied.scanGroups(user.getURI());
 
+			assertEquals(1, log.warningsMentioning(dangling.toString()),
+					"a dangling index mapping must be warned about once, not on every authorization decision");
+		}
 		assertTrue(pmi.reportedUnloadableEntriesView().contains(dangling),
-				"the unloadable mapping must be recorded so the warning is not repeated on every decision");
-		assertEquals(1, pmi.reportedUnloadableEntriesView().size(),
-				"only the entry that could not be loaded belongs in the set");
+				"the URI must be recorded, since that record is what suppresses the second warning");
 	}
 
 	@Test
@@ -444,6 +457,50 @@ public class UserGroupsCacheTest extends AbstractCoreTest {
 					"the next decision must see the revocation, not the racing loader's snapshot");
 		} finally {
 			loader.shutdownNow();
+		}
+	}
+
+	/**
+	 * Captures what one class logs, so a branch whose only effect is the level it logs at can be asserted on.
+	 * Raises that logger to WARN for the duration: the shared test configuration pins {@code org.entrystore.impl}
+	 * at ERROR, which would otherwise drop the event before any appender sees it.
+	 */
+	private static final class LogCapture implements AutoCloseable {
+
+		private final Logger logger;
+		private final Level previousLevel;
+		private final List<LogEvent> events = Collections.synchronizedList(new ArrayList<>());
+		private final AbstractAppender appender;
+
+		private LogCapture(Class<?> owner) {
+			logger = (Logger) LogManager.getLogger(owner);
+			previousLevel = logger.getLevel();
+			appender = new AbstractAppender("capture-" + owner.getSimpleName(), null,
+					PatternLayout.createDefaultLayout(), true, Property.EMPTY_ARRAY) {
+				@Override
+				public void append(LogEvent event) {
+					events.add(event.toImmutable());
+				}
+			};
+			appender.start();
+			logger.addAppender(appender);
+			Configurator.setLevel(owner.getName(), Level.WARN);
+		}
+
+		private long warningsMentioning(String needle) {
+			synchronized (events) {
+				return events.stream()
+						.filter(event -> Level.WARN.equals(event.getLevel()))
+						.filter(event -> event.getMessage().getFormattedMessage().contains(needle))
+						.count();
+			}
+		}
+
+		@Override
+		public void close() {
+			Configurator.setLevel(logger.getName(), previousLevel);
+			logger.removeAppender(appender);
+			appender.stop();
 		}
 	}
 }
