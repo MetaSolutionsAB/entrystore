@@ -16,60 +16,63 @@
 
 package org.entrystore.rest.springboot.service.auth;
 
-import org.apache.commons.validator.routines.InetAddressValidator;
+import com.google.common.net.InetAddresses;
+import jakarta.validation.Validator;
+import jakarta.validation.constraints.Email;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.net.Inet6Address;
 
 /**
- * This email validator class replaces the Apache Commons Validator due to its
- * lack of support for flexible handling of new TLDs. This validator provides
- * less strict validation of domain names (it does not compare against a white * list),
- * but maintains a sufficient level of validation.
+ * Applies Jakarta email syntax validation and EntryStore's domain policy: a dotted domain with a
+ * suffix of at least two characters, or a bracketed IP literal. No TLD allowlist or DNS lookup is used.
+ * IPv6 literals must carry the RFC 5321 {@code IPv6:} tag (matched case-insensitively); a bare bracketed
+ * IPv6 address is rejected, as is a zone ID such as {@code %eth0}.
  *
  * <p>Reached declaratively through
  * {@link org.entrystore.rest.springboot.model.validation.ValidEmail} on request bodies, and directly
  * by {@code AuthService} on the password-reset path.
  */
 @Service
-public class EmailValidator extends org.apache.commons.validator.routines.EmailValidator {
+@RequiredArgsConstructor
+public class EmailValidator {
 
-	private static final Pattern IP_DOMAIN_PATTERN = Pattern.compile("^\\[(.*)]$");
-
-	public EmailValidator() {
-		super(true);
-	}
+	private final Validator validator;
 
 	/**
-	 * Hides the inherited Commons factory so a stale {@code getInstance()} call fails fast instead of
-	 * silently returning the stricter Commons validator, whose TLD whitelist rejects the very addresses
-	 * this class exists to accept. Inject the Spring bean instead.
-	 *
-	 * <p>Kept as a throwing method rather than a note in the javadoc: the inherited static stays
-	 * reachable either way, so only code can stop it being called.
+	 * Rejects absent values for direct callers. The declarative {@code @ValidEmail} constraint leaves
+	 * null and empty values to the request body's presence constraint.
 	 */
-	public static EmailValidator getInstance() {
-		throw new UnsupportedOperationException("Inject the EmailValidator Spring bean instead");
-	}
-
-	@Override
-	protected boolean isValidDomain(String domain) {
-		// see if domain is an IP address in brackets
-		Matcher ipDomainMatcher = IP_DOMAIN_PATTERN.matcher(domain);
-
-		if (ipDomainMatcher.matches()) {
-			InetAddressValidator inetAddressValidator =
-					InetAddressValidator.getInstance();
-			return inetAddressValidator.isValid(ipDomainMatcher.group(1));
-		} else {
-			// We don't use Commons Validator's DomainValidator because it
-			// has an outdated list of TLDs and does not support new ones
-			// less than two characters for TLD
-			return domain.contains(".") && // no dot
-					domain.indexOf(".") != 0 && // dot in the beginning
-					domain.lastIndexOf(".") <= domain.length() - 3;
+	public boolean isValid(String email) {
+		if (email == null || email.isEmpty()) {
+			return false;
 		}
+		if (!validator.validate(new Address(email)).isEmpty()) {
+			return false;
+		}
+
+		String domain = email.substring(email.lastIndexOf('@') + 1);
+		if (domain.startsWith("[") && domain.endsWith("]")) {
+			String literal = domain.substring(1, domain.length() - 1);
+			// A zone ID names a host-local scope, which the policy rejects just like "localhost".
+			if (literal.indexOf('%') >= 0) {
+				return false;
+			}
+			if (literal.regionMatches(true, 0, "IPv6:", 0, 5)) {
+				literal = literal.substring(5);
+				return InetAddresses.isInetAddress(literal)
+						&& InetAddresses.forString(literal) instanceof Inet6Address;
+			}
+			// Hibernate's @Email checks IPv4 shape but does not enforce the octet range.
+			return InetAddresses.isInetAddress(literal);
+		}
+
+		int lastDot = domain.lastIndexOf('.');
+		int suffixLength = domain.length() - lastDot - 1;
+		return lastDot > 0 && suffixLength >= 2;
 	}
 
+	private record Address(@Email String value) {
+	}
 }
