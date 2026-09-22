@@ -57,7 +57,42 @@ import java.util.Vector;
 @Slf4j
 public class ListImpl extends RDFResource implements List {
 
-	private Vector<URI> children;
+	/**
+	 * Guards assignment of the {@link #children} field — not the contents of the vector it holds, which
+	 * {@code addChild}, {@code moveChildAfter}, {@code moveChildBefore} and {@code removeChild} mutate while
+	 * holding {@code entry.repository} alone. Per list rather than {@code entry.repository}, which is one object
+	 * shared by every entry in the instance: holding that across the store read in {@link #getGraph()} blocks each
+	 * cold list read for the duration of an import (45cdc777 moved the analogous lazy
+	 * {@code ContextImpl.loadIndex()} off it for the same reason).
+	 * <p>
+	 * <b>This lock is innermost. Never acquire {@code entry.repository} while holding it.</b> The paths that take
+	 * both take {@code entry.repository} first: the mutators reach this one through {@link #loadChildren()}, and
+	 * {@link #invalidateChildren()} takes them in that order. The rest — {@link #getChildren()}, the pre-monitor
+	 * {@link #loadChildren()} of {@code setChildren} and {@code removeChild}, {@code removeTree} and
+	 * {@code applyACLtoChildren} — hold this lock alone, which is why acquiring the repository monitor under it
+	 * anywhere would deadlock every write in the instance.
+	 */
+	private final Object childrenLock = new Object();
+
+	/**
+	 * The members of this list, or null until they are loaded. Assigned only under {@link #childrenLock}, which
+	 * {@link #loadChildren()} holds across the load and {@link #invalidateChildren()} across the drop: a reader
+	 * that is loading therefore publishes its copy <i>before</i> a following invalidation drops it, never after.
+	 * That ordering is exactly why a caller that changed the list through its own transaction must still
+	 * invalidate after the commit.
+	 * <p>
+	 * Reads are not all under the lock: {@link #getChildren()} takes a single volatile read of the field, and a
+	 * mutator holding {@code entry.repository} works with the vector {@link #loadChildren()} returned rather than
+	 * re-reading. Volatile so both see a fully published vector.
+	 */
+	private volatile Vector<URI> children;
+
+	/** The only writer of {@link #children} outside {@link #loadChildren()}, so the lock is taken by construction. */
+	private void publishChildren(Vector<URI> value) {
+		synchronized (childrenLock) {
+			children = value;
+		}
+	}
 
 	public ListImpl(EntryImpl entry, String uri) {
 		super(entry, uri);
@@ -67,7 +102,7 @@ public class ListImpl extends RDFResource implements List {
 		super(entry, uri);
 	}
 
-	public synchronized Model getGraph() {
+	public Model getGraph() {
 		RepositoryConnection rc = null;
 		Model result = null;
 		try {
@@ -88,7 +123,7 @@ public class ListImpl extends RDFResource implements List {
 		return result;
 	}
 
-	public synchronized void setGraph(Model graph) {
+	public void setGraph(Model graph) {
 		if (graph == null) {
 			throw new IllegalArgumentException("Graph must not be null");
 		}
@@ -124,39 +159,52 @@ public class ListImpl extends RDFResource implements List {
 		return result;
 	}
 
-	private synchronized void loadChildren() {
-		if (children == null) {
-			children = loadChildren(getGraph());
-		}
-	}
-
-	private synchronized void saveChildren() {
-		if (children == null) {
-			return;
-		}
-		try {
-			RepositoryConnection rc = entry.repository.getConnection();
-			try {
-				rc.begin();
-				saveChildren(rc);
-				rc.commit();
-				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
-			} catch (Exception e) {
-				rc.rollback();
-				throw new org.entrystore.repository.RepositoryException("Failed to save children for entry " + entry.getId(), e);
-			} finally {
-				rc.close();
+	/**
+	 * Returns the members, loading them from the store on first access. Callers must work with the returned
+	 * vector instead of reading the field again, since {@link #invalidateChildren()} can null the field as soon
+	 * as this monitor is released.
+	 */
+	private Vector<URI> loadChildren() {
+		synchronized (childrenLock) {
+			if (children == null) {
+				children = loadChildren(getGraph());
 			}
-		} catch (RepositoryException e) {
-			throw new org.entrystore.repository.RepositoryException("Failed to obtain repository connection for entry " + entry.getId(), e);
+			return children;
 		}
 	}
 
-	private void saveChildren(RepositoryConnection rc) throws RepositoryException {
-		saveChildren(children, rc);
+	/** Persists {@code toSave} in its own transaction; the caller holds the monitor and the vector it just changed. */
+	private void saveChildren(Vector<URI> toSave) {
+		synchronized (this.entry.repository) {
+			try {
+				RepositoryConnection rc = entry.repository.getConnection();
+				try {
+					rc.begin();
+					saveChildren(toSave, rc);
+					rc.commit();
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
+				} catch (Exception e) {
+					rc.rollback();
+					throw new org.entrystore.repository.RepositoryException("Failed to save children for entry " + entry.getId(), e);
+				} finally {
+					rc.close();
+				}
+			} catch (RepositoryException e) {
+				throw new org.entrystore.repository.RepositoryException("Failed to obtain repository connection for entry " + entry.getId(), e);
+			}
+		}
 	}
 
-	private void saveChildren(Vector<URI> childrenToSave, RepositoryConnection rc) throws RepositoryException {
+	/**
+	 * Persists exactly the members the caller holds. It must never re-derive them from the field or the store,
+	 * because neither carries the caller's uncommitted change: the field still holds the pre-change membership
+	 * whenever the caller built its vector without assigning it, as {@link #removeChildrenInTransaction} does
+	 * from its own {@code rc.getStatements}, and when the field is null {@link #loadChildren()} reaches
+	 * {@link #getGraph()}, which opens a connection that cannot see the caller's transaction either. Threading
+	 * the caller's connection into the read would therefore fix only the second half and still persist stale
+	 * membership. Package-private so a same-package test can hold a writer inside the member-list write.
+	 */
+	void saveChildren(Vector<URI> childrenToSave, RepositoryConnection rc) throws RepositoryException {
 		ValueFactory vf = entry.repository.getValueFactory();
 		childrenToSave.trimToSize();
 		rc.clear(this.resourceURI);
@@ -194,13 +242,9 @@ public class ListImpl extends RDFResource implements List {
 			&& !childEntry.getReferringListsInSameContext().isEmpty()) {
 			throw new org.entrystore.repository.RepositoryException("The entry " + nEntry + " cannot be added since it is a list which already have another parent, try moving it instead");
 		}
-		if (children == null) {
-			loadChildren();
-		}
-		if (orderedSetRequirement) {
-			if (children.contains(nEntry)) {
-				throw new org.entrystore.repository.RepositoryException("The entry " + nEntry + " is already a child in this list.");
-			}
+		Vector<URI> currentChildren = loadChildren();
+		if (orderedSetRequirement && currentChildren.contains(nEntry)) {
+			throw new org.entrystore.repository.RepositoryException("The entry " + nEntry + " is already a child in this list.");
 		}
 		try {
 			synchronized (this.entry.repository) {
@@ -212,17 +256,17 @@ public class ListImpl extends RDFResource implements List {
 					if (isOwnerOfContext) {
 						childEntry.setOriginalListSynchronized(null, rc, vf);
 					}
-					if (children.isEmpty()) {
+					if (currentChildren.isEmpty()) {
 						rc.add(this.resourceURI, RDF.TYPE, RDF.SEQ, this.resourceURI);
 					}
 
-					IRI li = vf.createIRI(RDF.NAMESPACE + "_" + (children.size() + 1));
+					IRI li = vf.createIRI(RDF.NAMESPACE + "_" + (currentChildren.size() + 1));
 					IRI childURI = vf.createIRI(nEntry.toString());
 					rc.add(this.resourceURI, li, childURI, this.resourceURI);
 					childEntry.addReferringList(this, rc); //TODO deprecate addReferringList.
 					entry.registerEntryModified(rc, vf);
 					rc.commit();
-					children.add(nEntry);
+					currentChildren.add(nEntry);
 				} catch (Exception e) {
 					try {
 						rc.rollback();
@@ -412,6 +456,14 @@ public class ListImpl extends RDFResource implements List {
 		return setChildren(newChildren, true, true);
 	}
 
+	/**
+	 * Replaces the membership of this list with {@code newChildren}, in the order given. Returns {@code true} or
+	 * throws: unlike {@link #removeChild(URI)}, a refusal is never a {@code false} return, so branching on the
+	 * result is dead code. {@code singleParentForListsRequirement} switches off the rule that a child list may
+	 * belong to one parent, and {@code orderedSetRequirement} the rule that a member may not appear twice; both
+	 * exist for callers that already know the rule is satisfied or irrelevant — {@code removeTree} empties the
+	 * list, {@code moveEntryHere} re-parents a child it has just detached.
+	 */
 	public boolean setChildren(java.util.List<URI> newChildren, boolean singleParentForListsRequirement, boolean orderedSetRequirement) {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
 		boolean isOwnerOfContext = false;
@@ -425,13 +477,11 @@ public class ListImpl extends RDFResource implements List {
 			}
 		}
 
-		if (children == null) {
-			loadChildren();
-		}
-		java.util.List<URI> toRemove = new java.util.ArrayList<>(children);
+		Vector<URI> currentChildren = loadChildren();
+		java.util.List<URI> toRemove = new java.util.ArrayList<>(currentChildren);
 		toRemove.removeAll(newChildren);
 		java.util.List<URI> toAdd = new java.util.ArrayList<>(newChildren);
-		toAdd.removeAll(children);
+		toAdd.removeAll(currentChildren);
 
 		for (URI uri : toAdd) {
 			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
@@ -466,12 +516,13 @@ public class ListImpl extends RDFResource implements List {
 		try {
 			synchronized (this.entry.repository) {
 				RepositoryConnection rc = entry.repository.getConnection();
-				Vector<URI> oldChildrenList = children;
+				Vector<URI> oldChildrenList = currentChildren;
 				try {
 					rc.begin();
-					children = new Vector<>(newChildren);
+					Vector<URI> newChildrenVector = new Vector<>(newChildren);
+					publishChildren(newChildrenVector);
 					java.util.List<EntryImpl> updatedChildEntries = new ArrayList<>();
-					saveChildren(rc);
+					saveChildren(newChildrenVector, rc);
 					for (URI uri : toAdd) {
 						EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
 						if (childEntry != null) {
@@ -511,7 +562,7 @@ public class ListImpl extends RDFResource implements List {
 						childEntry.refreshFromRepository(rc);
 						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 					}
-					children = oldChildrenList;
+					publishChildren(oldChildrenList);
 					throw new org.entrystore.repository.RepositoryException("Cannot set the list since: " + e.getMessage());
 				} finally {
 					rc.close();
@@ -526,35 +577,35 @@ public class ListImpl extends RDFResource implements List {
 	public java.util.List<URI> getChildren() {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.ReadResource);
 
-		if (children == null) {
-			loadChildren();
+		Vector<URI> currentChildren = children;
+		if (currentChildren == null) {
+			currentChildren = loadChildren();
 		}
-		return Collections.unmodifiableList(children);
+		// A copy, not a view: the mutators change this vector in place, so an iterating caller would race them.
+		// Not List.copyOf: a gap in the stored rdf:_N sequence leaves a null member, which every other reader
+		// of this list tolerates and which this call must not start rejecting.
+		return Collections.unmodifiableList(new ArrayList<>(currentChildren));
 	}
 
 	public void moveChildAfter(URI child, URI afterChild) {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.WriteResource);
 
-		if (children == null) {
-			loadChildren();
-		}
 		synchronized (this.entry.repository) {
-			children.remove(child);
-			children.add(children.indexOf(afterChild) + 1, child);
-			saveChildren();
+			Vector<URI> currentChildren = loadChildren();
+			currentChildren.remove(child);
+			currentChildren.add(currentChildren.indexOf(afterChild) + 1, child);
+			saveChildren(currentChildren);
 		}
 	}
 
 	public void moveChildBefore(URI child, URI beforeChild) {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.WriteResource);
 
-		if (children == null) {
-			loadChildren();
-		}
 		synchronized (this.entry.repository) {
-			children.remove(child);
-			children.add(children.indexOf(beforeChild), child);
-			saveChildren();
+			Vector<URI> currentChildren = loadChildren();
+			currentChildren.remove(child);
+			currentChildren.add(currentChildren.indexOf(beforeChild), child);
+			saveChildren(currentChildren);
 		}
 	}
 
@@ -565,10 +616,7 @@ public class ListImpl extends RDFResource implements List {
 
 	protected boolean removeChild(URI child, boolean checkOrphaned) {
 
-		if (children == null) {
-			loadChildren();
-		}
-		if (!children.contains(child)) {
+		if (!loadChildren().contains(child)) {
 			return false;
 		}
 
@@ -585,7 +633,8 @@ public class ListImpl extends RDFResource implements List {
 
 			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(child);
 			if (canRemove(checkOrphaned, childEntry, isOwnerOfContext)) {
-				children.remove(child);
+				Vector<URI> currentChildren = loadChildren();
+				currentChildren.remove(child);
 				try {
 					RepositoryConnection rc = entry.repository.getConnection();
 					ValueFactory vf = entry.repository.getValueFactory();
@@ -594,7 +643,7 @@ public class ListImpl extends RDFResource implements List {
 						if (checkOrphaned && isOwnerOfContext) {
 							childEntry.setOriginalListSynchronized(null, rc, vf); //remains to do the same for list case.
 						}
-						saveChildren(rc);
+						saveChildren(currentChildren, rc);
 						childEntry.removeReferringList(this, rc);
 						rc.commit();
 						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
@@ -620,9 +669,16 @@ public class ListImpl extends RDFResource implements List {
 	 * Removes several children from this list as part of the supplied transaction — one graph read and one
 	 * rewrite for the whole batch — without firing repository events or checking for orphans. Reads and
 	 * writes go through the supplied connection only, so earlier uncommitted removals in the same transaction
-	 * are seen and nothing uncommitted is published to concurrent readers; the in-memory children are cleared
-	 * so they are reloaded on next access whatever the transaction outcome. The list entry's modification date
-	 * and contributors are updated in memory, so after a rollback the caller must refresh it.
+	 * are seen and nothing uncommitted is published to concurrent readers; the in-memory members are cleared so
+	 * they are reloaded on next access whatever the transaction outcome. The list entry's modification date
+	 * and contributors are updated in memory, so after a rollback the caller must refresh it. No repository event
+	 * is fired here either.
+	 * <p>
+	 * Clearing them here is not on its own enough, so after the commit the caller must call
+	 * {@link #invalidateChildren()} and only then publish the list's change ({@code importContext} does both per
+	 * pruned list). A reader that does not hold the transaction can reload the members from the pre-commit store
+	 * at any point while it is open, which puts them back; the user-to-groups cache would otherwise re-scan that
+	 * reloaded list as authoritative once the event has bumped its epoch.
 	 */
 	protected void removeChildrenInTransaction(Collection<URI> childrenToRemove, RepositoryConnection rc) throws RepositoryException {
 		synchronized (this.entry.repository) {
@@ -631,7 +687,22 @@ public class ListImpl extends RDFResource implements List {
 			if (inTransactionChildren.removeAll(childrenToRemove)) {
 				saveChildren(inTransactionChildren, rc);
 			}
-			children = null;
+			invalidateChildren();
+		}
+	}
+
+	/**
+	 * Drops the in-memory member list so the next read reloads it from the committed store. For callers that changed
+	 * the list through their own transaction: a concurrent reader may hold, or be in the middle of loading, the
+	 * pre-commit list, and that copy must not outlive the commit. Takes {@link #childrenLock}, the same lock
+	 * {@link #loadChildren()} holds across its load, so a reader that is loading publishes its copy before this
+	 * drops it rather than after.
+	 */
+	void invalidateChildren() {
+		// entry.repository first: an invalidation landing inside another writer's open transaction lets a
+		// concurrent reader republish that transaction's pre-commit membership, which nothing then drops.
+		synchronized (this.entry.repository) {
+			publishChildren(null);
 		}
 	}
 
@@ -652,16 +723,14 @@ public class ListImpl extends RDFResource implements List {
 
 	public void remove(RepositoryConnection rc) throws Exception {
 		synchronized (this.entry.repository) {
-			if (children == null) {
-				loadChildren();
-			}
+			Vector<URI> currentChildren = loadChildren();
 			rc.clear(this.resourceURI);
-			for (URI uri : children) {
+			for (URI uri : currentChildren) {
 				EntryImpl childEntry = ((EntryImpl) this.entry.getContext().getByEntryURI(uri));
 				childEntry.removeReferringList(this, rc);
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 			}
-			children = null;
+			invalidateChildren();
 			entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceDeleted));
 		}
 	}
@@ -669,11 +738,7 @@ public class ListImpl extends RDFResource implements List {
 	public void removeTree() {
 		Context c = this.entry.getContext();
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(c.getEntry(), AccessProperty.Administer);
-		if (children == null) {
-			loadChildren();
-		}
-
-		java.util.List<URI> tchildren = new ArrayList<>(children);
+		java.util.List<URI> tchildren = new ArrayList<>(loadChildren());
 		setChildren(new ArrayList<>(), false, false);
 		for (URI uri : tchildren) {
 			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
@@ -694,11 +759,9 @@ public class ListImpl extends RDFResource implements List {
 	public void applyACLtoChildren(boolean recursive) {
 		Context c = this.entry.getContext();
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(c.getEntry(), AccessProperty.Administer);
-		if (children == null) {
-			loadChildren();
-		}
-
-		for (URI uri : children) {
+		// snapshot: this loop writes each child's ACL and recurses, so iterating the live vector would let a
+		// concurrent member change abort it part-applied with no rollback
+		for (URI uri : new ArrayList<>(loadChildren())) {
 			Entry childEntry = entry.getContext().getByEntryURI(uri);
 			if (childEntry != null) {
 				for (AccessProperty ap : AccessProperty.values()) {
