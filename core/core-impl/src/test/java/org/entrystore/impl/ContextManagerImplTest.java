@@ -29,6 +29,9 @@ import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
+import org.entrystore.repository.RepositoryListener;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.CommonQueries;
 import org.junit.jupiter.api.BeforeEach;
@@ -455,5 +458,91 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		assertTrue(cm.getLinks(externalMetadata).isEmpty());
 		// and a LinkReference sits in the resource index without being a Link
 		assertTrue(cm.getLinks(linkReference.getResourceURI()).isEmpty());
+	}
+
+	@Test
+	public void publishPrunedLists_dropsMembersAReaderReloadedDuringTheTransaction() throws Exception {
+		Context mouse = cm.getContext("mouse");
+		Entry listEntry = mouse.createResource(null, GraphType.List, null, null);
+		ListImpl list = (ListImpl) listEntry.getResource();
+		Entry kept = mouse.createResource(null, GraphType.None, null, null);
+		Entry pruned = mouse.createResource(null, GraphType.None, null, null);
+		list.setChildren(List.of(kept.getEntryURI(), pruned.getEntryURI()));
+		List<URI> published = new ArrayList<>();
+		List<Boolean> prunedMemberVisibleAtDispatch = new ArrayList<>();
+		RepositoryListener recorder = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				URI source = ((Entry) eventObject.getSource()).getEntryURI();
+				published.add(source);
+				if (source.equals(listEntry.getEntryURI())) {
+					// what a listener that re-scans on this event, such as the user-to-groups cache, would read
+					prunedMemberVisibleAtDispatch.add(list.getChildren().contains(pruned.getEntryURI()));
+				}
+			}
+		};
+		RepositoryManagerImpl rmi = (RepositoryManagerImpl) rm;
+		rmi.registerListener(recorder, RepositoryEvent.ResourceUpdated);
+		try {
+			try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+				rc.begin();
+				list.removeChildrenInTransaction(Set.of(pruned.getEntryURI()), rc);
+				// a reader that does not hold the transaction reloads the still-committed, pre-prune member list
+				assertTrue(list.getChildren().contains(pruned.getEntryURI()),
+						"precondition: a concurrent reader cached the pre-prune list while the transaction was open");
+				rc.commit();
+			}
+
+			((ContextManagerImpl) cm).publishPrunedLists(List.of((EntryImpl) listEntry));
+
+			assertFalse(list.getChildren().contains(pruned.getEntryURI()),
+					"after publishing, a read must reflect the committed prune rather than the reader's stale copy");
+			assertTrue(published.contains(listEntry.getEntryURI()), "the pruned list's ResourceUpdated must be dispatched");
+			assertEquals(List.of(false), prunedMemberVisibleAtDispatch,
+					"the members must be dropped before the event is fired, not after: a listener that re-scans "
+							+ "on the event would otherwise read the stale membership and cache it as current");
+		} finally {
+			rmi.unregisterListener(recorder, RepositoryEvent.ResourceUpdated);
+		}
+	}
+
+	/**
+	 * The call site of {@link ContextManagerImpl#publishPrunedLists(List)}: an import removes the ordinary
+	 * entries but keeps lists whose id starts with an underscore, so those lists are pruned inside the import
+	 * transaction, which fires nothing of its own.
+	 */
+	@Test
+	public void importContext_prunesASurvivingListAndPublishesIt(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		Entry survivingList = context.createResource("_survivor", GraphType.List, null, null);
+		Entry member = context.createLink(null, URI.create("https://slashdot.org/"), survivingList.getResourceURI());
+		ListImpl list = (ListImpl) survivingList.getResource();
+		assertTrue(list.getChildren().contains(member.getEntryURI()), "precondition: the member is in the list");
+
+		List<URI> published = new ArrayList<>();
+		RepositoryListener recorder = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				published.add(((Entry) eventObject.getSource()).getEntryURI());
+			}
+		};
+		RepositoryManagerImpl rmi = (RepositoryManagerImpl) rm;
+		rmi.registerListener(recorder, RepositoryEvent.ResourceUpdated);
+		try {
+			// the minimal ZIP contains no entries, so the import removes every ordinary entry
+			cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+		} finally {
+			rmi.unregisterListener(recorder, RepositoryEvent.ResourceUpdated);
+		}
+
+		assertNull(context.getByEntryURI(member.getEntryURI()), "the import removes the ordinary member");
+		assertNotNull(context.getByEntryURI(survivingList.getEntryURI()), "a list with an underscore id survives");
+		assertFalse(list.getChildren().contains(member.getEntryURI()),
+				"a read after the import must not report a member the import removed");
+		assertTrue(published.contains(survivingList.getEntryURI()),
+				"the pruned list's change must be published so the user-to-groups cache re-scans it");
 	}
 }

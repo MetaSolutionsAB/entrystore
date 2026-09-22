@@ -299,6 +299,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			setCheckForAuthorization(true);
 		}
 
+
 		trackDeletedEntries = configuration.getBoolean(Settings.REPOSITORY_TRACK_DELETED, false);
 		log.info("Tracking of deleted entries is {}", trackDeletedEntries ? "activated" : "deactivated");
 		boolean cleanupDeleted = configuration.getBoolean(Settings.REPOSITORY_TRACK_DELETED_CLEANUP, false);
@@ -524,24 +525,33 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		return quotaEnabled;
 	}
 
+	/**
+	 * Dispatches {@code eventObject} synchronously to every listener registered for its event and for
+	 * {@link RepositoryEvent#All}. Dispatch is failure-isolated against a listener's RuntimeException: it is logged
+	 * and the remaining listeners still run, so callers never see one. An Error is not isolated — it propagates and
+	 * abandons the rest of the dispatch, leaving every listener after it unreached, since listener order is
+	 * unspecified.
+	 */
 	public void fireRepositoryEvent(RepositoryEventObject eventObject) {
 		// because of concurrency problems the events are fired synchronously,
 		// not sure whether this event has a negative impact on performance.
-		// async-code is commented out.
 		synchronized (repositoryListeners) {
-			if (repositoryListeners.containsKey(eventObject.getEvent())) {
-				for (RepositoryListener repositoryListener : repositoryListeners.get(eventObject.getEvent())) {
-					//repositoryListener.setRepositoryEventObject(eventObject);
-					//listenerExecutor.execute(repositoryListener);
-					repositoryListener.repositoryUpdated(eventObject);
-				}
-			}
-			if (repositoryListeners.containsKey(RepositoryEvent.All)) {
-				for (RepositoryListener repositoryListener : repositoryListeners.get(RepositoryEvent.All)) {
-					//repositoryListener.setRepositoryEventObject(eventObject);
-					//listenerExecutor.execute(repositoryListener);
-					repositoryListener.repositoryUpdated(eventObject);
-				}
+			dispatch(repositoryListeners.get(eventObject.getEvent()), eventObject);
+			dispatch(repositoryListeners.get(RepositoryEvent.All), eventObject);
+		}
+	}
+
+	private void dispatch(Set<RepositoryListener> listeners, RepositoryEventObject eventObject) {
+		if (listeners == null) {
+			return;
+		}
+		for (RepositoryListener repositoryListener : listeners) {
+			try {
+				repositoryListener.repositoryUpdated(eventObject);
+			} catch (RuntimeException e) {
+				Object source = eventObject.getSource() instanceof Entry entry ? entry.getEntryURI() : eventObject.getSource();
+				log.error("Repository listener {} failed on {} for {}; remaining listeners still ran",
+						repositoryListener, eventObject.getEvent(), source, e);
 			}
 		}
 	}
