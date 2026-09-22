@@ -229,18 +229,56 @@ public class GroupImpl extends ListImpl implements Group {
 		return userList;
 	}
 
+	/**
+	 * Rejects a non-User or missing member before any store work, over the whole requested membership rather than
+	 * only over the additions. The rule itself is enforced in {@link #validateAdditions}, under the repository
+	 * monitor.
+	 */
 	@Override
 	public boolean setChildren(List<URI> newChildren, boolean singleParentForListsRequirement, boolean orderedSetRequirement) {
 		for (URI uri : newChildren) {
-			Entry childEntry = this.entry.getContext().getByEntryURI(uri);
-			if (childEntry == null) {
-				throw new IllegalArgumentException("Entry " + uri + " does not exist in the group's context");
-			}
-			if (childEntry.getGraphType() != GraphType.User) {
-				throw new IllegalArgumentException("Cannot add non-User entry " + uri + " to group. Only User entries are allowed as group members.");
-			}
+			requireUserMember(uri);
 		}
 		return super.setChildren(newChildren, singleParentForListsRequirement, orderedSetRequirement);
+	}
+
+	/**
+	 * Adds the group's own membership rule to the list validation, so it is decided under the same monitor as the
+	 * single-parent rule rather than only before it.
+	 */
+	@Override
+	void validateAdditions(List<URI> toAdd, boolean singleParentForListsRequirement) {
+		for (URI uri : toAdd) {
+			requireUserMember(uri);
+		}
+		super.validateAdditions(toAdd, singleParentForListsRequirement);
+	}
+
+	/**
+	 * The same rule on the single-member path. Without this override {@code addChild} is the way into a group's
+	 * member list that never checks it — {@code ContextImpl.create} with a {@code listURI} and
+	 * {@code moveEntryHere} both reach it — and a non-User member there is dropped by {@link #members()} with
+	 * only a logged content error.
+	 */
+	@Override
+	void validateAddition(EntryImpl childEntry, Vector<URI> currentChildren,
+						  boolean singleParentForListsRequirement, boolean orderedSetRequirement) {
+		if (childEntry == null) {
+			throw new IllegalArgumentException("The entry to add does not exist in the group's context");
+		}
+		requireUserMember(childEntry.getEntryURI());
+		super.validateAddition(childEntry, currentChildren, singleParentForListsRequirement, orderedSetRequirement);
+	}
+
+	/** IllegalArgumentException rather than a repository exception: this is bad input, and the REST layer maps it to 400. */
+	private void requireUserMember(URI uri) {
+		Entry childEntry = this.entry.getContext().getByEntryURI(uri);
+		if (childEntry == null) {
+			throw new IllegalArgumentException("Entry " + uri + " does not exist in the group's context");
+		}
+		if (childEntry.getGraphType() != GraphType.User) {
+			throw new IllegalArgumentException("Cannot add non-User entry " + uri + " to group. Only User entries are allowed as group members.");
+		}
 	}
 
 	public Vector<URI> setChildren(Vector<URI> children) {
