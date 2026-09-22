@@ -21,9 +21,12 @@ import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.entrystore.AuthorizationException;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
@@ -33,6 +36,7 @@ import org.junit.jupiter.api.BeforeEach;
 
 import java.net.URI;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Manages EntryStore instance(s) as preparation for the tests in entrystore-core-impl.
@@ -110,6 +114,47 @@ public abstract class AbstractCoreTest {
 	 */
 	protected static void evictFromSoftCache(Entry entry) {
 		((ContextImpl) entry.getContext()).softCache.remove(entry);
+	}
+
+	/**
+	 * Decides as {@code user} through the same throwing API every core mutation uses, then restores the
+	 * previously authenticated user (the thread-local is static, so a leaked principal bleeds into later tests).
+	 * A denial reads as {@code false}, with one exception: a principal that still exists but could not be resolved
+	 * points at a broken principals index rather than the decision under test and fails the test outright. A user
+	 * the test deleted is denied for exactly that reason in production, so that denial reads as {@code false}.
+	 */
+	protected boolean isAuthorized(User user, Entry entry, AccessProperty prop) {
+		return asUser(user, () -> {
+			try {
+				pm.checkAuthenticatedUserAuthorized(entry, prop);
+				return true;
+			} catch (AuthorizationException e) {
+				if (e.getUser() == null && pm.getUser(user.getURI()) != null) {
+					throw new AssertionError("denied because the principal could not be resolved although it exists: "
+							+ e.getMessage(), e);
+				}
+				return false;
+			}
+		});
+	}
+
+	/** The rights {@code user} holds on {@code entry}; restores the previously authenticated user afterwards. */
+	protected Set<AccessProperty> rightsOf(User user, Entry entry) {
+		return asUser(user, () -> pm.getRights(entry));
+	}
+
+	/**
+	 * Runs {@code action} as {@code user} and restores the previously authenticated principal, so an impersonating
+	 * helper cannot leak its principal into the tests that follow.
+	 */
+	private <T> T asUser(User user, java.util.function.Supplier<T> action) {
+		URI previous = pm.getAuthenticatedUserURI();
+		pm.setAuthenticatedUserURI(user.getURI());
+		try {
+			return action.get();
+		} finally {
+			pm.setAuthenticatedUserURI(previous);
+		}
 	}
 
 }
