@@ -9,7 +9,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.1.0</version>
+		<version>4.1.1</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 
@@ -29,14 +29,16 @@
 	<properties>
 		<java.version>25</java.version>
 		<solr.version>10.0.0</solr.version>
-		<rdf4j.version>5.3.2</rdf4j.version>
+		<rdf4j.version>6.1.0</rdf4j.version>
 		<guava.version>33.6.0-jre</guava.version>
 		<jsonorg.version>20260814</jsonorg.version>
 		<!-- Applies to swagger-annotations-jakarta only (ENTRYSTORE-991). swagger-core-jakarta /
 		     swagger-models-jakarta stay on whatever springdoc pulls in (see the springdoc version
-		     in modules/rest/spring-boot/pom.xml); raising them needs Jackson 2.22.x, which the
-		     Boot 4.1 BOM blocks — see ENTRYSTORE-1068. Do not add a requireSameVersions rule for
-		     the three swagger artifacts until that is resolved: it would fail the build today. -->
+		     in modules/rest/spring-boot/pom.xml), today 2.2.47 against this 2.2.53. The Jackson
+		     2.22.x obstacle noted in ENTRYSTORE-1068 is gone — jackson-2-bom is overridden below —
+		     but the split itself is springdoc's, so it stands until ENTRYSTORE-1068 moves springdoc.
+		     Do not add a requireSameVersions rule for the three swagger artifacts before then: it
+		     would fail the build today. -->
 		<swagger.version>2.2.53</swagger.version>
 		<!-- Must stay below 4.0.0: OpenSAML 5.x is built against the xmlsec 3 API and breaks on
 		     xmlsec 4. Check for a newer 3.0.x when reviewing dependencies. -->
@@ -51,6 +53,12 @@
 		<!-- Override Spring-boot versions -->
 		<!-- cas-client-core 4.1.1 needs commons-codec 1.22.0, above the Boot 4.1 BOM's 1.21.0 -->
 		<commons-codec.version>1.22.0</commons-codec.version>
+		<!-- RDF4J 6.1.0 is built against Jackson 3.2.x and jackson-annotations 2.22, both above the
+		     Boot 4.1 BOM's 3.1.5 / 2.21.5. These two properties are the BOM imports Boot exposes for
+		     overriding (tools.jackson:jackson-bom and com.fasterxml.jackson:jackson-bom); lowering
+		     either below RDF4J's floor fails requireUpperBoundDeps. -->
+		<jackson-bom.version>3.2.3</jackson-bom.version>
+		<jackson-2-bom.version>2.22.3</jackson-2-bom.version>
 
 		<site.url>https://entrystore.org</site.url>
 		<distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
