@@ -51,6 +51,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.Vector;
 
@@ -176,20 +177,35 @@ public class ListImpl extends RDFResource implements List {
 	/** Persists {@code toSave} in its own transaction; the caller holds the monitor and the vector it just changed. */
 	private void saveChildren(Vector<URI> toSave) {
 		synchronized (this.entry.repository) {
+			boolean committed = false;
 			try {
 				RepositoryConnection rc = entry.repository.getConnection();
 				try {
 					rc.begin();
 					saveChildren(toSave, rc);
 					rc.commit();
+					committed = true;
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 				} catch (Exception e) {
-					rc.rollback();
+					// The rollback runs on the connection that just failed, so its own failure must not replace
+					// the write failure that caused it.
+					try {
+						rc.rollback();
+					} catch (Exception rollbackFailure) {
+						e.addSuppressed(rollbackFailure);
+					}
 					throw new org.entrystore.repository.RepositoryException("Failed to save children for entry " + entry.getId(), e);
 				} finally {
 					rc.close();
 				}
 			} catch (RepositoryException e) {
+				if (committed) {
+					// Thrown by rc.close() in the finally above, after the write committed. Reporting it as a
+					// failure would make the caller restore an order the store no longer holds.
+					log.error("Closing the connection failed after the member-list write of entry {} had "
+							+ "committed; the write itself stands", entry.getId(), e);
+					return;
+				}
 				throw new org.entrystore.repository.RepositoryException("Failed to obtain repository connection for entry " + entry.getId(), e);
 			}
 		}
@@ -202,7 +218,8 @@ public class ListImpl extends RDFResource implements List {
 	 * from its own {@code rc.getStatements}, and when the field is null {@link #loadChildren()} reaches
 	 * {@link #getGraph()}, which opens a connection that cannot see the caller's transaction either. Threading
 	 * the caller's connection into the read would therefore fix only the second half and still persist stale
-	 * membership. Package-private so a same-package test can hold a writer inside the member-list write.
+	 * membership. Package-private so a same-package test can fail a member-list write and exercise the recovery
+	 * path.
 	 */
 	void saveChildren(Vector<URI> childrenToSave, RepositoryConnection rc) throws RepositoryException {
 		ValueFactory vf = entry.repository.getValueFactory();
@@ -242,12 +259,13 @@ public class ListImpl extends RDFResource implements List {
 			&& !childEntry.getReferringListsInSameContext().isEmpty()) {
 			throw new org.entrystore.repository.RepositoryException("The entry " + nEntry + " cannot be added since it is a list which already have another parent, try moving it instead");
 		}
-		Vector<URI> currentChildren = loadChildren();
-		if (orderedSetRequirement && currentChildren.contains(nEntry)) {
+		if (orderedSetRequirement && loadChildren().contains(nEntry)) {
 			throw new org.entrystore.repository.RepositoryException("The entry " + nEntry + " is already a child in this list.");
 		}
+		boolean committed = false;
 		try {
 			synchronized (this.entry.repository) {
+				Vector<URI> currentChildren = loadChildren();
 				RepositoryConnection rc = entry.repository.getConnection();
 				try {
 					ValueFactory vf = entry.repository.getValueFactory();
@@ -266,6 +284,7 @@ public class ListImpl extends RDFResource implements List {
 					childEntry.addReferringList(this, rc); //TODO deprecate addReferringList.
 					entry.registerEntryModified(rc, vf);
 					rc.commit();
+					committed = true;
 					currentChildren.add(nEntry);
 				} catch (Exception e) {
 					try {
@@ -280,11 +299,17 @@ public class ListImpl extends RDFResource implements List {
 				}
 			}
 		} catch (RepositoryException e) {
-			throw new org.entrystore.repository.RepositoryException("Failed to obtain repository connection for entry " + entry.getId(), e);
+			if (!committed) {
+				throw new org.entrystore.repository.RepositoryException("Failed to obtain repository connection for entry " + entry.getId(), e);
+			}
+			// Thrown by rc.close() after the add committed: store and memory both hold the child, so the events
+			// below must still fire or the user-to-groups cache keeps serving the pre-add set.
+			log.error("Closing the connection failed after adding child {} to list {} had committed; the add itself "
+					+ "stands", nEntry, entry.getEntryURI(), e);
 		}
 
-		// Notify listeners only after the transaction has committed and the connection is closed, and outside the
-		// try/catch above, so a listener failure propagates on its own and is never misreported as a failed add.
+		// Outside the try/catch above, so a listener failure is never misreported as a failed add; since
+		// fireRepositoryEvent isolates listener failures, it is logged there rather than reaching this caller.
 		entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 		entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 	}
@@ -463,6 +488,10 @@ public class ListImpl extends RDFResource implements List {
 	 * belong to one parent, and {@code orderedSetRequirement} the rule that a member may not appear twice; both
 	 * exist for callers that already know the rule is satisfied or irrelevant — {@code removeTree} empties the
 	 * list, {@code moveEntryHere} re-parents a child it has just detached.
+	 * <p>
+	 * Nothing is published to readers before the commit: the new membership is built beside the live vector and
+	 * swapped in only once the store holds it, so a transaction that rolls back — or that an {@code Error} leaves
+	 * uncommitted for good — cannot strand a membership the store never accepted.
 	 */
 	public boolean setChildren(java.util.List<URI> newChildren, boolean singleParentForListsRequirement, boolean orderedSetRequirement) {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
@@ -477,24 +506,6 @@ public class ListImpl extends RDFResource implements List {
 			}
 		}
 
-		Vector<URI> currentChildren = loadChildren();
-		java.util.List<URI> toRemove = new java.util.ArrayList<>(currentChildren);
-		toRemove.removeAll(newChildren);
-		java.util.List<URI> toAdd = new java.util.ArrayList<>(newChildren);
-		toAdd.removeAll(currentChildren);
-
-		for (URI uri : toAdd) {
-			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
-			if (singleParentForListsRequirement
-				&& childEntry.getGraphType() == GraphType.List
-				&& !childEntry.getReferringListsInSameContext().isEmpty()) {
-				throw new org.entrystore.repository.RepositoryException("Cannot set the list since the child " + uri + " is a list which already have a parent.");
-			}
-			if (childEntry == null) {
-				throw new org.entrystore.repository.RepositoryException("Cannot set the list since the child " + uri + " does not exist.");
-			}
-		}
-
 		if (orderedSetRequirement) {
 			HashSet<URI> set = new HashSet<>(newChildren);
 			if (set.size() < newChildren.size()) {
@@ -502,7 +513,19 @@ public class ListImpl extends RDFResource implements List {
 			}
 		}
 
-		for (URI uri : toRemove) {
+		MemberDiff validated = diffChildren(loadChildren(), newChildren);
+		for (URI uri : validated.toAdd()) {
+			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
+			if (childEntry == null) {
+				throw new org.entrystore.repository.RepositoryException("Cannot set the list since the child " + uri + " does not exist.");
+			}
+			if (singleParentForListsRequirement
+				&& childEntry.getGraphType() == GraphType.List
+				&& !childEntry.getReferringListsInSameContext().isEmpty()) {
+				throw new org.entrystore.repository.RepositoryException("Cannot set the list since the child " + uri + " is a list which already have a parent.");
+			}
+		}
+		for (URI uri : validated.toRemove()) {
 			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
 			if (childEntry == null) {
 				log.warn("List contains entry which does not exist: {}", uri);
@@ -513,14 +536,17 @@ public class ListImpl extends RDFResource implements List {
 			}
 		}
 
+		boolean committed = false;
 		try {
 			synchronized (this.entry.repository) {
+				Vector<URI> oldChildrenList = loadChildren();
+				java.util.List<URI> toAdd = validated.toAdd();
+				java.util.List<URI> toRemove = validated.toRemove();
+
 				RepositoryConnection rc = entry.repository.getConnection();
-				Vector<URI> oldChildrenList = currentChildren;
 				try {
 					rc.begin();
 					Vector<URI> newChildrenVector = new Vector<>(newChildren);
-					publishChildren(newChildrenVector);
 					java.util.List<EntryImpl> updatedChildEntries = new ArrayList<>();
 					saveChildren(newChildrenVector, rc);
 					for (URI uri : toAdd) {
@@ -544,34 +570,129 @@ public class ListImpl extends RDFResource implements List {
 						}
 					}
 					rc.commit();
+					committed = true;
+					// Only now: before the commit the store still holds the old membership, and a reader that saw
+					// the new one would act on a transaction that an Error can still leave uncommitted for good.
+					publishChildren(newChildrenVector);
 
 					for (EntryImpl updatedChildEntry : updatedChildEntries) {
 						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(updatedChildEntry, RepositoryEvent.RelationsUpdated));
 					}
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 				} catch (Exception e) {
-					log.error(e.getMessage());
-					rc.rollback();
-					for (URI uri : toAdd) {
-						EntryImpl childEntry = ((EntryImpl) this.entry.getContext().getByEntryURI(uri));
-						childEntry.refreshFromRepository(rc);
-						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
-					}
-					for (URI uri : toRemove) {
-						EntryImpl childEntry = ((EntryImpl) this.entry.getContext().getByEntryURI(uri));
-						childEntry.refreshFromRepository(rc);
-						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
-					}
-					publishChildren(oldChildrenList);
-					throw new org.entrystore.repository.RepositoryException("Cannot set the list since: " + e.getMessage());
+					log.error("Failed to set children of list {}", entry.getEntryURI(), e);
+					recoverFromFailedMemberWrite(e, committed, rc, () -> {
+						// the field still holds oldChildrenList, since publishing waits for the commit
+					}, failed -> {
+						failed.rollback();
+						refreshAndPublish(toAdd, failed);
+						refreshAndPublish(toRemove, failed);
+					});
+					throw new org.entrystore.repository.RepositoryException("Cannot set the list", e);
 				} finally {
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
+			if (committed) {
+				// Thrown by rc.close() in the finally above, after the write committed and was published. Reporting
+				// it as a failure would make removeTree abandon its children with the list already committed empty.
+				log.error("Closing the connection failed after the member-list write of list {} had committed; "
+						+ "the write itself stands", entry.getEntryURI(), e);
+				return true;
+			}
 			throw new org.entrystore.repository.RepositoryException("Failed to obtain repository connection for entry " + entry.getId(), e);
 		}
 		return true;
+	}
+
+	/** What a {@code setChildren} call adds to and removes from the current membership. */
+	record MemberDiff(java.util.List<URI> toAdd, java.util.List<URI> toRemove) {
+
+		MemberDiff {
+			// requireNonNull rather than List.copyOf, which would reject a null member before it can be reported
+			Objects.requireNonNull(toAdd, "toAdd");
+			Objects.requireNonNull(toRemove, "toRemove");
+		}
+	}
+
+	/**
+	 * Both sides hashed once: {@code removeAll} over a Vector is a linear scan per element, so a large list
+	 * reordered rather than changed costs O(n*m) comparisons to produce an empty diff.
+	 * <p>
+	 * {@code current} is copied before it is read, because the caller may pass the live {@link #children} vector
+	 * while holding neither lock: every mutator changes that vector in place under {@code entry.repository}
+	 * alone, and both traversals below are fail-fast. {@code Vector.toArray()} is synchronized, so the copy is an
+	 * atomic snapshot rather than one more unguarded traversal.
+	 */
+	private static MemberDiff diffChildren(java.util.List<URI> current, java.util.List<URI> wanted) {
+		java.util.List<URI> snapshot = new ArrayList<>(current);
+		HashSet<URI> wantedSet = new HashSet<>(wanted);
+		HashSet<URI> currentSet = new HashSet<>(snapshot);
+		java.util.List<URI> toRemove = snapshot.stream().filter(uri -> !wantedSet.contains(uri)).toList();
+		java.util.List<URI> toAdd = wanted.stream().filter(uri -> !currentSet.contains(uri)).toList();
+		return new MemberDiff(toAdd, toRemove);
+	}
+
+	/**
+	 * The rollback-and-refresh half of a failed member-list write; separate so it may throw. It takes the failed
+	 * connection so that it cannot be confused with the restore {@link Runnable} the same call passes: two
+	 * zero-argument callbacks would be mutually assignable, and swapping them silently runs the rollback before
+	 * the in-memory restore, which is the one ordering this recovery exists to guarantee.
+	 */
+	@FunctionalInterface
+	private interface StoreRecovery {
+		void rollBackAndRefresh(RepositoryConnection rc) throws Exception;
+	}
+
+	/**
+	 * Recovery shared by {@link #setChildren} and {@link #removeChild}, so a fix cannot land in one and miss the
+	 * other. Restores the in-memory member list and publishes the group-sourced ResourceUpdated before anything
+	 * that can throw: a concurrent authorization scan may already have read the uncommitted list, and the rollback
+	 * is exactly what fails on the broken connection that caused the write to fail.
+	 * <p>
+	 * Once the transaction has committed neither the restore nor the rollback applies: the store holds the change,
+	 * so restoring would leave the in-memory list disagreeing with it in whichever direction the change went, and
+	 * rolling back a committed transaction fails in its own right. The event is published on both paths, because
+	 * either the store changed or a concurrent scan read the list mid-write and must be told to re-read.
+	 *
+	 * @param committed whether {@code rc.commit()} returned; defensive, since nothing after the commit currently
+	 * throws into the caller's catch
+	 * @param rc the connection the write failed on, handed to {@code recovery}
+	 * @param restore puts the in-memory list back as it was; run only when the transaction did not commit
+	 * @param recovery rolls back and refreshes the affected members; a failure is logged here and suppressed onto
+	 * {@code cause}, which the caller may answer with a return value rather than rethrow
+	 */
+	private void recoverFromFailedMemberWrite(Exception cause, boolean committed, RepositoryConnection rc,
+											  Runnable restore, StoreRecovery recovery) {
+		if (!committed) {
+			restore.run();
+		}
+		entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
+		if (committed) {
+			return;
+		}
+		try {
+			recovery.rollBackAndRefresh(rc);
+		} catch (Exception recoveryFailure) {
+			log.error("Rolling back a failed member-list write on list {} also failed; the transaction may still be "
+					+ "open and the affected entries' in-memory relations may be stale", entry.getEntryURI(), recoveryFailure);
+			cause.addSuppressed(recoveryFailure);
+		}
+	}
+
+	/**
+	 * Reloads each listed child that still exists from the store and publishes it, so an indexer sees the rolled-back
+	 * state; a member whose entry is gone is skipped, as the pre-transaction validation tolerates it.
+	 */
+	private void refreshAndPublish(Collection<URI> childURIs, RepositoryConnection rc) throws RepositoryException {
+		for (URI uri : childURIs) {
+			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
+			if (childEntry != null) {
+				childEntry.refreshFromRepository(rc);
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
+			}
+		}
 	}
 
 	public java.util.List<URI> getChildren() {
@@ -591,10 +712,7 @@ public class ListImpl extends RDFResource implements List {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.WriteResource);
 
 		synchronized (this.entry.repository) {
-			Vector<URI> currentChildren = loadChildren();
-			currentChildren.remove(child);
-			currentChildren.add(currentChildren.indexOf(afterChild) + 1, child);
-			saveChildren(currentChildren);
+			moveChild(child, afterChild, 1);
 		}
 	}
 
@@ -602,10 +720,36 @@ public class ListImpl extends RDFResource implements List {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.WriteResource);
 
 		synchronized (this.entry.repository) {
-			Vector<URI> currentChildren = loadChildren();
+			moveChild(child, beforeChild, 0);
+		}
+	}
+
+	/**
+	 * Reorders one member relative to another, {@code offset} places after it. Both must be members: the removal
+	 * happens before the insertion, so an unknown {@code relativeTo} would otherwise drop {@code child} from the
+	 * in-memory list — silently at index 0 for a move-after, or behind an {@code ArrayIndexOutOfBoundsException}
+	 * for a move-before — while the store keeps the old order. A failed save restores the order for the same
+	 * reason {@code setChildren} restores its members: a concurrent reader may already have read the new one.
+	 */
+	private void moveChild(URI child, URI relativeTo, int offset) {
+		Vector<URI> currentChildren = loadChildren();
+		if (!currentChildren.contains(child) || !currentChildren.contains(relativeTo)) {
+			throw new org.entrystore.repository.RepositoryException("Cannot move " + child + " relative to "
+					+ relativeTo + " since both must be members of the list " + entry.getEntryURI());
+		}
+		if (child.equals(relativeTo)) {
+			// once the child is removed there is no anchor left to find, and the order is unchanged anyway
+			return;
+		}
+		Vector<URI> before = new Vector<>(currentChildren);
+		try {
 			currentChildren.remove(child);
-			currentChildren.add(currentChildren.indexOf(beforeChild), child);
+			currentChildren.add(currentChildren.indexOf(relativeTo) + offset, child);
 			saveChildren(currentChildren);
+		} catch (RuntimeException e) {
+			publishChildren(before);
+			entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
+			throw e;
 		}
 	}
 
@@ -632,36 +776,54 @@ public class ListImpl extends RDFResource implements List {
 			}
 
 			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(child);
-			if (canRemove(checkOrphaned, childEntry, isOwnerOfContext)) {
-				Vector<URI> currentChildren = loadChildren();
-				currentChildren.remove(child);
-				try {
-					RepositoryConnection rc = entry.repository.getConnection();
-					ValueFactory vf = entry.repository.getValueFactory();
-					try {
-						rc.begin();
-						if (checkOrphaned && isOwnerOfContext) {
-							childEntry.setOriginalListSynchronized(null, rc, vf); //remains to do the same for list case.
-						}
-						saveChildren(currentChildren, rc);
-						childEntry.removeReferringList(this, rc);
-						rc.commit();
-						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
-						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
-					} catch (Exception e) {
-						log.error(e.getMessage());
-						rc.rollback();
-						childEntry.refreshFromRepository(rc);
-						return false;
-					} finally {
-						rc.close();
-					}
-				} catch (RepositoryException e) {
-					log.error(e.getMessage());
-				}
-				return true;
+			if (!canRemove(checkOrphaned, childEntry, isOwnerOfContext)) {
+				return false;
 			}
-			return false;
+			// The contains check above ran outside the monitor; a concurrent write may have replaced the list since.
+			Vector<URI> currentChildren = loadChildren();
+			int index = currentChildren.indexOf(child);
+			if (index < 0) {
+				return false;
+			}
+			boolean committed = false;
+			try {
+				RepositoryConnection rc = entry.repository.getConnection();
+				ValueFactory vf = entry.repository.getValueFactory();
+				try {
+					rc.begin();
+					// Built beside the live vector rather than in it, so a reader never sees the removal until
+					// the store holds it; an Error between here and the commit would otherwise strand it.
+					Vector<URI> pending = new Vector<>(currentChildren);
+					pending.remove(child);
+					if (checkOrphaned && isOwnerOfContext) {
+						childEntry.setOriginalListSynchronized(null, rc, vf); //remains to do the same for list case.
+					}
+					saveChildren(pending, rc);
+					childEntry.removeReferringList(this, rc);
+					rc.commit();
+					committed = true;
+					publishChildren(pending);
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
+				} catch (Exception e) {
+					log.error("Failed to remove child {} from list {}", child, entry.getEntryURI(), e);
+					recoverFromFailedMemberWrite(e, committed, rc, () -> {
+						// the field still holds the member, since publishing waits for the commit
+					}, failed -> {
+						failed.rollback();
+						childEntry.refreshFromRepository(failed);
+					});
+					// the store already holds the removal when the failure came after the commit
+					return committed;
+				} finally {
+					rc.close();
+				}
+			} catch (RepositoryException e) {
+				// Also reached when a post-commit rc.close() fails, which does not undo the removal.
+				log.error("Failed to obtain or close the repository connection for list {}", entry.getEntryURI(), e);
+				return committed;
+			}
+			return true;
 		}
 	}
 

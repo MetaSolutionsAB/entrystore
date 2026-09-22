@@ -21,6 +21,7 @@ import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -31,7 +32,6 @@ import org.entrystore.QuotaException;
 import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.config.Settings;
-import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -43,19 +43,22 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.Future;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.CountDownLatch;
-import java.util.Vector;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
 
 public class ListImplTest extends AbstractCoreTest {
@@ -465,6 +468,85 @@ public class ListImplTest extends AbstractCoreTest {
 		}
 	}
 
+	/**
+	 * A move names two members, and the removal happens before the insertion, so an unknown anchor must be
+	 * refused rather than acted on: {@code moveChildBefore} would otherwise drop the child from the in-memory
+	 * list behind an {@code ArrayIndexOutOfBoundsException}, and {@code moveChildAfter} would silently move it
+	 * to the front, in both cases leaving the store holding the old order.
+	 */
+	@Test
+	public void movingRelativeToANonMemberIsRefusedAndLeavesTheListUnchanged() {
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry first = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+		Entry second = duck.createLink(null, URI.create("https://lwn.net/"), null);
+		Entry stranger = duck.createLink(null, URI.create("https://example.com/"), null);
+		List list = (List) listEntry.getResource();
+		list.setChildren(java.util.List.of(first.getEntryURI(), second.getEntryURI()));
+
+		assertThrows(RepositoryException.class,
+			() -> list.moveChildBefore(first.getEntryURI(), stranger.getEntryURI()));
+		assertThrows(RepositoryException.class,
+			() -> list.moveChildAfter(first.getEntryURI(), stranger.getEntryURI()));
+
+		assertEquals(java.util.List.of(first.getEntryURI(), second.getEntryURI()), list.getChildren(),
+			"a refused move must leave the membership and its order untouched");
+	}
+
+	/**
+	 * The membership reaches the shared field only after the commit. Publishing it earlier is visible to every
+	 * concurrent reader for the length of the transaction, and the recovery that would undo it is reached through
+	 * {@code catch (Exception)} — so an {@code Error} thrown inside the transaction strands the uncommitted
+	 * membership in memory with no event to invalidate it. On a group's member list that is a phantom member the
+	 * next authorization scan reads and caches as authoritative, for the life of the process.
+	 */
+	@Test
+	public void anErrorDuringTheWriteLeavesNoUncommittedMembershipBehind() {
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry member = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+
+		ListImpl spied = spy((ListImpl) listEntry.getResource());
+		doThrow(new StackOverflowError("simulated failure inside the transaction"))
+			.when(spied).saveChildren(any(), any(RepositoryConnection.class));
+
+		assertThrows(StackOverflowError.class,
+			() -> spied.setChildren(java.util.List.of(member.getEntryURI())));
+
+		assertTrue(spied.getChildren().isEmpty(),
+			"an Error inside the transaction must leave the membership as the store still holds it");
+		assertTrue(((EntryImpl) member).getReferringListsInSameContext().isEmpty(),
+			"and must not leave the member claiming a parent it never got");
+	}
+
+	/**
+	 * Moving a member relative to itself passes the membership guard, and the removal that precedes the insertion
+	 * then leaves no anchor to find. Without a guard the failed insertion escaped before the restore and left the
+	 * child gone from the in-memory list while the store still held it — on a group, a member silently revoked
+	 * until restart. A self-move is a no-op instead.
+	 */
+	@Test
+	public void movingAMemberRelativeToItselfLeavesTheListUnchanged() {
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry first = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+		Entry second = duck.createLink(null, URI.create("https://lwn.net/"), null);
+		List list = (List) listEntry.getResource();
+		list.setChildren(java.util.List.of(first.getEntryURI(), second.getEntryURI()));
+
+		list.moveChildBefore(first.getEntryURI(), first.getEntryURI());
+		list.moveChildAfter(second.getEntryURI(), second.getEntryURI());
+
+		assertEquals(java.util.List.of(first.getEntryURI(), second.getEntryURI()), list.getChildren(),
+			"a self-move must keep every member and the order");
+	}
+
 	/** Waits until {@code thread} settles on a monitor or finishes, so a test can tell those two apart. */
 	private static Thread.State awaitBlockedOrTerminated(Thread thread) throws InterruptedException {
 		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
@@ -475,4 +557,5 @@ public class ListImplTest extends AbstractCoreTest {
 		}
 		return state;
 	}
+
 }
