@@ -949,7 +949,9 @@ public class ListImpl extends RDFResource implements List {
 	 * Clearing them here is not on its own enough, so after the commit the caller must call
 	 * {@link #invalidateChildren()} and only then publish the list's change, as
 	 * {@code ContextManagerImpl.publishPrunedLists} does per pruned list. A reader that does not hold the
-	 * transaction can reload the members from the pre-commit store while it is open, which puts them back.
+	 * transaction can reload the members from the pre-commit store while it is open, which puts them back; the
+	 * user-to-groups cache would otherwise re-scan that reloaded list as authoritative once the event has bumped
+	 * its epoch.
 	 */
 	protected void removeChildrenInTransaction(Collection<URI> childrenToRemove, RepositoryConnection rc) throws RepositoryException {
 		synchronized (this.entry.repository) {
