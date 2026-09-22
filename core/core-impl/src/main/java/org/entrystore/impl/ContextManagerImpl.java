@@ -337,7 +337,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	 * Publishes lists whose members were pruned inside a transaction that fired nothing ({@code importContext}).
 	 * Each list's in-memory members are dropped first, because a reader that did not hold the transaction still
 	 * holds, or was loading, the pre-prune list, and the ResourceUpdated that follows makes every listener that
-	 * re-reads the list act on the committed one rather than on the reader's stale copy. Failure-isolated per list.
+	 * re-reads the list — the search index, and for a group the user-to-groups cache — act on the committed one
+	 * rather than on the reader's stale copy. Failure-isolated per list.
 	 * Package-private for tests.
 	 */
 	void publishPrunedLists(List<EntryImpl> prunedLists) {
@@ -346,8 +347,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				((ListImpl) prunedList.getResource()).invalidateChildren();
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(prunedList, RepositoryEvent.ResourceUpdated));
 			} catch (Exception e) {
-				log.error("Failed to publish pruned list {}; the search index may not reflect the pruned members "
-						+ "until a reindex or the next change to the list", prunedList.getEntryURI(), e);
+				log.error("Failed to publish pruned list {}; the search index and the user-to-groups cache may not "
+						+ "reflect the pruned members until a reindex or the next change to the list", prunedList.getEntryURI(), e);
 			}
 		}
 	}
@@ -609,8 +610,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			try {
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(removedEntry, RepositoryEvent.EntryDeleted));
 			} catch (Exception e) {
-				log.error("Failed to fire EntryDeleted for {}; the search index may still hold it until a reindex",
-						removedEntry.getEntryURI(), e);
+				log.error("Failed to fire EntryDeleted for {}; the search index and the user-to-groups cache may "
+						+ "still hold it until a reindex or the next group change", removedEntry.getEntryURI(), e);
 			}
 		}
 		publishPrunedLists(prunedSurvivingLists);

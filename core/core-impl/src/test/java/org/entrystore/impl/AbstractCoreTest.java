@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,21 @@
 
 package org.entrystore.impl;
 
+import org.entrystore.AuthorizationException;
 import org.entrystore.ContextManager;
+import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+
+import java.net.URI;
+import java.util.Set;
 
 /**
  * Manages EntryStore instance(s) as preparation for the tests in entrystore-core-impl.
@@ -43,10 +50,15 @@ public abstract class AbstractCoreTest {
 		config.setProperty(Settings.SOLR, "off");
 		//config.setProperty(Settings.SOLR_REINDEX_ON_STARTUP, "off");
 		//config.setProperty(Settings.SOLR_URL, "/tmp/entrystore-test-solr/");
+		customizeConfig(config);
 
 		rm = new RepositoryManagerImpl("http://localhost:8181/", config);
 		pm = rm.getPrincipalManager();
 		cm = rm.getContextManager();
+	}
+
+	/** Hook for a test class that needs a non-default setting; runs before the repository is created. */
+	protected void customizeConfig(Config config) {
 	}
 
 	@BeforeEach
@@ -63,6 +75,47 @@ public abstract class AbstractCoreTest {
 	public void tearDown() {
 		rm.shutdown();
 		rm = null;
+	}
+
+	/**
+	 * Decides as {@code user} through the same throwing API every core mutation uses, then restores the
+	 * previously authenticated user (the thread-local is static, so a leaked principal bleeds into later tests).
+	 * A denial reads as {@code false}, with one exception: a principal that still exists but could not be resolved
+	 * points at a broken principals index rather than the decision under test and fails the test outright. A user
+	 * the test deleted is denied for exactly that reason in production, so that denial reads as {@code false}.
+	 */
+	protected boolean isAuthorized(User user, Entry entry, AccessProperty prop) {
+		return asUser(user, () -> {
+			try {
+				pm.checkAuthenticatedUserAuthorized(entry, prop);
+				return true;
+			} catch (AuthorizationException e) {
+				if (e.getUser() == null && pm.getUser(user.getURI()) != null) {
+					throw new AssertionError("denied because the principal could not be resolved although it exists: "
+							+ e.getMessage(), e);
+				}
+				return false;
+			}
+		});
+	}
+
+	/** The rights {@code user} holds on {@code entry}; restores the previously authenticated user afterwards. */
+	protected Set<AccessProperty> rightsOf(User user, Entry entry) {
+		return asUser(user, () -> pm.getRights(entry));
+	}
+
+	/**
+	 * Runs {@code action} as {@code user} and restores the previously authenticated principal, so an impersonating
+	 * helper cannot leak its principal into the tests that follow.
+	 */
+	private <T> T asUser(User user, java.util.function.Supplier<T> action) {
+		URI previous = pm.getAuthenticatedUserURI();
+		pm.setAuthenticatedUserURI(user.getURI());
+		try {
+			return action.get();
+		} finally {
+			pm.setAuthenticatedUserURI(previous);
+		}
 	}
 
 }

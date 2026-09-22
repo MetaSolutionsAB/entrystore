@@ -299,6 +299,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			setCheckForAuthorization(true);
 		}
 
+		registerGroupCacheInvalidationListener();
 
 		trackDeletedEntries = configuration.getBoolean(Settings.REPOSITORY_TRACK_DELETED, false);
 		log.info("Tracking of deleted entries is {}", trackDeletedEntries ? "activated" : "deactivated");
@@ -360,6 +361,30 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	private void initialize() {
 		this.contextManager = new ContextManagerImpl(this, repository);
 		this.contextManager.initializeSystemEntries();
+	}
+
+	/**
+	 * Wires the user-to-groups authorization cache to repository events; the invalidation policy lives with the
+	 * cache in {@link PrincipalManagerImpl#onRepositoryEvent(RepositoryEventObject)}. Registers nothing when the
+	 * cache is disabled, so the kill switch also takes the listener out of every event dispatch.
+	 */
+	private void registerGroupCacheInvalidationListener() {
+		PrincipalManagerImpl principals = (PrincipalManagerImpl) getPrincipalManager();
+		if (!principals.isGroupCacheEnabled()) {
+			log.info("User-to-groups authorization cache is disabled");
+			return;
+		}
+		RepositoryListener invalidator = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				principals.onRepositoryEvent(eventObject);
+			}
+		};
+		registerListener(invalidator, RepositoryEvent.EntryCreated);
+		registerListener(invalidator, RepositoryEvent.EntryUpdated);
+		registerListener(invalidator, RepositoryEvent.ResourceUpdated);
+		registerListener(invalidator, RepositoryEvent.RelationsUpdated);
+		registerListener(invalidator, RepositoryEvent.EntryDeleted);
 	}
 
 	/**
@@ -529,8 +554,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * Dispatches {@code eventObject} synchronously to every listener registered for its event and for
 	 * {@link RepositoryEvent#All}. Dispatch is failure-isolated against a listener's RuntimeException: it is logged
 	 * and the remaining listeners still run, so callers never see one. An Error is not isolated — it propagates and
-	 * abandons the rest of the dispatch, leaving every listener after it unreached, since listener order is
-	 * unspecified.
+	 * abandons the rest of the dispatch, which can leave the authorization cache invalidator unreached and its
+	 * cached group sets stale, since listener order is unspecified.
 	 */
 	public void fireRepositoryEvent(RepositoryEventObject eventObject) {
 		// because of concurrency problems the events are fired synchronously,
