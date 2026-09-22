@@ -1283,8 +1283,12 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 			try {
 				for (URI uri : removeEntry.getReferringListsInSameContext()) {
-					Entry listItem = getByResourceURI(uri).iterator().next();
-					((ListImpl) listItem.getResource()).removeChild(entryURI, false);
+					// a Link may share the list's resource URI, so act only on the entry that is the list
+					for (Entry listItem : getByResourceURI(uri)) {
+						if (listItem.getResource() instanceof ListImpl list) {
+							list.removeChild(entryURI, false);
+						}
+					}
 				}
 			} catch (Exception e) {
 				log.error(e.getMessage(), e);

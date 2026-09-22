@@ -315,6 +315,8 @@ public class PrincipalManagerImplTest extends AbstractCoreTest {
 		Entry listEntry = mouse.createResource(null, GraphType.List, ResourceType.InformationResource, null);
 		Entry daisy = pm.getPrincipalEntry("Daisy");
 		listEntry.addAllowedPrincipalsFor(AccessProperty.WriteResource, daisy.getResourceURI());
+		// setAllowedPrincipalsFor installs an immutable cache; copyACL must copy it before adding Daisy
+		listEntry.setAllowedPrincipalsFor(AccessProperty.Administer, Set.of(pm.getPrincipalEntry("Mickey").getResourceURI()));
 		Set<URI> listAdmins = Set.copyOf(listEntry.getAllowedPrincipalsFor(AccessProperty.Administer));
 
 		pm.setAuthenticatedUserURI(daisy.getResourceURI());

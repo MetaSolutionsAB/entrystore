@@ -619,8 +619,8 @@ public class SolrSearchIndex implements SearchIndex {
 			Future indexer = reindexExecutor.submit(() -> {
 				try {
 					reindexSync(contextURI);
-				} catch (RuntimeException e) {
-					// the Future is never read, so this is the only record of the failure
+				} catch (RuntimeException | Error e) {
+					// the Future is only ever cancelled, never awaited, so this is the only record of the failure
 					log.error("Reindex of context {} failed", contextURI, e);
 				} finally {
 					reindexing.remove(contextURI);

@@ -667,24 +667,24 @@ public class EntryImpl implements Entry {
 		if (locType == EntryType.Local) {
 			throw new IllegalArgumentException("The resource URI of a local entry cannot be changed");
 		}
+		// a context's URI keys its index graph; a principal's URI is the object of every ACL naming it
+		GraphType graphType = getGraphType();
+		if (graphType == GraphType.Context || graphType == GraphType.SystemContext
+			|| graphType == GraphType.User || graphType == GraphType.Group) {
+			throw new IllegalArgumentException("The resource URI of a " + graphType + " cannot be changed");
+		}
 
 		ValueFactory vf = getRepositoryManager().getValueFactory();
 		IRI oldResourceURI = vf.createIRI(getResourceURI().toString());
 		IRI newResourceURI = vf.createIRI(resourceURI.toString());
 
-		// outside the transaction below: MetadataImpl.setGraph maintains other entries' relation caches,
-		// and resURI is still the old one, so a failure below leaves the rename retryable
-		Model newMetadataGraph = renamedGraph(getLocalMetadata(), oldResourceURI, newResourceURI);
-		if (newMetadataGraph != null) {
-			getLocalMetadata().setGraph(newMetadataGraph);
-		}
-		Model newCachedExternalMetadataGraph = renamedGraph(getCachedExternalMetadata(), oldResourceURI, newResourceURI);
-		if (newCachedExternalMetadataGraph != null) {
-			getCachedExternalMetadata().setGraph(newCachedExternalMetadataGraph);
-		}
-
 		try {
 			synchronized (this.repository) {
+				// before the transaction, not outside the monitor: MetadataImpl.setGraph maintains other entries'
+				// relation caches, and resURI is still the old one, so a failure below leaves the rename retryable
+				renameInMetadata(getLocalMetadata(), oldResourceURI, newResourceURI);
+				renameInMetadata(getCachedExternalMetadata(), oldResourceURI, newResourceURI);
+
 				try (RepositoryConnection rc = this.repository.getConnection()) {
 					rc.begin();
 					try {
@@ -723,19 +723,25 @@ public class EntryImpl implements Entry {
 		);
 	}
 
-	private static Model renamedGraph(Metadata metadata, IRI from, IRI to) {
-		if (metadata == null) {
-			return null;
+	/**
+	 * Writes only when the graph names {@code from}, so an unrelated rename bumps no modified date and
+	 * records no revision. A LocalMetadataWrapper is another entry's metadata and is left alone.
+	 */
+	private static void renameInMetadata(Metadata metadata, IRI from, IRI to) {
+		if (metadata == null || metadata instanceof LocalMetadataWrapper) {
+			return;
 		}
 		Model graph = metadata.getGraph();
-		return graph == null || graph.isEmpty() ? null : ModelUtil.replaceIRI(graph, from, to);
+		if (graph != null && (graph.contains(from, null, null) || graph.contains(null, null, from))) {
+			metadata.setGraph(ModelUtil.replaceIRI(graph, from, to));
+		}
 	}
 
 	/** Rolls back without losing the failure that made it necessary. */
 	private static void rollbackQuietly(RepositoryConnection rc, Exception cause) {
 		try {
 			rc.rollback();
-		} catch (RepositoryException e) {
+		} catch (RuntimeException e) {
 			cause.addSuppressed(e);
 		}
 	}
@@ -958,7 +964,8 @@ public class EntryImpl implements Entry {
 						throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
 					}
 					// after the commit, so a reader loading between invalidation and commit cannot pin the old
-					// answer; one that loaded before the commit and stores after this line still can, briefly
+					// answer; one that loaded before the commit and stores after this line still can, and the
+					// stale answer then survives until the next ACL write on this entry
 					this.hasExplicitAcl = null;
 					setCachedAllowedPrincipalsFor(prop, cached);
 					return result;
@@ -1189,19 +1196,20 @@ public class EntryImpl implements Entry {
 		}
 	}
 
-	public void setGraph(Model metametadata) {
+	public void setGraph(Model submitted) {
 		checkAdministerRights();
 
 		Model oldGraph = getGraph();
 
-		Iterator<Statement> resourceURIStmnts = metametadata.filter(this.entryURI, RepositoryProperties.resource, null).iterator();
+		// a client echoes the old resource URI as subject of the type and ACL triples it PUTs back
+		Model metametadata = submitted;
+		Iterator<Statement> resourceURIStmnts = submitted.filter(this.entryURI, RepositoryProperties.resource, null).iterator();
 		if (resourceURIStmnts.hasNext()) {
 			Value newResourceURI = resourceURIStmnts.next().getObject();
 			IRI oldResourceURI = this.resURI;
 			if (newResourceURI instanceof IRI newResourceIRI && !newResourceIRI.equals(oldResourceURI)) {
 				setResourceURI(toURI(newResourceIRI, "resource URI"));
-				// a client echoes the old resource URI as subject of the type and ACL triples it PUTs back
-				metametadata = ModelUtil.replaceIRI(metametadata, oldResourceURI, newResourceIRI);
+				metametadata = ModelUtil.replaceIRI(submitted, oldResourceURI, newResourceIRI);
 			}
 		}
 

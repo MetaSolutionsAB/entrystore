@@ -28,16 +28,26 @@ import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
+import org.entrystore.List;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryException;
+import org.entrystore.repository.RepositoryListener;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
 import java.net.URI;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -49,6 +59,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 public class EntryImplTest extends AbstractCoreTest {
 
@@ -300,20 +311,95 @@ public class EntryImplTest extends AbstractCoreTest {
 		assertTrue(targetEntry.getRelations().isEmpty());
 	}
 
-	@Test
-	public void setResourceURI_refusesALocalEntry() {
-		URI listURI = listEntry.getResourceURI();
-		assertThrows(IllegalArgumentException.class, () -> listEntry.setResourceURI(URI.create(listURI + "-renamed")));
-		URI fileURI = resourceEntry.getResourceURI();
-		assertThrows(IllegalArgumentException.class, () -> resourceEntry.setResourceURI(URI.create(fileURI + "-renamed")));
-		Entry contextEntry = context.getEntry();
-		assertThrows(IllegalArgumentException.class,
-			() -> contextEntry.setResourceURI(URI.create(contextEntry.getResourceURI() + "-renamed")));
-		Entry daisy = pm.getPrincipalEntry("Daisy");
-		assertThrows(IllegalArgumentException.class,
-			() -> daisy.setResourceURI(URI.create(daisy.getResourceURI() + "-renamed")));
+	private static Stream<Arguments> localEntries() {
+		return Stream.of(
+			arguments("list", (Function<EntryImplTest, Entry>) t -> t.listEntry),
+			arguments("file", (Function<EntryImplTest, Entry>) t -> t.resourceEntry),
+			arguments("context", (Function<EntryImplTest, Entry>) t -> t.context.getEntry()),
+			arguments("principal", (Function<EntryImplTest, Entry>) t -> t.pm.getPrincipalEntry("Daisy")));
+	}
 
-		assertEquals(listURI, listEntry.getResourceURI());
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("localEntries")
+	public void setResourceURI_refusesALocalEntry(String kind, Function<EntryImplTest, Entry> pick) {
+		Entry entry = pick.apply(this);
+		URI before = entry.getResourceURI();
+
+		assertThrows(IllegalArgumentException.class, () -> entry.setResourceURI(URI.create(before + "-renamed")));
+
+		assertEquals(before, entry.getResourceURI());
+	}
+
+	@Test
+	public void setResourceURI_refusesAUserTypedReference() {
+		// the shape TestSuite ships: a Reference to a user, typed User, whose URI may be an ACL object
+		Entry reference = context.createReference(null, URI.create("http://example.com/someone"), URI.create("http://example.com/someone-md"), null);
+		reference.setGraphType(GraphType.User);
+
+		assertThrows(IllegalArgumentException.class, () -> reference.setResourceURI(URI.create("http://example.com/renamed")));
+	}
+
+	@Test
+	public void setGraph_refusesARenameOfALocalEntryBeforeClearingItsGraph() {
+		((List) listEntry.getResource()).addChild(linkEntry.getEntryURI());
+		EntryImpl impl = (EntryImpl) listEntry;
+		Model body = new LinkedHashModel(listEntry.getGraph());
+		body.remove(impl.getSesameEntryURI(), RepositoryProperties.resource, impl.getSesameResourceURI());
+		body.add(impl.getSesameEntryURI(), RepositoryProperties.resource, rm.getValueFactory().createIRI(impl.getSesameResourceURI() + "-renamed"));
+		int statements = listEntry.getGraph().size();
+
+		assertThrows(IllegalArgumentException.class, () -> listEntry.setGraph(body));
+
+		// refused before the graph is cleared, so nothing about the entry moved
+		assertEquals(statements, listEntry.getGraph().size());
+		assertEquals(GraphType.List, listEntry.getGraphType());
+		assertTrue(((List) listEntry.getResource()).getChildren().contains(linkEntry.getEntryURI()));
+	}
+
+	@Test
+	public void setResourceURI_onAReferenceToALocalEntrySkipsTheWrappedMetadata() {
+		// external metadata under the repository base is another entry's local metadata, wrapped read-only
+		ValueFactory vf = rm.getValueFactory();
+		Model ownMetadata = new LinkedHashModel();
+		ownMetadata.add(vf.createIRI(linkEntry.getResourceURI().toString()), DCTERMS.TITLE, vf.createLiteral("the link's own title"));
+		linkEntry.getLocalMetadata().setGraph(ownMetadata);
+		Entry reference = context.createReference(null, URI.create("http://example.com/refers"), linkEntry.getLocalMetadataURI(), null);
+		assertTrue(reference.getCachedExternalMetadata() instanceof LocalMetadataWrapper);
+
+		reference.setResourceURI(URI.create("http://example.com/refers-renamed"));
+
+		assertEquals(URI.create("http://example.com/refers-renamed"), reference.getResourceURI());
+		Model untouched = linkEntry.getLocalMetadata().getGraph();
+		assertEquals(1, untouched.size());
+		assertTrue(untouched.contains(vf.createIRI(linkEntry.getResourceURI().toString()), DCTERMS.TITLE, vf.createLiteral("the link's own title")));
+	}
+
+	@Test
+	public void setResourceURI_leavesMetadataAloneWhenItNeverNamedTheResource() {
+		ValueFactory vf = rm.getValueFactory();
+		Model unrelated = new LinkedHashModel();
+		unrelated.add(vf.createIRI("http://example.com/unrelated"), DCTERMS.TITLE, vf.createLiteral("says nothing about the resource"));
+		linkEntry.getLocalMetadata().setGraph(unrelated);
+		// events fire synchronously, so a rewrite of the metadata is exactly one MetadataUpdated
+		AtomicInteger metadataWrites = new AtomicInteger();
+		RepositoryListener counter = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				metadataWrites.incrementAndGet();
+			}
+		};
+		rm.registerListener(counter, RepositoryEvent.MetadataUpdated);
+
+		try {
+			linkEntry.setResourceURI(URI.create("http://slashdot.org/renamed"));
+		} finally {
+			rm.unregisterListener(counter, RepositoryEvent.MetadataUpdated);
+		}
+
+		assertEquals(0, metadataWrites.get());
+		Model untouched = linkEntry.getLocalMetadata().getGraph();
+		assertEquals(1, untouched.size());
+		assertTrue(untouched.contains(vf.createIRI("http://example.com/unrelated"), DCTERMS.TITLE, vf.createLiteral("says nothing about the resource")));
 	}
 
 	@Test
@@ -371,21 +457,20 @@ public class EntryImplTest extends AbstractCoreTest {
 
 	@Test
 	public void setResourceURI_keepsTheContributorTheMetadataWriteAdded() {
-		// created by Mickey and renamed by Daisy, so Daisy is a contributor the creator exclusion cannot hide
+		// Mickey creates the entry and writes its metadata; Daisy renames. Her contributor triple can only
+		// come from the rename's own internal metadata write, which the pre-fix snapshot predated
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
 		EntryImpl entry = (EntryImpl) context.createLink(null, URI.create("http://example.com/created-by-mickey"), null);
 		ValueFactory vf = rm.getValueFactory();
+		Model metadata = new LinkedHashModel();
+		metadata.add(entry.getSesameResourceURI(), DCTERMS.TITLE, vf.createLiteral("names the resource, so the rename rewrites it"));
+		entry.getLocalMetadata().setGraph(metadata);
 		IRI daisy = vf.createIRI(pm.getPrincipalEntry("Daisy").getResourceURI().toString());
 		assertFalse(entry.getGraph().contains(entry.getSesameEntryURI(), RepositoryProperties.Contributor, daisy));
 		pm.setAuthenticatedUserURI(URI.create(daisy.stringValue()));
-		Model metadata = new LinkedHashModel();
-		metadata.add(entry.getSesameResourceURI(), DCTERMS.TITLE, vf.createLiteral("triggers a metadata write"));
-		entry.getLocalMetadata().setGraph(metadata);
 
 		entry.setResourceURI(URI.create("http://example.com/renamed-by-daisy"));
 
-		// the metadata rewrite inside the rename adds the contributor to the entry graph; the entry-graph
-		// rewrite that follows must carry it rather than restore a snapshot taken before it
 		assertTrue(entry.getGraph().contains(entry.getSesameEntryURI(), RepositoryProperties.Contributor, daisy));
 	}
 

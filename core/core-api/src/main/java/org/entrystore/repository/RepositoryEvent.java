@@ -23,7 +23,7 @@ public enum RepositoryEvent {
 
 	All,
 	EntryCreated,
-	EntryUpdated, // fired by EntryImpl.setGraph() and setResourceURI()
+	EntryUpdated, // fired after any write to an entry's own graph, its file metadata or a list's membership
 	EntryDeleted,
 	EntryAclGuestUpdated, // implemented for EntryImpl.setGraph() and changes concerning _guest,
 						  // NOT for EntryImpl.setAllowedPrincipalsFor and its siblings

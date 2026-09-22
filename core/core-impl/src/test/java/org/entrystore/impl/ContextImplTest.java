@@ -1330,10 +1330,27 @@ public class ContextImplTest extends AbstractCoreTest {
 	public void copyACL_skipsAListURIThatIsNotALocalList() {
 		Context context = (Context) cm.createResource(null, GraphType.Context, null, null).getResource();
 		Entry notAList = context.createResource(null, GraphType.None, null, null);
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		notAList.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
 		Entry entry = context.createResource(null, GraphType.None, null, null);
 
 		((ContextImpl) context).copyACL(notAList.getResourceURI(), entry);
 
-		assertTrue(entry.getAllowedPrincipalsFor(AccessProperty.Administer).isEmpty());
+		// a copy would have carried Daisy's grant over; a skip leaves the entry without it
+		assertFalse(entry.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
+	}
+
+	@Test
+	public void remove_toleratesALinkSharingAListsResourceURI() {
+		Context context = (Context) cm.createResource(null, GraphType.Context, null, null).getResource();
+		Entry list = context.createResource(null, GraphType.List, null, null);
+		Entry member = context.createLink(null, URI.create("http://example.com/member"), list.getResourceURI());
+		// a Link that took the list's resource URI, so getByResourceURI yields two entries for it
+		context.createLink(null, list.getResourceURI(), null);
+
+		context.remove(member.getEntryURI());
+
+		assertNull(context.getByEntryURI(member.getEntryURI()));
+		assertFalse(((List) list.getResource()).getChildren().contains(member.getEntryURI()));
 	}
 }
