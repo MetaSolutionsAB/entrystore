@@ -254,18 +254,14 @@ public class ListImpl extends RDFResource implements List {
 		}
 
 		EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(nEntry);
-		if (singleParentForListsRequirement
-			&& childEntry.getGraphType() == GraphType.List
-			&& !childEntry.getReferringListsInSameContext().isEmpty()) {
-			throw new org.entrystore.repository.RepositoryException("The entry " + nEntry + " cannot be added since it is a list which already have another parent, try moving it instead");
-		}
-		if (orderedSetRequirement && loadChildren().contains(nEntry)) {
-			throw new org.entrystore.repository.RepositoryException("The entry " + nEntry + " is already a child in this list.");
-		}
 		boolean committed = false;
 		try {
+			// Warmed outside the monitor: a cold list would otherwise read the whole member graph while holding
+			// the one monitor every writer in the instance shares.
+			loadChildren();
 			synchronized (this.entry.repository) {
 				Vector<URI> currentChildren = loadChildren();
+				validateAddition(childEntry, currentChildren, singleParentForListsRequirement, orderedSetRequirement);
 				RepositoryConnection rc = entry.repository.getConnection();
 				try {
 					ValueFactory vf = entry.repository.getValueFactory();
@@ -489,9 +485,14 @@ public class ListImpl extends RDFResource implements List {
 	 * exist for callers that already know the rule is satisfied or irrelevant — {@code removeTree} empties the
 	 * list, {@code moveEntryHere} re-parents a child it has just detached.
 	 * <p>
-	 * Nothing is published to readers before the commit: the new membership is built beside the live vector and
-	 * swapped in only once the store holds it, so a transaction that rolls back — or that an {@code Error} leaves
-	 * uncommitted for good — cannot strand a membership the store never accepted.
+	 * The work is split in two passes. The pass before {@code entry.repository} only resolves the members, so the
+	 * pass under the monitor reads cached entries; the rules are decided there, because each of them reads the
+	 * <em>child's</em> referring lists, which a write to another list changes. That decision is authoritative for
+	 * every membership write — {@code setChildren}, {@code addChild}, {@code removeChild} — since all of them
+	 * commit under this one monitor, so nothing they write can land between the re-diff and this call's commit.
+	 * It covers {@code originallyCreatedIn}, which {@code canRemove} also reads, only as long as the callers of
+	 * {@code EntryImpl.setOriginalListSynchronized(String)} keep holding the monitor as {@code ContextImpl.create}
+	 * does; that method takes none of its own.
 	 */
 	public boolean setChildren(java.util.List<URI> newChildren, boolean singleParentForListsRequirement, boolean orderedSetRequirement) {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
@@ -513,35 +514,18 @@ public class ListImpl extends RDFResource implements List {
 			}
 		}
 
-		MemberDiff validated = diffChildren(loadChildren(), newChildren);
-		for (URI uri : validated.toAdd()) {
-			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
-			if (childEntry == null) {
-				throw new org.entrystore.repository.RepositoryException("Cannot set the list since the child " + uri + " does not exist.");
-			}
-			if (singleParentForListsRequirement
-				&& childEntry.getGraphType() == GraphType.List
-				&& !childEntry.getReferringListsInSameContext().isEmpty()) {
-				throw new org.entrystore.repository.RepositoryException("Cannot set the list since the child " + uri + " is a list which already have a parent.");
-			}
-		}
-		for (URI uri : validated.toRemove()) {
-			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
-			if (childEntry == null) {
-				log.warn("List contains entry which does not exist: {}", uri);
-				continue;
-			}
-			if (!canRemove(true, childEntry, isOwnerOfContext)) {
-				throw new org.entrystore.repository.RepositoryException("Cannot set the list since you do not have the rights to remove the child " + uri + " from the list.");
-			}
-		}
+		resolveMembers(diffChildren(loadChildren(), newChildren));
 
 		boolean committed = false;
 		try {
 			synchronized (this.entry.repository) {
+				// The authoritative pass: re-diff and re-validate in full under the monitor that commits them.
 				Vector<URI> oldChildrenList = loadChildren();
-				java.util.List<URI> toAdd = validated.toAdd();
-				java.util.List<URI> toRemove = validated.toRemove();
+				MemberDiff diff = diffChildren(oldChildrenList, newChildren);
+				validateAdditions(diff.toAdd(), singleParentForListsRequirement);
+				validateRemovals(diff.toRemove(), isOwnerOfContext);
+				java.util.List<URI> toAdd = diff.toAdd();
+				java.util.List<URI> toRemove = diff.toRemove();
 
 				RepositoryConnection rc = entry.repository.getConnection();
 				try {
@@ -632,6 +616,131 @@ public class ListImpl extends RDFResource implements List {
 		java.util.List<URI> toRemove = snapshot.stream().filter(uri -> !wantedSet.contains(uri)).toList();
 		java.util.List<URI> toAdd = wanted.stream().filter(uri -> !currentSet.contains(uri)).toList();
 		return new MemberDiff(toAdd, toRemove);
+	}
+
+	/**
+	 * Resolves every member of {@code diff} before {@link #setChildren} takes the monitor, so the entries the
+	 * validation under it reads come from the repository-wide {@code SoftCache} rather than the store.
+	 * <p>
+	 * It deliberately decides nothing beyond existence of an addition. The rules themselves read state a write to
+	 * another list changes, so running them here would let this call refuse a request the authoritative pass
+	 * would have allowed — and refuse it in both directions, since a concurrent add can flip
+	 * {@code canRemove}'s count just as a concurrent removal can clear a single-parent conflict.
+	 * <p>
+	 * Package-private so a same-package test can hold a writer between this pass and the monitor.
+	 */
+	void resolveMembers(MemberDiff diff) {
+		for (URI uri : diff.toAdd()) {
+			if (this.entry.getContext().getByEntryURI(uri) == null) {
+				throw new org.entrystore.repository.RepositoryException("Cannot set the list since the child " + uri + " does not exist.");
+			}
+		}
+		for (URI uri : diff.toRemove()) {
+			// warms the SoftCache only; validateRemovals takes the verdict under the monitor
+			this.entry.getContext().getByEntryURI(uri);
+		}
+	}
+
+	/**
+	 * The rules {@link #addChild(URI, boolean, boolean)} applies to the one member it adds. Both read state a
+	 * concurrent write changes — the single-parent rule the child's referring lists, which any list's write
+	 * touches, and the duplicate rule this list's own members — so both are decided under {@code entry.repository},
+	 * as {@code setChildren}'s are: two concurrent adds of the same parentless child would otherwise each pass
+	 * before either committed.
+	 * <p>
+	 * Package-private so a same-package test can hold a writer inside the monitor, between the rules and the commit.
+	 */
+	void validateAddition(EntryImpl childEntry, Vector<URI> currentChildren,
+						  boolean singleParentForListsRequirement, boolean orderedSetRequirement) {
+		if (childEntry == null) {
+			throw new org.entrystore.repository.RepositoryException("The entry to add does not exist.");
+		}
+		URI nEntry = childEntry.getEntryURI();
+		if (singleParentForListsRequirement
+			&& childEntry.getGraphType() == GraphType.List
+			&& !childEntry.getReferringListsInSameContext().isEmpty()) {
+			throw new org.entrystore.repository.RepositoryException("The entry " + nEntry + " cannot be added since it is a list which already have another parent, try moving it instead");
+		}
+		if (orderedSetRequirement && currentChildren.contains(nEntry)) {
+			throw new org.entrystore.repository.RepositoryException("The entry " + nEntry + " is already a child in this list.");
+		}
+	}
+
+	/** Package-private so a same-package test can hold a writer inside the monitor, after the re-diff and before the commit. */
+	void validateAdditions(java.util.List<URI> toAdd, boolean singleParentForListsRequirement) {
+		java.util.List<EntryImpl> listChildren = new ArrayList<>();
+		for (URI uri : toAdd) {
+			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
+			if (childEntry == null) {
+				throw new org.entrystore.repository.RepositoryException("Cannot set the list since the child " + uri + " does not exist.");
+			}
+			if (singleParentForListsRequirement && childEntry.getGraphType() == GraphType.List) {
+				listChildren.add(childEntry);
+			}
+		}
+		Set<IRI> alreadyParented = relationGraphsNamingAParent(listChildren);
+		for (EntryImpl childEntry : listChildren) {
+			if (alreadyParented.contains(childEntry.relationURI)) {
+				throw new org.entrystore.repository.RepositoryException("Cannot set the list since the child " + childEntry.getEntryURI() + " is a list which already have a parent.");
+			}
+		}
+	}
+
+	/**
+	 * Which of the given children already belong to a list, decided on one connection instead of one per member.
+	 * Per member, {@code EntryImpl.getReferringListsInSameContext()} opens its own connection and materialises the
+	 * child's whole relation graph, and this decision is taken under the monitor every writer in the instance
+	 * shares, with the member count coming straight from the request body.
+	 * <p>
+	 * Each graph is probed separately rather than read in one pass keyed on the statements' context: a store that
+	 * returns statements without one — {@code SPARQLRepository} outside quad mode, which is what
+	 * {@code entrystore.repository.store.type=sparql} builds — would bucket nothing and quietly pass every child,
+	 * disabling the single-parent rule instead of enforcing it. Asking per graph needs no context in the answer.
+	 * A child whose {@code relationURI} is null is probed on the null context rather than skipped, because that
+	 * is the context {@code EntryImpl.addRelation} would have written its parent link to.
+	 * ENTRYSTORE-1141 does the same for the removal side, which still reads per member for a non-owner.
+	 */
+	private Set<IRI> relationGraphsNamingAParent(java.util.List<EntryImpl> listChildren) {
+		Set<IRI> parented = new HashSet<>();
+		if (listChildren.isEmpty()) {
+			return parented;
+		}
+		try (RepositoryConnection rc = entry.repository.getConnection()) {
+			for (EntryImpl child : listChildren) {
+				// No null special-case: addRelation writes the parent link with this same expression as its
+				// context, so a null graph must be probed rather than assumed parentless.
+				IRI relationGraph = child.relationURI;
+				if (parented.contains(relationGraph)) {
+					continue;
+				}
+				if (rc.hasStatement(null, RepositoryProperties.hasListMember, null, false, relationGraph)
+						|| rc.hasStatement(null, RepositoryProperties.hasGroupMember, null, false, relationGraph)) {
+					parented.add(relationGraph);
+				}
+			}
+		} catch (RepositoryException e) {
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+		}
+		return parented;
+	}
+
+	/** Package-private to match its sibling; both run only under the repository monitor. */
+	void validateRemovals(java.util.List<URI> toRemove, boolean isOwnerOfContext) {
+		if (isOwnerOfContext) {
+			// canRemove allows a context owner every member, so the per-member resolution under the instance-wide
+			// monitor would decide nothing. ENTRYSTORE-1141 batches the non-owner path's relation reads.
+			return;
+		}
+		for (URI uri : toRemove) {
+			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
+			if (childEntry == null) {
+				log.warn("List contains entry which does not exist: {}", uri);
+				continue;
+			}
+			if (!canRemove(true, childEntry, isOwnerOfContext)) {
+				throw new org.entrystore.repository.RepositoryException("Cannot set the list since you do not have the rights to remove the child " + uri + " from the list.");
+			}
+		}
 	}
 
 	/**
@@ -868,19 +977,22 @@ public class ListImpl extends RDFResource implements List {
 		}
 	}
 
+	/**
+	 * Whether the caller may remove {@code childEntry} from this list. The orphan rule only ever refuses a
+	 * non-owner, so the owner and no-check paths return before the relation read it would need: that read opens a
+	 * connection and scans a graph per member, under the instance-wide monitor, for a verdict already decided —
+	 * and {@code removeTree} takes the owner path for every member it removes. One consequence to know: a store
+	 * failure during that read no longer fails an owner's removal, since the owner is allowed either way.
+	 */
 	private boolean canRemove(boolean checkOrphaned, EntryImpl childEntry, boolean isOwnerOfContext) {
 		if (childEntry == null) {
 			return false;
 		}
-		Set<URI> refLists = childEntry.getReferringListsInSameContext();
-		if ((refLists != null) && checkOrphaned && refLists.size() == 1) {
-			if (isOwnerOfContext) {
-				return true;
-			} else {
-				return childEntry.getOriginalList() == null;
-			}
+		if (isOwnerOfContext || !checkOrphaned) {
+			return true;
 		}
-		return true;
+		Set<URI> refLists = childEntry.getReferringListsInSameContext();
+		return refLists.size() != 1 || childEntry.getOriginalList() == null;
 	}
 
 	public void remove(RepositoryConnection rc) throws Exception {

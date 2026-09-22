@@ -199,4 +199,25 @@ public class GroupImplTest extends AbstractCoreTest {
 
 		assertTrue(group.members().isEmpty());
 	}
+
+	/**
+	 * A group's member list must hold only Users on every path into it, not just {@code setChildren}.
+	 * {@code addChild} is reached by {@code ContextImpl.create} with a {@code listURI} and by
+	 * {@code moveEntryHere}, and a non-User that lands there is silently dropped by {@code members()} with
+	 * nothing but a logged content error to show for it.
+	 */
+	@Test
+	public void addChildRejectsANonUserMember() {
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry groupEntry = pm.createResource(null, GraphType.Group, null, null);
+		Entry otherGroupEntry = pm.createResource(null, GraphType.Group, null, null);
+		org.entrystore.List group = (org.entrystore.List) groupEntry.getResource();
+
+		IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+			() -> group.addChild(otherGroupEntry.getEntryURI()));
+
+		assertTrue(refused.getMessage().contains("Only User entries"), refused.getMessage());
+		assertTrue(((Group) groupEntry.getResource()).members().isEmpty(),
+			"the non-User must not have reached the member list");
+	}
 }

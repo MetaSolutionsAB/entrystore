@@ -63,6 +63,9 @@ import static org.mockito.Mockito.spy;
 
 public class ListImplTest extends AbstractCoreTest {
 
+	/** Names the second writer so the spy can tell the two threads' validation calls apart. */
+	private static final String CONTENDER = "monitor-contender";
+
 	@Test
 	public void singleOccurrenceOfChild() {
 		// Use the Donald user.
@@ -419,6 +422,89 @@ public class ListImplTest extends AbstractCoreTest {
 	}
 
 	/**
+	 * {@code setChildren} resolves its members before taking the monitor, since each costs a store read and the
+	 * member count is client-controlled, but it diffs and validates only <em>under</em> the monitor it commits
+	 * within. Relying on the outside diff, two concurrent writes to the same list diff the same
+	 * pre-state, and the loser rewrites the member graph without calling {@code removeReferringList} for what the
+	 * winner added — leaving a relation naming a list that no longer contains the entry, which then blocks
+	 * re-adding it anywhere else. Asserted on that leftover relation rather than on the number of validation
+	 * calls, which a diff hoisted back above the monitor would keep satisfying.
+	 */
+	@Test
+	public void setChildrenReDiffsUnderTheRepositoryMonitor() throws Exception {
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry member = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+
+		ListImpl list = spy((ListImpl) listEntry.getResource());
+		CountDownLatch writerIsDiffing = new CountDownLatch(1);
+		CountDownLatch releaseWriter = new CountDownLatch(1);
+		CountDownLatch contenderHasResolved = new CountDownLatch(1);
+		doAnswer(invocation -> {
+			// validation runs only under the monitor, so holding the writer here holds the monitor
+			if (!CONTENDER.equals(Thread.currentThread().getName())) {
+				writerIsDiffing.countDown();
+				if (!releaseWriter.await(10, TimeUnit.SECONDS)) {
+					throw new IllegalStateException("the diffing writer was never released");
+				}
+			}
+			return invocation.callRealMethod();
+		}).when(list).validateAdditions(any(), anyBoolean());
+		doAnswer(invocation -> {
+			if (CONTENDER.equals(Thread.currentThread().getName())) {
+				// the contender's own pre-monitor pass: from here its only remaining wait is the monitor
+				contenderHasResolved.countDown();
+			}
+			return invocation.callRealMethod();
+		}).when(list).resolveMembers(any());
+
+		ExecutorService writer = Executors.newSingleThreadExecutor();
+		try {
+			Future<?> write = writer.submit(() -> {
+				pm.setAuthenticatedUserURI(donald);
+				list.setChildren(java.util.List.of(member.getEntryURI()));
+			});
+			assertTrue(writerIsDiffing.await(10, TimeUnit.SECONDS),
+				"precondition: the writer is re-diffing under the monitor");
+
+			// A second writer that emptied the list from the pre-state it saw before the first writer committed
+			// would rewrite the member graph without removing the member's relation to this list.
+			AtomicReference<Throwable> contenderFailure = new AtomicReference<>();
+			Thread contender = new Thread(() -> {
+				pm.setAuthenticatedUserURI(donald);
+				list.setChildren(java.util.List.of());
+			}, CONTENDER);
+			contender.setUncaughtExceptionHandler((thread, failure) -> contenderFailure.set(failure));
+			contender.start();
+			assertTrue(contenderHasResolved.await(10, TimeUnit.SECONDS),
+				"precondition: the contender took its pre-monitor diff while the list was still empty");
+
+			assertEquals(Thread.State.BLOCKED, awaitBlockedOrTerminated(contender),
+				"a second writer must not be able to take the repository monitor while setChildren is diffing; "
+					+ "if it can, both diff the same pre-state and the loser drops the winner's member");
+
+			releaseWriter.countDown();
+			// Both writes must actually have happened: every assertion below is equally satisfied by a run in
+			// which one of the two threads died, which is the scenario never happening rather than passing.
+			write.get(10, TimeUnit.SECONDS);
+			assertTrue(contender.join(Duration.ofSeconds(10)), "the second writer must finish");
+			assertNull(contenderFailure.get(), "the second writer must not fail");
+
+			assertFalse(list.getChildren().contains(member.getEntryURI()),
+				"precondition: the second writer emptied the list after the first one had added the member");
+			assertTrue(((EntryImpl) member).getReferringListsInSameContext().isEmpty(),
+				"the second writer must re-diff against the committed membership and remove the relation it "
+					+ "inherited; a relation naming a list that no longer holds the entry blocks re-adding it "
+					+ "anywhere else");
+		} finally {
+			releaseWriter.countDown();
+			writer.shutdownNow();
+		}
+	}
+
+	/**
 	 * {@code invalidateChildren()} must not land inside another writer's open transaction. If it does, a reader
 	 * reloads the pre-commit membership into the field and nothing drops it afterwards, so the writer's change is
 	 * invisible to every later read — and on a group's member list the authorization cache then re-publishes the
@@ -465,6 +551,125 @@ public class ListImplTest extends AbstractCoreTest {
 		} finally {
 			releaseWriter.countDown();
 			writer.shutdownNow();
+		}
+	}
+
+	/**
+	 * The diff is validated before the monitor is taken, then recomputed under it. Anything the recomputation
+	 * surfaces that the first pass never saw must still be validated, or a concurrent change lets an addition
+	 * through that the rules reject — here a list that acquired a parent in the meantime.
+	 */
+	@Test
+	public void setChildrenValidatesWhatOnlyTheReDiffUnderTheMonitorSurfaces() throws Exception {
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry otherListEntry = duck.createResource(null, GraphType.List, null, null);
+		Entry childList = duck.createResource(null, GraphType.List, null, null);
+		ListImpl list = (ListImpl) listEntry.getResource();
+		list.setChildren(java.util.List.of(childList.getEntryURI()));
+
+		ListImpl spied = spy(list);
+		CountDownLatch validatedOutside = new CountDownLatch(1);
+		CountDownLatch releaseWriter = new CountDownLatch(1);
+		AtomicInteger resolutions = new AtomicInteger();
+		doAnswer(invocation -> {
+			// the last step before the monitor is taken; hold the writer here on its first pass only
+			if (resolutions.incrementAndGet() == 1) {
+				validatedOutside.countDown();
+				if (!releaseWriter.await(10, TimeUnit.SECONDS)) {
+					throw new IllegalStateException("the writer was never released");
+				}
+			}
+			return invocation.callRealMethod();
+		}).when(spied).resolveMembers(any());
+
+		ExecutorService writer = Executors.newSingleThreadExecutor();
+		try {
+			// re-submitting the membership it already has, so the first pass sees nothing to add
+			Future<?> rewrite = writer.submit(() -> {
+				pm.setAuthenticatedUserURI(donald);
+				spied.setChildren(java.util.List.of(childList.getEntryURI()));
+			});
+			assertTrue(validatedOutside.await(10, TimeUnit.SECONDS), "precondition: the first pass has run");
+
+			// through the spy: it carries its own copy of the field, so mutating the original would not reach the re-diff
+			spied.setChildren(java.util.List.of());
+			((List) otherListEntry.getResource()).addChild(childList.getEntryURI());
+			releaseWriter.countDown();
+
+			ExecutionException thrown = assertThrows(ExecutionException.class, () -> rewrite.get(10, TimeUnit.SECONDS));
+			assertInstanceOf(RepositoryException.class, thrown.getCause(),
+				"the re-diff surfaced an addition the first pass never validated, so it must be validated now");
+			assertTrue(thrown.getCause().getMessage().contains("already have a parent"), thrown.getCause().getMessage());
+		} finally {
+			releaseWriter.countDown();
+			writer.shutdownNow();
+		}
+	}
+
+	/**
+	 * {@code addChild} decides the single-parent rule under the monitor it commits under, for the same reason
+	 * {@code setChildren} does: the rule reads the child's referring lists, which the other writer's commit
+	 * changes, so two adds of the same parentless child list that both decided before either committed would
+	 * each pass and leave the child with two parents — the state the rule exists to prevent, and one that then
+	 * blocks moving the child anywhere.
+	 */
+	@Test
+	public void addChildDecidesTheSingleParentRuleUnderTheRepositoryMonitor() throws Exception {
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry firstParent = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry secondParent = duck.createResource(null, GraphType.List, null, null);
+		Entry childList = duck.createResource(null, GraphType.List, null, null);
+
+		ListImpl first = spy((ListImpl) firstParent.getResource());
+		CountDownLatch firstIsInsideTheMonitor = new CountDownLatch(1);
+		CountDownLatch releaseFirst = new CountDownLatch(1);
+		doAnswer(invocation -> {
+			firstIsInsideTheMonitor.countDown();
+			if (!releaseFirst.await(10, TimeUnit.SECONDS)) {
+				throw new IllegalStateException("the first writer was never released");
+			}
+			return invocation.callRealMethod();
+		}).when(first).validateAddition(any(), any(), anyBoolean(), anyBoolean());
+
+		ExecutorService writers = Executors.newSingleThreadExecutor();
+		try {
+			Future<?> firstAdd = writers.submit(() -> {
+				pm.setAuthenticatedUserURI(donald);
+				first.addChild(childList.getEntryURI());
+			});
+			assertTrue(firstIsInsideTheMonitor.await(10, TimeUnit.SECONDS),
+				"precondition: the first writer holds the monitor and has not committed");
+
+			AtomicReference<Throwable> secondFailure = new AtomicReference<>();
+			Thread secondAdd = new Thread(() -> {
+				pm.setAuthenticatedUserURI(donald);
+				((List) secondParent.getResource()).addChild(childList.getEntryURI());
+			}, "second-adder");
+			secondAdd.setUncaughtExceptionHandler((thread, failure) -> secondFailure.set(failure));
+			secondAdd.start();
+			// Without this the second add could run entirely after the first committed, which every assertion
+			// below would satisfy even if the rule were decided before the monitor.
+			assertEquals(Thread.State.BLOCKED, awaitBlockedOrTerminated(secondAdd),
+				"precondition: the second add is waiting on the monitor, not deciding after the first committed");
+
+			releaseFirst.countDown();
+			firstAdd.get(10, TimeUnit.SECONDS);
+			assertTrue(secondAdd.join(Duration.ofSeconds(10)), "the second add must finish");
+
+			Throwable refused = secondFailure.get();
+			assertInstanceOf(RepositoryException.class, refused,
+				"the second add must not decide its rule until the first has committed, so it must refuse");
+			assertTrue(refused.getMessage().contains("already have another parent"), refused.getMessage());
+			assertEquals(1, ((EntryImpl) childList).getReferringListsInSameContext().size(),
+				"the child must end up in exactly one list");
+		} finally {
+			releaseFirst.countDown();
+			writers.shutdownNow();
 		}
 	}
 
