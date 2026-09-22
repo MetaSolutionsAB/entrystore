@@ -17,8 +17,12 @@
 package org.entrystore.impl;
 
 import org.apache.solr.client.solrj.SolrClient;
+import org.entrystore.Entry;
 import org.entrystore.SearchIndex.ReindexResult;
 import org.entrystore.config.Config;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
+import org.entrystore.repository.RepositoryListener;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.SolrSearchIndex;
@@ -27,12 +31,16 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -122,16 +130,73 @@ public class RepositoryManagerImplTest {
 		verify(throwingSolrServer).close();
 	}
 
+	@Test
+	public void fireRepositoryEvent_runsRemainingListenersWhenOneThrows() throws Exception {
+		String baseUrl = "http://localhost:8181/";
+		RepositoryManagerImpl rm = newMinimalRepositoryManager(baseUrl);
+		try {
+			List<String> reached = new ArrayList<>();
+			// Listener order is unspecified, so whichever runs first is the one that throws.
+			rm.registerListener(recordingListener("first", reached), RepositoryEvent.ResourceUpdated);
+			rm.registerListener(recordingListener("second", reached), RepositoryEvent.ResourceUpdated);
+			rm.registerListener(recordingListener("all", reached), RepositoryEvent.All);
+
+			assertDoesNotThrow(() -> rm.fireRepositoryEvent(
+					new RepositoryEventObject(mock(Entry.class), RepositoryEvent.ResourceUpdated)));
+
+			assertEquals(Set.of("first", "second", "all"), Set.copyOf(reached),
+					"a listener that throws must not keep the remaining listeners, including All, from running");
+		} finally {
+			deregisterInstance(baseUrl);
+		}
+	}
+
+	@Test
+	public void fireRepositoryEvent_propagatesAnError() throws Exception {
+		String baseUrl = "http://localhost:8181/";
+		RepositoryManagerImpl rm = newMinimalRepositoryManager(baseUrl);
+		try {
+			rm.registerListener(new RepositoryListener() {
+				@Override
+				public void repositoryUpdated(RepositoryEventObject eventObject) {
+					throw new AssertionError("simulated listener error");
+				}
+			}, RepositoryEvent.ResourceUpdated);
+
+			assertThrows(AssertionError.class, () -> rm.fireRepositoryEvent(
+					new RepositoryEventObject(mock(Entry.class), RepositoryEvent.ResourceUpdated)));
+		} finally {
+			deregisterInstance(baseUrl);
+		}
+	}
+
+	private static RepositoryListener recordingListener(String name, List<String> reached) {
+		return new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				boolean first = reached.isEmpty();
+				reached.add(name);
+				if (first) {
+					throw new IllegalStateException("simulated failure in listener " + name);
+				}
+			}
+		};
+	}
+
+	private static RepositoryManagerImpl newMinimalRepositoryManager(String baseUrl) {
+		Config config = new PropertiesConfiguration("EntryStore Configuration");
+		config.setProperty(Settings.STORE_TYPE, "memory");
+		config.setProperty(Settings.BASE_URL, baseUrl);
+		config.setProperty(Settings.SOLR, "off");
+		return new RepositoryManagerImpl(baseUrl, config);
+	}
+
 	// Builds a minimal RepositoryManagerImpl, injects a collaborator whose shutdown throws into the named
 	// field, then asserts shutdown() swallows the failure and still reaches its final step. Deregisters the
 	// instance from the static instances map afterwards so it cannot be served stale to a later same-URL test.
 	private void assertShutdownCompletesAfterInjecting(String fieldName, Object throwingCollaborator) throws Exception {
 		String baseUrl = "http://localhost:8181/";
-		Config config = new PropertiesConfiguration("EntryStore Configuration");
-		config.setProperty(Settings.STORE_TYPE, "memory");
-		config.setProperty(Settings.BASE_URL, baseUrl);
-		config.setProperty(Settings.SOLR, "off");
-		RepositoryManagerImpl rm = new RepositoryManagerImpl(baseUrl, config);
+		RepositoryManagerImpl rm = newMinimalRepositoryManager(baseUrl);
 		try {
 			setField(rm, fieldName, throwingCollaborator);
 

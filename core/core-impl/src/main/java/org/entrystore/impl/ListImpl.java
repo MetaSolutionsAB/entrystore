@@ -318,8 +318,8 @@ public class ListImpl extends RDFResource implements List {
 					+ "stands", nEntry, entry.getEntryURI(), e);
 		}
 
-		// Outside the try/catch above, so a listener failure is never misreported as a failed add: it reaches the
-		// caller only after the add committed and was published.
+		// Outside the try/catch above, so a listener's Error — the only failure fireRepositoryEvent does not
+		// isolate — is never misreported as a failed add.
 		entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 		entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 	}
@@ -584,8 +584,8 @@ public class ListImpl extends RDFResource implements List {
 						refreshAndPublish(toRemove, failed);
 					});
 					if (committed) {
-						// A listener failed after the commit; the store and the published list hold the change, so
-						// reporting a failure would make removeTree abandon children of a list already committed empty.
+						// Defensive, since fireRepositoryEvent isolates listener failures: the store and the published list
+						// hold the change, so reporting a failure would make removeTree abandon an emptied list's children.
 						return true;
 					}
 					throw new org.entrystore.repository.RepositoryException("Cannot set the list", e);
@@ -774,7 +774,8 @@ public class ListImpl extends RDFResource implements List {
 	 * Once the transaction has committed the rollback does not apply, since rolling back a committed transaction
 	 * fails in its own right; the event is still published, because the store changed.
 	 *
-	 * @param committed whether {@code rc.commit()} returned; true when a listener failed after the commit
+	 * @param committed whether {@code rc.commit()} returned; defensive, since {@code fireRepositoryEvent} isolates
+	 * the listener failures that could otherwise reach the caller's catch after the commit
 	 * @param rc the connection the write failed on, handed to {@code recovery}
 	 * @param recovery rolls back and refreshes the affected members; a failure is logged here and suppressed onto
 	 * {@code cause}, which the caller may answer with a return value rather than rethrow

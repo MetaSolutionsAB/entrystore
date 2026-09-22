@@ -30,6 +30,9 @@ import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
+import org.entrystore.repository.RepositoryListener;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.CommonQueries;
 import org.junit.jupiter.api.BeforeEach;
@@ -593,5 +596,53 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		Entry loaded = context.get(reference.getId());
 
 		assertTrue(((ContextManagerImpl) cm).isEntryMetadataReadable(loaded));
+	}
+
+	/**
+	 * An import removes the ordinary entries but keeps lists whose id starts with an underscore, so those lists
+	 * are pruned inside the import transaction, which fires nothing of its own.
+	 */
+	@Test
+	public void importContext_prunesASurvivingListAndPublishesIt(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		Entry survivingList = context.createResource("_survivor", GraphType.List, null, null);
+		Entry member = context.createLink(null, URI.create("https://slashdot.org/"), survivingList.getResourceURI());
+		ListImpl list = (ListImpl) survivingList.getResource();
+		assertTrue(list.getChildren().contains(member.getEntryURI()), "precondition: the member is in the list");
+
+		List<URI> published = new ArrayList<>();
+		List<Boolean> removedMemberVisibleAtDispatch = new ArrayList<>();
+		RepositoryListener recorder = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				URI source = ((Entry) eventObject.getSource()).getEntryURI();
+				published.add(source);
+				if (source.equals(survivingList.getEntryURI())) {
+					// what a listener that re-reads the list on this event, such as the search index, would read
+					removedMemberVisibleAtDispatch.add(list.getChildren().contains(member.getEntryURI()));
+				}
+			}
+		};
+		RepositoryManagerImpl rmi = (RepositoryManagerImpl) rm;
+		rmi.registerListener(recorder, RepositoryEvent.ResourceUpdated);
+		try {
+			// the minimal ZIP contains no entries, so the import removes every ordinary entry
+			cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+		} finally {
+			rmi.unregisterListener(recorder, RepositoryEvent.ResourceUpdated);
+		}
+
+		assertNull(context.getByEntryURI(member.getEntryURI()), "the import removes the ordinary member");
+		assertNotNull(context.getByEntryURI(survivingList.getEntryURI()), "a list with an underscore id survives");
+		assertFalse(list.getChildren().contains(member.getEntryURI()),
+				"a read after the import must not report a member the import removed");
+		assertTrue(published.contains(survivingList.getEntryURI()),
+				"the pruned list's change must be published so listeners such as the search index see it");
+		assertEquals(List.of(false), removedMemberVisibleAtDispatch,
+				"the members must be dropped before the event is fired, or a listener that re-scans on it "
+						+ "reads the stale ones");
 	}
 }

@@ -595,11 +595,11 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 		cont.evictFromCaches(removedEntries);
 		for (EntryImpl removedEntry : removedEntries) {
-			try {
-				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(removedEntry, RepositoryEvent.EntryDeleted));
-			} catch (Exception e) {
-				log.error("Failed to fire EntryDeleted event for {}, search index may be stale until reindex", removedEntry.getEntryURI(), e);
-			}
+			entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(removedEntry, RepositoryEvent.EntryDeleted));
+		}
+		// the import changed their members and fired nothing; invalidated above, so listeners read the committed ones
+		for (EntryImpl survivingList : survivingLists) {
+			entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(survivingList, RepositoryEvent.ResourceUpdated));
 		}
 		for (DataImpl removedData : deferredFileDeletions) {
 			try {
