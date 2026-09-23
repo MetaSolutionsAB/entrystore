@@ -45,6 +45,7 @@ import org.entrystore.Provenance;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
+import org.entrystore.repository.CorruptEntryException;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
@@ -63,6 +64,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.eclipse.rdf4j.model.util.Values.iri;
 
@@ -261,7 +263,22 @@ public class EntryImpl implements Entry {
 		loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, entryURI)));
 	}
 
+	/**
+	 * Loads the entry from the statements of its entry graph.
+	 *
+	 * @throws CorruptEntryException if the entry graph is corrupt, e.g. it lacks the resource statement or
+	 *                               contains a literal where a URI is expected or a malformed date
+	 */
 	private boolean loadFromStatements(List<Statement> existingStatements) throws RepositoryException {
+		try {
+			return parseStatements(existingStatements);
+		} catch (ClassCastException | IllegalArgumentException e) {
+			throw new CorruptEntryException("Entry graph <" + existingStatements.getFirst().getContext()
+					+ "> is corrupt: it contains a malformed value", e);
+		}
+	}
+
+	private boolean parseStatements(List<Statement> existingStatements) throws RepositoryException {
 		if (existingStatements.isEmpty()) {
 			return false;
 		}
@@ -343,6 +360,10 @@ public class EntryImpl implements Entry {
 			}
 		}
 
+		if (resURI == null) {
+			throw new CorruptEntryException(describeGraphWithoutResource(existingStatements));
+		}
+
 		//Detect types.
 		for (Statement statement : existingStatements) {
 			org.eclipse.rdf4j.model.Resource subject = statement.getSubject();
@@ -394,6 +415,22 @@ public class EntryImpl implements Entry {
 		this.invRelations = invRelations;
 
 		return true;
+	}
+
+	/**
+	 * Describes an entry graph that has statements but no {@code es:resource} statement, which leaves the
+	 * entry without a resource URI. Such a graph is typically the leftover of an incompletely removed entry;
+	 * the message names the graph and its predicates so the operator can locate and repair it.
+	 */
+	private static String describeGraphWithoutResource(List<Statement> statements) {
+		String predicates = statements.stream()
+				.map(s -> s.getPredicate().stringValue())
+				.distinct()
+				.sorted()
+				.collect(Collectors.joining(", "));
+		return "Entry graph <" + statements.getFirst().getContext() + "> is corrupt: it contains "
+				+ statements.size() + " statement(s) but no <" + RepositoryProperties.resource
+				+ "> statement; predicates present: " + predicates;
 	}
 
 	private ResourceType getResourceType(Value rt) {

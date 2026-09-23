@@ -87,6 +87,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 import java.util.zip.GZIPOutputStream;
 
 public class RepositoryManagerImpl implements RepositoryManager {
@@ -580,13 +581,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	private void initSolr() {
 		try {
 			initSolrInternal();
-		} catch (RuntimeException e) {
+		} catch (RuntimeException | Error e) {
 			// Release RDF4J native-store file locks and any other resources before propagating;
-			// otherwise stale lock files block subsequent boots. shutdown() can itself throw, so
-			// surface any cleanup failure as a suppressed cause to preserve the original cause.
+			// otherwise stale lock files block subsequent boots. Errors are included because an open
+			// Solr client keeps non-daemon threads alive, so the JVM would not exit after the failed
+			// startup. shutdown() can itself throw, so surface any cleanup failure as a suppressed
+			// cause to preserve the original cause.
 			try {
 				this.shutdown();
-			} catch (RuntimeException cleanup) {
+			} catch (RuntimeException | Error cleanup) {
 				e.addSuppressed(cleanup);
 			}
 			throw e;
@@ -657,16 +660,14 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		if (solrServer != null) {
 			solrIndex = new SolrSearchIndex(this, solrServer);
 			boolean reindexSucceeded = false;
+			SearchIndex.ReindexResult reindexResult = null;
 			if (reindex) {
 				if (reindexWait) {
 					if (!solrIndex.clearSolrIndex(solrServer)) {
 						log.error("Initial Solr full-wipe failed; skipping reindex to avoid serving a dirty index. Next restart will retry.");
 					} else {
-						solrIndex.reindexSync(false);
-						reindexSucceeded = solrIndex.waitForQueueDrain();
-						if (!reindexSucceeded) {
-							log.warn("Solr submission queue did not drain; skipping version-marker write so the next restart re-triggers reindex.");
-						}
+						reindexResult = solrIndex.reindexSync(false);
+						reindexSucceeded = isReindexComplete(reindexResult, solrIndex::waitForQueueDrain);
 					}
 				} else {
 					log.info("Async reindex started; Solr version markers will not be persisted on this run because '{}=false' means reindex runs on every boot.",
@@ -674,7 +675,23 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					solrIndex.reindex(false);
 				}
 			}
-			if (dataFolder != null && reindex && reindexSucceeded && versionResolved) {
+			// The version markers record that a full reindex ran to completion, not that every entry is in the
+			// index: contexts and entries that fail because of their data would fail again on the next restart,
+			// so of the reindex outcomes only an interruption or an undrained submission queue withholds them.
+			boolean persistMarkers = dataFolder != null && reindex && reindexSucceeded && versionResolved;
+			if (reindexResult != null) {
+				if (!reindexSucceeded) {
+					log.warn("Solr {}; skipping version-marker write so the next restart re-triggers reindex.",
+							reindexResult.interrupted() ? "reindex was interrupted" : "submission queue did not drain");
+				}
+				if (reindexResult.hasFailures()) {
+					log.error("Solr reindex could not index {} context(s) and {} entries (logged above). They are"
+							+ " missing from the search index{}; repair the affected data and trigger a reindex.",
+							reindexResult.failedContexts(), reindexResult.failedEntries(),
+							persistMarkers ? " and a restart does not retry them" : "");
+				}
+			}
+			if (persistMarkers) {
 				boolean schemaWritten = SolrVersionMarker.write(SolrVersionMarker.schemaMarker(dataFolder), currentVersion);
 				boolean solrWritten = SolrVersionMarker.write(SolrVersionMarker.solrMarker(dataFolder), SolrVersion.LATEST.toString());
 				if (!schemaWritten || !solrWritten) {
@@ -685,6 +702,19 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			log.error("Unable to initialize Solr");
 			this.shutdown();
 		}
+	}
+
+	/**
+	 * Decides whether a synchronous reindex ran to completion, which is what the Solr version markers record:
+	 * it was not interrupted and its documents left the submission queue. Contexts and entries that could not
+	 * be indexed do not count against completion, because they fail because of their data and would fail again.
+	 *
+	 * @param waitForQueueDrain waits until the submission queue is empty and returns false if interrupted; it is
+	 *                          not called after an interrupted reindex, since it has no timeout and only an
+	 *                          interruption ends it early
+	 */
+	static boolean isReindexComplete(SearchIndex.ReindexResult result, BooleanSupplier waitForQueueDrain) {
+		return !result.interrupted() && waitForQueueDrain.getAsBoolean();
 	}
 
 	private void registerSolrListeners() {
