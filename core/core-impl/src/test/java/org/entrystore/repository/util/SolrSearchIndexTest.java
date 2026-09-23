@@ -260,7 +260,59 @@ public class SolrSearchIndexTest {
 		assertTrue(result.interrupted());
 		assertTrue(interruptStatusKept,
 				"The caller must still see the interrupt, e.g. to stop waiting for the queue to drain");
+		verify(cm, never()).getByEntryURI(CONTEXT_1);
 		verify(cm, never()).getByEntryURI(CONTEXT_2);
+	}
+
+	@Test
+	public void reindexSyncStopsWithoutRetryWhenContextLoadFailsDuringInterruption() {
+		ContextManager cm = contextManagerListing(CONTEXT_1, CONTEXT_2);
+		when(cm.getByEntryURI(CONTEXT_1)).thenAnswer(invocation -> {
+			Thread.currentThread().interrupt();
+			throw new RepositoryException("Interrupted context load");
+		});
+
+		try {
+			assertEquals(new ReindexResult(1, 0, true), index.reindexSync(false));
+			assertTrue(Thread.currentThread().isInterrupted());
+		} finally {
+			Thread.interrupted();
+		}
+		verify(cm, times(1)).getByEntryURI(CONTEXT_1);
+		verify(cm, never()).getByEntryURI(CONTEXT_2);
+	}
+
+	@Test
+	public void reindexSyncReportsInterruptionWhileLoadingTheLastEmptyContext() {
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		Context emptyContext = mock(Context.class);
+		when(cm.getContext("1")).thenAnswer(invocation -> {
+			Thread.currentThread().interrupt();
+			return emptyContext;
+		});
+
+		try {
+			assertEquals(new ReindexResult(0, 0, true), index.reindexSync(false));
+			assertTrue(Thread.currentThread().isInterrupted());
+		} finally {
+			Thread.interrupted();
+		}
+	}
+
+	@Test
+	public void reindexSyncReportsInterruptionWhileListingNoContexts() {
+		ContextManager cm = contextManagerListing();
+		when(cm.getEntries()).thenAnswer(invocation -> {
+			Thread.currentThread().interrupt();
+			return new LinkedHashSet<URI>();
+		});
+
+		try {
+			assertEquals(new ReindexResult(0, 0, true), index.reindexSync(false));
+			assertTrue(Thread.currentThread().isInterrupted());
+		} finally {
+			Thread.interrupted();
+		}
 	}
 
 	@Test

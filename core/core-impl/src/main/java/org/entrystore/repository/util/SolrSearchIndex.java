@@ -678,21 +678,31 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 		int failedContexts = 0;
 		int failedEntries = 0;
+		if (Thread.currentThread().isInterrupted()) {
+			return new ReindexResult(0, 0, true);
+		}
 		Collection<URI> pendingContexts = listContextsAsAdmin();
 		for (int attempt = 1; attempt <= MAX_CONTEXT_REINDEX_ATTEMPTS && !pendingContexts.isEmpty(); attempt++) {
 			List<URI> abortedContexts = new ArrayList<>();
 			for (URI contextURI : pendingContexts) {
+				if (Thread.currentThread().isInterrupted()) {
+					return new ReindexResult(failedContexts + abortedContexts.size(), failedEntries, true);
+				}
 				ContextPostResult posted;
 				try {
 					posted = reindexContext(contextURI, purgeAllBeforeReindex);
 				} catch (RuntimeException | StackOverflowError e) {
+					abortedContexts.add(contextURI);
+					if (Thread.currentThread().isInterrupted()) {
+						log.info("Reindexing of context {} was interrupted; stopping without retry", contextURI);
+						return new ReindexResult(failedContexts + abortedContexts.size(), failedEntries, true);
+					}
 					if (attempt < MAX_CONTEXT_REINDEX_ATTEMPTS) {
 						log.error("Reindexing of context {} failed; it is retried after the remaining contexts",
 								contextURI, e);
 					} else {
 						log.error("Reindexing of context {} failed again, giving up", contextURI, e);
 					}
-					abortedContexts.add(contextURI);
 					continue;
 				}
 				failedEntries += posted.failedEntries() + posted.unresolvedEntries();
@@ -704,7 +714,7 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 					case INTERRUPTED -> true;
 				};
-				if (interrupted) {
+				if (interrupted || Thread.currentThread().isInterrupted()) {
 					// interrupted() in postContextEntriesToQueue cleared the flag; restore it for the caller
 					Thread.currentThread().interrupt();
 					return new ReindexResult(failedContexts + abortedContexts.size(), failedEntries, true);
@@ -712,7 +722,8 @@ public class SolrSearchIndex implements SearchIndex {
 			}
 			pendingContexts = abortedContexts;
 		}
-		return new ReindexResult(failedContexts + pendingContexts.size(), failedEntries, false);
+		return new ReindexResult(failedContexts + pendingContexts.size(), failedEntries,
+				Thread.currentThread().isInterrupted());
 	}
 
 	private Set<URI> listContextsAsAdmin() {
