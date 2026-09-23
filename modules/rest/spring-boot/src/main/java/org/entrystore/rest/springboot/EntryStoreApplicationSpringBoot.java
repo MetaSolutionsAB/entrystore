@@ -28,6 +28,20 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class EntryStoreApplicationSpringBoot {
 
 	static void main(String[] args) {
-		SpringApplication.run(EntryStoreApplicationSpringBoot.class, args);
+		try {
+			SpringApplication.run(EntryStoreApplicationSpringBoot.class, args);
+		} catch (SpringApplication.AbandonedRunException e) {
+			// Thrown on purpose when a hook stops the run early, e.g. during AOT processing
+			throw e;
+		} catch (Throwable t) {
+			// Report the failure as if it were uncaught: Spring Boot's handler for this thread skips failures that
+			// SpringApplication has already logged, and the default handler prints the others, e.g. failures before
+			// SpringApplication could report anything. Then exit explicitly, because non-daemon threads started
+			// before the failure (e.g. HTTP client executors) would otherwise keep the JVM running, and a container
+			// would neither serve requests nor be restarted.
+			Thread current = Thread.currentThread();
+			current.getUncaughtExceptionHandler().uncaughtException(current, t);
+			System.exit(1);
+		}
 	}
 }

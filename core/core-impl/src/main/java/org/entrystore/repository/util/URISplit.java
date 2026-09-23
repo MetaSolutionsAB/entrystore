@@ -51,6 +51,9 @@ public class URISplit {
 			if (anyURI.toString().startsWith(base)) {
 				String anyURIWithoutBase = anyURI.toString().substring(base.length());
 				StringTokenizer st = new StringTokenizer(anyURIWithoutBase, SLASH_DELIMITER);
+				if (!st.hasMoreTokens()) {
+					throw new IllegalArgumentException("URI is incompatible with EntryStore");
+				}
 				contextId = st.nextToken();
 				if (st.hasMoreTokens()) {
 					path = st.nextToken();

@@ -690,6 +690,80 @@ class EntryIT extends BaseSpec {
 		responseJson['timestamp'] != null
 	}
 
+	def "POST /{context-id}?entrytype=linkreference&id=x with its own metadata as external metadata should respond with Bad Request"() {
+		given:
+		def requestedEntryId = 'selfReferencingLinkReference'
+		def ownMetadataUrl = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + requestedEntryId
+		def params = [entrytype: 'linkreference', resource: resourceUrl, 'cached-external-metadata': ownMetadataUrl, id: requestedEntryId]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params))
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		def responseJson = JSON_PARSER.parseText(connection.errorStream.text)
+		responseJson['error'].toString().contains('must not refer to entry')
+		EntryStoreClient.getRequest('/' + contextId + '/entry/' + requestedEntryId).getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} changing the external metadata of a linkreference to its own metadata should respond with Bad Request"() {
+		given:
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [entrytype: 'linkreference', resource: resourceUrl, 'cached-external-metadata': metadataUrl]
+		def entryId = createEntry(contextId, params)
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		def ownMetadataUrl = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+		def putBody = """
+@prefix es: <http://entrystore.org/terms/> .
+
+<${entryUri}> a es:LinkReference;
+  es:resource <${resourceUrl}>;
+  es:externalMetadata <${ownMetadataUrl}> .
+"""
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId, putBody, 'admin', 'text/turtle')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(editEntryConn.errorStream.text)['error'].toString().contains('must not refer to entry')
+
+		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		getEntryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(getEntryConn.inputStream.text)
+		def externalMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_EXTERNAL_METADATA].collect()
+		externalMetadata.size() == 1
+		externalMetadata[0]['value'] == metadataUrl
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} changing the resource and external metadata of a linkreference should apply both"() {
+		given:
+		def params = [entrytype: 'linkreference', resource: resourceUrl, 'cached-external-metadata': 'https://bbc.co.uk/metadata']
+		def entryId = createEntry(contextId, params)
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		def newResourceUrl = 'https://bbc.co.uk/v2'
+		def newMetadataUrl = 'https://bbc.co.uk/v2/metadata'
+		def putBody = """
+@prefix es: <http://entrystore.org/terms/> .
+
+<${entryUri}> a es:LinkReference;
+  es:resource <${newResourceUrl}>;
+  es:externalMetadata <${newMetadataUrl}> .
+"""
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId, putBody, 'admin', 'text/turtle')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_NO_CONTENT
+
+		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		getEntryConn.getResponseCode() == HTTP_OK
+		def entryInfo = JSON_PARSER.parseText(getEntryConn.inputStream.text)['info'][entryUri]
+		entryInfo[NameSpaceConst.TERM_RESOURCE].collect { it['value'] } == [newResourceUrl]
+		entryInfo[NameSpaceConst.TERM_EXTERNAL_METADATA].collect { it['value'] } == [newMetadataUrl]
+	}
+
 	def "POST /{context-id}?entrytype=link should not create a new entry if context does not exist"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
