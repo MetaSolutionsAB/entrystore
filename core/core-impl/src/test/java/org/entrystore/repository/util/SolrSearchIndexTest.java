@@ -19,16 +19,23 @@ package org.entrystore.repository.util;
 import com.github.benmanes.caffeine.cache.Cache;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrServerException;
+import org.apache.solr.client.solrj.request.SolrQuery;
 import org.apache.solr.client.solrj.request.UpdateRequest;
+import org.apache.solr.client.solrj.response.QueryResponse;
+import org.apache.solr.common.SolrDocument;
+import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrInputDocument;
+import org.apache.solr.common.params.SolrParams;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.EntryType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.SearchIndex.ReindexResult;
 import org.entrystore.User;
 import org.entrystore.config.Config;
+import org.entrystore.repository.CorruptEntryException;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.PropertiesConfiguration;
@@ -51,6 +58,8 @@ import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -58,15 +67,18 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -82,6 +94,7 @@ public class SolrSearchIndexTest {
 	private static final URI CONTEXT_2 = URI.create("http://localhost:8181/_contexts/entry/2");
 	private static final URI ENTRY_1_1 = URI.create("http://localhost:8181/1/entry/1");
 	private static final URI ENTRY_1_2 = URI.create("http://localhost:8181/1/entry/2");
+	private static final URI ENTRY_1_3 = URI.create("http://localhost:8181/1/entry/3");
 	private static final URI ENTRY_2_1 = URI.create("http://localhost:8181/2/entry/1");
 
 	private RepositoryManager rm;
@@ -332,28 +345,181 @@ public class SolrSearchIndexTest {
 	}
 
 	@Test
-	public void reindexOfContextKeepsIndexedDocumentsWhenAnEntryFailed() throws Exception {
+	public void reindexOfContextRemovesDocumentsOfCorruptEntriesRightAway() throws Exception {
+		stopDocumentSubmitter(); // keeps removed documents in the delete queue
 		ContextManager cm = contextManagerListing(CONTEXT_1);
-		resolvableContext(cm, "1", ENTRY_1_1, deletedEntry(cm, ENTRY_1_2));
-		when(cm.getEntry(ENTRY_1_1)).thenThrow(new RepositoryException("Unable to load entry " + ENTRY_1_1));
-		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+		resolvableContext(cm, "1", ENTRY_1_1, ENTRY_1_2, ENTRY_1_3);
+		when(cm.getEntry(ENTRY_1_1)).thenThrow(corruptEntryFailure(ENTRY_1_1));
+		when(cm.getEntry(ENTRY_1_2)).thenThrow(new StackOverflowError());
+		// cm.getEntry(ENTRY_1_3) is not stubbed and returns null, as for an entry that is still being created;
+		// its document is left to the purge, which cannot remove the document that its creation posts
 
 		index.reindexSync(CONTEXT_1, false);
+
+		assertEquals(List.of(ENTRY_1_1, ENTRY_1_2), List.copyOf(deleteQueue()));
+	}
+
+	@Test
+	public void reindexOfRepairedEntryCancelsThePendingRemovalOfItsDocument() throws Exception {
+		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
+		SolrSearchIndex indexWithoutDocuments = spy(index);
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", ENTRY_1_1);
+		Entry repairedEntry = mock(Entry.class);
+		when(repairedEntry.getContext()).thenReturn(mock(Context.class));
+		when(cm.getEntry(ENTRY_1_1))
+				.thenThrow(corruptEntryFailure(ENTRY_1_1), corruptEntryFailure(ENTRY_1_1))
+				.thenReturn(repairedEntry);
+
+		indexWithoutDocuments.reindexSync(CONTEXT_1, false);
+		indexWithoutDocuments.reindexSync(CONTEXT_1, false);
+		assertEquals(List.of(ENTRY_1_1, ENTRY_1_1), List.copyOf(deleteQueue()));
+		indexWithoutDocuments.reindexSync(CONTEXT_1, false);
+
+		assertTrue(deleteQueue().isEmpty(),
+				"A pending deletion must not remove the newer document, even if it is sent after the document");
+		assertEquals(1, index.getPostQueueSize());
+	}
+
+	@Test
+	public void reindexOfCorruptEntryKeepsItsQueuedDocument() throws Exception {
+		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
+		SolrSearchIndex indexWithoutDocuments = spy(index);
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", ENTRY_1_1);
+		Entry loadableEntry = mock(Entry.class);
+		when(loadableEntry.getContext()).thenReturn(mock(Context.class));
+		// The entry loads for one reindex while another one, which read it earlier, finds it corrupt
+		when(cm.getEntry(ENTRY_1_1)).thenReturn(loadableEntry).thenThrow(corruptEntryFailure(ENTRY_1_1));
+
+		indexWithoutDocuments.reindexSync(CONTEXT_1, false);
+		indexWithoutDocuments.reindexSync(CONTEXT_1, false);
+
+		assertTrue(deleteQueue().isEmpty(), "A queued document must not be dropped because of an earlier failure");
+		assertEquals(1, index.getPostQueueSize());
+	}
+
+	@Test
+	public void reindexDoesNotRestoreTheDocumentOfAnEntryDeletedConcurrently() throws Exception {
+		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
+		SolrSearchIndex indexWithoutDocuments = spy(index);
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", ENTRY_1_1);
+		AtomicBoolean deleted = new AtomicBoolean();
+		Entry entry = mock(Entry.class);
+		when(entry.getEntryURI()).thenReturn(ENTRY_1_1);
+		when(entry.isDeleted()).thenAnswer(invocation -> deleted.get());
+		AtomicReference<Thread> deletion = new AtomicReference<>();
+		// Another thread deletes the entry after the reindex has checked the entry itself, and waits for the
+		// monitor of the submission queue if the reindex holds it
+		when(entry.getContext()).thenAnswer(invocation -> {
+			deletion.set(Thread.ofPlatform().start(() -> {
+				deleted.set(true);
+				index.removeEntry(entry);
+			}));
+			awaitFinishedOrBlocked(deletion.get());
+			return mock(Context.class);
+		});
+		when(cm.getEntry(ENTRY_1_1)).thenReturn(entry);
+
+		indexWithoutDocuments.reindexSync(CONTEXT_1, false);
+		deletion.get().join(TimeUnit.SECONDS.toMillis(10));
+
+		assertEquals(List.of(ENTRY_1_1), List.copyOf(deleteQueue()),
+				"The deletion must be queued after the document, or the document must not be queued");
+		assertEquals(0, index.getPostQueueSize());
+	}
+
+	/**
+	 * Waits until the thread has finished or is blocked on a monitor.
+	 */
+	private static void awaitFinishedOrBlocked(Thread thread) {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (thread.isAlive() && thread.getState() != Thread.State.BLOCKED) {
+			if (System.nanoTime() > deadline) {
+				throw new AssertionError("Thread neither finished nor blocked");
+			}
+			Thread.yield();
+		}
+	}
+
+	@Test
+	public void failedDeletionIsNotRequeuedWhenADocumentOfTheEntryWasQueuedMeanwhile() throws Exception {
+		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
+		postQueue().put(ENTRY_1_1, new SolrInputDocument()); // queued while the deletion batch was being sent
+		Method requeueDeletes = SolrSearchIndex.SolrInputDocumentSubmitter.class
+				.getDeclaredMethod("requeueDeletes", List.class);
+		requeueDeletes.setAccessible(true);
+
+		requeueDeletes.invoke(documentSubmitter(), List.of(ENTRY_1_1, ENTRY_1_2));
+
+		assertEquals(List.of(ENTRY_1_2), List.copyOf(deleteQueue()));
+	}
+
+	@Test
+	public void reindexOfContextKeepsIndexedDocumentsWhenLoadingAnEntryFailsForAnotherReason() throws Exception {
+		stopDocumentSubmitter(); // keeps removed documents in the delete queue
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", ENTRY_1_1, deletedEntry(cm, ENTRY_1_2));
+		// A failure of the store, which may be transient, is not a reason to remove the entry's document
+		when(cm.getEntry(ENTRY_1_1)).thenThrow(new RepositoryException("Failed to connect to Repository"));
+		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+
+		ReindexResult result = index.reindexSync(false);
 		index.shutdown(); // waits for a delayed purge, if one was scheduled
 
+		assertEquals(new ReindexResult(0, 1, false), result);
+		assertTrue(deleteQueue().isEmpty(), "The document of an entry that may still be loadable must be kept");
 		verify(solrServer, never()).request(any(), any());
 	}
 
 	@Test
-	public void reindexOfContextKeepsIndexedDocumentsWhenAnEntryCannotBeFound() throws Exception {
+	public void reindexOfContextPurgesExpiredDocumentsWhenAnEntryIsCorrupt() throws Exception {
+		stopDocumentSubmitter(); // only the purge reaches Solr
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", ENTRY_1_1, deletedEntry(cm, ENTRY_1_2));
+		when(cm.getEntry(ENTRY_1_1)).thenThrow(corruptEntryFailure(ENTRY_1_1));
+		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+
+		index.reindexSync(CONTEXT_1, false);
+		index.shutdown(); // waits for the delayed purge
+
+		assertTrue(sentDeleteQuery().startsWith("indexedAt:[* TO "));
+	}
+
+	@Test
+	public void reindexOfContextPurgesExpiredDocumentsWhenAnEntryCannotBeFound() throws Exception {
+		stopDocumentSubmitter(); // only the purge reaches Solr
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", ENTRY_1_1, deletedEntry(cm, ENTRY_1_2));
 		// cm.getEntry(ENTRY_1_1) is not stubbed and returns null, as for an entry whose graph is missing
 		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
 
 		index.reindexSync(CONTEXT_1, false);
+		index.shutdown(); // waits for the delayed purge
+
+		assertTrue(deleteQueue().isEmpty(), "The document of an entry that cannot be found is left to the purge");
+		assertTrue(sentDeleteQuery().startsWith("indexedAt:[* TO "));
+	}
+
+	@Test
+	public void reindexOfContextKeepsIndexedDocumentsWhenAnEntryCannotBeIndexed() throws Exception {
+		stopDocumentSubmitter();
+		SolrSearchIndex indexFailingDocuments = spy(index);
+		doThrow(new IllegalStateException("Unable to extract fulltext"))
+				.when(indexFailingDocuments).constructSolrInputDocument(any(), anyBoolean());
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), deletedEntry(cm, ENTRY_1_2));
+		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+
+		ReindexResult result = indexFailingDocuments.reindexSync(false);
 		index.shutdown(); // waits for a delayed purge, if one was scheduled
 
+		assertEquals(new ReindexResult(0, 1, false), result);
+		assertTrue(deleteQueue().isEmpty(), "The previous document of an entry that loads must be kept");
 		verify(solrServer, never()).request(any(), any());
 	}
 
@@ -387,13 +553,16 @@ public class SolrSearchIndexTest {
 		SolrSearchIndex indexWithoutDocuments = spy(index);
 		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
-		// The deleted entry comes last, so the purge must wait for the entry before it, not for the last entry
-		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), deletedEntry(cm, ENTRY_1_2));
+		// The deleted entry comes last, so the purge must wait for the entry before it, not for the last entry.
+		// The corrupt entry does not prevent the purge, and its document is removed right away.
+		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), ENTRY_1_3, deletedEntry(cm, ENTRY_1_2));
+		when(cm.getEntry(ENTRY_1_3)).thenThrow(corruptEntryFailure(ENTRY_1_3));
 		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
 
 		indexWithoutDocuments.reindexSync(CONTEXT_1, false);
 
 		assertEquals(1, index.getPostQueueSize());
+		assertEquals(List.of(ENTRY_1_3), List.copyOf(deleteQueue()));
 		verify(solrServer, after(1000).never()).request(any(), any());
 		postQueue().invalidate(ENTRY_1_1); // as the document submitter does when it takes the document
 		// The purge checks the queue every 5 seconds
@@ -562,10 +731,14 @@ public class SolrSearchIndexTest {
 		return entryURI;
 	}
 
-	private void stopDocumentSubmitter() throws Exception {
+	private SolrSearchIndex.SolrInputDocumentSubmitter documentSubmitter() throws Exception {
 		Field f = SolrSearchIndex.class.getDeclaredField("documentSubmitter");
 		f.setAccessible(true);
-		Thread documentSubmitter = (Thread) f.get(index);
+		return (SolrSearchIndex.SolrInputDocumentSubmitter) f.get(index);
+	}
+
+	private void stopDocumentSubmitter() throws Exception {
+		Thread documentSubmitter = documentSubmitter();
 		documentSubmitter.interrupt();
 		documentSubmitter.join(TimeUnit.SECONDS.toMillis(10));
 		assertFalse(documentSubmitter.isAlive());
@@ -576,6 +749,30 @@ public class SolrSearchIndexTest {
 		Field f = SolrSearchIndex.class.getDeclaredField("postQueue");
 		f.setAccessible(true);
 		return (Cache<URI, SolrInputDocument>) f.get(index);
+	}
+
+	@SuppressWarnings("unchecked")
+	private Queue<URI> deleteQueue() throws Exception {
+		Field f = SolrSearchIndex.class.getDeclaredField("deleteQueue");
+		f.setAccessible(true);
+		return (Queue<URI>) f.get(index);
+	}
+
+	/**
+	 * Returns the delete query of the only request sent to Solr.
+	 */
+	private String sentDeleteQuery() throws Exception {
+		ArgumentCaptor<UpdateRequest> captor = ArgumentCaptor.forClass(UpdateRequest.class);
+		verify(solrServer).request(captor.capture(), any());
+		return captor.getValue().getDeleteQuery().getFirst();
+	}
+
+	/**
+	 * Returns the exception that loading an entry with corrupt data throws: the context wraps the cause.
+	 */
+	private static RepositoryException corruptEntryFailure(URI entryURI) {
+		return new RepositoryException("Unable to load entry " + entryURI,
+				new CorruptEntryException("Entry graph <" + entryURI + "> is corrupt"));
 	}
 
 	private static void stubContextEntry(ContextManager cm, URI contextURI, String contextResourceURI) {
@@ -680,6 +877,58 @@ public class SolrSearchIndexTest {
 	@Test
 	public void testRemoveEntry() throws Exception {
 		// TODO
+	}
+
+	@Test
+	public void sendQuerySkipsHitWhoseEntryIsCorrupt() throws Exception {
+		ContextManager cm = contextManagerListing();
+		when(cm.getEntry(ENTRY_1_1)).thenThrow(corruptEntryFailure(ENTRY_1_1));
+		Entry readableEntry = mock(Entry.class);
+		when(readableEntry.getEntryType()).thenReturn(EntryType.Local);
+		when(readableEntry.getRepositoryManager()).thenReturn(rm);
+		when(cm.getEntry(ENTRY_1_2)).thenReturn(readableEntry);
+		solrReturnsHits(ENTRY_1_1, ENTRY_1_2);
+
+		QueryResult result = index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		assertEquals(Set.of(readableEntry), result.getEntries());
+		assertEquals(1, result.getHits());
+	}
+
+	@Test
+	public void sendQuerySkipsHitWhoseEntryOverflowsTheStack() throws Exception {
+		ContextManager cm = contextManagerListing();
+		when(cm.getEntry(ENTRY_1_1)).thenThrow(new StackOverflowError());
+		solrReturnsHits(ENTRY_1_1);
+
+		QueryResult result = index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		assertTrue(result.getEntries().isEmpty());
+		assertEquals(0, result.getHits());
+	}
+
+	@Test
+	public void sendQueryFailsWhenLoadingAHitFailsForAnotherReason() throws Exception {
+		ContextManager cm = contextManagerListing();
+		// A failure of the store must not turn into an empty search result
+		when(cm.getEntry(ENTRY_1_1)).thenThrow(new RepositoryException("Failed to connect to Repository"));
+		solrReturnsHits(ENTRY_1_1);
+
+		assertThrows(RepositoryException.class,
+				() -> index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10)));
+	}
+
+	private void solrReturnsHits(URI... entryURIs) throws Exception {
+		SolrDocumentList docs = new SolrDocumentList();
+		for (URI entryURI : entryURIs) {
+			SolrDocument doc = new SolrDocument();
+			doc.setField("uri", entryURI.toString());
+			docs.add(doc);
+		}
+		docs.setNumFound(entryURIs.length);
+		QueryResponse response = mock(QueryResponse.class);
+		when(response.getResults()).thenReturn(docs);
+		when(solrServer.query(any(SolrParams.class))).thenReturn(response);
 	}
 
 	@Disabled("To be implemented")

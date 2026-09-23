@@ -53,6 +53,7 @@ import org.entrystore.User;
 import org.entrystore.impl.LocalMetadataWrapper;
 import org.entrystore.impl.RegularContext;
 import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.repository.CorruptEntryException;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
 import org.slf4j.Logger;
@@ -363,8 +364,21 @@ public class SolrSearchIndex implements SearchIndex {
 			return batch;
 		}
 
+		/**
+		 * Puts the deletions of a failed batch back into the delete queue, except those of entries with a queued
+		 * document: that document was queued after the deletion, since queueing a deletion drops the entry's
+		 * queued document, so the deletion must not remove it.
+		 */
 		private void requeueDeletes(List<URI> batch) {
-			deleteQueue.addAll(batch);
+			synchronized (postQueue) {
+				synchronized (deleteQueue) {
+					for (URI entryURI : batch) {
+						if (postQueue.getIfPresent(entryURI) == null) {
+							deleteQueue.add(entryURI);
+						}
+					}
+				}
+			}
 		}
 
 		private void requeueAdds(Map<URI, SolrInputDocument> batch) {
@@ -705,7 +719,7 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 					continue;
 				}
-				failedEntries += posted.failedEntries() + posted.unresolvedEntries();
+				failedEntries += posted.notIndexedEntries();
 				boolean interrupted = switch (posted.outcome()) {
 					case COMPLETED -> false;
 					case UNRESOLVED -> {
@@ -790,25 +804,27 @@ public class SolrSearchIndex implements SearchIndex {
 	 * <ul>
 	 *     <li>the documents of the context were removed before the reindex,</li>
 	 *     <li>the context could not be resolved or its reindex was interrupted,</li>
-	 *     <li>entries of the context could not be loaded or indexed, because their documents would be removed
-	 *     without being replaced,</li>
-	 *     <li>the context has no entry that could be loaded, which saves a Solr request for each empty context, or</li>
+	 *     <li>entries of the context could not be loaded because of a failure that is not caused by their data,
+	 *     e.g. of the store, or loaded but could not be indexed, because their previous documents would be removed
+	 *     without being replaced although the entries may still be loadable,</li>
+	 *     <li>the context lists no entries, which saves a Solr request for each empty context, or</li>
 	 *     <li>the context entry could not be loaded, because the delete query would then not be restricted to the
 	 *     context.</li>
 	 * </ul>
+	 * Entries that are corrupt or cannot be found do not prevent the purge: they cannot be returned by a search, and
+	 * the purge removes the documents of entries that cannot be found, see {@link #postContextEntriesToQueue(URI)}.
 	 */
 	private void purgeExpiredDocumentsAfterReindex(URI contextURI, Entry contextEntry, Date reindexStart,
 			boolean purgedBeforeReindex, ContextPostResult posted) {
 		if (purgedBeforeReindex || posted.outcome() != ContextPostOutcome.COMPLETED) {
 			return;
 		}
-		int notIndexedEntries = posted.failedEntries() + posted.unresolvedEntries();
-		if (notIndexedEntries > 0) {
+		if (posted.keptEntries() > 0) {
 			log.warn("Not purging expired documents of context {} because {} of its entries could not be indexed;"
-					+ " their previously indexed documents are kept", contextURI, notIndexedEntries);
+					+ " their previously indexed documents are kept", contextURI, posted.keptEntries());
 			return;
 		}
-		if (posted.loadedEntries() == 0) {
+		if (posted.listedEntries() == 0) {
 			return;
 		}
 		if (contextEntry == null) {
@@ -966,49 +982,98 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Result of posting the entries of a context to the submission queue. Failed and unresolved entries both
-	 * count as not indexed, and both prevent the purge of the context's expired documents.
+	 * Result of posting the entries of a context to the submission queue. All entries that could not be posted
+	 * count as not indexed. The documents of corrupt entries are removed from the index right away and those of
+	 * unresolved entries by the purge of the context's expired documents, while unloadable and unindexable entries
+	 * keep their previous documents and prevent that purge.
 	 *
 	 * @param outcome            whether all entries of the context were processed
 	 * @param lastQueuedEntryURI the entry that was posted last, or null if none was posted
 	 * @param loadedEntries      entries that were loaded, whether they were then posted, skipped as deleted or
 	 *                           could not be indexed
-	 * @param failedEntries      entries whose loading or indexing threw an exception
+	 * @param corruptEntries     entries whose loading failed because of their data, see
+	 *                           {@link #isCausedByCorruptData(Throwable)}
 	 * @param unresolvedEntries  entries that are listed in the context but were not found when loading them
+	 * @param unloadableEntries  entries whose loading failed for another reason, e.g. an error of the store
+	 * @param unindexableEntries entries that were loaded but whose Solr document could not be constructed
 	 */
 	private record ContextPostResult(ContextPostOutcome outcome, URI lastQueuedEntryURI, int loadedEntries,
-			int failedEntries, int unresolvedEntries) {
+			int corruptEntries, int unresolvedEntries, int unloadableEntries, int unindexableEntries) {
+
+		static ContextPostResult unresolved() {
+			return new ContextPostResult(ContextPostOutcome.UNRESOLVED, null, 0, 0, 0, 0, 0);
+		}
+
+		/**
+		 * @return the entries that were processed, whether they could be loaded or not
+		 */
+		int listedEntries() {
+			return loadedEntries + corruptEntries + unresolvedEntries + unloadableEntries;
+		}
+
+		/**
+		 * @return the entries that could not be indexed and whose documents are removed from the index
+		 */
+		int removedEntries() {
+			return corruptEntries + unresolvedEntries;
+		}
+
+		/**
+		 * @return the entries that could not be indexed and keep their previous documents
+		 */
+		int keptEntries() {
+			return unloadableEntries + unindexableEntries;
+		}
+
+		int notIndexedEntries() {
+			return removedEntries() + keptEntries();
+		}
+
 	}
 
+	/**
+	 * Posts the entries of a context to the submission queue. The documents of entries that cannot be loaded
+	 * because of their data are removed from the index: they would otherwise keep matching queries although their
+	 * entries cannot be returned, and a reindex restores them once the data is repaired. Entries that cannot be
+	 * found are left to the purge of expired documents, which only removes documents indexed before the reindex
+	 * started: an entry that is listed but not yet committed while it is being created cannot be found either, and
+	 * removing its document right away could remove the document that its creation posts. Entries whose loading
+	 * fails for another reason, e.g. a transient error of the store, keep their documents.
+	 */
 	private ContextPostResult postContextEntriesToQueue(URI contextURI) {
 		String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
 		ContextManager cm = rm.getContextManager();
 		Context context = cm.getContext(id);
 		if (context == null) {
-			return new ContextPostResult(ContextPostOutcome.UNRESOLVED, null, 0, 0, 0);
+			return ContextPostResult.unresolved();
 		}
 		URI lastQueuedEntryURI = null;
 		int loadedEntries = 0;
-		int failedEntries = 0;
+		int corruptEntries = 0;
 		int unresolvedEntries = 0;
+		int unloadableEntries = 0;
+		int unindexableEntries = 0;
 		Set<String> tracedFailureCauses = new HashSet<>();
 		for (URI entryURI : context.getEntries()) {
 			if (interrupted()) {
 				return new ContextPostResult(ContextPostOutcome.INTERRUPTED, lastQueuedEntryURI, loadedEntries,
-						failedEntries, unresolvedEntries);
+						corruptEntries, unresolvedEntries, unloadableEntries, unindexableEntries);
 			}
 			if (entryURI == null) {
 				continue;
 			}
 			Entry entry;
-			boolean deleted;
 			try {
 				entry = cm.getEntry(entryURI);
-				deleted = entry != null && (entry.isDeleted() || entry.getContext().isDeleted());
 			} catch (Exception | StackOverflowError e) {
-				// Corrupt data, e.g. entries whose references form a cycle, can cause unbounded recursion
-				failedEntries++;
-				logEntryFailure("Unable to load entry", entryURI, e, tracedFailureCauses);
+				if (isCausedByCorruptData(e)) {
+					corruptEntries++;
+					logEntryFailure("Unable to load corrupt entry", entryURI, e, tracedFailureCauses);
+					removeCorruptEntryDocument(entryURI);
+				} else {
+					unloadableEntries++;
+					logEntryFailure("Unable to load entry", entryURI, e, tracedFailureCauses);
+				}
 				continue;
 			}
 			if (entry == null) {
@@ -1017,27 +1082,58 @@ public class SolrSearchIndex implements SearchIndex {
 				continue;
 			}
 			loadedEntries++;
-			if (deleted) {
-				log.debug("Not adding deleted entry to post queue: {}", entryURI);
-				continue;
-			}
 			synchronized (postQueue) {
-				log.info("Adding entry to Solr post queue: {}", entryURI);
 				try {
-					postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+					// Checked while holding the monitor that the removal of a deleted entry's document takes, so
+					// that a concurrent deletion is either seen here or removes the document queued here
+					if (entry.isDeleted() || entry.getContext().isDeleted()) {
+						log.debug("Not adding deleted entry to post queue: {}", entryURI);
+						continue;
+					}
+					log.info("Adding entry to Solr post queue: {}", entryURI);
+					queueDocument(entryURI, constructSolrInputDocument(entry, extractFulltext));
 					lastQueuedEntryURI = entryURI;
 				} catch (Exception | StackOverflowError e) {
-					failedEntries++;
+					unindexableEntries++;
 					logEntryFailure("Not indexing entry", entryURI, e, tracedFailureCauses);
 				}
 			}
 		}
-		if (failedEntries > 0 || unresolvedEntries > 0) {
-			log.error("{} entries of context {} could not be indexed: {} failed with an error, {} could not be found",
-					failedEntries + unresolvedEntries, contextURI, failedEntries, unresolvedEntries);
+		ContextPostResult posted = new ContextPostResult(ContextPostOutcome.COMPLETED, lastQueuedEntryURI,
+				loadedEntries, corruptEntries, unresolvedEntries, unloadableEntries, unindexableEntries);
+		if (posted.notIndexedEntries() > 0) {
+			log.error("{} entries of context {} could not be indexed: {} are corrupt and {} could not be found, their"
+					+ " documents are removed from the index unless the purge is prevented; {} could not be loaded"
+					+ " and {} could not be indexed, they keep their previous documents", posted.notIndexedEntries(),
+					contextURI, corruptEntries, unresolvedEntries, unloadableEntries, unindexableEntries);
 		}
-		return new ContextPostResult(ContextPostOutcome.COMPLETED, lastQueuedEntryURI, loadedEntries, failedEntries,
-				unresolvedEntries);
+		return posted;
+	}
+
+	/**
+	 * Removes the document of an entry that failed to load because of its data, unless a document of the entry is
+	 * queued: then the entry loaded after it failed to load here, e.g. because its data was repaired in between,
+	 * and the queued document must not be dropped. A queued document from before the data became corrupt is kept
+	 * as well, which is harmless because a search skips hits whose entries are corrupt.
+	 */
+	private void removeCorruptEntryDocument(URI entryURI) {
+		synchronized (postQueue) {
+			if (postQueue.getIfPresent(entryURI) != null) {
+				log.info("Not removing the document of corrupt entry {} because a document of it is queued", entryURI);
+				return;
+			}
+			removeEntryDocument(entryURI);
+		}
+	}
+
+	/**
+	 * Tells whether loading an entry failed because of its data, so that it fails the same way until the data is
+	 * repaired: the data is recognizably corrupt, or references in it form a cycle and cause unbounded recursion.
+	 * Other failures, e.g. of the store, may be transient.
+	 */
+	private static boolean isCausedByCorruptData(Throwable e) {
+		return ExceptionUtils.indexOfType(e, CorruptEntryException.class) >= 0
+				|| ExceptionUtils.indexOfType(e, StackOverflowError.class) >= 0;
 	}
 
 	/**
@@ -1461,7 +1557,7 @@ public class SolrSearchIndex implements SearchIndex {
 				if (!entry.isDeleted() && !entry.getContext().isDeleted()) {
 					log.info("Adding document to Solr post queue: {}", entryURI);
 					try {
-						postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+						queueDocument(entryURI, constructSolrInputDocument(entry, extractFulltext));
 					} catch (Exception e) {
 						log.error("Not indexing {}", entryURI, e);
 					}
@@ -1475,23 +1571,41 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public void removeEntry(Entry entry) {
-		URI entryURI = entry.getEntryURI();
-
-		synchronized (postQueue) {
-			// we make sure that the entry is not added again after deletion
-			// if the queues are handled at different times
-			postQueue.invalidate(entryURI);
-		}
-
-		synchronized (deleteQueue) {
-			log.info("Adding entry to Solr delete queue: " + entryURI);
-			deleteQueue.add(entryURI);
-		}
+		removeEntryDocument(entry.getEntryURI());
 
 		// if entry is a context, also remove all entries inside
 		if (GraphType.Context.equals(entry.getGraphType())) {
 			if (!clearSolrIndex(solrServer, null, entry)) {
 				log.warn("Context-removal purge for context {} failed; expired Solr documents may remain", entry.getEntryURI());
+			}
+		}
+	}
+
+	/**
+	 * Queues the document of an entry for submission and drops a pending deletion of the entry, so that the
+	 * deletion cannot remove the newer document: the submitter does not necessarily send all queued deletions
+	 * before the queued documents. The caller must hold the submission queue's monitor, see
+	 * {@link #removeEntryDocument(URI)}.
+	 */
+	private void queueDocument(URI entryURI, SolrInputDocument document) {
+		synchronized (deleteQueue) {
+			deleteQueue.removeIf(entryURI::equals);
+		}
+		postQueue.put(entryURI, document);
+	}
+
+	/**
+	 * Removes the document of an entry from the index and drops a document of the entry that is still waiting in
+	 * the submission queue, so that it is not added again after the deletion. Both happen while holding the
+	 * submission queue's monitor, as does {@link #queueDocument(URI, SolrInputDocument)}, so that of a deletion
+	 * and a concurrently queued document of the same entry the later one wins.
+	 */
+	private void removeEntryDocument(URI entryURI) {
+		synchronized (postQueue) {
+			postQueue.invalidate(entryURI);
+			synchronized (deleteQueue) {
+				log.info("Adding entry to Solr delete queue: {}", entryURI);
+				deleteQueue.add(entryURI);
 			}
 		}
 	}
@@ -1598,6 +1712,16 @@ public class SolrSearchIndex implements SearchIndex {
 						}
 					}
 				} catch (AuthorizationException | IllegalStateException e) {
+					inaccessibleHits++;
+				} catch (RuntimeException | StackOverflowError e) {
+					// A corrupt entry must not fail the whole search, but other failures, e.g. of the store, must
+					// not turn into an empty result. Corrupt data, e.g. entries whose references form a cycle, can
+					// cause unbounded recursion; the JVM is usable again once it has unwound.
+					if (!isCausedByCorruptData(e)) {
+						throw e;
+					}
+					log.warn("Skipping search hit {} because its entry is corrupt: {}", uri,
+							ExceptionUtils.getRootCauseMessage(e));
 					inaccessibleHits++;
 				}
 			}

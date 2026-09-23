@@ -45,6 +45,7 @@ import org.entrystore.Provenance;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
+import org.entrystore.repository.CorruptEntryException;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
@@ -262,7 +263,22 @@ public class EntryImpl implements Entry {
 		loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, entryURI)));
 	}
 
+	/**
+	 * Loads the entry from the statements of its entry graph.
+	 *
+	 * @throws CorruptEntryException if the entry graph is corrupt, e.g. it lacks the resource statement or
+	 *                               contains a literal where a URI is expected or a malformed date
+	 */
 	private boolean loadFromStatements(List<Statement> existingStatements) throws RepositoryException {
+		try {
+			return parseStatements(existingStatements);
+		} catch (ClassCastException | IllegalArgumentException e) {
+			throw new CorruptEntryException("Entry graph <" + existingStatements.getFirst().getContext()
+					+ "> is corrupt: it contains a malformed value", e);
+		}
+	}
+
+	private boolean parseStatements(List<Statement> existingStatements) throws RepositoryException {
 		if (existingStatements.isEmpty()) {
 			return false;
 		}
@@ -345,7 +361,7 @@ public class EntryImpl implements Entry {
 		}
 
 		if (resURI == null) {
-			throw new org.entrystore.repository.RepositoryException(describeGraphWithoutResource(existingStatements));
+			throw new CorruptEntryException(describeGraphWithoutResource(existingStatements));
 		}
 
 		//Detect types.

@@ -41,10 +41,12 @@ import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
+import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.List;
+import org.entrystore.repository.CorruptEntryException;
 import org.entrystore.repository.RepositoryException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -310,7 +312,7 @@ public class ContextImplTest extends AbstractCoreTest {
 		RepositoryException e = assertThrows(RepositoryException.class, () -> context.getByEntryURI(entryURI));
 
 		assertEquals("Unable to load entry " + entryURI, e.getMessage());
-		assertInstanceOf(RepositoryException.class, e.getCause());
+		assertInstanceOf(CorruptEntryException.class, e.getCause());
 		String causeMessage = e.getCause().getMessage();
 		assertTrue(causeMessage.startsWith("Entry graph <" + entryURI + "> is corrupt"), causeMessage);
 		assertTrue(causeMessage.contains("no <" + RepositoryProperties.resource + ">"), causeMessage);
@@ -327,9 +329,47 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		RepositoryException e = assertThrows(RepositoryException.class, () -> context.getByEntryURI(entryURI));
 
-		assertInstanceOf(RepositoryException.class, e.getCause());
+		assertInstanceOf(CorruptEntryException.class, e.getCause());
 		assertTrue(e.getCause().getMessage().startsWith("Entry graph <" + entryURI + "> is corrupt"),
 				e.getCause().getMessage());
+	}
+
+	@Test
+	public void loadingEntryGraphWithLiteralWhereUriIsExpectedFailsAsCorruptEntry() {
+		Entry entry = context.createResource(null, GraphType.None, null, null);
+		URI entryURI = entry.getEntryURI();
+		removeFromEntryGraph(entryURI, RepositoryProperties.resource);
+		IRI graph = SimpleValueFactory.getInstance().createIRI(entryURI.toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.add(graph, RepositoryProperties.resource, SimpleValueFactory.getInstance().createLiteral("not a URI"),
+					graph);
+		}
+		evictFromSoftCache(entry);
+
+		RepositoryException e = assertThrows(RepositoryException.class, () -> context.getByEntryURI(entryURI));
+
+		assertInstanceOf(CorruptEntryException.class, e.getCause());
+		assertTrue(e.getCause().getMessage().startsWith("Entry graph <" + entryURI + "> is corrupt"),
+				e.getCause().getMessage());
+		assertInstanceOf(ClassCastException.class, e.getCause().getCause());
+	}
+
+	@Test
+	public void loadingEntryGraphWithMalformedDateFailsAsCorruptEntry() {
+		Entry entry = context.createResource(null, GraphType.None, null, null);
+		URI entryURI = entry.getEntryURI();
+		removeFromEntryGraph(entryURI, RepositoryProperties.Created);
+		IRI graph = SimpleValueFactory.getInstance().createIRI(entryURI.toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.add(graph, RepositoryProperties.Created,
+					SimpleValueFactory.getInstance().createLiteral("not a date", XSD.DATETIME), graph);
+		}
+		evictFromSoftCache(entry);
+
+		RepositoryException e = assertThrows(RepositoryException.class, () -> context.getByEntryURI(entryURI));
+
+		assertInstanceOf(CorruptEntryException.class, e.getCause());
+		assertInstanceOf(IllegalArgumentException.class, e.getCause().getCause());
 	}
 
 	private void removeFromEntryGraph(URI entryURI, IRI predicate) {
