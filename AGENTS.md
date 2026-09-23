@@ -100,6 +100,8 @@ Reach for the annotation first; only write the expansion manually when Lombok ca
 
 **Comments explain why, not what.** Put the explanation in the class or method Javadoc — contract, caller obligations, non-obvious constraints. Inline line comments only where the code itself is controversial (a deliberate fail-open, a lock/transaction subtlety, a workaround), and then 1 line, 2 at most. Decision history, alternatives rejected, and issue background belong in the commit message or the JIRA issue, not in the source.
 
+**Keep all prose as short as it can be while still saying why** — commit messages, PR descriptions, CHANGELOG entries, JIRA issues, Javadoc and comments alike. State the change and its reason; leave out narration, restated code, and history that git already holds.
+
 Formatting is IntelliJ-based, defined in `.editorconfig` (with `ij_*` properties) and `.idea/codeStyles/`. No Eclipse formatter is used.
 
 From `.editorconfig`:

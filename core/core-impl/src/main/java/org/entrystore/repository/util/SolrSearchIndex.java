@@ -85,6 +85,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import static java.lang.Thread.interrupted;
 
@@ -415,7 +417,7 @@ public class SolrSearchIndex implements SearchIndex {
 						DelayedContextIndexerInfo info = delayedReindex.get(contextURI);
 						if (info.submitted.until(LocalDateTime.now(), ChronoUnit.SECONDS) >= 10) {
 							log.info("Submitting context for reindexing after 10 seconds delay");
-							reindex(contextURI, false);
+							reindex(contextURI);
 							it.remove();
 						}
 					}
@@ -587,27 +589,25 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Re-indexes a context and all of its entries in Solr. Starts a new indexing thread and
-	 * ends an eventually existing reindexing thread if there is one for the same scope.
-	 *
-	 * @param purgeAllBeforeReindex If true, the index will be emptied before re-indexation
-	 *                                 starts. If false, expired entries will be removed after
-	 *                                 re-indexation is finished.
+	 * Re-indexes every context in Solr, one indexing task per context, cancelling a task already
+	 * running for the same context. Expired documents are purged after each context has been
+	 * reposted; see {@link #reindexSync(URI)}.
 	 */
-	public void reindex(boolean purgeAllBeforeReindex) {
-		reindex(purgeAllBeforeReindex, false);
+	public void reindex() {
+		reindexAll(this::reindex);
 	}
 
 	/**
-	 * Re-indexes a context and all of its entries in Solr. Starts a new indexing thread and
-	 * ends an eventually existing reindexing thread if there is one for the same scope.
+	 * Re-indexes a context and all of its entries in Solr. Starts a new indexing task and cancels an
+	 * eventually existing one for the same context. Expired documents are purged after the context
+	 * has been reposted; see {@link #reindexSync(URI)}.
 	 *
-	 * @param contextURI The URI of the context to be re-indexed. Use "null" to reindex the whole repository.
-	 * @param purgeAllBeforeReindex If true, the index will be emptied before re-indexation
-	 *                                 starts. If false, expired entries will be removed after
-	 *                                 re-indexation is finished.
+	 * @param contextURI The URI of the context to be re-indexed, never null.
 	 */
-	public void reindex(URI contextURI, boolean purgeAllBeforeReindex) {
+	public void reindex(URI contextURI) {
+		if (contextURI == null) {
+			throw new IllegalArgumentException("Context URI must not be null");
+		}
 		synchronized (reindexing) {
 			if (reindexing.containsKey(contextURI)) {
 				Future existingIndexer = reindexing.get(contextURI);
@@ -617,19 +617,31 @@ public class SolrSearchIndex implements SearchIndex {
 				}
 				reindexing.remove(contextURI);
 			}
-			Future indexer = reindexExecutor.submit(() -> {
-				reindexSync(contextURI, false);
-				reindexing.remove(contextURI);
+			AtomicReference<Future<?>> task = new AtomicReference<>();
+			Future<?> indexer = reindexExecutor.submit(() -> {
+				try {
+					reindexSync(contextURI);
+				} catch (RuntimeException | Error e) {
+					// the Future is only ever cancelled, never awaited, so this is the only record of the failure
+					log.error("Reindex of context {} failed", contextURI, e);
+				} finally {
+					// only its own registration: a cancelled task must not evict the replacement already put
+					synchronized (reindexing) {
+						reindexing.remove(contextURI, task.get());
+					}
+				}
 			});
+			task.set(indexer);
 			reindexing.put(contextURI, indexer);
 		}
 	}
 
-	public void reindexSync(boolean purgeAllBeforeReindex) {
-		reindex(purgeAllBeforeReindex, true);
+	/** Re-indexes every context in Solr on the calling thread; see {@link #reindexSync(URI)}. */
+	public void reindexSync() {
+		reindexAll(this::reindexSync);
 	}
 
-	private void reindex(boolean purgeAllBeforeReindex, boolean sync) {
+	private void reindexAll(Consumer<URI> reindexContext) {
 		Set<URI> contexts;
 		PrincipalManager pm = rm.getPrincipalManager();
 		URI currentUser = pm.getAuthenticatedUserURI();
@@ -639,17 +651,20 @@ public class SolrSearchIndex implements SearchIndex {
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
-
-		for (URI contextURI : contexts) {
-			if (sync) {
-				reindexSync(contextURI, purgeAllBeforeReindex);
-			} else {
-				reindex(contextURI, purgeAllBeforeReindex);
-			}
-		}
+		contexts.forEach(reindexContext);
 	}
 
-	public void reindexSync(URI contextURI, boolean purgeAllBeforeReindex) {
+	/**
+	 * Re-indexes a context: every entry is queued for reposting on the calling thread, and a purge of
+	 * the documents this reindex did not repost is scheduled to run once the last queued entry has been
+	 * submitted, so search never sees a gap. The method returns before the queue drains or the purge
+	 * runs. No purge happens for a context that listed no entries or whose URI index is incomplete —
+	 * it would delete the entries that merely went unlisted (ENTRYSTORE-1095) — and the purge is
+	 * abandoned after MAX_PURGE_WAIT_NANOS or on shutdown.
+	 *
+	 * @param contextURI The URI of the context to be re-indexed, never null.
+	 */
+	public void reindexSync(URI contextURI) {
 		if (solrServer == null) {
 			log.warn("Ignoring request as Solr is not used by this instance");
 			return;
@@ -662,18 +677,8 @@ public class SolrSearchIndex implements SearchIndex {
 
 		Entry contextEntry = rm.getContextManager().getByEntryURI(contextURI);
 
-		// Both purges below delete Solr documents for entries this reindex did not repost, and what it
-		// reposts comes from context.getEntries(). An incomplete index makes that listing short, so
-		// purging would delete the unlisted entries from the search index — data loss driven by a triple
-		// nobody can parse. Reindex without purging instead: a stale document is recoverable, a deleted
-		// one is not (ENTRYSTORE-1095).
+		// no purge on an incomplete URI index: it would delete the unlisted entries (ENTRYSTORE-1095, see javadoc)
 		boolean purgeIsSafe = indexIsComplete(contextURI);
-
-		if (purgeAllBeforeReindex && purgeIsSafe) {
-			if (!clearSolrIndex(solrServer, null, contextEntry)) {
-				log.warn("Pre-reindex purge of context {} failed; proceeding with reindex against potentially dirty index", contextURI);
-			}
-		}
 
 		Date reindexStart = new Date();
 
@@ -683,7 +688,7 @@ public class SolrSearchIndex implements SearchIndex {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			URI lastIndexedEntryURI = postContextEntriesToQueue(contextURI);
 			if (lastIndexedEntryURI != null) {
-				if (!purgeAllBeforeReindex && purgeIsSafe) {
+				if (purgeIsSafe) {
 					purgeExecutor.submit(() -> {
 						long deadline = System.nanoTime() + MAX_PURGE_WAIT_NANOS;
 						try {
@@ -709,7 +714,7 @@ public class SolrSearchIndex implements SearchIndex {
 							if (clearSolrIndex(solrServer, reindexStart, contextEntry)) {
 								log.info("Expired entries of context {} have been purged from the index", contextURI);
 							} else {
-								log.warn("Delayed purge of context {} did not clear expired entries; rerun reindex with purgeAllBeforeReindex=true if needed",
+								log.warn("Delayed purge of context {} did not clear expired entries; rerun the reindex if needed",
 										contextURI);
 							}
 						} catch (InterruptedException e) {

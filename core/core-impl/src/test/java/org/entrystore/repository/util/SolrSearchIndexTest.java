@@ -39,10 +39,15 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
@@ -52,12 +57,13 @@ import static org.mockito.Mockito.when;
 public class SolrSearchIndexTest {
 
 	private SolrSearchIndex index;
+	private RepositoryManager rm;
 	private Map<URI, Future> reindexingMap;
 
 	@BeforeEach
 	@SuppressWarnings("unchecked")
 	public void setUp() throws Exception {
-		RepositoryManager rm = mock(RepositoryManager.class);
+		rm = mock(RepositoryManager.class);
 		Config config = new PropertiesConfiguration("EntryStore Test Configuration");
 		when(rm.getConfiguration()).thenReturn(config);
 		when(rm.getValueFactory()).thenReturn(SimpleValueFactory.getInstance());
@@ -218,5 +224,77 @@ public class SolrSearchIndexTest {
 	@Test
 	public void testExtractFulltext() throws Exception {
 		// TODO
+	}
+
+	@Test
+	public void reindexWithANullContextFailsOnTheCallingThreadAndRegistersNothing() {
+		assertThrows(IllegalArgumentException.class, () -> index.reindex(null));
+
+		assertTrue(reindexingMap.isEmpty(), "a rejected reindex must not leave a dead entry that keeps isIndexing() true");
+	}
+
+	@Test
+	public void reindexRemovesItsRegistrationWhenTheWorkerFails() throws Exception {
+		URI ctx = URI.create("http://localhost:8181/_contexts/entry/failing");
+		CountDownLatch started = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		when(rm.getContextManager()).thenAnswer(invocation -> {
+			started.countDown();
+			assertTrue(release.await(10, TimeUnit.SECONDS));
+			throw new IllegalStateException("Simulated context lookup failure");
+		});
+
+		try {
+			index.reindex(ctx);
+			assertTrue(started.await(10, TimeUnit.SECONDS));
+			Future<?> worker = reindexingMap.get(ctx);
+			assertNotNull(worker);
+			release.countDown();
+			worker.get(10, TimeUnit.SECONDS);
+
+			assertFalse(index.isIndexing(ctx));
+			assertFalse(index.isIndexing());
+		} finally {
+			release.countDown();
+		}
+	}
+
+	@Test
+	public void cancelledReindexCannotRemoveItsReplacementRegistration() throws Exception {
+		URI ctx = URI.create("http://localhost:8181/_contexts/entry/replaced");
+		CountDownLatch firstStarted = new CountDownLatch(1);
+		CountDownLatch replacementStarted = new CountDownLatch(1);
+		CountDownLatch releaseReplacement = new CountDownLatch(1);
+		AtomicInteger calls = new AtomicInteger();
+		when(rm.getContextManager()).thenAnswer(invocation -> {
+			if (calls.incrementAndGet() == 1) {
+				firstStarted.countDown();
+				try {
+					new CountDownLatch(1).await(10, TimeUnit.SECONDS);
+				} catch (InterruptedException expected) {
+					throw new IllegalStateException("First reindex cancelled", expected);
+				}
+			} else {
+				replacementStarted.countDown();
+				assertTrue(releaseReplacement.await(10, TimeUnit.SECONDS));
+			}
+			throw new IllegalStateException("Simulated context lookup failure");
+		});
+
+		try {
+			index.reindex(ctx);
+			assertTrue(firstStarted.await(10, TimeUnit.SECONDS));
+			index.reindex(ctx);
+			assertTrue(replacementStarted.await(10, TimeUnit.SECONDS));
+
+			assertTrue(index.isIndexing(ctx));
+			Future<?> replacement = reindexingMap.get(ctx);
+			assertNotNull(replacement);
+			releaseReplacement.countDown();
+			replacement.get(10, TimeUnit.SECONDS);
+			assertFalse(index.isIndexing(ctx));
+		} finally {
+			releaseReplacement.countDown();
+		}
 	}
 }

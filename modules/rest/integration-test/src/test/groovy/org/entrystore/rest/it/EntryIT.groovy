@@ -1884,6 +1884,57 @@ class EntryIT extends BaseSpec {
 		entryRespJson['relations'] as Map == [:]
 	}
 
+	def "PUT /{context-id}/entry/{entry-id} renaming a local entry's resource should return Bad-Request 400 and change nothing"() {
+		given:
+		def entryId = 'localListForRename'
+		getOrCreateEntry(contextId, [id: entryId, graphtype: 'list'])
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		def resourceUri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryId
+		def putBody = [(entryUri): [(NameSpaceConst.TERM_RESOURCE): [[type: 'uri', value: resourceUri + '-renamed']]]]
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId,
+			JsonOutput.toJson(putBody), 'admin', 'application/json')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_BAD_REQUEST
+		def errorJson = JSON_PARSER.parseText(editEntryConn.errorStream.text)
+		errorJson['error'].toString().contains('resource URI of a local entry cannot be changed')
+
+		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
+		getEntryConn.getResponseCode() == HTTP_OK
+		def info = JSON_PARSER.parseText(getEntryConn.inputStream.text)['info']
+		info[entryUri][NameSpaceConst.TERM_RESOURCE][0]['value'] == resourceUri
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} renaming a link's resource should carry its ACL to the new resource URI"() {
+		given:
+		def entryId = 'linkForRename'
+		getOrCreateEntry(contextId, [id: entryId, entrytype: 'link', resource: resourceUrl])
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
+		def renamedResource = resourceUrl + '/renamed-' + entryId
+		// what a client PUTs back: es:resource changed, the ACL still keyed on the old resource URI
+		def putBody = [
+			(entryUri)   : [(NameSpaceConst.TERM_RESOURCE): [[type: 'uri', value: renamedResource]]],
+			(resourceUrl): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]
+		]
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId,
+			JsonOutput.toJson(putBody), 'admin', 'application/json')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_NO_CONTENT
+
+		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
+		getEntryConn.getResponseCode() == HTTP_OK
+		def info = JSON_PARSER.parseText(getEntryConn.inputStream.text)['info']
+		info[entryUri][NameSpaceConst.TERM_RESOURCE][0]['value'] == renamedResource
+		info[renamedResource][NameSpaceConst.TERM_READ][0]['value'] == guestUri
+		info[resourceUrl] == null
+	}
+
 	def "PUT /{context-id}/entry/{entry-id} with malformed JSON body should return Bad-Request 400"() {
 		given:
 		def entryId = 'entryForGetTests'

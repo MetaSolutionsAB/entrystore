@@ -654,7 +654,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					if (!solrIndex.clearSolrIndex(solrServer)) {
 						log.error("Initial Solr full-wipe failed; skipping reindex to avoid serving a dirty index. Next restart will retry.");
 					} else {
-						solrIndex.reindexSync(false);
+						solrIndex.reindexSync();
 						reindexSucceeded = solrIndex.waitForQueueDrain();
 						if (!reindexSucceeded) {
 							log.warn("Solr submission queue did not drain; skipping version-marker write so the next restart re-triggers reindex.");
@@ -663,7 +663,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				} else {
 					log.info("Async reindex started; Solr version markers will not be persisted on this run because '{}=false' means reindex runs on every boot.",
 							Settings.SOLR_REINDEX_ON_STARTUP_WAIT);
-					solrIndex.reindex(false);
+					solrIndex.reindex();
 				}
 			}
 			if (dataFolder != null && reindex && reindexSucceeded && versionResolved) {

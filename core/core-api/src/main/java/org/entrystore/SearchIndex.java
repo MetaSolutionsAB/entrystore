@@ -27,26 +27,26 @@ import java.net.URI;
  */
 public interface SearchIndex {
 
-	public void shutdown();
+	void shutdown();
 
-	public void reindex(boolean purgeAllBeforeReindex);
+	void reindex();
 
-	public void reindexSync(boolean purgeAllBeforeReindex);
+	void reindexSync();
 
-	public void reindex(URI contextURI, boolean purgeAllBeforeReindex);
+	/** @param contextURI never null; use {@link #reindex()} for the whole repository. */
+	void reindex(URI contextURI);
 
-	public void reindexSync(URI contextURI, boolean purgeAllBeforeReindex);
+	void reindexSync(URI contextURI);
 
-	public void postEntry(Entry entry);
+	void postEntry(Entry entry);
 
-	public void removeEntry(Entry entry);
+	void removeEntry(Entry entry);
 
-	public boolean isIndexing();
+	boolean isIndexing();
 
-	public boolean isIndexing(URI contextURI);
+	boolean isIndexing(URI contextURI);
 
-	public boolean ping();
+	boolean ping();
 
-	public boolean isUp();
-
+	boolean isUp();
 }

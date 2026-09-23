@@ -21,30 +21,50 @@ import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
+import org.eclipse.rdf4j.repository.Repository;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
+import org.entrystore.List;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryException;
+import org.entrystore.repository.RepositoryListener;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
 import java.net.URI;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class EntryImplTest extends AbstractCoreTest {
 
@@ -216,6 +236,8 @@ public class EntryImplTest extends AbstractCoreTest {
 		// the package-private bootstrap constructor leaves entryURI null
 		EntryImpl uninitialized = new EntryImpl(rm, ((EntryImpl) linkEntry).getRepository());
 
+		// below needed bcos: with a null entryURI the field comparison can never match, so only the identity
+		// short-circuit keeps equals reflexive
 		assertEquals(uninitialized, uninitialized);
 		assertNotEquals(uninitialized, linkEntry);
 		assertNotEquals(linkEntry, uninitialized);
@@ -292,5 +314,322 @@ public class EntryImplTest extends AbstractCoreTest {
 		assertFalse(targetEntry.getRelations().isEmpty());
 		context.remove(sourceEntry.getEntryURI());
 		assertTrue(targetEntry.getRelations().isEmpty());
+	}
+
+	private static Stream<Arguments> localEntries() {
+		return Stream.of(
+			local("list", t -> t.listEntry),
+			local("file", t -> t.resourceEntry),
+			local("context", t -> t.context.getEntry()),
+			local("principal", t -> t.pm.getPrincipalEntry("Daisy")));
+	}
+
+	private static Arguments local(String kind, Function<EntryImplTest, Entry> pick) {
+		return arguments(kind, pick);
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("localEntries")
+	public void setResourceURI_refusesALocalEntry(String kind, Function<EntryImplTest, Entry> pick) {
+		Entry entry = pick.apply(this);
+		URI before = entry.getResourceURI();
+
+		assertThrows(IllegalArgumentException.class, () -> entry.setResourceURI(URI.create(before + "-renamed")));
+
+		assertEquals(before, entry.getResourceURI());
+	}
+
+	@Test
+	public void setResourceURI_refusesAUserTypedReference() {
+		// the shape TestSuite ships: a Reference to a user, typed User, whose URI may be an ACL object
+		Entry reference = context.createReference(null, URI.create("http://example.com/someone"), URI.create("http://example.com/someone-md"), null);
+		reference.setGraphType(GraphType.User);
+
+		assertThrows(IllegalArgumentException.class, () -> reference.setResourceURI(URI.create("http://example.com/renamed")));
+	}
+
+	@Test
+	public void setGraph_refusesARenameOfALocalEntryBeforeClearingItsGraph() {
+		((List) listEntry.getResource()).addChild(linkEntry.getEntryURI());
+		EntryImpl impl = (EntryImpl) listEntry;
+		Model body = new LinkedHashModel(listEntry.getGraph());
+		body.remove(impl.getSesameEntryURI(), RepositoryProperties.resource, impl.getSesameResourceURI());
+		body.add(impl.getSesameEntryURI(), RepositoryProperties.resource, rm.getValueFactory().createIRI(impl.getSesameResourceURI() + "-renamed"));
+		int statements = listEntry.getGraph().size();
+
+		assertThrows(IllegalArgumentException.class, () -> listEntry.setGraph(body));
+
+		// refused before the graph is cleared, so nothing about the entry moved
+		assertEquals(statements, listEntry.getGraph().size());
+		assertEquals(GraphType.List, listEntry.getGraphType());
+		assertTrue(((List) listEntry.getResource()).getChildren().contains(linkEntry.getEntryURI()));
+	}
+
+	@Test
+	public void setResourceURI_onAReferenceToALocalEntrySkipsTheWrappedMetadata() {
+		// external metadata under the repository base is another entry's local metadata, wrapped read-only
+		ValueFactory vf = rm.getValueFactory();
+		Model ownMetadata = new LinkedHashModel();
+		ownMetadata.add(vf.createIRI(linkEntry.getResourceURI().toString()), DCTERMS.TITLE, vf.createLiteral("the link's own title"));
+		linkEntry.getLocalMetadata().setGraph(ownMetadata);
+		Entry reference = context.createReference(null, URI.create("http://example.com/refers"), linkEntry.getLocalMetadataURI(), null);
+		assertInstanceOf(LocalMetadataWrapper.class, reference.getCachedExternalMetadata());
+
+		reference.setResourceURI(URI.create("http://example.com/refers-renamed"));
+
+		assertEquals(URI.create("http://example.com/refers-renamed"), reference.getResourceURI());
+		Model untouched = linkEntry.getLocalMetadata().getGraph();
+		assertEquals(1, untouched.size());
+		assertTrue(untouched.contains(vf.createIRI(linkEntry.getResourceURI().toString()), DCTERMS.TITLE, vf.createLiteral("the link's own title")));
+	}
+
+	@Test
+	public void setResourceURI_leavesMetadataAloneWhenItNeverNamedTheResource() {
+		ValueFactory vf = rm.getValueFactory();
+		Model unrelated = new LinkedHashModel();
+		unrelated.add(vf.createIRI("http://example.com/unrelated"), DCTERMS.TITLE, vf.createLiteral("says nothing about the resource"));
+		linkEntry.getLocalMetadata().setGraph(unrelated);
+		// events fire synchronously, so a rewrite of the metadata is exactly one MetadataUpdated
+		AtomicInteger metadataWrites = new AtomicInteger();
+		RepositoryListener counter = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				metadataWrites.incrementAndGet();
+			}
+		};
+		rm.registerListener(counter, RepositoryEvent.MetadataUpdated);
+
+		try {
+			linkEntry.setResourceURI(URI.create("http://slashdot.org/renamed"));
+		} finally {
+			rm.unregisterListener(counter, RepositoryEvent.MetadataUpdated);
+		}
+
+		assertEquals(0, metadataWrites.get());
+		Model untouched = linkEntry.getLocalMetadata().getGraph();
+		assertEquals(1, untouched.size());
+		assertTrue(untouched.contains(vf.createIRI("http://example.com/unrelated"), DCTERMS.TITLE, vf.createLiteral("says nothing about the resource")));
+	}
+
+	@Test
+	public void setResourceURI_onALinkKeepsTypeAclMetadataAndIndex() {
+		linkEntry.setGraphType(GraphType.List);
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		ValueFactory vf = rm.getValueFactory();
+		URI oldResourceURI = linkEntry.getResourceURI();
+		IRI oldResourceIRI = vf.createIRI(oldResourceURI.toString());
+		Model metadata = new LinkedHashModel();
+		metadata.add(oldResourceIRI, DCTERMS.TITLE, vf.createLiteral("kept across the rename"));
+		linkEntry.getLocalMetadata().setGraph(metadata);
+		URI newResourceURI = URI.create("http://slashdot.org/renamed");
+
+		linkEntry.setResourceURI(newResourceURI);
+
+		assertEquals(newResourceURI, linkEntry.getResourceURI());
+		// type and resource-level ACL hang off the resource URI as subject inside the entry graph
+		assertEquals(GraphType.List, linkEntry.getGraphType());
+		assertTrue(linkEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
+		Model renamedMetadata = linkEntry.getLocalMetadata().getGraph();
+		assertTrue(renamedMetadata.contains(vf.createIRI(newResourceURI.toString()), DCTERMS.TITLE, null));
+		assertFalse(renamedMetadata.contains(oldResourceIRI, null, null));
+		assertTrue(context.getByResourceURI(newResourceURI).contains(linkEntry));
+		assertTrue(context.getByResourceURI(oldResourceURI).isEmpty());
+	}
+
+	@Test
+	public void setResourceURI_onALinkReferenceRewritesTheCachedExternalMetadata() {
+		ValueFactory vf = rm.getValueFactory();
+		IRI oldResourceIRI = vf.createIRI(refLinkEntry.getResourceURI().toString());
+		Model cached = new LinkedHashModel();
+		cached.add(oldResourceIRI, DCTERMS.TITLE, vf.createLiteral("cached"));
+		refLinkEntry.getCachedExternalMetadata().setGraph(cached);
+		URI newResourceURI = URI.create("http://vk.se/renamed");
+
+		refLinkEntry.setResourceURI(newResourceURI);
+
+		Model renamed = refLinkEntry.getCachedExternalMetadata().getGraph();
+		assertTrue(renamed.contains(vf.createIRI(newResourceURI.toString()), DCTERMS.TITLE, null));
+		assertFalse(renamed.contains(oldResourceIRI, null, null));
+	}
+
+	@Test
+	public void setResourceURI_mayTargetAURLAnotherLinkAlreadyUses() {
+		URI shared = refLinkEntry.getResourceURI();
+
+		linkEntry.setResourceURI(shared);
+
+		Set<Entry> holders = context.getByResourceURI(shared);
+		assertTrue(holders.contains(linkEntry));
+		assertTrue(holders.contains(refLinkEntry));
+	}
+
+	@Test
+	public void setResourceURI_keepsTheContributorTheMetadataWriteAdded() {
+		// Mickey creates the entry and writes its metadata; Daisy renames. Her contributor triple can only
+		// come from the rename's own internal metadata write, which the pre-fix snapshot predated
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
+		EntryImpl entry = (EntryImpl) context.createLink(null, URI.create("http://example.com/created-by-mickey"), null);
+		ValueFactory vf = rm.getValueFactory();
+		Model metadata = new LinkedHashModel();
+		metadata.add(entry.getSesameResourceURI(), DCTERMS.TITLE, vf.createLiteral("names the resource, so the rename rewrites it"));
+		entry.getLocalMetadata().setGraph(metadata);
+		IRI daisy = vf.createIRI(pm.getPrincipalEntry("Daisy").getResourceURI().toString());
+		assertFalse(entry.getGraph().contains(entry.getSesameEntryURI(), RepositoryProperties.Contributor, daisy));
+		pm.setAuthenticatedUserURI(URI.create(daisy.stringValue()));
+
+		entry.setResourceURI(URI.create("http://example.com/renamed-by-daisy"));
+
+		assertTrue(entry.getGraph().contains(entry.getSesameEntryURI(), RepositoryProperties.Contributor, daisy));
+	}
+
+	@Test
+	public void setGraph_renamingTheResourceKeepsTheTypeAndTheResourceAcl() {
+		linkEntry.setGraphType(GraphType.List);
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		EntryImpl impl = (EntryImpl) linkEntry;
+		IRI oldResourceURI = impl.getSesameResourceURI();
+		IRI newResourceURI = rm.getValueFactory().createIRI("http://slashdot.org/renamed");
+		// what a client PUTs back: the GET body with only es:resource changed
+		Model body = new LinkedHashModel(linkEntry.getGraph());
+		body.remove(impl.getSesameEntryURI(), RepositoryProperties.resource, oldResourceURI);
+		body.add(impl.getSesameEntryURI(), RepositoryProperties.resource, newResourceURI);
+
+		linkEntry.setGraph(body);
+
+		assertEquals(URI.create(newResourceURI.stringValue()), linkEntry.getResourceURI());
+		assertEquals(GraphType.List, linkEntry.getGraphType());
+		assertTrue(linkEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
+	}
+
+	@Test
+	public void setResourceURI_updatesTheInverseRelationOnTheTargetEntry() {
+		// only a statement between two repository resources is cached as an inverse relation, so the
+		// link points at a local resource and is renamed to another one
+		EntryImpl source = (EntryImpl) context.createLink(null, resourceEntry.getResourceURI(), null);
+		EntryImpl target = (EntryImpl) context.createResource(null, GraphType.None, null, null);
+		ValueFactory vf = source.getRepository().getValueFactory();
+		IRI related = vf.createIRI("http://example.com/related");
+		IRI oldResourceURI = source.getSesameResourceURI();
+		Model graph = source.getGraph();
+		graph.add(oldResourceURI, related, target.getSesameResourceURI());
+		source.setGraph(graph);
+		assertTrue(target.getRelations().contains(oldResourceURI, related, target.getSesameResourceURI()));
+		URI newResourceURI = listEntry.getResourceURI();
+
+		source.setResourceURI(newResourceURI);
+
+		Model relations = target.getRelations();
+		assertTrue(relations.contains(vf.createIRI(newResourceURI.toString()), related, target.getSesameResourceURI()));
+		assertFalse(relations.contains(oldResourceURI, null, null));
+	}
+
+	@Test
+	public void removeAllowedPrincipalsFor_reportsWhetherThePrincipalWasAllowed() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+
+		assertTrue(linkEntry.removeAllowedPrincipalsFor(AccessProperty.ReadResource, daisy));
+		assertFalse(linkEntry.removeAllowedPrincipalsFor(AccessProperty.ReadResource, daisy));
+		assertFalse(linkEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
+	}
+
+	@Test
+	public void setAllowedPrincipalsFor_replacesTheWholeSet() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+
+		linkEntry.setAllowedPrincipalsFor(AccessProperty.ReadResource, Set.of(donald));
+
+		assertEquals(Set.of(donald), linkEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource));
+		// the store, not the cache the call just installed, is what survives a reload
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			IRI entryIRI = ((EntryImpl) linkEntry).getSesameEntryURI();
+			assertFalse(rc.hasStatement(null, RepositoryProperties.Read, rc.getValueFactory().createIRI(daisy.toString()), false, entryIRI));
+			assertTrue(rc.hasStatement(null, RepositoryProperties.Read, rc.getValueFactory().createIRI(donald.toString()), false, entryIRI));
+		}
+	}
+
+	@Test
+	public void addAllowedPrincipalsFor_leavesOtherPrincipalsAlone() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, donald);
+
+		assertEquals(Set.of(daisy, donald), linkEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource));
+	}
+
+	@Test
+	public void hasAllowedPrincipals_isFalseUntilAnAclIsSet() {
+		assertFalse(linkEntry.hasAllowedPrincipals());
+
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, pm.getPrincipalEntry("Daisy").getResourceURI());
+
+		assertTrue(linkEntry.hasAllowedPrincipals());
+	}
+
+	@Test
+	public void hasAllowedPrincipals_isFalseAfterRemovingTheLastPrincipal() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		assertTrue(linkEntry.hasAllowedPrincipals());
+
+		assertTrue(linkEntry.removeAllowedPrincipalsFor(AccessProperty.ReadResource, daisy));
+
+		assertFalse(linkEntry.hasAllowedPrincipals());
+	}
+
+	@Test
+	public void hasAllowedPrincipals_isFalseAfterReplacingTheLastAclWithAnEmptySet() {
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, pm.getPrincipalEntry("Daisy").getResourceURI());
+		assertTrue(linkEntry.hasAllowedPrincipals());
+
+		linkEntry.setAllowedPrincipalsFor(AccessProperty.ReadResource, Set.of());
+
+		assertFalse(linkEntry.hasAllowedPrincipals());
+	}
+
+	@Test
+	public void hasAllowedPrincipals_preservesTheRepositoryConnectionFailure() {
+		Repository unavailable = mock(Repository.class);
+		var failure = new org.eclipse.rdf4j.repository.RepositoryException("Store unavailable");
+		when(unavailable.getConnection()).thenThrow(failure);
+		EntryImpl entry = new EntryImpl(rm, unavailable);
+
+		RepositoryException thrown = assertThrows(RepositoryException.class, entry::hasAllowedPrincipals);
+
+		assertSame(failure, thrown.getCause());
+	}
+
+	@Test
+	public void setResourceURI_firesOneEntryUpdatedAfterUpdatingTheIndex() {
+		URI oldURI = linkEntry.getResourceURI();
+		URI newURI = URI.create("http://example.com/renamed");
+		assertTrue(context.getByResourceURI(oldURI).contains(linkEntry));
+		AtomicInteger events = new AtomicInteger();
+		AtomicBoolean consistentAtEvent = new AtomicBoolean();
+		RepositoryListener listener = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject event) {
+				events.incrementAndGet();
+				consistentAtEvent.set(newURI.equals(linkEntry.getResourceURI())
+						&& context.getByResourceURI(newURI).contains(linkEntry)
+						&& !context.getByResourceURI(oldURI).contains(linkEntry));
+			}
+		};
+		rm.registerListener(listener, RepositoryEvent.EntryUpdated);
+		try {
+			linkEntry.setResourceURI(newURI);
+			// the second call is a no-op and must not fire again
+			linkEntry.setResourceURI(newURI);
+			assertEquals(1, events.get());
+			assertTrue(consistentAtEvent.get());
+		} finally {
+			rm.unregisterListener(listener, RepositoryEvent.EntryUpdated);
+		}
 	}
 }

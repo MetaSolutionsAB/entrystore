@@ -55,7 +55,7 @@ public class SolrManagementService {
 			if (searchIndex.isIndexing()) {
 				throw new CustomResponseException("A full reindex operation is already in progress", HttpStatus.CONFLICT);
 			}
-			searchIndex.reindex(false);
+			searchIndex.reindex();
 			log.info("Full Solr reindex initiated");
 			return "Full Solr reindex initiated";
 		} else {
@@ -68,7 +68,7 @@ public class SolrManagementService {
 			if (searchIndex.isIndexing(contextUri)) {
 				throw new CustomResponseException("A reindex operation is already in progress for this context", HttpStatus.CONFLICT);
 			}
-			searchIndex.reindex(contextUri, false);
+			searchIndex.reindex(contextUri);
 			log.info("Solr reindex initiated for context: {}", contextUri);
 			return "Solr reindex initiated for context: " + contextUri;
 		}

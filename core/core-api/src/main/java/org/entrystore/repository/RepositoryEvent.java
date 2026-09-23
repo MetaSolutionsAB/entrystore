@@ -23,11 +23,10 @@ public enum RepositoryEvent {
 
 	All,
 	EntryCreated,
-	EntryUpdated, // TODO event firing only implemented for EntryImpl.setGraph()
+	EntryUpdated, // fired after any write to an entry's own graph, its file metadata or a list's membership
 	EntryDeleted,
 	EntryAclGuestUpdated, // implemented for EntryImpl.setGraph() and changes concerning _guest,
-						  // NOT for EntryImpl.updateAllowedPrincipalsFor() which only seems to be
-						  // used during entry creation
+						  // NOT for EntryImpl.setAllowedPrincipalsFor and its siblings
 	EntryProjectTypeUpdated,
 	MetadataUpdated,
 	ExternalMetadataUpdated,
