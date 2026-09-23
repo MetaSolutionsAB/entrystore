@@ -32,6 +32,7 @@ import org.eclipse.rdf4j.query.resultio.binary.BinaryQueryResultWriter;
 import org.eclipse.rdf4j.query.resultio.sparqljson.SPARQLResultsJSONWriter;
 import org.eclipse.rdf4j.query.resultio.sparqlxml.SPARQLResultsXMLWriter;
 import org.eclipse.rdf4j.query.resultio.text.csv.SPARQLResultsCSVWriter;
+import org.eclipse.rdf4j.query.resultio.text.tsv.SPARQLResultsTSVWriter;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.sail.SailTupleQuery;
@@ -298,6 +299,7 @@ public class SparqlService {
 			case SPARQL_RESULTS_JSON -> new SPARQLResultsJSONWriter(out);
 			case SPARQL_RESULTS_XML -> new SPARQLResultsXMLWriter(out);
 			case CSV -> new SPARQLResultsCSVWriter(out);
+			case TSV -> new SPARQLResultsTSVWriter(out);
 			case BINARY -> new BinaryQueryResultWriter(out);
 		};
 	}

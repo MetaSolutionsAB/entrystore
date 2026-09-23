@@ -208,6 +208,48 @@ class SparqlServiceTest {
 	}
 
 	@Test
+	void runQuery_csvAlias_returnsCsvResultsWithQuotedFields() {
+		String query = """
+				SELECT ?iri ?label WHERE {
+					VALUES (?iri ?label) { (<http://example.org/item> "Nobel, Prize") }
+				}
+				""";
+		SparqlResultFormat format = SparqlResultFormat.resolve(null, "application/sparql-results+csv");
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+		service.runQuery(format, query, null, out);
+
+		assertEquals("iri,label\r\nhttp://example.org/item,\"Nobel, Prize\"\r\n",
+				out.toString(StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void runQuery_validQueryTsv_returnsRdfTermsAndEscapesLiteralDelimiters() {
+		String query = """
+				SELECT ?iri ?label ?missing WHERE {
+					VALUES (?iri ?label ?missing) {
+						(<http://example.org/item> "Nobel\\tPrize\\n2026"@en UNDEF)
+					}
+				}
+				""";
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+		service.runQuery(SparqlResultFormat.TSV, query, null, out);
+
+		assertEquals("?iri\t?label\t?missing\n<http://example.org/item>\t\"Nobel\\tPrize\\n2026\"@en\t\n",
+				out.toString(StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void runQuery_emptyTsvResult_returnsHeaderOnly() {
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+		service.runQuery(SparqlResultFormat.TSV, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }", null, out);
+
+		assertEquals("?s\t?p\t?o\n", out.toString(StandardCharsets.UTF_8));
+	}
+
+	@Test
 	void runQuery_validQueryBinary_startsWithBrtrMagicHeader() {
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		service.runQuery(SparqlResultFormat.BINARY, SELECT_ALL, null, out);

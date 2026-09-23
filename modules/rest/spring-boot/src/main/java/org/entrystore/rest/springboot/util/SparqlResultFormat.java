@@ -31,11 +31,11 @@ import java.util.Map;
 
 /**
  * SPARQL tuple-result format enum + content negotiation. Each value carries the canonical
- * MIME string, parsed Spring {@link MediaType}, and any legacy aliases that should resolve
+ * MIME string, parsed Spring {@link MediaType}, and any compatibility aliases that should resolve
  * to the value.
  *
  * <p>Switch expressions over this enum (e.g. {@code SparqlService.createWriter}) are
- * exhaustive at compile time, so adding a fifth result type fails to compile until every
+ * exhaustive at compile time, so adding a result type fails to compile until every
  * such switch has wired it up. The static-init blocks below catch the remaining invariants
  * at class-load: {@code PARTIAL_WILDCARD_PREFERENCE} must list every value, and
  * {@code ALIAS_TO_FORMAT} must not have any alias collisions.</p>
@@ -45,7 +45,8 @@ public enum SparqlResultFormat {
 	BINARY("application/x-binary-rdf-results-table", List.of()),
 	SPARQL_RESULTS_JSON("application/sparql-results+json", List.of(MediaType.APPLICATION_JSON_VALUE)),
 	SPARQL_RESULTS_XML("application/sparql-results+xml", List.of(MediaType.APPLICATION_XML_VALUE)),
-	CSV("text/csv", List.of());
+	CSV("text/csv", List.of("application/sparql-results+csv")),
+	TSV("text/tab-separated-values", List.of());
 
 	private static final int ECHOED_VALUE_MAX_LENGTH = 64;
 
@@ -63,9 +64,10 @@ public enum SparqlResultFormat {
 		this.aliases = aliases;
 	}
 
-	// BINARY first so application/* keeps preferring the most efficient SPARQL result format.
+	// BINARY first so application/* keeps preferring the most efficient SPARQL result format;
+	// CSV before TSV so text/* keeps resolving to text/csv.
 	private static final List<SparqlResultFormat> PARTIAL_WILDCARD_PREFERENCE =
-			List.of(BINARY, SPARQL_RESULTS_JSON, SPARQL_RESULTS_XML, CSV);
+			List.of(BINARY, SPARQL_RESULTS_JSON, SPARQL_RESULTS_XML, CSV, TSV);
 
 	static {
 		// Fail at class-load if a future enum value forgets to register itself in
@@ -121,7 +123,9 @@ public enum SparqlResultFormat {
 			case "json" -> SPARQL_RESULTS_JSON;
 			case "xml" -> SPARQL_RESULTS_XML;
 			case "csv" -> CSV;
-			default -> throw new BadRequestException("Unsupported SPARQL output format: " + truncate(output));
+			case "tsv" -> TSV;
+			default -> throw new BadRequestException(
+					"Unsupported SPARQL output format: " + truncate(output) + " (supported: json, xml, csv, tsv)");
 		};
 	}
 

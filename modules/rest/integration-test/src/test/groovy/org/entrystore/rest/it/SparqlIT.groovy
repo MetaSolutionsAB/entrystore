@@ -196,6 +196,30 @@ class SparqlIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
+	@Unroll
+	def "GET #path with Accept #acceptHeader should return #expectedContentType results"() {
+		given:
+		def queryParams = [query: 'SELECT ?title WHERE { VALUES ?title { "Nobelpriset – Ö"@sv } }']
+
+		when:
+		def conn = EntryStoreClient.getRequest(path + convertMapToQueryParams(queryParams), '', acceptHeader)
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains(expectedContentType)
+		conn.getContentType().contains('charset=UTF-8')
+		conn.inputStream.getText('UTF-8') == expectedBody
+
+		where:
+		path                        | acceptHeader                     | expectedContentType
+		'/sparql'                   | 'application/sparql-results+csv' | 'text/csv'
+		'/' + CONTEXT_ID + '/sparql' | 'application/sparql-results+csv' | 'text/csv'
+		'/sparql'                   | 'text/tab-separated-values'      | 'text/tab-separated-values'
+		'/' + CONTEXT_ID + '/sparql' | 'text/tab-separated-values'      | 'text/tab-separated-values'
+
+		expectedBody = expectedContentType == 'text/csv' ? 'title\r\nNobelpriset – Ö\r\n' : '?title\n"Nobelpriset – Ö"@sv\n'
+	}
+
 	def "GET /sparql with Accept of only unsupported types should return Not-Acceptable 406"() {
 		given:
 		def queryParams = [query: VALID_QUERY]
@@ -272,6 +296,21 @@ class SparqlIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('text/csv')
+	}
+
+	def "POST /sparql form-encoded with output=tsv should return SPARQL TSV"() {
+		given:
+		def query = 'SELECT ?title WHERE { VALUES ?title { "Nobelpriset – Ö"@sv } }'
+		def body = createFormBody([query: query, output: 'tsv'])
+
+		when:
+		def conn = EntryStoreClient.postRequest('/sparql', body, '', 'application/x-www-form-urlencoded')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('text/tab-separated-values')
+		conn.getContentType().contains('charset=UTF-8')
+		conn.inputStream.getText('UTF-8') == '?title\n"Nobelpriset – Ö"@sv\n'
 	}
 
 	def "POST /sparql form-encoded without output should default to SPARQL JSON"() {
