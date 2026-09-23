@@ -85,6 +85,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import static java.lang.Thread.interrupted;
@@ -616,16 +617,21 @@ public class SolrSearchIndex implements SearchIndex {
 				}
 				reindexing.remove(contextURI);
 			}
-			Future indexer = reindexExecutor.submit(() -> {
+			AtomicReference<Future<?>> task = new AtomicReference<>();
+			Future<?> indexer = reindexExecutor.submit(() -> {
 				try {
 					reindexSync(contextURI);
 				} catch (RuntimeException | Error e) {
 					// the Future is only ever cancelled, never awaited, so this is the only record of the failure
 					log.error("Reindex of context {} failed", contextURI, e);
 				} finally {
-					reindexing.remove(contextURI);
+					// only its own registration: a cancelled task must not evict the replacement already put
+					synchronized (reindexing) {
+						reindexing.remove(contextURI, task.get());
+					}
 				}
 			});
+			task.set(indexer);
 			reindexing.put(contextURI, indexer);
 		}
 	}

@@ -687,12 +687,13 @@ public class EntryImpl implements Entry {
 
 				try (RepositoryConnection rc = this.repository.getConnection()) {
 					rc.begin();
+					// read here, since the metadata writes above also touched this graph; the graph type,
+					// resource type and resource-level ACL hang off the resource URI as subject
+					List<Statement> originalStatements = Iterations.asList(
+							rc.getStatements(null, null, null, false, entryURI));
 					try {
-						// read here, since the metadata writes above also touched this graph; the graph type,
-						// resource type and resource-level ACL hang off the resource URI as subject
-						Model newEntryGraph = ModelUtil.replaceIRI(
-							Iterations.addAll(rc.getStatements(null, null, null, false, entryURI), new LinkedHashModel()),
-							oldResourceURI, newResourceURI);
+						Model newEntryGraph = ModelUtil.replaceIRI(new LinkedHashModel(originalStatements),
+								oldResourceURI, newResourceURI);
 						removeInverseRelations(rc);
 						rc.clear(entryURI);
 						rc.add(newEntryGraph, entryURI);
@@ -705,6 +706,8 @@ public class EntryImpl implements Entry {
 						rc.commit();
 					} catch (Exception e) {
 						rollbackQuietly(rc, e);
+						// removeInverseRelations and registerEntryModified changed cached fields before the commit
+						loadFromStatements(originalStatements);
 						throw new org.entrystore.repository.RepositoryException("Failed to move resource " + oldResourceURI + " to " + newResourceURI, e);
 					}
 					loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, entryURI)));
@@ -715,12 +718,13 @@ public class EntryImpl implements Entry {
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 
-		getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
+		// index first: a synchronous listener resolves related entries by resource URI
 		this.context.updateResource2EntryIndex(
 				URI.create(oldResourceURI.stringValue()),
 				URI.create(newResourceURI.stringValue()),
 				URI.create(this.entryURI.stringValue())
 		);
+		getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
 	}
 
 	/**

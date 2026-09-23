@@ -23,6 +23,7 @@ import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
+import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -45,12 +46,14 @@ import java.io.File;
 import java.net.URI;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -60,6 +63,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class EntryImplTest extends AbstractCoreTest {
 
@@ -313,10 +318,14 @@ public class EntryImplTest extends AbstractCoreTest {
 
 	private static Stream<Arguments> localEntries() {
 		return Stream.of(
-			arguments("list", (Function<EntryImplTest, Entry>) t -> t.listEntry),
-			arguments("file", (Function<EntryImplTest, Entry>) t -> t.resourceEntry),
-			arguments("context", (Function<EntryImplTest, Entry>) t -> t.context.getEntry()),
-			arguments("principal", (Function<EntryImplTest, Entry>) t -> t.pm.getPrincipalEntry("Daisy")));
+			local("list", t -> t.listEntry),
+			local("file", t -> t.resourceEntry),
+			local("context", t -> t.context.getEntry()),
+			local("principal", t -> t.pm.getPrincipalEntry("Daisy")));
+	}
+
+	private static Arguments local(String kind, Function<EntryImplTest, Entry> pick) {
+		return arguments(kind, pick);
 	}
 
 	@ParameterizedTest(name = "{0}")
@@ -364,7 +373,7 @@ public class EntryImplTest extends AbstractCoreTest {
 		ownMetadata.add(vf.createIRI(linkEntry.getResourceURI().toString()), DCTERMS.TITLE, vf.createLiteral("the link's own title"));
 		linkEntry.getLocalMetadata().setGraph(ownMetadata);
 		Entry reference = context.createReference(null, URI.create("http://example.com/refers"), linkEntry.getLocalMetadataURI(), null);
-		assertTrue(reference.getCachedExternalMetadata() instanceof LocalMetadataWrapper);
+		assertInstanceOf(LocalMetadataWrapper.class, reference.getCachedExternalMetadata());
 
 		reference.setResourceURI(URI.create("http://example.com/refers-renamed"));
 
@@ -561,5 +570,66 @@ public class EntryImplTest extends AbstractCoreTest {
 		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, pm.getPrincipalEntry("Daisy").getResourceURI());
 
 		assertTrue(linkEntry.hasAllowedPrincipals());
+	}
+
+	@Test
+	public void hasAllowedPrincipals_isFalseAfterRemovingTheLastPrincipal() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		assertTrue(linkEntry.hasAllowedPrincipals());
+
+		assertTrue(linkEntry.removeAllowedPrincipalsFor(AccessProperty.ReadResource, daisy));
+
+		assertFalse(linkEntry.hasAllowedPrincipals());
+	}
+
+	@Test
+	public void hasAllowedPrincipals_isFalseAfterReplacingTheLastAclWithAnEmptySet() {
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, pm.getPrincipalEntry("Daisy").getResourceURI());
+		assertTrue(linkEntry.hasAllowedPrincipals());
+
+		linkEntry.setAllowedPrincipalsFor(AccessProperty.ReadResource, Set.of());
+
+		assertFalse(linkEntry.hasAllowedPrincipals());
+	}
+
+	@Test
+	public void hasAllowedPrincipals_preservesTheRepositoryConnectionFailure() {
+		Repository unavailable = mock(Repository.class);
+		var failure = new org.eclipse.rdf4j.repository.RepositoryException("Store unavailable");
+		when(unavailable.getConnection()).thenThrow(failure);
+		EntryImpl entry = new EntryImpl(rm, unavailable);
+
+		RepositoryException thrown = assertThrows(RepositoryException.class, entry::hasAllowedPrincipals);
+
+		assertSame(failure, thrown.getCause());
+	}
+
+	@Test
+	public void setResourceURI_firesOneEntryUpdatedAfterUpdatingTheIndex() {
+		URI oldURI = linkEntry.getResourceURI();
+		URI newURI = URI.create("http://example.com/renamed");
+		assertTrue(context.getByResourceURI(oldURI).contains(linkEntry));
+		AtomicInteger events = new AtomicInteger();
+		AtomicBoolean consistentAtEvent = new AtomicBoolean();
+		RepositoryListener listener = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject event) {
+				events.incrementAndGet();
+				consistentAtEvent.set(newURI.equals(linkEntry.getResourceURI())
+						&& context.getByResourceURI(newURI).contains(linkEntry)
+						&& !context.getByResourceURI(oldURI).contains(linkEntry));
+			}
+		};
+		rm.registerListener(listener, RepositoryEvent.EntryUpdated);
+		try {
+			linkEntry.setResourceURI(newURI);
+			// the second call is a no-op and must not fire again
+			linkEntry.setResourceURI(newURI);
+			assertEquals(1, events.get());
+			assertTrue(consistentAtEvent.get());
+		} finally {
+			rm.unregisterListener(listener, RepositoryEvent.EntryUpdated);
+		}
 	}
 }

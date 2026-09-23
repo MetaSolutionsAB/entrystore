@@ -90,6 +90,18 @@ class EntryServiceTest {
 	}
 
 	@Test
+	void modifyEntry_rejectsCoreValidationErrorsAsBadRequestsWithoutAStackTraceCause() {
+		doThrow(new IllegalArgumentException("The resource URI of a local entry cannot be changed"))
+				.when(entry).setGraph(any());
+
+		BadRequestException thrown = assertThrows(BadRequestException.class,
+				() -> service.modifyEntry(entry, "", "text/turtle", false));
+
+		assertEquals("The resource URI of a local entry cannot be changed", thrown.getMessage());
+		assertNull(thrown.getCause());
+	}
+
+	@Test
 	void createLocalEntry_jsonParseFailureWithCleanupAlsoThrowing_preservesOriginalCauseAndSuppressesCleanup() {
 		// Pins the rollback contract: when a JSON parse failure triggers the orphan rollback AND the
 		// rollback itself fails, the client-visible BadRequestException must carry the original parse

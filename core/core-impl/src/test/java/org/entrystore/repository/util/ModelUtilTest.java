@@ -110,6 +110,21 @@ public class ModelUtilTest {
 	}
 
 	@Test
+	public void replaceIRI_preservesBlankNodeSubjectsObjectsAndContexts() {
+		var blank = VF.createBNode();
+		var context = VF.createBNode();
+		Model graph = new LinkedHashModel();
+		graph.add(blank, P, A, context);
+		graph.add(A, P, blank, context);
+
+		Model result = ModelUtil.replaceIRI(graph, A, B);
+
+		assertEquals(2, result.size());
+		assertTrue(result.contains(blank, P, B, context));
+		assertTrue(result.contains(B, P, blank, context));
+	}
+
+	@Test
 	public void emptyModelStaysEmpty() {
 		assertTrue(ModelUtil.replaceIRI(new LinkedHashModel(), A, B).isEmpty());
 	}

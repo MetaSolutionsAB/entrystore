@@ -288,6 +288,14 @@ public interface Entry {
 	
 	void setMimetype(String mt);
 
+	/**
+	 * Changes the resource URI of a Link, Reference or LinkReference, rewriting it in the entry graph, the
+	 * entry's own metadata and the resource index. Requires Administer access; the current URI is a no-op.
+	 *
+	 * @throws IllegalArgumentException for a Local entry, whose resource URI is derived from its id, or for an
+	 * entry typed Context, SystemContext, User or Group, whose URI is an index or ACL key
+	 * @throws org.entrystore.repository.RepositoryException if the store rejects the change
+	 */
 	void setResourceURI(URI resourceURI);
 
 	void setExternalMetadataURI(URI externalMetadataURI);

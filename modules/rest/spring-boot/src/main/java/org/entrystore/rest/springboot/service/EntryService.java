@@ -536,7 +536,7 @@ public class EntryService {
 		try {
 			entry.setGraph(deserializedGraph);
 		} catch (IllegalArgumentException iae) {
-			throw new BadRequestException(iae.getMessage(), iae); // Core exception — message is safe to return
+			throw new BadRequestException(iae.getMessage()); // core validation message; no cause, it is expected client input
 		}
 		if (applyACLtoChildren &&
 				GraphType.List.equals(entry.getGraphType()) &&
