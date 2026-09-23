@@ -16,16 +16,15 @@
 
 package org.entrystore.exception;
 
-import java.net.URI;
-
 /**
- * Thrown when the external metadata URI of a Reference or LinkReference entry refers to the entry itself. The
- * message only contains the two URIs and may be returned to the client that submitted the external metadata URI.
+ * Thrown when the external metadata URI of a Reference or LinkReference entry is not acceptable, e.g. because it
+ * is in the repository but does not denote an entry. The message only contains URIs that the client submitted or
+ * that belong to the entry, and may be returned to the client.
  */
-public class SelfReferencingExternalMetadataException extends InvalidExternalMetadataURIException {
+public class InvalidExternalMetadataURIException extends IllegalArgumentException {
 
-	public SelfReferencingExternalMetadataException(URI externalMetadataURI, URI entryURI) {
-		super("The external metadata URI " + externalMetadataURI + " must not refer to entry " + entryURI + " itself");
+	public InvalidExternalMetadataURIException(String message) {
+		super(message);
 	}
 
 }

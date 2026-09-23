@@ -83,12 +83,16 @@ public class LocalMetadataWrapperTest extends AbstractCoreTest {
 
 	@Test
 	public void getGraphReturnsEmptyGraphWhenExternalMetadataURIIsNoEntryURI() {
-		// A URI of this repository that does not denote an entry, since it has no entry ID
+		// A URI of this repository that does not denote an entry, since it has no entry ID. Such a URI is rejected
+		// when it is set (ENTRYSTORE-1182), so it can only be in the store from before, and is written there.
 		URI noEntryURI = URI.create(rm.getRepositoryURL() + context.getEntry().getId() + "/entry");
-		Entry reference = context.createLinkReference(null, URI.create("http://example.com/resource"), noEntryURI,
-				null);
+		Entry reference = context.createLinkReference(null, URI.create("http://example.com/resource"),
+				URI.create("http://example.com/metadata"), null);
+		replaceExternalMetadataInStore(reference, noEntryURI);
+		context.softCache.remove(reference);
+		Entry loaded = context.get(reference.getId());
 
-		Model graph = reference.getCachedExternalMetadata().getGraph();
+		Model graph = loaded.getCachedExternalMetadata().getGraph();
 
 		assertTrue(graph.isEmpty());
 	}
