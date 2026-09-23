@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,6 +48,9 @@ public class URISplit {
 			if (anyURI.toString().startsWith(base)) {
 				String anyURIWithoutBase = anyURI.toString().substring(base.length());
 				StringTokenizer st = new StringTokenizer(anyURIWithoutBase, SLASH_DELIMITER);
+				if (!st.hasMoreTokens()) {
+					throw new IllegalArgumentException("URI is incompatible with EntryStore");
+				}
 				contextId = st.nextToken();
 				if (st.hasMoreTokens()) {
 					path = st.nextToken();

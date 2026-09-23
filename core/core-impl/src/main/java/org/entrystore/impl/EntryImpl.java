@@ -45,6 +45,7 @@ import org.entrystore.Provenance;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
+import org.entrystore.exception.SelfReferencingExternalMetadataException;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
@@ -202,14 +203,6 @@ public class EntryImpl implements Entry {
 
 		if (lType == EntryType.LinkReference || lType == EntryType.Reference) {
 			checkExternalMetadataURI(URI.create(externalMetadataURI.stringValue()));
-		}
-
-		if (lType == EntryType.LinkReference) {
-			this.cachedExternalMdURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
-			this.externalMdURI = externalMetadataURI;
-		}
-
-		if (lType == EntryType.Reference) {
 			this.cachedExternalMdURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
 			this.externalMdURI = externalMetadataURI;
 		}
@@ -1225,10 +1218,13 @@ public class EntryImpl implements Entry {
 		Model oldGraph = getGraph();
 
 		URI newExternalMetadataURI = null;
-		Iterator<Statement> externalMdURIStmnts = metametadata.filter(this.entryURI, RepositoryProperties.externalMetadata, null).iterator();
-		if (externalMdURIStmnts.hasNext() && externalMdURIStmnts.next().getObject() instanceof IRI externalMdIRI) {
+		Iterator<Statement> externalMdURIStmnts =
+				metametadata.filter(this.entryURI, RepositoryProperties.externalMetadata, null).iterator();
+		if (externalMdURIStmnts.hasNext() && externalMdURIStmnts.next().getObject() instanceof IRI externalMdIRI
+				&& (externalMdURI == null || !externalMdIRI.stringValue().equals(externalMdURI.stringValue()))) {
 			newExternalMetadataURI = URI.create(externalMdIRI.toString());
-			// Validated before anything is changed, so that a rejected URI leaves the entry unchanged
+			// Validated before anything is changed, so that a rejected URI leaves the entry unchanged. An unchanged
+			// URI is not validated, so that entries created before the validation can still be modified.
 			checkExternalMetadataURI(newExternalMetadataURI);
 		}
 
@@ -1490,7 +1486,7 @@ public class EntryImpl implements Entry {
 	 * Rejects an external metadata URI that belongs to this entry itself, e.g. its own metadata URI: the entry
 	 * would be the source of its own cached external metadata.
 	 *
-	 * @throws IllegalArgumentException if the URI belongs to this entry
+	 * @throws SelfReferencingExternalMetadataException if the URI belongs to this entry
 	 */
 	private void checkExternalMetadataURI(URI externalMetadataURI) {
 		URI referencedEntryURI;
@@ -1505,7 +1501,7 @@ public class EntryImpl implements Entry {
 			return;
 		}
 		if (referencedEntryURI.toString().equals(entryURI.stringValue())) {
-			throw new IllegalArgumentException("The external metadata URI " + externalMetadataURI + " must not refer to entry " + entryURI + " itself");
+			throw new SelfReferencingExternalMetadataException(externalMetadataURI, referencedEntryURI);
 		}
 	}
 

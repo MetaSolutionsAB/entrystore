@@ -43,6 +43,7 @@ import org.entrystore.Resource;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
 import org.entrystore.exception.EntryMissingException;
+import org.entrystore.exception.SelfReferencingExternalMetadataException;
 import org.entrystore.impl.ContextImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
@@ -575,8 +576,8 @@ public class EntryService {
 		Model deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
 		try {
 			entry.setGraph(deserializedGraph);
-		} catch (IllegalArgumentException iae) {
-			throw new BadRequestException(iae.getMessage(), iae); // Core exception — message is safe to return
+		} catch (SelfReferencingExternalMetadataException e) {
+			throw new BadRequestException(e.getMessage(), e); // The message only contains URIs from the request
 		}
 		if (applyACLtoChildren &&
 				GraphType.List.equals(entry.getGraphType()) &&

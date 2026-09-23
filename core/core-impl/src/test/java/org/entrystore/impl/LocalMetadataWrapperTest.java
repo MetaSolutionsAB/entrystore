@@ -53,7 +53,8 @@ public class LocalMetadataWrapperTest extends AbstractCoreTest {
 	public void getGraphReturnsLocalMetadataOfReferencedEntry() {
 		Entry referenced = context.createResource(null, GraphType.None, null, null);
 		setTitle(referenced, "referenced title");
-		Entry reference = context.createLinkReference(null, URI.create("http://example.com/resource"), referenced.getLocalMetadataURI(), null);
+		Entry reference = context.createLinkReference(null, URI.create("http://example.com/resource"),
+				referenced.getLocalMetadataURI(), null);
 
 		Model graph = reference.getCachedExternalMetadata().getGraph();
 
@@ -63,24 +64,42 @@ public class LocalMetadataWrapperTest extends AbstractCoreTest {
 	@Test
 	public void loadingLinkReferenceWhoseExternalMetadataIsItsOwnMetadataDoesNotRecurse() {
 		Entry placeholder = context.createResource(null, GraphType.None, null, null);
-		Entry reference = context.createLinkReference(null, URI.create("http://example.com/resource"), placeholder.getLocalMetadataURI(), null);
+		Entry reference = context.createLinkReference(null, URI.create("http://example.com/resource"),
+				placeholder.getLocalMetadataURI(), null);
 		setTitle(reference, "own title");
 		// Such an entry can no longer be created through the API, so the self-reference is written to the store
 		replaceExternalMetadataInStore(reference, reference.getLocalMetadataURI());
 		context.softCache.remove(reference);
 
 		Entry loaded = context.getByEntryURI(reference.getEntryURI());
+		// Evicted again, so that resolving the referenced entry has to load it as well
+		context.softCache.remove(loaded);
 
 		assertNotNull(loaded);
 		assertEquals(reference.getLocalMetadataURI(), loaded.getExternalMetadataURI());
-		assertTrue(loaded.getCachedExternalMetadata().getGraph().contains(null, DCTERMS.TITLE, vf.createLiteral("own title")));
+		Model cachedExternalMetadata = loaded.getCachedExternalMetadata().getGraph();
+		assertTrue(cachedExternalMetadata.contains(null, DCTERMS.TITLE, vf.createLiteral("own title")));
+	}
+
+	@Test
+	public void getGraphReturnsEmptyGraphWhenExternalMetadataURIIsNoEntryURI() {
+		// A URI of this repository that does not denote an entry, since it has no entry ID
+		URI noEntryURI = URI.create(rm.getRepositoryURL() + context.getEntry().getId() + "/entry");
+		Entry reference = context.createLinkReference(null, URI.create("http://example.com/resource"), noEntryURI,
+				null);
+
+		Model graph = reference.getCachedExternalMetadata().getGraph();
+
+		assertTrue(graph.isEmpty());
 	}
 
 	@Test
 	public void loadingLinkReferencesWhoseExternalMetadataRefersToEachOtherDoesNotRecurse() {
 		Entry placeholder = context.createResource(null, GraphType.None, null, null);
-		Entry first = context.createLinkReference(null, URI.create("http://example.com/first"), placeholder.getLocalMetadataURI(), null);
-		Entry second = context.createLinkReference(null, URI.create("http://example.com/second"), first.getLocalMetadataURI(), null);
+		Entry first = context.createLinkReference(null, URI.create("http://example.com/first"),
+				placeholder.getLocalMetadataURI(), null);
+		Entry second = context.createLinkReference(null, URI.create("http://example.com/second"),
+				first.getLocalMetadataURI(), null);
 		first.setExternalMetadataURI(second.getLocalMetadataURI());
 		setTitle(second, "second title");
 		context.softCache.remove(first);
@@ -89,7 +108,8 @@ public class LocalMetadataWrapperTest extends AbstractCoreTest {
 		Entry loaded = context.getByEntryURI(first.getEntryURI());
 
 		assertNotNull(loaded);
-		assertTrue(loaded.getCachedExternalMetadata().getGraph().contains(null, DCTERMS.TITLE, vf.createLiteral("second title")));
+		Model cachedExternalMetadata = loaded.getCachedExternalMetadata().getGraph();
+		assertTrue(cachedExternalMetadata.contains(null, DCTERMS.TITLE, vf.createLiteral("second title")));
 	}
 
 	private static void setTitle(Entry entry, String title) {
@@ -102,7 +122,8 @@ public class LocalMetadataWrapperTest extends AbstractCoreTest {
 		IRI entryIRI = vf.createIRI(entry.getEntryURI().toString());
 		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
 			rc.remove(entryIRI, RepositoryProperties.externalMetadata, null, entryIRI);
-			rc.add(entryIRI, RepositoryProperties.externalMetadata, vf.createIRI(externalMetadataURI.toString()), entryIRI);
+			rc.add(entryIRI, RepositoryProperties.externalMetadata, vf.createIRI(externalMetadataURI.toString()),
+					entryIRI);
 		}
 	}
 

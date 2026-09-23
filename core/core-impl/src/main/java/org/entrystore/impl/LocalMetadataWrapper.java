@@ -48,14 +48,15 @@ public class LocalMetadataWrapper implements Metadata {
 		URI refEntryURI = getReferencedEntryURI();
 		if (refEntryURI != null) {
 			e = ((ContextImpl) entry.getContext()).getSoftCache().getByEntryURI(refEntryURI);
-		}
-		if (e == null) {
-			e = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());
+			if (e == null) {
+				e = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());
+			}
 		}
 		if (e != null && e.getLocalMetadata() != null) {
 			return e.getLocalMetadata().getGraph();
 		} else {
-			log.warn("No local metadata found for external metadata URI {}, returning an empty graph", entry.getExternalMetadataURI());
+			log.warn("No local metadata found for external metadata URI {}, returning an empty graph",
+					entry.getExternalMetadataURI());
 			return new LinkedHashModel();
 		}
 	}
@@ -66,7 +67,8 @@ public class LocalMetadataWrapper implements Metadata {
 	 */
 	private URI getReferencedEntryURI() {
 		try {
-			URISplit split = new URISplit(entry.getExternalMetadataURI(), entry.getRepositoryManager().getRepositoryURL());
+			URISplit split = new URISplit(entry.getExternalMetadataURI(),
+					entry.getRepositoryManager().getRepositoryURL());
 			return split.getUriType() == URIType.Unknown ? null : split.getMetaMetadataURI();
 		} catch (IllegalArgumentException e) {
 			return null;

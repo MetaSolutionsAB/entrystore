@@ -39,6 +39,7 @@ import org.entrystore.Quota;
 import org.entrystore.QuotaException;
 import org.entrystore.ResourceType;
 import org.entrystore.exception.EntryMissingException;
+import org.entrystore.exception.SelfReferencingExternalMetadataException;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.security.DisallowedException;
@@ -499,8 +500,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 					softCache.put(newEntry);
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(newEntry, RepositoryEvent.EntryCreated));
 					return newEntry;
-				} catch (IllegalArgumentException e) {
-					// Invalid input, e.g. an external metadata URI that refers to the new entry itself
+				} catch (SelfReferencingExternalMetadataException e) {
+					// Invalid input that is reported to the client; nothing has been written or cached yet
 					rc.rollback();
 					throw e;
 				} catch (Exception e) {
