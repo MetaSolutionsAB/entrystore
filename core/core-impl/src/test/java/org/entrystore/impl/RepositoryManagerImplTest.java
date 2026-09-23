@@ -17,6 +17,7 @@
 package org.entrystore.impl;
 
 import org.apache.solr.client.solrj.SolrClient;
+import org.entrystore.SearchIndex.ReindexResult;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
@@ -27,14 +28,40 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 public class RepositoryManagerImplTest {
+
+	@Test
+	public void reindexIsCompleteWhenQueueDrainsDespiteContextsAndEntriesThatCouldNotBeIndexed() {
+		assertTrue(RepositoryManagerImpl.isReindexComplete(new ReindexResult(2, 5, false), () -> true));
+	}
+
+	@Test
+	public void reindexIsIncompleteWhenQueueDoesNotDrain() {
+		assertFalse(RepositoryManagerImpl.isReindexComplete(new ReindexResult(0, 0, false), () -> false));
+	}
+
+	@Test
+	public void interruptedReindexIsIncompleteWithoutWaitingForTheQueue() {
+		AtomicBoolean waitedForQueue = new AtomicBoolean();
+
+		boolean complete = RepositoryManagerImpl.isReindexComplete(new ReindexResult(0, 0, true), () -> {
+			waitedForQueue.set(true);
+			return true;
+		});
+
+		assertFalse(complete);
+		assertFalse(waitedForQueue.get(),
+				"Waiting for the queue has no timeout and must be skipped after an interruption");
+	}
 
 	@Disabled("To be implemented")
 	@Test
