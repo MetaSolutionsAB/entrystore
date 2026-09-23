@@ -642,7 +642,9 @@ public class SolrSearchIndex implements SearchIndex {
 
 	/**
 	 * Re-indexes all contexts in the calling thread. A context whose reindex fails is logged and skipped so
-	 * that a single corrupt context does not prevent the remaining contexts from being indexed.
+	 * that a single corrupt context does not prevent the remaining contexts from being indexed. Besides
+	 * runtime exceptions this covers {@link StackOverflowError}, which corrupt data can cause through
+	 * unbounded recursion and after which the JVM is usable again; other errors are propagated.
 	 *
 	 * @return false if the reindex of at least one context failed as a whole. Entries that could not be
 	 * indexed and contexts that could not be resolved are logged but do not affect the result: callers
@@ -653,7 +655,7 @@ public class SolrSearchIndex implements SearchIndex {
 		for (URI contextURI : listContextsAsAdmin()) {
 			try {
 				reindexSync(contextURI, purgeAllBeforeReindex);
-			} catch (RuntimeException e) {
+			} catch (RuntimeException | StackOverflowError e) {
 				log.error("Reindexing of context {} failed, continuing with the remaining contexts", contextURI, e);
 				allContextsReindexed = false;
 			}
@@ -859,7 +861,8 @@ public class SolrSearchIndex implements SearchIndex {
 					Entry entry;
 					try {
 						entry = cm.getEntry(entryURI);
-					} catch (Exception e) {
+					} catch (Exception | StackOverflowError e) {
+						// Corrupt data, e.g. entries whose references form a cycle, can cause unbounded recursion
 						logEntryFailure("Unable to load entry", entryURI, e, ++failedEntries);
 						continue;
 					}
@@ -872,7 +875,7 @@ public class SolrSearchIndex implements SearchIndex {
 							log.info("Adding entry to Solr post queue: {}", entryURI);
 							try {
 								postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
-							} catch (Exception e) {
+							} catch (Exception | StackOverflowError e) {
 								logEntryFailure("Not indexing entry", entryURI, e, ++failedEntries);
 							}
 						} else {
@@ -891,7 +894,7 @@ public class SolrSearchIndex implements SearchIndex {
 		return null;
 	}
 
-	private void logEntryFailure(String message, URI entryURI, Exception e, int failureCount) {
+	private void logEntryFailure(String message, URI entryURI, Throwable e, int failureCount) {
 		if (failureCount <= MAX_ENTRY_FAILURE_TRACES) {
 			log.error("{} {}", message, entryURI, e);
 		} else {

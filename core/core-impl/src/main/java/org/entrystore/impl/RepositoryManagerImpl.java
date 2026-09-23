@@ -580,10 +580,12 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	private void initSolr() {
 		try {
 			initSolrInternal();
-		} catch (RuntimeException e) {
+		} catch (RuntimeException | Error e) {
 			// Release RDF4J native-store file locks and any other resources before propagating;
-			// otherwise stale lock files block subsequent boots. shutdown() can itself throw, so
-			// surface any cleanup failure as a suppressed cause to preserve the original cause.
+			// otherwise stale lock files block subsequent boots. Errors are included because an open
+			// Solr client keeps non-daemon threads alive, so the JVM would not exit after the failed
+			// startup. shutdown() can itself throw, so surface any cleanup failure as a suppressed
+			// cause to preserve the original cause.
 			try {
 				this.shutdown();
 			} catch (RuntimeException cleanup) {

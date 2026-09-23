@@ -20,6 +20,7 @@ import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
@@ -129,6 +130,33 @@ public class SolrSearchIndexTest {
 
 		assertFalse(allContextsReindexed, "A failed context must be reported so the version markers are not persisted");
 		verify(cm).getByEntryURI(CONTEXT_2);
+	}
+
+	@Test
+	public void reindexSyncContinuesWithRemainingContextsWhenOneContextOverflowsTheStack() {
+		ContextManager cm = contextManagerListing(CONTEXT_1, CONTEXT_2);
+		when(cm.getByEntryURI(CONTEXT_1)).thenThrow(new StackOverflowError());
+
+		boolean allContextsReindexed = index.reindexSync(false);
+
+		assertFalse(allContextsReindexed, "A context that overflowed the stack must be reported as failed");
+		verify(cm).getByEntryURI(CONTEXT_2);
+	}
+
+	@Test
+	public void reindexSyncContinuesWithRemainingEntriesWhenLoadingOneEntryOverflowsTheStack() {
+		URI recursiveEntry = URI.create("http://localhost:8181/1/entry/1");
+		URI nextEntry = URI.create("http://localhost:8181/1/entry/2");
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		Context context = mock(Context.class);
+		when(context.getEntries()).thenReturn(new LinkedHashSet<>(List.of(recursiveEntry, nextEntry)));
+		when(cm.getContext("1")).thenReturn(context);
+		when(cm.getEntry(recursiveEntry)).thenThrow(new StackOverflowError());
+
+		boolean allContextsReindexed = index.reindexSync(false);
+
+		assertTrue(allContextsReindexed, "A single failing entry must not fail the reindex of its context");
+		verify(cm).getEntry(nextEntry);
 	}
 
 	@Test
