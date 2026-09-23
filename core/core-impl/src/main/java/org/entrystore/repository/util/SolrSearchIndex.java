@@ -638,9 +638,11 @@ public class SolrSearchIndex implements SearchIndex {
 					log.error("Reindexing of context {} failed", contextURI, e);
 				} finally {
 					// Remove only this task's mapping: a cancelled task that is still unwinding must not remove
-					// the mapping of its replacement. The remove call waits for the map's monitor, which the
-					// submitter holds until self is set and the mapping is in place.
-					reindexing.remove(contextURI, self.get());
+					// the mapping of its replacement. Acquire the monitor before reading self, so the submitter
+					// has assigned the future and installed its mapping even if this task finishes immediately.
+					synchronized (reindexing) {
+						reindexing.remove(contextURI, self.get());
+					}
 				}
 			});
 			self.set(indexer);

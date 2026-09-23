@@ -37,6 +37,8 @@ import org.mockito.ArgumentCaptor;
 
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URI;
@@ -47,8 +49,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -241,6 +247,46 @@ public class SolrSearchIndexTest {
 		index.shutdown(); // waits for a delayed purge, if one was scheduled
 
 		verify(solrServer, never()).request(any(), any());
+	}
+
+	@Test
+	public void fastAsyncReindexClearsIndexingStateWhenCleanupStartsBeforeSubmitReturns() throws Exception {
+		contextManagerListing(CONTEXT_1);
+		Field executorField = SolrSearchIndex.class.getDeclaredField("reindexExecutor");
+		executorField.setAccessible(true);
+		((ExecutorService) executorField.get(index)).shutdown();
+		AtomicReference<Thread> worker = new AtomicReference<>();
+		ThreadPoolExecutor fastExecutor = new ThreadPoolExecutor(
+				1, 1, 0, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), task -> {
+			Thread thread = new Thread(task, "fast-reindex-test");
+			worker.set(thread);
+			return thread;
+		}) {
+			@Override
+			public void execute(Runnable task) {
+				super.execute(task);
+				// Hold submit() open until cleanup waits on the map monitor held by the submitting thread.
+				// This exercises a fast worker without relying on scheduling luck or arbitrary sleeps.
+				long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+				var threadMXBean = ManagementFactory.getThreadMXBean();
+				while (System.nanoTime() < deadline) {
+					ThreadInfo info = threadMXBean.getThreadInfo(worker.get().threadId());
+					if (info != null && info.getThreadState() == Thread.State.BLOCKED
+							&& info.getLockOwnerId() == Thread.currentThread().threadId()
+							&& info.getLockInfo().getIdentityHashCode() == System.identityHashCode(reindexingMap)) {
+						return;
+					}
+					Thread.yield();
+				}
+				throw new AssertionError("Worker did not reach reindex cleanup");
+			}
+		};
+		executorField.set(index, fastExecutor);
+
+		index.reindex(CONTEXT_1, false);
+		reindexingFutureOrCompleted(CONTEXT_1).get(10, TimeUnit.SECONDS);
+
+		assertFalse(index.isIndexing(CONTEXT_1), "A completed reindex must clear its mapping even if cleanup starts before submit returns");
 	}
 
 	@Test
