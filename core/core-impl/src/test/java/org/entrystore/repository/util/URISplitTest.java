@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import java.net.MalformedURLException;
 import java.net.URI;
+import java.net.URL;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -111,6 +112,12 @@ public class URISplitTest {
 	public void constructor_unknown() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(unknownURIString), URI.create(anyURIStringBase).toURL());
 		assertEquals(URIType.Unknown, uriSplit.getUriType());
+	}
+
+	@Test
+	public void constructor_baseURIFail() throws MalformedURLException {
+		URL base = URI.create(anyURIStringBase).toURL();
+		assertThrows(IllegalArgumentException.class, () -> new URISplit(URI.create(anyURIStringBase), base));
 	}
 
 	@Test

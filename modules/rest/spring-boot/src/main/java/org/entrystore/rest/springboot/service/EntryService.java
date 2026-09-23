@@ -43,6 +43,7 @@ import org.entrystore.Resource;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
 import org.entrystore.exception.EntryMissingException;
+import org.entrystore.exception.SelfReferencingExternalMetadataException;
 import org.entrystore.impl.ContextImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
@@ -573,7 +574,11 @@ public class EntryService {
 	public Entry modifyEntry(Entry entry, String body, String mediaType, boolean applyACLtoChildren) throws AuthorizationException {
 
 		Model deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
-		entry.setGraph(deserializedGraph);
+		try {
+			entry.setGraph(deserializedGraph);
+		} catch (SelfReferencingExternalMetadataException e) {
+			throw new BadRequestException(e.getMessage(), e); // The message only contains URIs from the request
+		}
 		if (applyACLtoChildren &&
 				GraphType.List.equals(entry.getGraphType()) &&
 				Local.equals(entry.getEntryType())) {
