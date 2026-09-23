@@ -499,6 +499,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 					softCache.put(newEntry);
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(newEntry, RepositoryEvent.EntryCreated));
 					return newEntry;
+				} catch (IllegalArgumentException e) {
+					// Invalid input, e.g. an external metadata URI that refers to the new entry itself
+					rc.rollback();
+					throw e;
 				} catch (Exception e) {
 					rc.rollback();
 					if (newEntry != null) {

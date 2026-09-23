@@ -28,6 +28,16 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class EntryStoreApplicationSpringBoot {
 
 	static void main(String[] args) {
-		SpringApplication.run(EntryStoreApplicationSpringBoot.class, args);
+		try {
+			SpringApplication.run(EntryStoreApplicationSpringBoot.class, args);
+		} catch (SpringApplication.AbandonedRunException e) {
+			// Thrown on purpose when a hook stops the run early, e.g. during AOT processing
+			throw e;
+		} catch (Throwable t) {
+			// SpringApplication has already logged the failure. Exit explicitly because non-daemon threads
+			// started before the failure (e.g. HTTP client executors) would otherwise keep the JVM running,
+			// and a container would neither serve requests nor be restarted.
+			System.exit(1);
+		}
 	}
 }

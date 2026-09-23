@@ -573,7 +573,11 @@ public class EntryService {
 	public Entry modifyEntry(Entry entry, String body, String mediaType, boolean applyACLtoChildren) throws AuthorizationException {
 
 		Model deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
-		entry.setGraph(deserializedGraph);
+		try {
+			entry.setGraph(deserializedGraph);
+		} catch (IllegalArgumentException iae) {
+			throw new BadRequestException(iae.getMessage(), iae); // Core exception — message is safe to return
+		}
 		if (applyACLtoChildren &&
 				GraphType.List.equals(entry.getGraphType()) &&
 				Local.equals(entry.getEntryType())) {

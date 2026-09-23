@@ -28,6 +28,7 @@ import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryException;
+import org.entrystore.repository.util.URISplit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -43,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -189,6 +191,47 @@ public class EntryImplTest extends AbstractCoreTest {
 	public void refLocalEntry() {
 		Entry ref = context.createReference(null, linkEntry.getResourceURI(), linkEntry.getLocalMetadataURI(), null);
 		assertEquals(ref.getCachedExternalMetadata().getGraph().size(), linkEntry.getLocalMetadata().getGraph().size());
+	}
+
+	@Test
+	public void createLinkReferenceRejectsItsOwnMetadataAsExternalMetadata() {
+		URI ownMetadataURI = URISplit.createURI(rm.getRepositoryURL().toString(), context.getEntry().getId(), RepositoryProperties.MD_PATH, "selfReference");
+
+		assertThrows(IllegalArgumentException.class,
+				() -> context.createLinkReference("selfReference", URI.create("http://vk.se/"), ownMetadataURI, null));
+		assertNull(context.get("selfReference"));
+	}
+
+	@Test
+	public void createReferenceRejectsItsOwnMetadataAsExternalMetadata() {
+		URI ownMetadataURI = URISplit.createURI(rm.getRepositoryURL().toString(), context.getEntry().getId(), RepositoryProperties.MD_PATH, "selfReference");
+
+		assertThrows(IllegalArgumentException.class,
+				() -> context.createReference("selfReference", URI.create("http://vk.se/"), ownMetadataURI, null));
+		assertNull(context.get("selfReference"));
+	}
+
+	@Test
+	public void setExternalMetadataURIRejectsTheEntrysOwnMetadata() {
+		assertThrows(IllegalArgumentException.class, () -> refLinkEntry.setExternalMetadataURI(refLinkEntry.getLocalMetadataURI()));
+
+		assertEquals(URI.create("http://vk.se/md1"), refLinkEntry.getExternalMetadataURI());
+	}
+
+	@Test
+	public void setGraphRejectsOwnMetadataAsExternalMetadataBeforeChangingTheEntry() {
+		ValueFactory vf = rm.getValueFactory();
+		IRI entryIRI = vf.createIRI(refLinkEntry.getEntryURI().toString());
+		Model graph = refLinkEntry.getGraph();
+		graph.remove(entryIRI, RepositoryProperties.resource, null);
+		graph.add(entryIRI, RepositoryProperties.resource, vf.createIRI("http://vk.se/changed"));
+		graph.remove(entryIRI, RepositoryProperties.externalMetadata, null);
+		graph.add(entryIRI, RepositoryProperties.externalMetadata, vf.createIRI(refLinkEntry.getLocalMetadataURI().toString()));
+
+		assertThrows(IllegalArgumentException.class, () -> refLinkEntry.setGraph(graph));
+
+		assertEquals(URI.create("http://vk.se/"), refLinkEntry.getResourceURI());
+		assertEquals(URI.create("http://vk.se/md1"), refLinkEntry.getExternalMetadataURI());
 	}
 
 	@Test

@@ -49,6 +49,7 @@ import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.util.URISplit;
+import org.entrystore.repository.util.URIType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -198,6 +199,10 @@ public class EntryImpl implements Entry {
 		String base = repositoryManager.getRepositoryURL().toString();
 		ValueFactory vf = repository.getValueFactory();
 		this.resURI = resURI;
+
+		if (lType == EntryType.LinkReference || lType == EntryType.Reference) {
+			checkExternalMetadataURI(URI.create(externalMetadataURI.stringValue()));
+		}
 
 		if (lType == EntryType.LinkReference) {
 			this.cachedExternalMdURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
@@ -795,6 +800,7 @@ public class EntryImpl implements Entry {
 		}
 
 		checkAdministerRights();
+		checkExternalMetadataURI(externalMetadataURI);
 
 		ValueFactory vf = getRepositoryManager().getValueFactory();
 		IRI oldExternalMetadataURI = vf.createIRI(getExternalMetadataURI().toString());
@@ -1218,6 +1224,14 @@ public class EntryImpl implements Entry {
 
 		Model oldGraph = getGraph();
 
+		URI newExternalMetadataURI = null;
+		Iterator<Statement> externalMdURIStmnts = metametadata.filter(this.entryURI, RepositoryProperties.externalMetadata, null).iterator();
+		if (externalMdURIStmnts.hasNext() && externalMdURIStmnts.next().getObject() instanceof IRI externalMdIRI) {
+			newExternalMetadataURI = URI.create(externalMdIRI.toString());
+			// Validated before anything is changed, so that a rejected URI leaves the entry unchanged
+			checkExternalMetadataURI(newExternalMetadataURI);
+		}
+
 		Iterator<Statement> resourceURIStmnts = metametadata.filter(this.entryURI, RepositoryProperties.resource, null).iterator();
 		if (resourceURIStmnts.hasNext()) {
 			Value newResourceURI = resourceURIStmnts.next().getObject();
@@ -1226,12 +1240,8 @@ public class EntryImpl implements Entry {
 			}
 		}
 
-		Iterator<Statement> externalMdURIStmnts = metametadata.filter(this.entryURI, RepositoryProperties.externalMetadata, null).iterator();
-		if (externalMdURIStmnts.hasNext()) {
-			Value newResourceURI = externalMdURIStmnts.next().getObject();
-			if (newResourceURI instanceof IRI) {
-				setExternalMetadataURI(URI.create(newResourceURI.toString()));
-			}
+		if (newExternalMetadataURI != null) {
+			setExternalMetadataURI(newExternalMetadataURI);
 		}
 		String originalList = this.getOriginalList();
 
@@ -1475,6 +1485,29 @@ public class EntryImpl implements Entry {
             }
         }
     }
+
+	/**
+	 * Rejects an external metadata URI that belongs to this entry itself, e.g. its own metadata URI: the entry
+	 * would be the source of its own cached external metadata.
+	 *
+	 * @throws IllegalArgumentException if the URI belongs to this entry
+	 */
+	private void checkExternalMetadataURI(URI externalMetadataURI) {
+		URI referencedEntryURI;
+		try {
+			URISplit split = new URISplit(externalMetadataURI, repositoryManager.getRepositoryURL());
+			if (split.getUriType() == URIType.Unknown) {
+				return;
+			}
+			referencedEntryURI = split.getMetaMetadataURI();
+		} catch (IllegalArgumentException e) {
+			// Not a URI of an entry in this repository
+			return;
+		}
+		if (referencedEntryURI.toString().equals(entryURI.stringValue())) {
+			throw new IllegalArgumentException("The external metadata URI " + externalMetadataURI + " must not refer to entry " + entryURI + " itself");
+		}
+	}
 
     private void checkAdministerRights() {
 		PrincipalManager pm = this.getRepositoryManager().getPrincipalManager();
