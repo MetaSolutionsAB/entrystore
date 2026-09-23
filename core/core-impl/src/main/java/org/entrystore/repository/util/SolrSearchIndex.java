@@ -117,6 +117,11 @@ public class SolrSearchIndex implements SearchIndex {
 	 */
 	private static final int MAX_ENTRY_FAILURE_TRACES = 5;
 
+	/**
+	 * Number of attempts to reindex a context whose reindex fails as a whole during a synchronous reindex.
+	 */
+	private static final int MAX_CONTEXT_REINDEX_ATTEMPTS = 2;
+
 	private static final DateTimeFormatter SOLR_DATE_FORMATTER =
 			DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
@@ -614,7 +619,7 @@ public class SolrSearchIndex implements SearchIndex {
 	 * Re-indexes a context and all of its entries in Solr. Starts a new indexing thread and
 	 * ends an eventually existing reindexing thread if there is one for the same scope.
 	 *
-	 * @param contextURI The URI of the context to be re-indexed. Use "null" to reindex the whole repository.
+	 * @param contextURI The URI of the context to be re-indexed.
 	 * @param purgeAllBeforeReindex If true, the index will be emptied before re-indexation
 	 *                                 starts. If false, expired entries will be removed after
 	 *                                 re-indexation is finished.
@@ -651,10 +656,17 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Re-indexes all contexts in the calling thread. A context whose reindex fails is logged, counted and
-	 * skipped so that a single corrupt context does not prevent the remaining contexts from being indexed.
-	 * Besides runtime exceptions this covers {@link StackOverflowError}, which corrupt data can cause through
-	 * unbounded recursion and after which the JVM is usable again; other errors are propagated.
+	 * Re-indexes all contexts in the calling thread, so that a single corrupt context does not prevent the
+	 * remaining contexts from being indexed:
+	 * <ul>
+	 *     <li>A context whose reindex fails as a whole is logged and retried once after all other contexts, since
+	 *     the failure may be transient, e.g. an I/O error of the store. If it fails again, it is counted as failed.
+	 *     Besides runtime exceptions this covers {@link StackOverflowError}, which corrupt data can cause through
+	 *     unbounded recursion and after which the JVM is usable again; other errors are propagated.</li>
+	 *     <li>A context that cannot be resolved and entries that cannot be loaded or indexed are logged and
+	 *     counted.</li>
+	 * </ul>
+	 * An interrupted reindex stops, and the interrupt status of the calling thread is kept.
 	 *
 	 * @return the number of contexts and entries that could not be indexed, and whether the reindex was
 	 * interrupted before all contexts were processed
@@ -666,24 +678,41 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 		int failedContexts = 0;
 		int failedEntries = 0;
-		for (URI contextURI : listContextsAsAdmin()) {
-			ContextPostResult posted;
-			try {
-				posted = reindexContext(contextURI, purgeAllBeforeReindex);
-			} catch (RuntimeException | StackOverflowError e) {
-				log.error("Reindexing of context {} failed, continuing with the remaining contexts", contextURI, e);
-				failedContexts++;
-				continue;
+		Collection<URI> pendingContexts = listContextsAsAdmin();
+		for (int attempt = 1; attempt <= MAX_CONTEXT_REINDEX_ATTEMPTS && !pendingContexts.isEmpty(); attempt++) {
+			List<URI> abortedContexts = new ArrayList<>();
+			for (URI contextURI : pendingContexts) {
+				ContextPostResult posted;
+				try {
+					posted = reindexContext(contextURI, purgeAllBeforeReindex);
+				} catch (RuntimeException | StackOverflowError e) {
+					if (attempt < MAX_CONTEXT_REINDEX_ATTEMPTS) {
+						log.error("Reindexing of context {} failed; it is retried after the remaining contexts",
+								contextURI, e);
+					} else {
+						log.error("Reindexing of context {} failed again, giving up", contextURI, e);
+					}
+					abortedContexts.add(contextURI);
+					continue;
+				}
+				failedEntries += posted.failedEntries() + posted.unresolvedEntries();
+				boolean interrupted = switch (posted.outcome()) {
+					case COMPLETED -> false;
+					case UNRESOLVED -> {
+						failedContexts++;
+						yield false;
+					}
+					case INTERRUPTED -> true;
+				};
+				if (interrupted) {
+					// interrupted() in postContextEntriesToQueue cleared the flag; restore it for the caller
+					Thread.currentThread().interrupt();
+					return new ReindexResult(failedContexts + abortedContexts.size(), failedEntries, true);
+				}
 			}
-			failedEntries += posted.failedEntries() + posted.unresolvedEntries();
-			if (posted.outcome() == ContextPostOutcome.INTERRUPTED) {
-				return new ReindexResult(failedContexts, failedEntries, true);
-			}
-			if (posted.outcome() == ContextPostOutcome.UNRESOLVED) {
-				failedContexts++;
-			}
+			pendingContexts = abortedContexts;
 		}
-		return new ReindexResult(failedContexts, failedEntries, false);
+		return new ReindexResult(failedContexts + pendingContexts.size(), failedEntries, false);
 	}
 
 	private Set<URI> listContextsAsAdmin() {
@@ -727,12 +756,17 @@ public class SolrSearchIndex implements SearchIndex {
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			ContextPostResult posted = postContextEntriesToQueue(contextURI);
-			if (posted.outcome() == ContextPostOutcome.COMPLETED) {
-				if (!purgeAllBeforeReindex) {
-					purgeExpiredDocumentsAfterReindex(contextURI, contextEntry, reindexStart, posted);
-				}
-				log.info("Finished Solr reindexing of context {}, took {} ms; the Solr submission queue may still contain yet to be processed documents", contextURI, new Date().getTime() - reindexStart.getTime());
+			switch (posted.outcome()) {
+				case COMPLETED -> log.info("Finished Solr reindexing of context {}, took {} ms; the Solr submission"
+						+ " queue may still contain yet to be processed documents",
+						contextURI, new Date().getTime() - reindexStart.getTime());
+				case UNRESOLVED -> log.warn("Context {} could not be resolved; its entries were not reindexed and its"
+						+ " documents {}", contextURI,
+						purgeAllBeforeReindex ? "were removed from the index" : "in the index were left unchanged");
+				case INTERRUPTED -> log.info(
+						"Reindexing of context {} was interrupted; expired documents are not purged", contextURI);
 			}
+			purgeExpiredDocumentsAfterReindex(contextURI, contextEntry, reindexStart, purgeAllBeforeReindex, posted);
 			return posted;
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
@@ -740,19 +774,35 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Removes the documents of a context that were indexed before its reindex started, as soon as the entries
-	 * posted by the reindex have left the submission queue. Skipped if entries of the context could not be
-	 * indexed, because their documents would be removed without being replaced.
+	 * Removes the documents of a context that were indexed before its reindex started, as soon as the entry that
+	 * the reindex posted last has left the submission queue. Nothing is purged if
+	 * <ul>
+	 *     <li>the documents of the context were removed before the reindex,</li>
+	 *     <li>the context could not be resolved or its reindex was interrupted,</li>
+	 *     <li>entries of the context could not be loaded or indexed, because their documents would be removed
+	 *     without being replaced,</li>
+	 *     <li>the context has no entry that could be loaded, which saves a Solr request for each empty context, or</li>
+	 *     <li>the context entry could not be loaded, because the delete query would then not be restricted to the
+	 *     context.</li>
+	 * </ul>
 	 */
-	private void purgeExpiredDocumentsAfterReindex(URI contextURI, Entry contextEntry, Date reindexStart, ContextPostResult posted) {
-		if (posted.failedEntries() > 0) {
-			log.warn("Not purging expired documents of context {} because {} of its entries could not be indexed; their previously indexed documents are kept",
-					contextURI, posted.failedEntries());
+	private void purgeExpiredDocumentsAfterReindex(URI contextURI, Entry contextEntry, Date reindexStart,
+			boolean purgedBeforeReindex, ContextPostResult posted) {
+		if (purgedBeforeReindex || posted.outcome() != ContextPostOutcome.COMPLETED) {
+			return;
+		}
+		int notIndexedEntries = posted.failedEntries() + posted.unresolvedEntries();
+		if (notIndexedEntries > 0) {
+			log.warn("Not purging expired documents of context {} because {} of its entries could not be indexed;"
+					+ " their previously indexed documents are kept", contextURI, notIndexedEntries);
+			return;
+		}
+		if (posted.loadedEntries() == 0) {
 			return;
 		}
 		if (contextEntry == null) {
-			// Without the context entry the delete query would not be restricted to this context
-			log.warn("Not purging expired documents of context {} because its context entry could not be loaded", contextURI);
+			log.warn("Not purging expired documents of context {} because its context entry could not be loaded",
+					contextURI);
 			return;
 		}
 		URI lastQueuedEntryURI = posted.lastQueuedEntryURI();
@@ -905,13 +955,18 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Result of posting the entries of a context to the submission queue.
+	 * Result of posting the entries of a context to the submission queue. Failed and unresolved entries both
+	 * count as not indexed, and both prevent the purge of the context's expired documents.
 	 *
+	 * @param outcome            whether all entries of the context were processed
 	 * @param lastQueuedEntryURI the entry that was posted last, or null if none was posted
-	 * @param failedEntries      entries that could not be loaded or indexed because of an error
-	 * @param unresolvedEntries  entries that are listed in the context but could not be loaded
+	 * @param loadedEntries      entries that were loaded, whether they were then posted, skipped as deleted or
+	 *                           could not be indexed
+	 * @param failedEntries      entries whose loading or indexing threw an exception
+	 * @param unresolvedEntries  entries that are listed in the context but were not found when loading them
 	 */
-	private record ContextPostResult(ContextPostOutcome outcome, URI lastQueuedEntryURI, int failedEntries, int unresolvedEntries) {
+	private record ContextPostResult(ContextPostOutcome outcome, URI lastQueuedEntryURI, int loadedEntries,
+			int failedEntries, int unresolvedEntries) {
 	}
 
 	private ContextPostResult postContextEntriesToQueue(URI contextURI) {
@@ -919,54 +974,59 @@ public class SolrSearchIndex implements SearchIndex {
 		ContextManager cm = rm.getContextManager();
 		Context context = cm.getContext(id);
 		if (context == null) {
-			log.warn("Context {} could not be resolved; its entries were not reindexed and its documents in the index were left unchanged", contextURI);
-			return new ContextPostResult(ContextPostOutcome.UNRESOLVED, null, 0, 0);
+			return new ContextPostResult(ContextPostOutcome.UNRESOLVED, null, 0, 0, 0);
 		}
 		URI lastQueuedEntryURI = null;
+		int loadedEntries = 0;
 		int failedEntries = 0;
 		int unresolvedEntries = 0;
 		Set<String> tracedFailureCauses = new HashSet<>();
 		for (URI entryURI : context.getEntries()) {
 			if (interrupted()) {
-				log.info("Indexer thread received interrupt, stopping reindexing of {}; expired documents are not purged", contextURI);
-				return new ContextPostResult(ContextPostOutcome.INTERRUPTED, lastQueuedEntryURI, failedEntries, unresolvedEntries);
+				return new ContextPostResult(ContextPostOutcome.INTERRUPTED, lastQueuedEntryURI, loadedEntries,
+						failedEntries, unresolvedEntries);
 			}
-			if (entryURI != null) {
-				Entry entry;
+			if (entryURI == null) {
+				continue;
+			}
+			Entry entry;
+			boolean deleted;
+			try {
+				entry = cm.getEntry(entryURI);
+				deleted = entry != null && (entry.isDeleted() || entry.getContext().isDeleted());
+			} catch (Exception | StackOverflowError e) {
+				// Corrupt data, e.g. entries whose references form a cycle, can cause unbounded recursion
+				failedEntries++;
+				logEntryFailure("Unable to load entry", entryURI, e, tracedFailureCauses);
+				continue;
+			}
+			if (entry == null) {
+				unresolvedEntries++;
+				log.warn("Unable to load entry with URI {}", entryURI);
+				continue;
+			}
+			loadedEntries++;
+			if (deleted) {
+				log.debug("Not adding deleted entry to post queue: {}", entryURI);
+				continue;
+			}
+			synchronized (postQueue) {
+				log.info("Adding entry to Solr post queue: {}", entryURI);
 				try {
-					entry = cm.getEntry(entryURI);
+					postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+					lastQueuedEntryURI = entryURI;
 				} catch (Exception | StackOverflowError e) {
-					// Corrupt data, e.g. entries whose references form a cycle, can cause unbounded recursion
 					failedEntries++;
-					logEntryFailure("Unable to load entry", entryURI, e, tracedFailureCauses);
-					continue;
-				}
-				if (entry == null) {
-					unresolvedEntries++;
-					log.warn("Unable to load entry with URI {}", entryURI);
-					continue;
-				}
-				synchronized (postQueue) {
-					if (!entry.isDeleted() && !entry.getContext().isDeleted()) {
-						log.info("Adding entry to Solr post queue: {}", entryURI);
-						try {
-							postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
-							lastQueuedEntryURI = entryURI;
-						} catch (Exception | StackOverflowError e) {
-							failedEntries++;
-							logEntryFailure("Not indexing entry", entryURI, e, tracedFailureCauses);
-						}
-					} else {
-						log.debug("Not adding deleted entry to post queue: {}", entryURI);
-					}
+					logEntryFailure("Not indexing entry", entryURI, e, tracedFailureCauses);
 				}
 			}
 		}
 		if (failedEntries > 0 || unresolvedEntries > 0) {
-			log.error("{} entries of context {} could not be indexed: {} failed with an error, {} could not be loaded",
+			log.error("{} entries of context {} could not be indexed: {} failed with an error, {} could not be found",
 					failedEntries + unresolvedEntries, contextURI, failedEntries, unresolvedEntries);
 		}
-		return new ContextPostResult(ContextPostOutcome.COMPLETED, lastQueuedEntryURI, failedEntries, unresolvedEntries);
+		return new ContextPostResult(ContextPostOutcome.COMPLETED, lastQueuedEntryURI, loadedEntries, failedEntries,
+				unresolvedEntries);
 	}
 
 	/**
@@ -975,7 +1035,8 @@ public class SolrSearchIndex implements SearchIndex {
 	 */
 	private void logEntryFailure(String message, URI entryURI, Throwable e, Set<String> tracedFailureCauses) {
 		String rootCause = ExceptionUtils.getRootCauseMessage(e);
-		if (tracedFailureCauses.size() < MAX_ENTRY_FAILURE_TRACES && tracedFailureCauses.add(message + ": " + rootCause)) {
+		if (tracedFailureCauses.size() < MAX_ENTRY_FAILURE_TRACES
+				&& tracedFailureCauses.add(message + ": " + rootCause)) {
 			log.error("{} {}", message, entryURI, e);
 		} else {
 			log.error("{} {}: {}", message, entryURI, rootCause);

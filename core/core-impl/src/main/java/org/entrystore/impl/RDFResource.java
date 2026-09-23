@@ -71,7 +71,8 @@ public class RDFResource extends ResourceImpl {
 					rc.commit();
 				} catch (Exception e) {
 					rc.rollback();
-					throw new org.entrystore.repository.RepositoryException("Unable to set graph resource " + resourceURI + " of entry " + entry.getEntryURI(), e);
+					throw new org.entrystore.repository.RepositoryException(
+							"Unable to set graph resource " + resourceURI + " of entry " + entry.getEntryURI(), e);
 				} finally {
 					rc.close();
 				}

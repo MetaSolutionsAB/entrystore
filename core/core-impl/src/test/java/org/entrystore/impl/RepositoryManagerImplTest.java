@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,40 @@
 
 package org.entrystore.impl;
 
+import org.entrystore.SearchIndex.ReindexResult;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 public class RepositoryManagerImplTest {
+
+	@Test
+	public void reindexIsCompleteWhenQueueDrainsDespiteContextsAndEntriesThatCouldNotBeIndexed() {
+		assertTrue(RepositoryManagerImpl.isReindexComplete(new ReindexResult(2, 5, false), () -> true));
+	}
+
+	@Test
+	public void reindexIsIncompleteWhenQueueDoesNotDrain() {
+		assertFalse(RepositoryManagerImpl.isReindexComplete(new ReindexResult(0, 0, false), () -> false));
+	}
+
+	@Test
+	public void interruptedReindexIsIncompleteWithoutWaitingForTheQueue() {
+		AtomicBoolean waitedForQueue = new AtomicBoolean();
+
+		boolean complete = RepositoryManagerImpl.isReindexComplete(new ReindexResult(0, 0, true), () -> {
+			waitedForQueue.set(true);
+			return true;
+		});
+
+		assertFalse(complete);
+		assertFalse(waitedForQueue.get(),
+				"Waiting for the queue has no timeout and must be skipped after an interruption");
+	}
 
 	@Disabled("To be implemented")
 	@Test

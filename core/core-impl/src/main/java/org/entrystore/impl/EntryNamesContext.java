@@ -150,7 +150,8 @@ public class EntryNamesContext extends ContextImpl {
 					return true;
 				} catch (Exception e) {
 					rc.rollback();
-					throw new org.entrystore.repository.RepositoryException("Unable to set the name " + newName + " for entry " + entryURI, e);
+					throw new org.entrystore.repository.RepositoryException(
+							"Unable to set the name " + newName + " for entry " + entryURI, e);
 				} finally {
 					rc.close();
 				}
@@ -177,7 +178,8 @@ public class EntryNamesContext extends ContextImpl {
 							names2EntryURI.put(name, entryURI);
 							entryURI2Name.put(entryURI, name);
 						} catch (Exception e) {
-							throw new org.entrystore.repository.RepositoryException("Unable to read name statement " + statement + " of context " + this.resourceURI, e);
+							throw new org.entrystore.repository.RepositoryException("Unable to read name statement "
+									+ statement + " of context " + this.resourceURI, e);
 						}
 					}
 				}

@@ -129,7 +129,8 @@ public class MetadataImpl implements Metadata {
 					throw ae;
 				} catch (Exception e) {
 					rc.rollback();
-					throw new org.entrystore.repository.RepositoryException("Unable to set metadata graph " + uri + " of entry " + entry.getEntryURI(), e);
+					throw new org.entrystore.repository.RepositoryException(
+							"Unable to set metadata graph " + uri + " of entry " + entry.getEntryURI(), e);
 				} finally {
 					rc.close();
 				}

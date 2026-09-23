@@ -171,7 +171,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 					rc.commit();
 				} catch (Exception e) {
 					rc.rollback();
-					throw new org.entrystore.repository.RepositoryException("Unable to rebuild the entry index of context " + this.resourceURI, e);
+					throw new org.entrystore.repository.RepositoryException(
+							"Unable to rebuild the entry index of context " + this.resourceURI, e);
 				} finally {
 					rc.close();
 				}
@@ -861,7 +862,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 					log.error(e1.getMessage());
 					throw new org.entrystore.repository.RepositoryException("Error when rolling back transaction", e);
 				}
-				log.error(e.getMessage(), e);
 				throw new org.entrystore.repository.RepositoryException("Unable to remove entry " + entryURI, e);
 			} finally {
 				try {

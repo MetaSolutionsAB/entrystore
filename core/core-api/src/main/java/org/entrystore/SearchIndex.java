@@ -56,13 +56,20 @@ public interface SearchIndex {
 	public boolean isUp();
 
 	/**
-	 * Outcome of a synchronous reindex of all contexts.
+	 * Outcome of a synchronous reindex of all contexts. After an interruption, the counts only cover the
+	 * contexts that were processed until then.
 	 *
-	 * @param failedContexts contexts that failed as a whole or could not be resolved
+	 * @param failedContexts contexts that could not be resolved or whose reindex failed as a whole
 	 * @param failedEntries  entries of the processed contexts that could not be loaded or indexed
 	 * @param interrupted    true if the reindex stopped before all contexts were processed
 	 */
 	record ReindexResult(int failedContexts, int failedEntries, boolean interrupted) {
+
+		public ReindexResult {
+			if (failedContexts < 0 || failedEntries < 0) {
+				throw new IllegalArgumentException("Counts must not be negative");
+			}
+		}
 
 		public boolean hasFailures() {
 			return failedContexts > 0 || failedEntries > 0;
