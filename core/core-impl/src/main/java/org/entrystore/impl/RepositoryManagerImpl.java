@@ -664,14 +664,21 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					if (!solrIndex.clearSolrIndex(solrServer)) {
 						log.error("Initial Solr full-wipe failed; skipping reindex to avoid serving a dirty index. Next restart will retry.");
 					} else {
-						boolean allContextsReindexed = solrIndex.reindexSync(false);
+						// The version markers record that a full reindex ran to completion, not that every entry
+						// is in the index: contexts and entries that fail because of their data would fail again
+						// on the next restart, so only an interrupted run or an undrained queue withholds them.
+						SearchIndex.ReindexResult result = solrIndex.reindexSync(false);
 						boolean queueDrained = solrIndex.waitForQueueDrain();
-						if (!allContextsReindexed) {
-							log.error("Solr reindex failed for one or more contexts (logged above); skipping version-marker write so the next restart re-triggers reindex.");
+						if (result.interrupted()) {
+							log.warn("Solr reindex was interrupted; skipping version-marker write so the next restart re-triggers reindex.");
 						} else if (!queueDrained) {
 							log.warn("Solr submission queue did not drain; skipping version-marker write so the next restart re-triggers reindex.");
 						}
-						reindexSucceeded = allContextsReindexed && queueDrained;
+						reindexSucceeded = !result.interrupted() && queueDrained;
+						if (result.hasFailures()) {
+							log.error("Solr reindex could not index {} context(s) and {} entries (logged above). They are missing from the search index{}; repair the affected data and trigger a reindex.",
+									result.failedContexts(), result.failedEntries(), reindexSucceeded ? " and a restart does not retry them" : "");
+						}
 					}
 				} else {
 					log.info("Async reindex started; Solr version markers will not be persisted on this run because '{}=false' means reindex runs on every boot.",

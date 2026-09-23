@@ -24,6 +24,7 @@ import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
+import org.entrystore.SearchIndex.ReindexResult;
 import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
@@ -45,6 +46,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
@@ -53,6 +55,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -60,8 +63,12 @@ public class SolrSearchIndexTest {
 
 	private static final URI CONTEXT_1 = URI.create("http://localhost:8181/_contexts/entry/1");
 	private static final URI CONTEXT_2 = URI.create("http://localhost:8181/_contexts/entry/2");
+	private static final URI ENTRY_1_1 = URI.create("http://localhost:8181/1/entry/1");
+	private static final URI ENTRY_1_2 = URI.create("http://localhost:8181/1/entry/2");
+	private static final URI ENTRY_2_1 = URI.create("http://localhost:8181/2/entry/1");
 
 	private RepositoryManager rm;
+	private SolrClient solrServer;
 	private SolrSearchIndex index;
 	private Map<URI, Future> reindexingMap;
 
@@ -72,7 +79,7 @@ public class SolrSearchIndexTest {
 		Config config = new PropertiesConfiguration("EntryStore Test Configuration");
 		when(rm.getConfiguration()).thenReturn(config);
 		when(rm.getValueFactory()).thenReturn(SimpleValueFactory.getInstance());
-		SolrClient solrServer = mock(SolrClient.class);
+		solrServer = mock(SolrClient.class);
 
 		index = new SolrSearchIndex(rm, solrServer);
 
@@ -125,10 +132,11 @@ public class SolrSearchIndexTest {
 	public void reindexSyncContinuesWithRemainingContextsWhenOneContextFails() {
 		ContextManager cm = contextManagerListing(CONTEXT_1, CONTEXT_2);
 		when(cm.getByEntryURI(CONTEXT_1)).thenThrow(new org.entrystore.repository.RepositoryException("Unable to load entry " + CONTEXT_1));
+		resolvableContext(cm, "2", deletedEntry(cm, ENTRY_2_1));
 
-		boolean allContextsReindexed = index.reindexSync(false);
+		ReindexResult result = index.reindexSync(false);
 
-		assertFalse(allContextsReindexed, "A failed context must be reported so the version markers are not persisted");
+		assertEquals(new ReindexResult(1, 0, false), result);
 		verify(cm).getByEntryURI(CONTEXT_2);
 	}
 
@@ -136,38 +144,103 @@ public class SolrSearchIndexTest {
 	public void reindexSyncContinuesWithRemainingContextsWhenOneContextOverflowsTheStack() {
 		ContextManager cm = contextManagerListing(CONTEXT_1, CONTEXT_2);
 		when(cm.getByEntryURI(CONTEXT_1)).thenThrow(new StackOverflowError());
+		resolvableContext(cm, "2", deletedEntry(cm, ENTRY_2_1));
 
-		boolean allContextsReindexed = index.reindexSync(false);
+		ReindexResult result = index.reindexSync(false);
 
-		assertFalse(allContextsReindexed, "A context that overflowed the stack must be reported as failed");
+		assertEquals(new ReindexResult(1, 0, false), result);
 		verify(cm).getByEntryURI(CONTEXT_2);
 	}
 
 	@Test
 	public void reindexSyncContinuesWithRemainingEntriesWhenLoadingOneEntryOverflowsTheStack() {
-		URI recursiveEntry = URI.create("http://localhost:8181/1/entry/1");
-		URI nextEntry = URI.create("http://localhost:8181/1/entry/2");
 		ContextManager cm = contextManagerListing(CONTEXT_1);
-		Context context = mock(Context.class);
-		when(context.getEntries()).thenReturn(new LinkedHashSet<>(List.of(recursiveEntry, nextEntry)));
-		when(cm.getContext("1")).thenReturn(context);
-		when(cm.getEntry(recursiveEntry)).thenThrow(new StackOverflowError());
+		resolvableContext(cm, "1", ENTRY_1_1, deletedEntry(cm, ENTRY_1_2));
+		when(cm.getEntry(ENTRY_1_1)).thenThrow(new StackOverflowError());
 
-		boolean allContextsReindexed = index.reindexSync(false);
+		ReindexResult result = index.reindexSync(false);
 
-		assertTrue(allContextsReindexed, "A single failing entry must not fail the reindex of its context");
-		verify(cm).getEntry(nextEntry);
+		assertEquals(new ReindexResult(0, 1, false), result);
+		verify(cm).getEntry(ENTRY_1_2);
 	}
 
 	@Test
-	public void reindexSyncReportsSuccessWhenNoContextFails() {
+	public void reindexSyncCountsEntriesThatCannotBeLoaded() {
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", ENTRY_1_1, deletedEntry(cm, ENTRY_1_2));
+		// cm.getEntry(ENTRY_1_1) is not stubbed and returns null, as for an entry whose graph is missing
+
+		ReindexResult result = index.reindexSync(false);
+
+		assertEquals(new ReindexResult(0, 1, false), result);
+	}
+
+	@Test
+	public void reindexSyncCountsContextsThatCannotBeResolvedAsFailed() {
 		ContextManager cm = contextManagerListing(CONTEXT_1, CONTEXT_2);
+		// cm.getContext(...) is not stubbed and returns null for both contexts
 
-		boolean allContextsReindexed = index.reindexSync(false);
+		ReindexResult result = index.reindexSync(false);
 
-		assertTrue(allContextsReindexed);
-		verify(cm).getByEntryURI(CONTEXT_1);
-		verify(cm).getByEntryURI(CONTEXT_2);
+		assertEquals(new ReindexResult(2, 0, false), result);
+	}
+
+	@Test
+	public void reindexSyncReportsNoFailuresWhenAllContextsAreIndexed() {
+		ContextManager cm = contextManagerListing(CONTEXT_1, CONTEXT_2);
+		resolvableContext(cm, "1", deletedEntry(cm, ENTRY_1_1));
+		resolvableContext(cm, "2", deletedEntry(cm, ENTRY_2_1));
+
+		ReindexResult result = index.reindexSync(false);
+
+		assertEquals(new ReindexResult(0, 0, false), result);
+		assertFalse(result.hasFailures());
+	}
+
+	@Test
+	public void reindexSyncStopsAndReportsInterruptionWhenThreadIsInterrupted() {
+		ContextManager cm = contextManagerListing(CONTEXT_1, CONTEXT_2);
+		resolvableContext(cm, "1", deletedEntry(cm, ENTRY_1_1));
+
+		ReindexResult result;
+		try {
+			Thread.currentThread().interrupt();
+			result = index.reindexSync(false);
+		} finally {
+			Thread.interrupted();
+		}
+
+		assertTrue(result.interrupted());
+		verify(cm, never()).getByEntryURI(CONTEXT_2);
+	}
+
+	@Test
+	public void reindexOfContextPurgesExpiredDocumentsWhenAllEntriesWereProcessed() throws Exception {
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", deletedEntry(cm, ENTRY_1_1));
+		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+
+		index.reindexSync(CONTEXT_1, false);
+		index.shutdown(); // waits for the delayed purge
+
+		ArgumentCaptor<UpdateRequest> captor = ArgumentCaptor.forClass(UpdateRequest.class);
+		verify(solrServer).request(captor.capture(), any());
+		String deleteQuery = captor.getValue().getDeleteQuery().getFirst();
+		assertTrue(deleteQuery.startsWith("indexedAt:[* TO "), deleteQuery);
+		assertTrue(deleteQuery.endsWith(" AND context:http\\:\\/\\/localhost\\:8181\\/1"), deleteQuery);
+	}
+
+	@Test
+	public void reindexOfContextKeepsIndexedDocumentsWhenAnEntryFailed() throws Exception {
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", ENTRY_1_1, deletedEntry(cm, ENTRY_1_2));
+		when(cm.getEntry(ENTRY_1_1)).thenThrow(new org.entrystore.repository.RepositoryException("Unable to load entry " + ENTRY_1_1));
+		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+
+		index.reindexSync(CONTEXT_1, false);
+		index.shutdown(); // waits for a delayed purge, if one was scheduled
+
+		verify(solrServer, never()).request(any(), any());
 	}
 
 	@Test
@@ -178,6 +251,7 @@ public class SolrSearchIndexTest {
 		index.reindex(CONTEXT_1, false);
 		reindexingFutureOrCompleted(CONTEXT_1).get(10, TimeUnit.SECONDS);
 
+		verify(cm).getByEntryURI(CONTEXT_1);
 		assertFalse(index.isIndexing(CONTEXT_1), "A failed reindex must not leave the context marked as indexing");
 	}
 
@@ -189,7 +263,36 @@ public class SolrSearchIndexTest {
 		index.reindex(CONTEXT_1, false);
 		reindexingFutureOrCompleted(CONTEXT_1).get(10, TimeUnit.SECONDS);
 
+		verify(cm).getByEntryURI(CONTEXT_1);
 		assertFalse(index.isIndexing(CONTEXT_1), "An Error must not leave the context marked as indexing");
+	}
+
+	@Test
+	public void cancelledAsyncReindexKeepsIndexingStateOfItsReplacement() throws Exception {
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		CountDownLatch firstStarted = new CountDownLatch(1);
+		CountDownLatch replacementStarted = new CountDownLatch(1);
+		CountDownLatch releaseReplacement = new CountDownLatch(1);
+		when(cm.getByEntryURI(CONTEXT_1))
+				.thenAnswer(invocation -> {
+					firstStarted.countDown();
+					awaitOrThrow(new CountDownLatch(1)); // blocks until cancelled
+					return null;
+				})
+				.thenAnswer(invocation -> {
+					replacementStarted.countDown();
+					awaitOrThrow(releaseReplacement);
+					return null;
+				});
+
+		index.reindex(CONTEXT_1, false);
+		assertTrue(firstStarted.await(10, TimeUnit.SECONDS));
+		index.reindex(CONTEXT_1, false); // cancels the first task and queues its replacement
+		// The single reindex thread starts the replacement only after the cancelled task has unwound
+		assertTrue(replacementStarted.await(10, TimeUnit.SECONDS));
+
+		assertTrue(index.isIndexing(CONTEXT_1), "The cancelled task must not remove the mapping of its running replacement");
+		releaseReplacement.countDown();
 	}
 
 	/**
@@ -201,8 +304,21 @@ public class SolrSearchIndexTest {
 	}
 
 	/**
-	 * Stubs a context manager listing the given contexts, none of which resolves to a context, so that
-	 * reindexing each of them completes without posting documents.
+	 * Waits for the latch; an interrupt (from cancelling the reindex task) ends the wait with an exception.
+	 */
+	private static void awaitOrThrow(CountDownLatch latch) {
+		try {
+			if (!latch.await(10, TimeUnit.SECONDS)) {
+				throw new IllegalStateException("Latch was not released");
+			}
+		} catch (InterruptedException e) {
+			throw new IllegalStateException("Interrupted", e);
+		}
+	}
+
+	/**
+	 * Stubs a context manager listing the given contexts. Unless stubbed further, none of them resolves to a
+	 * context, so that reindexing each of them completes without posting documents.
 	 */
 	private ContextManager contextManagerListing(URI... contextURIs) {
 		PrincipalManager pm = mock(PrincipalManager.class);
@@ -215,6 +331,32 @@ public class SolrSearchIndexTest {
 		when(cm.getEntries()).thenReturn(new LinkedHashSet<>(List.of(contextURIs)));
 		when(rm.getContextManager()).thenReturn(cm);
 		return cm;
+	}
+
+	/**
+	 * Stubs a context with the given ID that lists the given entries.
+	 */
+	private static void resolvableContext(ContextManager cm, String contextId, URI... entryURIs) {
+		Context context = mock(Context.class);
+		when(context.getEntries()).thenReturn(new LinkedHashSet<>(List.of(entryURIs)));
+		when(cm.getContext(contextId)).thenReturn(context);
+	}
+
+	/**
+	 * Stubs an entry that loads but is not posted because it is deleted, which keeps Solr documents out of
+	 * the tests that only exercise the reindex bookkeeping.
+	 */
+	private static URI deletedEntry(ContextManager cm, URI entryURI) {
+		Entry entry = mock(Entry.class);
+		when(entry.isDeleted()).thenReturn(true);
+		when(cm.getEntry(entryURI)).thenReturn(entry);
+		return entryURI;
+	}
+
+	private static void stubContextEntry(ContextManager cm, URI contextURI, String contextResourceURI) {
+		Entry contextEntry = mock(Entry.class);
+		when(contextEntry.getResourceURI()).thenReturn(URI.create(contextResourceURI));
+		when(cm.getByEntryURI(contextURI)).thenReturn(contextEntry);
 	}
 
 	@Disabled("To be implemented")

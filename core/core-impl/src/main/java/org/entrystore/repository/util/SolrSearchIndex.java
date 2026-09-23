@@ -86,6 +86,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static java.lang.Thread.interrupted;
 
@@ -110,8 +111,9 @@ public class SolrSearchIndex implements SearchIndex {
 	private static final long MAX_PURGE_WAIT_NANOS = TimeUnit.MINUTES.toNanos(5);
 
 	/**
-	 * Number of entry failures per context reindex that are logged with a stack trace. Entries of one
-	 * context tend to fail for a shared cause, and one trace per entry would flood the log.
+	 * Number of distinct entry failure causes per context reindex that are logged with a stack trace. Entries
+	 * of one context tend to fail for a shared cause, and one trace per entry would flood the log; later
+	 * failures with an already traced cause, and all failures beyond this limit, are logged as one line.
 	 */
 	private static final int MAX_ENTRY_FAILURE_TRACES = 5;
 
@@ -594,11 +596,12 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Re-indexes a context and all of its entries in Solr. Starts a new indexing thread and
-	 * ends an eventually existing reindexing thread if there is one for the same scope.
+	 * Re-indexes all contexts and their entries in Solr by submitting one background reindex per context,
+	 * see {@link #reindex(URI, boolean)}. Failures are logged by the background tasks and not reported to
+	 * the caller.
 	 *
-	 * @param purgeAllBeforeReindex If true, the index will be emptied before re-indexation
-	 *                                 starts. If false, expired entries will be removed after
+	 * @param purgeAllBeforeReindex If true, the documents of each context are removed from the index before
+	 *                                 it is re-indexed. If false, expired documents are removed after
 	 *                                 re-indexation is finished.
 	 */
 	public void reindex(boolean purgeAllBeforeReindex) {
@@ -626,41 +629,59 @@ public class SolrSearchIndex implements SearchIndex {
 				}
 				reindexing.remove(contextURI);
 			}
-			Future indexer = reindexExecutor.submit(() -> {
+			AtomicReference<Future<?>> self = new AtomicReference<>();
+			Future<?> indexer = reindexExecutor.submit(() -> {
 				try {
-					reindexSync(contextURI, false);
+					reindexSync(contextURI, purgeAllBeforeReindex);
 				} catch (RuntimeException | Error e) {
 					// The Future is never inspected, so without this the failure would vanish without a trace.
 					log.error("Reindexing of context {} failed", contextURI, e);
 				} finally {
-					reindexing.remove(contextURI);
+					// Remove only this task's mapping: a cancelled task that is still unwinding must not remove
+					// the mapping of its replacement. The remove call waits for the map's monitor, which the
+					// submitter holds until self is set and the mapping is in place.
+					reindexing.remove(contextURI, self.get());
 				}
 			});
+			self.set(indexer);
 			reindexing.put(contextURI, indexer);
 		}
 	}
 
 	/**
-	 * Re-indexes all contexts in the calling thread. A context whose reindex fails is logged and skipped so
-	 * that a single corrupt context does not prevent the remaining contexts from being indexed. Besides
-	 * runtime exceptions this covers {@link StackOverflowError}, which corrupt data can cause through
+	 * Re-indexes all contexts in the calling thread. A context whose reindex fails is logged, counted and
+	 * skipped so that a single corrupt context does not prevent the remaining contexts from being indexed.
+	 * Besides runtime exceptions this covers {@link StackOverflowError}, which corrupt data can cause through
 	 * unbounded recursion and after which the JVM is usable again; other errors are propagated.
 	 *
-	 * @return false if the reindex of at least one context failed as a whole. Entries that could not be
-	 * indexed and contexts that could not be resolved are logged but do not affect the result: callers
-	 * use it to decide whether to repeat the full reindex, which would not repair either.
+	 * @return the number of contexts and entries that could not be indexed, and whether the reindex was
+	 * interrupted before all contexts were processed
 	 */
-	public boolean reindexSync(boolean purgeAllBeforeReindex) {
-		boolean allContextsReindexed = true;
+	public ReindexResult reindexSync(boolean purgeAllBeforeReindex) {
+		if (solrServer == null) {
+			log.warn("Ignoring request as Solr is not used by this instance");
+			return new ReindexResult(0, 0, false);
+		}
+		int failedContexts = 0;
+		int failedEntries = 0;
 		for (URI contextURI : listContextsAsAdmin()) {
+			ContextPostResult posted;
 			try {
-				reindexSync(contextURI, purgeAllBeforeReindex);
+				posted = reindexContext(contextURI, purgeAllBeforeReindex);
 			} catch (RuntimeException | StackOverflowError e) {
 				log.error("Reindexing of context {} failed, continuing with the remaining contexts", contextURI, e);
-				allContextsReindexed = false;
+				failedContexts++;
+				continue;
+			}
+			failedEntries += posted.failedEntries() + posted.unresolvedEntries();
+			if (posted.outcome() == ContextPostOutcome.INTERRUPTED) {
+				return new ReindexResult(failedContexts, failedEntries, true);
+			}
+			if (posted.outcome() == ContextPostOutcome.UNRESOLVED) {
+				failedContexts++;
 			}
 		}
-		return allContextsReindexed;
+		return new ReindexResult(failedContexts, failedEntries, false);
 	}
 
 	private Set<URI> listContextsAsAdmin() {
@@ -679,6 +700,10 @@ public class SolrSearchIndex implements SearchIndex {
 			log.warn("Ignoring request as Solr is not used by this instance");
 			return;
 		}
+		reindexContext(contextURI, purgeAllBeforeReindex);
+	}
+
+	private ContextPostResult reindexContext(URI contextURI, boolean purgeAllBeforeReindex) {
 		if (contextURI == null) {
 			throw new IllegalArgumentException("Context URI must not be null");
 		}
@@ -699,59 +724,82 @@ public class SolrSearchIndex implements SearchIndex {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			URI lastIndexedEntryURI = postContextEntriesToQueue(contextURI);
-			if (lastIndexedEntryURI != null) {
+			ContextPostResult posted = postContextEntriesToQueue(contextURI);
+			if (posted.outcome() == ContextPostOutcome.COMPLETED) {
 				if (!purgeAllBeforeReindex) {
-					purgeExecutor.submit(() -> {
-						long deadline = System.nanoTime() + MAX_PURGE_WAIT_NANOS;
-						try {
-							// We need to wait until the last entry of the context is indexed, otherwise this would leave a gap of some time
-							// (between milliseconds to seconds or even minutes) where the entries of that particular context are not in the index
-							while (postQueue.asMap().containsKey(lastIndexedEntryURI)
-									&& System.nanoTime() < deadline
-									&& !Thread.currentThread().isInterrupted()) {
-								log.debug("Entries of context {} are still in submission queue, sleeping 5 seconds before attempting new purge of expired entries", contextURI);
-								Thread.sleep(5000);
-								postQueue.cleanUp();
-							}
-							if (Thread.currentThread().isInterrupted()) {
-								log.warn("Delayed purge of context {} interrupted (shutdown); expired entries were NOT removed",
-										contextURI);
-								return;
-							}
-							if (postQueue.asMap().containsKey(lastIndexedEntryURI)) {
-								log.warn("Delayed purge of context {} aborted after {} min wait; submission queue still contains {}",
-										contextURI, TimeUnit.NANOSECONDS.toMinutes(MAX_PURGE_WAIT_NANOS), lastIndexedEntryURI);
-								return;
-							}
-							if (clearSolrIndex(solrServer, reindexStart, contextEntry)) {
-								log.info("Expired entries of context {} have been purged from the index", contextURI);
-							} else {
-								log.warn("Delayed purge of context {} did not clear expired entries; rerun reindex with purgeAllBeforeReindex=true if needed",
-										contextURI);
-							}
-						} catch (InterruptedException e) {
-							log.warn("Delayed purge of context {} interrupted before clearSolrIndex completed; expired entries were NOT removed",
-									contextURI, e);
-							Thread.currentThread().interrupt();
-						} catch (RuntimeException e) {
-							log.error("Unexpected {} during delayed purge of context {}; expired entries were NOT removed",
-									e.getClass().getSimpleName(), contextURI, e);
-						} catch (Error e) {
-							// Not re-thrown: with submit() the Error is captured by FutureTask.run() and the
-							// discarded Future means rethrow has no observable effect. Logging is the only signal.
-							log.error("Fatal {} during delayed purge of context {}; expired entries were NOT removed",
-									e.getClass().getSimpleName(), contextURI, e);
-						}
-					});
+					purgeExpiredDocumentsAfterReindex(contextURI, contextEntry, reindexStart, posted);
 				}
 				log.info("Finished Solr reindexing of context {}, took {} ms; the Solr submission queue may still contain yet to be processed documents", contextURI, new Date().getTime() - reindexStart.getTime());
-			} else {
-				log.debug("Solr reindexing of context {} posted no entries: the context is empty, could not be resolved, or the reindexing was interrupted", contextURI);
 			}
+			return posted;
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
+	}
+
+	/**
+	 * Removes the documents of a context that were indexed before its reindex started, as soon as the entries
+	 * posted by the reindex have left the submission queue. Skipped if entries of the context could not be
+	 * indexed, because their documents would be removed without being replaced.
+	 */
+	private void purgeExpiredDocumentsAfterReindex(URI contextURI, Entry contextEntry, Date reindexStart, ContextPostResult posted) {
+		if (posted.failedEntries() > 0) {
+			log.warn("Not purging expired documents of context {} because {} of its entries could not be indexed; their previously indexed documents are kept",
+					contextURI, posted.failedEntries());
+			return;
+		}
+		if (contextEntry == null) {
+			// Without the context entry the delete query would not be restricted to this context
+			log.warn("Not purging expired documents of context {} because its context entry could not be loaded", contextURI);
+			return;
+		}
+		URI lastQueuedEntryURI = posted.lastQueuedEntryURI();
+		purgeExecutor.submit(() -> {
+			long deadline = System.nanoTime() + MAX_PURGE_WAIT_NANOS;
+			try {
+				// We need to wait until the last entry of the context is indexed, otherwise this would leave a gap of some time
+				// (between milliseconds to seconds or even minutes) where the entries of that particular context are not in the index
+				while (isQueued(lastQueuedEntryURI)
+						&& System.nanoTime() < deadline
+						&& !Thread.currentThread().isInterrupted()) {
+					log.debug("Entries of context {} are still in submission queue, sleeping 5 seconds before attempting new purge of expired entries", contextURI);
+					Thread.sleep(5000);
+					postQueue.cleanUp();
+				}
+				if (Thread.currentThread().isInterrupted()) {
+					log.warn("Delayed purge of context {} interrupted (shutdown); expired entries were NOT removed",
+							contextURI);
+					return;
+				}
+				if (isQueued(lastQueuedEntryURI)) {
+					log.warn("Delayed purge of context {} aborted after {} min wait; submission queue still contains {}",
+							contextURI, TimeUnit.NANOSECONDS.toMinutes(MAX_PURGE_WAIT_NANOS), lastQueuedEntryURI);
+					return;
+				}
+				if (clearSolrIndex(solrServer, reindexStart, contextEntry)) {
+					log.info("Expired entries of context {} have been purged from the index", contextURI);
+				} else {
+					log.warn("Delayed purge of context {} did not clear expired entries; rerun reindex with purgeAllBeforeReindex=true if needed",
+							contextURI);
+				}
+			} catch (InterruptedException e) {
+				log.warn("Delayed purge of context {} interrupted before clearSolrIndex completed; expired entries were NOT removed",
+						contextURI, e);
+				Thread.currentThread().interrupt();
+			} catch (RuntimeException e) {
+				log.error("Unexpected {} during delayed purge of context {}; expired entries were NOT removed",
+						e.getClass().getSimpleName(), contextURI, e);
+			} catch (Error e) {
+				// Not re-thrown: with submit() the Error is captured by FutureTask.run() and the
+				// discarded Future means rethrow has no observable effect. Logging is the only signal.
+				log.error("Fatal {} during delayed purge of context {}; expired entries were NOT removed",
+						e.getClass().getSimpleName(), contextURI, e);
+			}
+		});
+	}
+
+	private boolean isQueued(URI entryURI) {
+		return entryURI != null && postQueue.asMap().containsKey(entryURI);
 	}
 
 	public boolean isIndexing() {
@@ -845,60 +893,90 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	private URI postContextEntriesToQueue(URI contextURI) {
+	private enum ContextPostOutcome {
+		/** All entries of the context were processed; some of them may have failed. */
+		COMPLETED,
+		/** The context could not be resolved, so none of its entries were processed. */
+		UNRESOLVED,
+		/** The reindex was interrupted before all entries of the context were processed. */
+		INTERRUPTED
+	}
+
+	/**
+	 * Result of posting the entries of a context to the submission queue.
+	 *
+	 * @param lastQueuedEntryURI the entry that was posted last, or null if none was posted
+	 * @param failedEntries      entries that could not be loaded or indexed because of an error
+	 * @param unresolvedEntries  entries that are listed in the context but could not be loaded
+	 */
+	private record ContextPostResult(ContextPostOutcome outcome, URI lastQueuedEntryURI, int failedEntries, int unresolvedEntries) {
+	}
+
+	private ContextPostResult postContextEntriesToQueue(URI contextURI) {
 		String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
 		ContextManager cm = rm.getContextManager();
 		Context context = cm.getContext(id);
-		if (context != null) {
-			URI lastEntryURI = null;
-			int failedEntries = 0;
-			for (URI entryURI : context.getEntries()) {
-				if (interrupted()) {
-					log.info("Indexer thread received interrupt, stopping reindexing of " + contextURI);
-					return null;
-				}
-				if (entryURI != null) {
-					Entry entry;
-					try {
-						entry = cm.getEntry(entryURI);
-					} catch (Exception | StackOverflowError e) {
-						// Corrupt data, e.g. entries whose references form a cycle, can cause unbounded recursion
-						logEntryFailure("Unable to load entry", entryURI, e, ++failedEntries);
-						continue;
-					}
-					if (entry == null) {
-						log.warn("Unable to load entry with URI {}", entryURI);
-						continue;
-					}
-					synchronized (postQueue) {
-						if (!entry.isDeleted() && !entry.getContext().isDeleted()) {
-							log.info("Adding entry to Solr post queue: {}", entryURI);
-							try {
-								postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
-							} catch (Exception | StackOverflowError e) {
-								logEntryFailure("Not indexing entry", entryURI, e, ++failedEntries);
-							}
-						} else {
-							log.debug("Not adding deleted entry to post queue: {}", entryURI);
-						}
-					}
-					lastEntryURI = entryURI;
-				}
-			}
-			if (failedEntries > 0) {
-				log.error("{} entries of context {} could not be indexed", failedEntries, contextURI);
-			}
-			return lastEntryURI;
+		if (context == null) {
+			log.warn("Context {} could not be resolved; its entries were not reindexed and its documents in the index were left unchanged", contextURI);
+			return new ContextPostResult(ContextPostOutcome.UNRESOLVED, null, 0, 0);
 		}
-		log.warn("Context {} could not be resolved; its entries were not reindexed", contextURI);
-		return null;
+		URI lastQueuedEntryURI = null;
+		int failedEntries = 0;
+		int unresolvedEntries = 0;
+		Set<String> tracedFailureCauses = new HashSet<>();
+		for (URI entryURI : context.getEntries()) {
+			if (interrupted()) {
+				log.info("Indexer thread received interrupt, stopping reindexing of {}; expired documents are not purged", contextURI);
+				return new ContextPostResult(ContextPostOutcome.INTERRUPTED, lastQueuedEntryURI, failedEntries, unresolvedEntries);
+			}
+			if (entryURI != null) {
+				Entry entry;
+				try {
+					entry = cm.getEntry(entryURI);
+				} catch (Exception | StackOverflowError e) {
+					// Corrupt data, e.g. entries whose references form a cycle, can cause unbounded recursion
+					failedEntries++;
+					logEntryFailure("Unable to load entry", entryURI, e, tracedFailureCauses);
+					continue;
+				}
+				if (entry == null) {
+					unresolvedEntries++;
+					log.warn("Unable to load entry with URI {}", entryURI);
+					continue;
+				}
+				synchronized (postQueue) {
+					if (!entry.isDeleted() && !entry.getContext().isDeleted()) {
+						log.info("Adding entry to Solr post queue: {}", entryURI);
+						try {
+							postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+							lastQueuedEntryURI = entryURI;
+						} catch (Exception | StackOverflowError e) {
+							failedEntries++;
+							logEntryFailure("Not indexing entry", entryURI, e, tracedFailureCauses);
+						}
+					} else {
+						log.debug("Not adding deleted entry to post queue: {}", entryURI);
+					}
+				}
+			}
+		}
+		if (failedEntries > 0 || unresolvedEntries > 0) {
+			log.error("{} entries of context {} could not be indexed: {} failed with an error, {} could not be loaded",
+					failedEntries + unresolvedEntries, contextURI, failedEntries, unresolvedEntries);
+		}
+		return new ContextPostResult(ContextPostOutcome.COMPLETED, lastQueuedEntryURI, failedEntries, unresolvedEntries);
 	}
 
-	private void logEntryFailure(String message, URI entryURI, Throwable e, int failureCount) {
-		if (failureCount <= MAX_ENTRY_FAILURE_TRACES) {
+	/**
+	 * Logs an entry failure with its stack trace if it is the first failure of this kind (message and root
+	 * cause) in the current context reindex and the trace budget is not exhausted, otherwise as one line.
+	 */
+	private void logEntryFailure(String message, URI entryURI, Throwable e, Set<String> tracedFailureCauses) {
+		String rootCause = ExceptionUtils.getRootCauseMessage(e);
+		if (tracedFailureCauses.size() < MAX_ENTRY_FAILURE_TRACES && tracedFailureCauses.add(message + ": " + rootCause)) {
 			log.error("{} {}", message, entryURI, e);
 		} else {
-			log.error("{} {}: {}", message, entryURI, ExceptionUtils.getRootCauseMessage(e));
+			log.error("{} {}: {}", message, entryURI, rootCause);
 		}
 	}
 

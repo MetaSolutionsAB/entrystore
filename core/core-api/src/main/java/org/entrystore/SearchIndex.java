@@ -32,11 +32,12 @@ public interface SearchIndex {
 	public void reindex(boolean purgeAllBeforeReindex);
 
 	/**
-	 * Re-indexes all contexts in the calling thread; a context that fails is skipped.
+	 * Re-indexes all contexts in the calling thread. Contexts and entries that cannot be indexed are logged
+	 * and skipped.
 	 *
-	 * @return false if the reindex of at least one context failed
+	 * @return the outcome of the reindex; documents may still be waiting in the submission queue
 	 */
-	public boolean reindexSync(boolean purgeAllBeforeReindex);
+	public ReindexResult reindexSync(boolean purgeAllBeforeReindex);
 
 	public void reindex(URI contextURI, boolean purgeAllBeforeReindex);
 
@@ -53,5 +54,20 @@ public interface SearchIndex {
 	public boolean ping();
 
 	public boolean isUp();
+
+	/**
+	 * Outcome of a synchronous reindex of all contexts.
+	 *
+	 * @param failedContexts contexts that failed as a whole or could not be resolved
+	 * @param failedEntries  entries of the processed contexts that could not be loaded or indexed
+	 * @param interrupted    true if the reindex stopped before all contexts were processed
+	 */
+	record ReindexResult(int failedContexts, int failedEntries, boolean interrupted) {
+
+		public boolean hasFailures() {
+			return failedContexts > 0 || failedEntries > 0;
+		}
+
+	}
 
 }
