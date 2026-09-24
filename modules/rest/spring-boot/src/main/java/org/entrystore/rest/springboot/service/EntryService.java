@@ -326,6 +326,7 @@ public class EntryService {
 		Entry entry = null; // A variable to store the new entry in.
 
 		try {
+			checkExternalMetadataURIOfEntryGraph(context, entryId, body);
 			// Local
 			if (entryType == null || entryType == EntryType.Local) {
 				entry = createLocalEntry(context, entryId, graphType, listUri, groupUri, body);
@@ -339,7 +340,6 @@ public class EntryService {
 						&& resourceUri != null
 						&& cachedExternalMetadataUri != null) {
 
-					checkExternalMetadataURIOfEntryGraph(context, entryId, body);
 					entry = createReferenceEntry(context, entryId, graphType, resourceUri, listUri, cachedExternalMetadataUri, body);
 				}
 				// LinkReference
@@ -347,7 +347,6 @@ public class EntryService {
 						&& resourceUri != null
 						&& cachedExternalMetadataUri != null) {
 
-					checkExternalMetadataURIOfEntryGraph(context, entryId, body);
 					entry = createLinkReferenceEntry(context, entryId, graphType, resourceUri, listUri, cachedExternalMetadataUri, body);
 				}
 			}
@@ -849,18 +848,11 @@ public class EntryService {
 
 
 	/**
-	 * Extracts entry info from the request body and sets it as the entry's local metadata graph.
-	 * Since it assumes this is the creation step, the Entries URIs was not available
-	 * on the client, hence the special "_newId" entryId has been used.
-	 * Make sure this is replaced with the new entryId first.
-	 *
-	 * @param entry The entry to set the metadata on.
-	 */
-	/**
 	 * Validates the external metadata URI that the entry graph in the request body sets, before the entry is
 	 * created: the entry graph is applied only after the entry has been created, and a rejected URI must not leave
-	 * a created entry behind. The entry graph refers to an entry without a given ID as {@code _newId}, as does
-	 * the entry URI that the URI is validated against.
+	 * a created entry behind. The entry graph may refer to the new entry as {@code _newId}; as in
+	 * {@link #setEntryGraph}, this is replaced with the given ID, and without one the entry URI that the URI is
+	 * validated against uses {@code _newId} as well.
 	 *
 	 * @throws InvalidExternalMetadataURIException if the entry graph sets an external metadata URI that is not
 	 *                                             acceptable, see {@link EntryImpl#checkExternalMetadataURI}
@@ -871,9 +863,11 @@ public class EntryService {
 		}
 		Model graph;
 		try {
-			graph = RDFJSON.rdfJsonToGraph(new JSONObject(body.info()));
-		} catch (JSONException e) {
-			return; // setEntryGraph ignores an entry graph that cannot be parsed
+			// The entry graph as setEntryGraph applies it
+			String info = entryId != null ? body.info().replaceAll("_newId", entryId) : body.info();
+			graph = RDFJSON.rdfJsonToGraph(new JSONObject(info));
+		} catch (JSONException | RDFParseException e) {
+			return; // Reported as before by the create path of the entry type, e.g. as 400 by createLocalEntry
 		}
 		if (graph == null) {
 			return;
@@ -890,6 +884,14 @@ public class EntryService {
 		}
 	}
 
+	/**
+	 * Extracts entry info from the request body and sets it as the entry's local metadata graph.
+	 * Since it assumes this is the creation step, the Entries URIs was not available
+	 * on the client, hence the special "_newId" entryId has been used.
+	 * Make sure this is replaced with the new entryId first.
+	 *
+	 * @param entry The entry to set the metadata on.
+	 */
 	private void setEntryGraph(Entry entry, CreateEntryRequestBody requestBody) {
 
 		if (requestBody == null || StringUtils.isEmpty(requestBody.info())) {

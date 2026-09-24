@@ -719,6 +719,23 @@ class EntryIT extends BaseSpec {
 		EntryStoreClient.getRequest('/' + contextId + '/entry/' + requestedEntryId).getResponseCode() == HTTP_NOT_FOUND
 	}
 
+	def "POST /{context-id}?entrytype=linkreference&id=x with an entry graph that sets its own metadata as external metadata via _newId should respond with Bad Request and create nothing"() {
+		given:
+		def requestedEntryId = 'selfReferencingEntryGraphViaNewId'
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/_newId'
+		def ownMetadataUrl = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/_newId'
+		def params = [entrytype: 'linkreference', resource: resourceUrl, 'cached-external-metadata': 'https://bbc.co.uk/metadata', id: requestedEntryId]
+		def body = [info: [(entryUri): [(NameSpaceConst.TERM_EXTERNAL_METADATA): [[type: 'uri', value: ownMetadataUrl]]]]]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), JsonOutput.toJson(body))
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(connection.errorStream.text)['error'].toString().contains('must not refer to entry')
+		EntryStoreClient.getRequest('/' + contextId + '/entry/' + requestedEntryId).getResponseCode() == HTTP_NOT_FOUND
+	}
+
 	def "POST /{context-id}?entrytype=linkreference with an entry graph that sets its own metadata as external metadata via _newId should respond with Bad Request and create nothing"() {
 		given:
 		// The entry would be added to this list if it were created, which shows whether it was
