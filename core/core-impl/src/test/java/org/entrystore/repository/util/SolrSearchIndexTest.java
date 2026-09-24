@@ -55,11 +55,11 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -377,7 +377,7 @@ public class SolrSearchIndexTest {
 
 		indexWithoutDocuments.reindexSync(CONTEXT_1);
 		indexWithoutDocuments.reindexSync(CONTEXT_1);
-		assertEquals(List.of(ENTRY_1_1, ENTRY_1_1), List.copyOf(deleteQueue()));
+		assertEquals(List.of(ENTRY_1_1), List.copyOf(deleteQueue()));
 		indexWithoutDocuments.reindexSync(CONTEXT_1);
 
 		assertTrue(deleteQueue().isEmpty(),
@@ -447,6 +447,31 @@ public class SolrSearchIndexTest {
 			}
 			Thread.yield();
 		}
+	}
+
+	@Test
+	public void requeuedFailedDeletionsAreDrainedAfterTheDeletionsQueuedBeforeThem() throws Exception {
+		stopDocumentSubmitter(); // keeps queued deletions in their queue
+		List<URI> queued = new ArrayList<>();
+		for (int i = 1; i <= 150; i++) {
+			queued.add(URI.create("http://localhost:8181/1/entry/" + i));
+		}
+		deleteQueue().addAll(queued);
+		Method drainDeleteQueue = SolrSearchIndex.SolrInputDocumentSubmitter.class
+				.getDeclaredMethod("drainDeleteQueue");
+		drainDeleteQueue.setAccessible(true);
+		Method requeueDeletes = SolrSearchIndex.SolrInputDocumentSubmitter.class
+				.getDeclaredMethod("requeueDeletes", List.class);
+		requeueDeletes.setAccessible(true);
+
+		List<?> failedBatch = (List<?>) drainDeleteQueue.invoke(documentSubmitter());
+		requeueDeletes.invoke(documentSubmitter(), failedBatch);
+		List<?> nextBatch = (List<?>) drainDeleteQueue.invoke(documentSubmitter());
+
+		assertEquals(queued.subList(0, 100), failedBatch);
+		// A failed batch must not overtake the deletions that have not been sent yet
+		assertEquals(queued.subList(100, 150), nextBatch.subList(0, 50));
+		assertEquals(queued.subList(0, 50), nextBatch.subList(50, 100));
 	}
 
 	@Test
@@ -771,10 +796,10 @@ public class SolrSearchIndexTest {
 	}
 
 	@SuppressWarnings("unchecked")
-	private Queue<URI> deleteQueue() throws Exception {
+	private Set<URI> deleteQueue() throws Exception {
 		Field f = SolrSearchIndex.class.getDeclaredField("deleteQueue");
 		f.setAccessible(true);
-		return (Queue<URI>) f.get(index);
+		return (Set<URI>) f.get(index);
 	}
 
 	/**
