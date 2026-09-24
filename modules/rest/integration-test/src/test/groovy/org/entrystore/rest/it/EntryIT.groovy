@@ -706,6 +706,96 @@ class EntryIT extends BaseSpec {
 		EntryStoreClient.getRequest('/' + contextId + '/entry/' + requestedEntryId).getResponseCode() == HTTP_NOT_FOUND
 	}
 
+	def "POST /{context-id}?entrytype=linkreference&id=x with the repository base URL as external metadata should respond with Bad Request"() {
+		given:
+		def requestedEntryId = 'baseUrlLinkReference'
+		def params = [entrytype: 'linkreference', resource: resourceUrl, 'cached-external-metadata': EntryStoreClient.baseUrl + '/', id: requestedEntryId]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params))
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(connection.errorStream.text)['error'].toString().contains('does not denote an entry')
+		EntryStoreClient.getRequest('/' + contextId + '/entry/' + requestedEntryId).getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "POST /{context-id}?entrytype=linkreference with the repository base URL followed by query parameters as external metadata should create the entry with empty cached external metadata"() {
+		given:
+		// Accepted in 5.x as well: such a URI does not denote an entry, so its metadata is an empty graph
+		def searchUrl = EntryStoreClient.baseUrl + '/search?type=solr&query=title:x'
+		def params = [entrytype: 'linkreference', resource: resourceUrl, 'cached-external-metadata': searchUrl]
+
+		when:
+		def entryId = createEntry(contextId, params)
+
+		then:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		entryConn.getResponseCode() == HTTP_OK
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		def entryExtMetadata = JSON_PARSER.parseText(entryConn.inputStream.text)['info'][entryUri][NameSpaceConst.TERM_EXTERNAL_METADATA].collect()
+		entryExtMetadata.size() == 1
+		entryExtMetadata[0]['value'] == searchUrl
+		def cachedMetadataConn = EntryStoreClient.getRequest('/' + contextId + '/cached-external-metadata/' + entryId)
+		cachedMetadataConn.getResponseCode() == HTTP_OK
+		(JSON_PARSER.parseText(cachedMetadataConn.inputStream.text) as Map).isEmpty()
+	}
+
+	def "POST /{context-id}?entrytype=linkreference&id=x with an entry graph that sets its own metadata as external metadata should respond with Bad Request and create nothing"() {
+		given:
+		def requestedEntryId = 'selfReferencingEntryGraph'
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + requestedEntryId
+		def ownMetadataUrl = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + requestedEntryId
+		def params = [entrytype: 'linkreference', resource: resourceUrl, 'cached-external-metadata': 'https://bbc.co.uk/metadata', id: requestedEntryId]
+		def body = [info: [(entryUri): [(NameSpaceConst.TERM_EXTERNAL_METADATA): [[type: 'uri', value: ownMetadataUrl]]]]]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), JsonOutput.toJson(body))
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(connection.errorStream.text)['error'].toString().contains('must not refer to entry')
+		EntryStoreClient.getRequest('/' + contextId + '/entry/' + requestedEntryId).getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "POST /{context-id}?entrytype=linkreference&id=x with an entry graph that sets its own metadata as external metadata via _newId should respond with Bad Request and create nothing"() {
+		given:
+		def requestedEntryId = 'selfReferencingEntryGraphViaNewId'
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/_newId'
+		def ownMetadataUrl = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/_newId'
+		def params = [entrytype: 'linkreference', resource: resourceUrl, 'cached-external-metadata': 'https://bbc.co.uk/metadata', id: requestedEntryId]
+		def body = [info: [(entryUri): [(NameSpaceConst.TERM_EXTERNAL_METADATA): [[type: 'uri', value: ownMetadataUrl]]]]]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), JsonOutput.toJson(body))
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(connection.errorStream.text)['error'].toString().contains('must not refer to entry')
+		EntryStoreClient.getRequest('/' + contextId + '/entry/' + requestedEntryId).getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "POST /{context-id}?entrytype=linkreference with an entry graph that sets its own metadata as external metadata via _newId should respond with Bad Request and create nothing"() {
+		given:
+		// The entry would be added to this list if it were created, which shows whether it was
+		def listId = createEntry(contextId, [graphtype: 'list'])
+		def listUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + listId
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/_newId'
+		def ownMetadataUrl = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/_newId'
+		def params = [entrytype: 'linkreference', resource: resourceUrl, 'cached-external-metadata': 'https://bbc.co.uk/metadata', list: listUri]
+		def body = [info: [(entryUri): [(NameSpaceConst.TERM_EXTERNAL_METADATA): [[type: 'uri', value: ownMetadataUrl]]]]]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), JsonOutput.toJson(body))
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(connection.errorStream.text)['error'].toString().contains('must not refer to entry')
+		def listConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + listId)
+		listConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(listConn.inputStream.text) == []
+	}
+
 	def "PUT /{context-id}/entry/{entry-id} changing the external metadata of a linkreference to its own metadata should respond with Bad Request"() {
 		given:
 		def metadataUrl = 'https://bbc.co.uk/metadata'
