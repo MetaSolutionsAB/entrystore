@@ -16,7 +16,12 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.ContextManager;
+import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.PropertiesConfiguration;
@@ -24,6 +29,8 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+
+import java.net.URI;
 
 /**
  * Manages EntryStore instance(s) as preparation for the tests in entrystore-core-impl.
@@ -63,6 +70,24 @@ public abstract class AbstractCoreTest {
 	public void tearDown() {
 		rm.shutdown();
 		rm = null;
+	}
+
+	/**
+	 * Removes the statements with the given predicate from an entry graph in the store, bypassing the API, e.g. to
+	 * make the entry corrupt.
+	 */
+	protected void removeFromEntryGraph(URI entryURI, IRI predicate) {
+		IRI graph = SimpleValueFactory.getInstance().createIRI(entryURI.toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.remove((Resource) null, predicate, null, graph);
+		}
+	}
+
+	/**
+	 * Evicts an entry from the soft cache, so that it is loaded from the store again.
+	 */
+	protected static void evictFromSoftCache(Entry entry) {
+		((ContextImpl) entry.getContext()).softCache.remove(entry);
 	}
 
 }
