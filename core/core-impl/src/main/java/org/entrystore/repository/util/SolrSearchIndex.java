@@ -18,7 +18,6 @@ package org.entrystore.repository.util;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.google.common.collect.Queues;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.solr.client.solrj.RemoteSolrException;
 import org.apache.solr.client.solrj.SolrClient;
@@ -78,7 +77,6 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.concurrent.ConcurrentMap;
@@ -146,7 +144,12 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private final Cache<URI, SolrInputDocument> postQueue = Caffeine.newBuilder().build();
 
-	private final Queue<URI> deleteQueue = Queues.newConcurrentLinkedQueue();
+	/**
+	 * Entries whose documents are to be removed from the index, in the order in which they were queued. A set, so
+	 * that dropping the pending deletion of an entry when its document is queued does not scan all pending
+	 * deletions.
+	 */
+	private final Set<URI> deleteQueue = Collections.synchronizedSet(new LinkedHashSet<>());
 
 	private final Map<URI, Future> reindexing = Collections.synchronizedMap(new HashMap<>());
 
@@ -331,12 +334,10 @@ public class SolrSearchIndex implements SearchIndex {
 		private List<URI> drainDeleteQueue() {
 			List<URI> batch = new ArrayList<>();
 			synchronized (deleteQueue) {
-				while (batch.size() < BATCH_SIZE_DELETE) {
-					URI uri = deleteQueue.poll();
-					if (uri == null) {
-						break;
-					}
-					batch.add(uri);
+				Iterator<URI> it = deleteQueue.iterator();
+				while (batch.size() < BATCH_SIZE_DELETE && it.hasNext()) {
+					batch.add(it.next());
+					it.remove();
 				}
 			}
 			return batch;
@@ -1589,7 +1590,7 @@ public class SolrSearchIndex implements SearchIndex {
 	 */
 	private void queueDocument(URI entryURI, SolrInputDocument document) {
 		synchronized (deleteQueue) {
-			deleteQueue.removeIf(entryURI::equals);
+			deleteQueue.remove(entryURI);
 		}
 		postQueue.put(entryURI, document);
 	}
