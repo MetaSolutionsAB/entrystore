@@ -16,12 +16,10 @@
 
 package org.entrystore.impl;
 
-import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
-import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.junit.jupiter.api.BeforeEach;
@@ -120,15 +118,6 @@ public class LocalMetadataWrapperTest extends AbstractCoreTest {
 		Model graph = new LinkedHashModel();
 		graph.add(vf.createIRI(entry.getResourceURI().toString()), DCTERMS.TITLE, vf.createLiteral(title));
 		entry.getLocalMetadata().setGraph(graph);
-	}
-
-	private void replaceExternalMetadataInStore(Entry entry, URI externalMetadataURI) {
-		IRI entryIRI = vf.createIRI(entry.getEntryURI().toString());
-		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
-			rc.remove(entryIRI, RepositoryProperties.externalMetadata, null, entryIRI);
-			rc.add(entryIRI, RepositoryProperties.externalMetadata, vf.createIRI(externalMetadataURI.toString()),
-					entryIRI);
-		}
 	}
 
 	@Disabled("To be implemented")

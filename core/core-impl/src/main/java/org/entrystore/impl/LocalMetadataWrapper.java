@@ -21,7 +21,6 @@ import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.Entry;
 import org.entrystore.Metadata;
 import org.entrystore.repository.util.URISplit;
-import org.entrystore.repository.util.URIType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,42 +36,37 @@ public class LocalMetadataWrapper implements Metadata {
 	/**
 	 * Does not resolve the referenced entry: the wrapper is created while its entry is being loaded, and
 	 * resolving a referenced entry that refers back to the entry being loaded would load that entry again
-	 * without end.
+	 * without end. This must stay lazy even though external metadata URIs of the entry itself are rejected (see
+	 * {@link EntryImpl#checkExternalMetadataURI}): that check does not detect every URI that denotes the entry.
 	 */
 	public LocalMetadataWrapper(Entry entry) {
 		this.entry = entry;
 	}
 
 	public Model getGraph() {
-		Entry e = null;
-		URI refEntryURI = getReferencedEntryURI();
-		if (refEntryURI != null) {
-			e = ((ContextImpl) entry.getContext()).getSoftCache().getByEntryURI(refEntryURI);
-			if (e == null) {
-				e = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());
-			}
-		}
-		if (e != null && e.getLocalMetadata() != null) {
-			return e.getLocalMetadata().getGraph();
-		} else {
-			log.warn("No local metadata found for external metadata URI {}, returning an empty graph",
-					entry.getExternalMetadataURI());
+		URI externalMetadataURI = entry.getExternalMetadataURI();
+		URI refEntryURI = URISplit.entryURIOf(externalMetadataURI, entry.getRepositoryManager().getRepositoryURL())
+				.orElse(null);
+		if (refEntryURI == null) {
+			log.warn("External metadata URI {} of entry {} does not denote an entry, returning an empty graph",
+					externalMetadataURI, entry.getEntryURI());
 			return new LinkedHashModel();
 		}
-	}
-
-	/**
-	 * @return the URI of the entry that the external metadata URI belongs to, or null if the URI does not
-	 * belong to an entry of this repository
-	 */
-	private URI getReferencedEntryURI() {
-		try {
-			URISplit split = new URISplit(entry.getExternalMetadataURI(),
-					entry.getRepositoryManager().getRepositoryURL());
-			return split.getUriType() == URIType.Unknown ? null : split.getMetaMetadataURI();
-		} catch (IllegalArgumentException e) {
-			return null;
+		Entry e = ((ContextImpl) entry.getContext()).getSoftCache().getByEntryURI(refEntryURI);
+		if (e == null) {
+			e = entry.getRepositoryManager().getContextManager().getEntry(refEntryURI);
 		}
+		if (e == null) {
+			log.warn("Entry {} that entry {} refers to with external metadata URI {} does not exist, returning an "
+					+ "empty graph", refEntryURI, entry.getEntryURI(), externalMetadataURI);
+			return new LinkedHashModel();
+		}
+		if (e.getLocalMetadata() == null) {
+			log.warn("Entry {} that entry {} refers to with external metadata URI {} has no local metadata, "
+					+ "returning an empty graph", refEntryURI, entry.getEntryURI(), externalMetadataURI);
+			return new LinkedHashModel();
+		}
+		return e.getLocalMetadata().getGraph();
 	}
 
 	public URI getResourceURI() {

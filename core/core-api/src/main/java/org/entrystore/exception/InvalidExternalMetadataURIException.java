@@ -17,9 +17,10 @@
 package org.entrystore.exception;
 
 /**
- * Thrown when the external metadata URI of a Reference or LinkReference entry is not acceptable, e.g. because it
- * is in the repository but does not denote an entry. The message only contains URIs that the client submitted or
- * that belong to the entry, and may be returned to the client.
+ * Thrown when an external metadata URI is not acceptable, e.g. because it is in the repository but does not denote
+ * an entry, or because it is set for an entry that has no external metadata URI, such as a Local or Link entry. The
+ * message only contains URIs that the client submitted or that belong to the entry, the entry type and fixed text,
+ * and may be returned to the client.
  */
 public class InvalidExternalMetadataURIException extends IllegalArgumentException {
 
