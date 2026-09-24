@@ -1695,7 +1695,15 @@ public class SolrSearchIndex implements SearchIndex {
 						// check that the referenced metadata is accessible.
 						if ((entry.getEntryType() == EntryType.Reference || entry.getEntryType() == EntryType.LinkReference)
 								&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper) {
-							Entry refEntry = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());
+							Entry refEntry;
+							try {
+								refEntry = entry.getRepositoryManager().getContextManager()
+										.getEntry(entry.getExternalMetadataURI());
+							} catch (IllegalArgumentException e) {
+								// A URI in the repository that does not denote an entry, stored before such URIs
+								// were rejected (ENTRYSTORE-1182); handled like a reference to a missing entry
+								refEntry = null;
+							}
 							if (refEntry != null) {
 								pm.checkAuthenticatedUserAuthorized(refEntry, AccessProperty.ReadMetadata);
 							} else {

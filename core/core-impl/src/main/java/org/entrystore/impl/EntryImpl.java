@@ -45,6 +45,7 @@ import org.entrystore.Provenance;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
+import org.entrystore.exception.InvalidExternalMetadataURIException;
 import org.entrystore.exception.SelfReferencingExternalMetadataException;
 import org.entrystore.repository.CorruptEntryException;
 import org.entrystore.repository.RepositoryEvent;
@@ -59,6 +60,7 @@ import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
 import java.net.URI;
+import java.net.URL;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.GregorianCalendar;
@@ -1520,24 +1522,42 @@ public class EntryImpl implements Entry {
     }
 
 	/**
-	 * Rejects an external metadata URI that belongs to this entry itself, e.g. its own metadata URI: the entry
-	 * would be the source of its own cached external metadata.
-	 *
-	 * @throws SelfReferencingExternalMetadataException if the URI belongs to this entry
+	 * Validates an external metadata URI for this entry, see {@link #checkExternalMetadataURI(URI, URI, URL)}.
 	 */
 	private void checkExternalMetadataURI(URI externalMetadataURI) {
-		URI referencedEntryURI;
-		try {
-			URISplit split = new URISplit(externalMetadataURI, repositoryManager.getRepositoryURL());
-			if (split.getUriType() == URIType.Unknown) {
-				return;
-			}
-			referencedEntryURI = split.getMetaMetadataURI();
-		} catch (IllegalArgumentException e) {
-			// Not a URI of an entry in this repository
+		checkExternalMetadataURI(externalMetadataURI, URI.create(entryURI.stringValue()),
+				repositoryManager.getRepositoryURL());
+	}
+
+	/**
+	 * Validates the external metadata URI of a Reference or LinkReference entry. A URI in the repository, i.e.
+	 * one that starts with its base URL, gets its metadata from the local metadata of the entry it denotes (see
+	 * {@link LocalMetadataWrapper}), so it must be a URI that the repository can split, and must not denote the
+	 * entry itself: the entry would be the source of its own cached external metadata. The base URL followed only
+	 * by query parameters, e.g. a search URL, does not denote an entry and is accepted as before; its metadata is
+	 * an empty graph. A URI of another system is not restricted; its metadata is cached in the entry.
+	 *
+	 * @param entryURI the URI of the entry that the external metadata URI is set for
+	 * @throws SelfReferencingExternalMetadataException if the URI belongs to the entry itself
+	 * @throws InvalidExternalMetadataURIException if the URI is in the repository but cannot be split, e.g. the
+	 *                                             base URL itself or an entry path without an entry ID
+	 */
+	public static void checkExternalMetadataURI(URI externalMetadataURI, URI entryURI, URL repositoryURL) {
+		if (!externalMetadataURI.toString().startsWith(repositoryURL.toString())) {
 			return;
 		}
-		if (referencedEntryURI.toString().equals(entryURI.stringValue())) {
+		URISplit split;
+		try {
+			split = new URISplit(externalMetadataURI, repositoryURL);
+		} catch (IllegalArgumentException e) {
+			throw new InvalidExternalMetadataURIException("The external metadata URI " + externalMetadataURI
+					+ " is in this repository but does not denote an entry");
+		}
+		if (split.getUriType() == URIType.Unknown) {
+			return;
+		}
+		URI referencedEntryURI = split.getMetaMetadataURI();
+		if (referencedEntryURI.equals(entryURI)) {
 			throw new SelfReferencingExternalMetadataException(externalMetadataURI, referencedEntryURI);
 		}
 	}

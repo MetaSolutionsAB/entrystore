@@ -28,6 +28,7 @@ import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
+import org.entrystore.exception.InvalidExternalMetadataURIException;
 import org.entrystore.exception.SelfReferencingExternalMetadataException;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.util.URISplit;
@@ -269,6 +270,78 @@ public class EntryImplTest extends AbstractCoreTest {
 
 		assertEquals(URI.create("http://vk.se/changed"), legacyEntry.getResourceURI());
 		assertEquals(refLinkEntry.getLocalMetadataURI(), legacyEntry.getExternalMetadataURI());
+	}
+
+	@Test
+	public void createLinkReferenceRejectsTheRepositoryBaseUrlAsExternalMetadata() {
+		URI baseURI = URI.create(rm.getRepositoryURL().toString());
+
+		assertThrows(InvalidExternalMetadataURIException.class,
+				() -> context.createLinkReference("baseReference", URI.create("http://vk.se/"), baseURI, null));
+		assertNull(context.get("baseReference"));
+	}
+
+	@Test
+	public void setExternalMetadataURIRejectsAnUriInTheRepositoryThatDoesNotDenoteAnEntry() {
+		URI entryPathWithoutId = URI.create(rm.getRepositoryURL() + context.getEntry().getId() + "/"
+				+ RepositoryProperties.ENTRY_PATH);
+
+		assertThrows(InvalidExternalMetadataURIException.class,
+				() -> refLinkEntry.setExternalMetadataURI(entryPathWithoutId));
+
+		assertEquals(URI.create("http://vk.se/md1"), refLinkEntry.getExternalMetadataURI());
+	}
+
+	@Test
+	public void setGraphRejectsAnExternalMetadataUriInTheRepositoryThatDoesNotDenoteAnEntry() {
+		ValueFactory vf = rm.getValueFactory();
+		IRI entryIRI = vf.createIRI(refLinkEntry.getEntryURI().toString());
+		Model graph = refLinkEntry.getGraph();
+		graph.remove(entryIRI, RepositoryProperties.resource, null);
+		graph.add(entryIRI, RepositoryProperties.resource, vf.createIRI("http://vk.se/changed"));
+		graph.remove(entryIRI, RepositoryProperties.externalMetadata, null);
+		graph.add(entryIRI, RepositoryProperties.externalMetadata, vf.createIRI(rm.getRepositoryURL().toString()));
+
+		assertThrows(InvalidExternalMetadataURIException.class, () -> refLinkEntry.setGraph(graph));
+
+		assertEquals(URI.create("http://vk.se/"), refLinkEntry.getResourceURI());
+		assertEquals(URI.create("http://vk.se/md1"), refLinkEntry.getExternalMetadataURI());
+	}
+
+	@Test
+	public void createLinkReferenceAcceptsTheRepositoryBaseUrlFollowedByQueryParametersAsExternalMetadata() {
+		// Accepted in 5.x as well; such a URI does not denote an entry and yields an empty graph
+		URI searchURI = URI.create(rm.getRepositoryURL() + "search?type=solr&query=title:x");
+
+		Entry reference = context.createLinkReference("searchReference", URI.create("http://vk.se/"), searchURI, null);
+
+		assertEquals(searchURI, reference.getExternalMetadataURI());
+		assertTrue(reference.getCachedExternalMetadata().getGraph().isEmpty());
+	}
+
+	@Test
+	public void setExternalMetadataURIAcceptsTheRepositoryBaseUrlFollowedByQueryParameters() {
+		URI searchURI = URI.create(rm.getRepositoryURL() + "search?type=solr&query=title:x");
+
+		refLinkEntry.setExternalMetadataURI(searchURI);
+
+		assertEquals(searchURI, refLinkEntry.getExternalMetadataURI());
+	}
+
+	@Test
+	public void setExternalMetadataURIAcceptsTheMetadataOfAnotherSystem() {
+		URI otherSystemMetadataURI = URI.create("http://example.org/metadata/42");
+
+		refLinkEntry.setExternalMetadataURI(otherSystemMetadataURI);
+
+		assertEquals(otherSystemMetadataURI, refLinkEntry.getExternalMetadataURI());
+	}
+
+	@Test
+	public void setExternalMetadataURIAcceptsTheMetadataOfAnotherEntry() {
+		refLinkEntry.setExternalMetadataURI(linkEntry.getLocalMetadataURI());
+
+		assertEquals(linkEntry.getLocalMetadataURI(), refLinkEntry.getExternalMetadataURI());
 	}
 
 	@Test

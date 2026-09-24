@@ -35,6 +35,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.SearchIndex.ReindexResult;
 import org.entrystore.User;
 import org.entrystore.config.Config;
+import org.entrystore.impl.LocalMetadataWrapper;
 import org.entrystore.repository.CorruptEntryException;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryManager;
@@ -905,6 +906,26 @@ public class SolrSearchIndexTest {
 
 		assertTrue(result.getEntries().isEmpty());
 		assertEquals(0, result.getHits());
+	}
+
+	@Test
+	public void sendQueryKeepsReferenceHitWhoseExternalMetadataUriDoesNotDenoteAnEntry() throws Exception {
+		ContextManager cm = contextManagerListing();
+		URI baseURI = URI.create("http://localhost:8181/");
+		Entry reference = mock(Entry.class);
+		when(reference.getEntryType()).thenReturn(EntryType.LinkReference);
+		when(reference.getRepositoryManager()).thenReturn(rm);
+		when(reference.getCachedExternalMetadata()).thenReturn(mock(LocalMetadataWrapper.class));
+		when(reference.getExternalMetadataURI()).thenReturn(baseURI);
+		when(cm.getEntry(ENTRY_1_1)).thenReturn(reference);
+		// As URISplit rejects the base URL, stored before such external metadata URIs were rejected
+		when(cm.getEntry(baseURI)).thenThrow(new IllegalArgumentException("URI is incompatible with EntryStore"));
+		solrReturnsHits(ENTRY_1_1);
+
+		QueryResult result = index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		assertEquals(Set.of(reference), result.getEntries());
+		assertEquals(1, result.getHits());
 	}
 
 	@Test
