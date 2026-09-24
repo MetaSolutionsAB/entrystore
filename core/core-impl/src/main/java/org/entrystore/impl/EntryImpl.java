@@ -274,7 +274,7 @@ public class EntryImpl implements Entry {
 		try {
 			return parseStatements(existingStatements);
 		} catch (ClassCastException | IllegalArgumentException e) {
-			throw new CorruptEntryException("Entry graph <" + existingStatements.getFirst().getContext()
+			throw new CorruptEntryException(getEntryURI(), "Entry graph <" + existingStatements.getFirst().getContext()
 					+ "> is corrupt: it contains a malformed value", e);
 		}
 	}
@@ -362,7 +362,8 @@ public class EntryImpl implements Entry {
 		}
 
 		if (resURI == null) {
-			throw new CorruptEntryException(describeGraphWithoutResource(existingStatements));
+			// Not the local entryURI above: it is only set from the resource statement, which is missing here
+			throw new CorruptEntryException(getEntryURI(), describeGraphWithoutResource(existingStatements));
 		}
 
 		//Detect types.
