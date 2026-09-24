@@ -17,7 +17,9 @@
 package org.entrystore.impl;
 
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
@@ -83,6 +85,24 @@ public abstract class AbstractCoreTest {
 			rc.add(entryIRI, RepositoryProperties.externalMetadata, vf.createIRI(externalMetadataURI.toString()),
 					entryIRI);
 		}
+	}
+
+	/**
+	 * Removes the statements with the given predicate from an entry graph in the store, bypassing the API, e.g. to
+	 * make the entry corrupt.
+	 */
+	protected void removeFromEntryGraph(URI entryURI, IRI predicate) {
+		IRI graph = SimpleValueFactory.getInstance().createIRI(entryURI.toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.remove((Resource) null, predicate, null, graph);
+		}
+	}
+
+	/**
+	 * Evicts an entry from the soft cache, so that it is loaded from the store again.
+	 */
+	protected static void evictFromSoftCache(Entry entry) {
+		((ContextImpl) entry.getContext()).softCache.remove(entry);
 	}
 
 }

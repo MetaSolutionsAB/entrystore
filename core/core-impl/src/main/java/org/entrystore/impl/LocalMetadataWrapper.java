@@ -20,11 +20,13 @@ import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.Entry;
 import org.entrystore.Metadata;
+import org.entrystore.repository.util.CorruptData;
 import org.entrystore.repository.util.URISplit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.net.URL;
 
 
 public class LocalMetadataWrapper implements Metadata {
@@ -43,10 +45,14 @@ public class LocalMetadataWrapper implements Metadata {
 		this.entry = entry;
 	}
 
+	/**
+	 * @return the local metadata of the referenced entry, or an empty graph if the external metadata URI does not
+	 * denote an entry, there is no such entry, it has no local metadata, or it cannot be loaded because its data or
+	 * that of its context entry is corrupt; a reference is then treated like a reference to a missing entry
+	 */
 	public Model getGraph() {
 		URI externalMetadataURI = entry.getExternalMetadataURI();
-		URI refEntryURI = URISplit.entryURIOf(externalMetadataURI, entry.getRepositoryManager().getRepositoryURL())
-				.orElse(null);
+		URI refEntryURI = getReferencedEntryURI();
 		if (refEntryURI == null) {
 			log.warn("External metadata URI {} of entry {} does not denote an entry, returning an empty graph",
 					externalMetadataURI, entry.getEntryURI());
@@ -54,7 +60,18 @@ public class LocalMetadataWrapper implements Metadata {
 		}
 		Entry e = ((ContextImpl) entry.getContext()).getSoftCache().getByEntryURI(refEntryURI);
 		if (e == null) {
-			e = entry.getRepositoryManager().getContextManager().getEntry(refEntryURI);
+			try {
+				e = entry.getRepositoryManager().getContextManager().getEntry(refEntryURI);
+			} catch (RuntimeException failure) {
+				URL repositoryURL = entry.getRepositoryManager().getRepositoryURL();
+				if (!CorruptData.isCorruptDataOf(failure, refEntryURI, repositoryURL)) {
+					throw failure;
+				}
+				log.warn("Entry {} that entry {} refers to with external metadata URI {} cannot be loaded, returning"
+						+ " an empty graph: {}", refEntryURI, entry.getEntryURI(), externalMetadataURI,
+						CorruptData.describe(failure));
+				return new LinkedHashModel();
+			}
 		}
 		if (e == null) {
 			log.warn("Entry {} that entry {} refers to with external metadata URI {} does not exist, returning an "
@@ -67,6 +84,15 @@ public class LocalMetadataWrapper implements Metadata {
 			return new LinkedHashModel();
 		}
 		return e.getLocalMetadata().getGraph();
+	}
+
+	/**
+	 * @return the URI of the entry that the external metadata URI belongs to, or null if the URI does not
+	 * belong to an entry of this repository
+	 */
+	public URI getReferencedEntryURI() {
+		return URISplit.entryURIOf(entry.getExternalMetadataURI(), entry.getRepositoryManager().getRepositoryURL())
+				.orElse(null);
 	}
 
 	public URI getResourceURI() {

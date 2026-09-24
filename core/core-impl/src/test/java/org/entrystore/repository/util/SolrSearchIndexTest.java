@@ -32,6 +32,7 @@ import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.SearchIndex.ReindexResult;
 import org.entrystore.User;
 import org.entrystore.config.Config;
@@ -55,11 +56,11 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -73,6 +74,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.after;
@@ -97,6 +99,8 @@ public class SolrSearchIndexTest {
 	private static final URI ENTRY_1_2 = URI.create("http://localhost:8181/1/entry/2");
 	private static final URI ENTRY_1_3 = URI.create("http://localhost:8181/1/entry/3");
 	private static final URI ENTRY_2_1 = URI.create("http://localhost:8181/2/entry/1");
+	private static final URI METADATA_2_1 = URI.create("http://localhost:8181/2/metadata/1");
+	private static final URI PRINCIPAL_ENTRY = URI.create("http://localhost:8181/_principals/entry/5");
 
 	private RepositoryManager rm;
 	private SolrClient solrServer;
@@ -110,6 +114,7 @@ public class SolrSearchIndexTest {
 		Config config = new PropertiesConfiguration("EntryStore Test Configuration");
 		when(rm.getConfiguration()).thenReturn(config);
 		when(rm.getValueFactory()).thenReturn(SimpleValueFactory.getInstance());
+		when(rm.getRepositoryURL()).thenReturn(URI.create("http://localhost:8181/").toURL());
 		solrServer = mock(SolrClient.class);
 
 		index = new SolrSearchIndex(rm, solrServer);
@@ -279,6 +284,23 @@ public class SolrSearchIndexTest {
 	}
 
 	@Test
+	public void reindexSyncOfContextKeepsTheInterruptFlag() throws Exception {
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", ENTRY_1_1);
+
+		boolean interruptStatusKept;
+		try {
+			Thread.currentThread().interrupt();
+			index.reindexSync(CONTEXT_1, false);
+		} finally {
+			interruptStatusKept = Thread.interrupted();
+		}
+
+		assertTrue(interruptStatusKept, "The caller, e.g. a cancelled reindex task, must still see the interrupt");
+		verify(cm, never()).getEntry(any());
+	}
+
+	@Test
 	public void reindexSyncStopsWithoutRetryWhenContextLoadFailsDuringInterruption() {
 		ContextManager cm = contextManagerListing(CONTEXT_1, CONTEXT_2);
 		when(cm.getByEntryURI(CONTEXT_1)).thenAnswer(invocation -> {
@@ -375,7 +397,7 @@ public class SolrSearchIndexTest {
 
 		indexWithoutDocuments.reindexSync(CONTEXT_1, false);
 		indexWithoutDocuments.reindexSync(CONTEXT_1, false);
-		assertEquals(List.of(ENTRY_1_1, ENTRY_1_1), List.copyOf(deleteQueue()));
+		assertEquals(List.of(ENTRY_1_1), List.copyOf(deleteQueue()));
 		indexWithoutDocuments.reindexSync(CONTEXT_1, false);
 
 		assertTrue(deleteQueue().isEmpty(),
@@ -445,6 +467,31 @@ public class SolrSearchIndexTest {
 			}
 			Thread.yield();
 		}
+	}
+
+	@Test
+	public void requeuedFailedDeletionsAreDrainedAfterTheDeletionsQueuedBeforeThem() throws Exception {
+		stopDocumentSubmitter(); // keeps queued deletions in their queue
+		List<URI> queued = new ArrayList<>();
+		for (int i = 1; i <= 150; i++) {
+			queued.add(URI.create("http://localhost:8181/1/entry/" + i));
+		}
+		deleteQueue().addAll(queued);
+		Method drainDeleteQueue = SolrSearchIndex.SolrInputDocumentSubmitter.class
+				.getDeclaredMethod("drainDeleteQueue");
+		drainDeleteQueue.setAccessible(true);
+		Method requeueDeletes = SolrSearchIndex.SolrInputDocumentSubmitter.class
+				.getDeclaredMethod("requeueDeletes", List.class);
+		requeueDeletes.setAccessible(true);
+
+		List<?> failedBatch = (List<?>) drainDeleteQueue.invoke(documentSubmitter());
+		requeueDeletes.invoke(documentSubmitter(), failedBatch);
+		List<?> nextBatch = (List<?>) drainDeleteQueue.invoke(documentSubmitter());
+
+		assertEquals(queued.subList(0, 100), failedBatch);
+		// A failed batch must not overtake the deletions that have not been sent yet
+		assertEquals(queued.subList(100, 150), nextBatch.subList(0, 50));
+		assertEquals(queued.subList(0, 50), nextBatch.subList(50, 100));
 	}
 
 	@Test
@@ -753,10 +800,10 @@ public class SolrSearchIndexTest {
 	}
 
 	@SuppressWarnings("unchecked")
-	private Queue<URI> deleteQueue() throws Exception {
+	private Set<URI> deleteQueue() throws Exception {
 		Field f = SolrSearchIndex.class.getDeclaredField("deleteQueue");
 		f.setAccessible(true);
-		return (Queue<URI>) f.get(index);
+		return (Set<URI>) f.get(index);
 	}
 
 	/**
@@ -773,7 +820,7 @@ public class SolrSearchIndexTest {
 	 */
 	private static RepositoryException corruptEntryFailure(URI entryURI) {
 		return new RepositoryException("Unable to load entry " + entryURI,
-				new CorruptEntryException("Entry graph <" + entryURI + "> is corrupt"));
+				new CorruptEntryException(entryURI, "Entry graph <" + entryURI + "> is corrupt"));
 	}
 
 	private static void stubContextEntry(ContextManager cm, URI contextURI, String contextResourceURI) {
@@ -938,6 +985,130 @@ public class SolrSearchIndexTest {
 
 		assertThrows(RepositoryException.class,
 				() -> index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10)));
+	}
+
+	@Test
+	public void sendQuerySkipsHitWhoseContextEntryIsCorrupt() throws Exception {
+		ContextManager cm = contextManagerListing();
+		when(cm.getEntry(ENTRY_1_1)).thenThrow(corruptEntryFailure(CONTEXT_1));
+		solrReturnsHits(ENTRY_1_1);
+
+		QueryResult result = index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		assertTrue(result.getEntries().isEmpty());
+		assertEquals(0, result.getHits());
+	}
+
+	@Test
+	public void sendQueryDoesNotRemoveTheDocumentOfACorruptHit() throws Exception {
+		stopDocumentSubmitter(); // keeps queued deletions in their queue
+		ContextManager cm = contextManagerListing();
+		when(cm.getEntry(ENTRY_1_1)).thenThrow(corruptEntryFailure(ENTRY_1_1));
+		solrReturnsHits(ENTRY_1_1);
+
+		index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		assertTrue(deleteQueue().isEmpty(), "A search must leave the removal of documents to the reindex");
+	}
+
+	@Test
+	public void sendQueryFailsWhenLoadingAHitFailsBecauseAnotherEntryIsCorrupt() throws Exception {
+		ContextManager cm = contextManagerListing();
+		// As when the access check on a cached hit loads a corrupt principal
+		when(cm.getEntry(ENTRY_1_1)).thenThrow(corruptEntryFailure(PRINCIPAL_ENTRY));
+		solrReturnsHits(ENTRY_1_1);
+
+		assertThrows(RepositoryException.class,
+				() -> index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10)));
+	}
+
+	@Test
+	public void sendQueryFailsWhenTheAccessCheckFailsBecauseOfACorruptPrincipal() throws Exception {
+		ContextManager cm = contextManagerListing();
+		Entry entry = mock(Entry.class);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getRepositoryManager()).thenReturn(rm);
+		when(cm.getEntry(ENTRY_1_1)).thenReturn(entry);
+		PrincipalManager pm = rm.getPrincipalManager();
+		doThrow(corruptEntryFailure(PRINCIPAL_ENTRY)).when(pm)
+				.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
+		solrReturnsHits(ENTRY_1_1);
+
+		assertThrows(RepositoryException.class,
+				() -> index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10)));
+	}
+
+	@Test
+	public void sendQuerySkipsReferenceHitWhoseReferencedEntryIsCorrupt() throws Exception {
+		ContextManager cm = contextManagerListing();
+		referenceTo(cm, ENTRY_1_1, METADATA_2_1, ENTRY_2_1);
+		// The access to the referenced metadata, which the indexed document may contain, cannot be checked
+		when(cm.getEntry(METADATA_2_1)).thenThrow(corruptEntryFailure(ENTRY_2_1));
+		solrReturnsHits(ENTRY_1_1);
+
+		QueryResult result = index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		assertTrue(result.getEntries().isEmpty());
+		assertEquals(0, result.getHits());
+	}
+
+	@Test
+	public void sendQuerySkipsReferenceHitWhoseReferencedEntrysContextEntryIsCorrupt() throws Exception {
+		ContextManager cm = contextManagerListing();
+		referenceTo(cm, ENTRY_1_1, METADATA_2_1, ENTRY_2_1);
+		when(cm.getEntry(METADATA_2_1)).thenThrow(corruptEntryFailure(CONTEXT_2));
+		solrReturnsHits(ENTRY_1_1);
+
+		QueryResult result = index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		assertTrue(result.getEntries().isEmpty());
+		assertEquals(0, result.getHits());
+	}
+
+	@Test
+	public void sendQueryFailsWhenLoadingTheReferencedEntryFailsBecauseAnotherEntryIsCorrupt() throws Exception {
+		ContextManager cm = contextManagerListing();
+		referenceTo(cm, ENTRY_1_1, METADATA_2_1, ENTRY_2_1);
+		// As when the access check on the cached referenced entry loads a corrupt principal
+		when(cm.getEntry(METADATA_2_1)).thenThrow(corruptEntryFailure(PRINCIPAL_ENTRY));
+		solrReturnsHits(ENTRY_1_1);
+
+		assertThrows(RepositoryException.class,
+				() -> index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10)));
+	}
+
+	/**
+	 * Stubs a LinkReference that the given hit loads as, whose external metadata is the local metadata of the given
+	 * referenced entry.
+	 */
+	private Entry referenceTo(ContextManager cm, URI hitURI, URI externalMetadataURI, URI referencedEntryURI) {
+		LocalMetadataWrapper wrapper = mock(LocalMetadataWrapper.class);
+		when(wrapper.getReferencedEntryURI()).thenReturn(referencedEntryURI);
+		Entry reference = mock(Entry.class);
+		when(reference.getEntryType()).thenReturn(EntryType.LinkReference);
+		when(reference.getRepositoryManager()).thenReturn(rm);
+		when(reference.getCachedExternalMetadata()).thenReturn(wrapper);
+		when(reference.getExternalMetadataURI()).thenReturn(externalMetadataURI);
+		when(cm.getEntry(hitURI)).thenReturn(reference);
+		return reference;
+	}
+
+	@Test
+	public void failureKindIsTheSameForTheSameFailureOfDifferentEntries() {
+		assertEquals(SolrSearchIndex.failureKind("Unable to load entry", corruptEntryFailure(ENTRY_1_1)),
+				SolrSearchIndex.failureKind("Unable to load entry", corruptEntryFailure(ENTRY_1_2)));
+	}
+
+	@Test
+	public void failureKindDiffersForADifferentCause() {
+		assertNotEquals(SolrSearchIndex.failureKind("Unable to load entry", corruptEntryFailure(ENTRY_1_1)),
+				SolrSearchIndex.failureKind("Unable to load entry", new RepositoryException("Failed to connect")));
+	}
+
+	@Test
+	public void failureKindDiffersForADifferentMessage() {
+		assertNotEquals(SolrSearchIndex.failureKind("Unable to load entry", corruptEntryFailure(ENTRY_1_1)),
+				SolrSearchIndex.failureKind("Not indexing entry", corruptEntryFailure(ENTRY_1_1)));
 	}
 
 	private void solrReturnsHits(URI... entryURIs) throws Exception {

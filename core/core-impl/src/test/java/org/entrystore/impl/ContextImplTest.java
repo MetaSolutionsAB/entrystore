@@ -38,7 +38,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntConsumer;
 import org.eclipse.rdf4j.model.IRI;
-import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.model.vocabulary.XSD;
@@ -312,7 +311,8 @@ public class ContextImplTest extends AbstractCoreTest {
 		RepositoryException e = assertThrows(RepositoryException.class, () -> context.getByEntryURI(entryURI));
 
 		assertEquals("Unable to load entry " + entryURI, e.getMessage());
-		assertInstanceOf(CorruptEntryException.class, e.getCause());
+		CorruptEntryException corrupt = assertInstanceOf(CorruptEntryException.class, e.getCause());
+		assertEquals(entryURI, corrupt.getEntryURI());
 		String causeMessage = e.getCause().getMessage();
 		assertTrue(causeMessage.startsWith("Entry graph <" + entryURI + "> is corrupt"), causeMessage);
 		assertTrue(causeMessage.contains("no <" + RepositoryProperties.resource + ">"), causeMessage);
@@ -348,10 +348,10 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		RepositoryException e = assertThrows(RepositoryException.class, () -> context.getByEntryURI(entryURI));
 
-		assertInstanceOf(CorruptEntryException.class, e.getCause());
-		assertTrue(e.getCause().getMessage().startsWith("Entry graph <" + entryURI + "> is corrupt"),
-				e.getCause().getMessage());
-		assertInstanceOf(ClassCastException.class, e.getCause().getCause());
+		CorruptEntryException corrupt = assertInstanceOf(CorruptEntryException.class, e.getCause());
+		assertEquals(entryURI, corrupt.getEntryURI());
+		assertTrue(corrupt.getMessage().startsWith("Entry graph <" + entryURI + "> is corrupt"), corrupt.getMessage());
+		assertInstanceOf(ClassCastException.class, corrupt.getCause());
 	}
 
 	@Test
@@ -368,20 +368,26 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		RepositoryException e = assertThrows(RepositoryException.class, () -> context.getByEntryURI(entryURI));
 
-		assertInstanceOf(CorruptEntryException.class, e.getCause());
-		assertInstanceOf(IllegalArgumentException.class, e.getCause().getCause());
+		CorruptEntryException corrupt = assertInstanceOf(CorruptEntryException.class, e.getCause());
+		assertEquals(entryURI, corrupt.getEntryURI());
+		assertInstanceOf(IllegalArgumentException.class, corrupt.getCause());
 	}
 
-	private void removeFromEntryGraph(URI entryURI, IRI predicate) {
-		IRI graph = SimpleValueFactory.getInstance().createIRI(entryURI.toString());
-		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
-			rc.remove((Resource) null, predicate, null, graph);
-		}
+	@Test
+	public void loadingAnEntryWhoseContextEntryIsCorruptNamesTheContextEntry() {
+		Entry entry = context.createResource(null, GraphType.None, null, null);
+		Entry contextEntry = context.getEntry();
+		removeFromEntryGraph(contextEntry.getEntryURI(), RepositoryProperties.resource);
+		evictFromSoftCache(entry);
+		evictFromSoftCache(contextEntry);
+
+		RepositoryException e = assertThrows(RepositoryException.class,
+				() -> rm.getContextManager().getEntry(entry.getEntryURI()));
+
+		CorruptEntryException corrupt = CorruptEntryException.findIn(e).orElseThrow();
+		assertEquals(contextEntry.getEntryURI(), corrupt.getEntryURI());
 	}
 
-	private void evictFromSoftCache(Entry e) {
-		context.softCache.remove(e);
-	}
 
 	/**
 	 * Submits {@code taskCount} copies of {@code task} to a virtual-thread executor, releases them simultaneously via

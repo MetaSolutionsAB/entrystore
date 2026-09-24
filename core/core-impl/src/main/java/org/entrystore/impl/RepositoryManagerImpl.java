@@ -675,9 +675,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					solrIndex.reindex(false);
 				}
 			}
-			// The version markers record that a full reindex ran to completion, not that every entry is in the
-			// index: contexts and entries that fail because of their data would fail again on the next restart,
-			// so of the reindex outcomes only an interruption or an undrained submission queue withholds them.
+			// The version markers record that a full reindex ran to completion, see isReindexComplete
 			boolean persistMarkers = dataFolder != null && reindex && reindexSucceeded && versionResolved;
 			if (reindexResult != null) {
 				if (!reindexSucceeded) {
@@ -686,7 +684,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 				if (reindexResult.hasFailures()) {
 					log.error("Solr reindex could not index {} context(s) and {} entries (logged above). They are"
-							+ " missing from the search index{}; repair the affected data and trigger a reindex.",
+							+ " missing from the search index{}; once the cause is resolved, a reindex adds them again"
+							+ " (POST /management/solr with {\"command\": \"reindex\"}), and an entry is also added"
+							+ " again when it is modified.",
 							reindexResult.failedContexts(), reindexResult.failedEntries(),
 							persistMarkers ? " and a restart does not retry them" : "");
 				}
@@ -707,7 +707,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	/**
 	 * Decides whether a synchronous reindex ran to completion, which is what the Solr version markers record:
 	 * it was not interrupted and its documents left the submission queue. Contexts and entries that could not
-	 * be indexed do not count against completion, because they fail because of their data and would fail again.
+	 * be indexed do not count against completion. Most of them fail because of their data and would fail again,
+	 * and withholding the markers for them would wipe the index and reindex everything on every start. That is
+	 * accepted for entries that fail for a possibly transient reason as well, e.g. an error of the store: they stay
+	 * missing from the index until they are modified or reindexed (a context that fails as a whole is retried once).
 	 *
 	 * @param waitForQueueDrain waits until the submission queue is empty and returns false if interrupted; it is
 	 *                          not called after an interrupted reindex, since it has no timeout and only an
