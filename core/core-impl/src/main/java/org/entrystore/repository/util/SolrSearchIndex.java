@@ -86,6 +86,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static java.lang.Thread.interrupted;
 
@@ -727,8 +728,6 @@ public class SolrSearchIndex implements SearchIndex {
 					case INTERRUPTED -> true;
 				};
 				if (interrupted || Thread.currentThread().isInterrupted()) {
-					// interrupted() in postContextEntriesToQueue cleared the flag; restore it for the caller
-					Thread.currentThread().interrupt();
 					return new ReindexResult(failedContexts + abortedContexts.size(), failedEntries, true);
 				}
 			}
@@ -1065,6 +1064,11 @@ public class SolrSearchIndex implements SearchIndex {
 	 * started: an entry that is listed but not yet committed while it is being created cannot be found either, and
 	 * removing its document right away could remove the document that its creation posts. Entries whose loading
 	 * fails for another reason, e.g. a transient error of the store, keep their documents.
+	 * <p>
+	 * Loading runs as admin, so a failure caused by corrupt data is attributed by its cause chain alone: no
+	 * principals are loaded, and the context entry was already loaded to list the entries. Building a document
+	 * checks guest access, which loads all principals, so a corrupt principal makes every entry unindexable until it
+	 * is repaired.
 	 */
 	private ContextPostResult postContextEntriesToQueue(URI contextURI) {
 		String id = URISplit.getLastSegment(contextURI.toString());
@@ -1081,7 +1085,7 @@ public class SolrSearchIndex implements SearchIndex {
 		int unindexableEntries = 0;
 		Set<String> tracedFailureCauses = new HashSet<>();
 		for (URI entryURI : context.getEntries()) {
-			if (interrupted()) {
+			if (Thread.currentThread().isInterrupted()) {
 				return new ContextPostResult(ContextPostOutcome.INTERRUPTED, lastQueuedEntryURI, loadedEntries,
 						corruptEntries, unresolvedEntries, unloadableEntries, unindexableEntries);
 			}
@@ -1130,7 +1134,8 @@ public class SolrSearchIndex implements SearchIndex {
 		if (posted.notIndexedEntries() > 0) {
 			log.error("{} entries of context {} could not be indexed: {} are corrupt and {} could not be found, their"
 					+ " documents are removed from the index unless the purge is prevented; {} could not be loaded"
-					+ " and {} could not be indexed, they keep their previous documents", posted.notIndexedEntries(),
+					+ " and {} could not be indexed, they keep the documents they had in the index, if any",
+					posted.notIndexedEntries(),
 					contextURI, corruptEntries, unresolvedEntries, unloadableEntries, unindexableEntries);
 		}
 		return posted;
@@ -1163,17 +1168,28 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Logs an entry failure with its stack trace if it is the first failure of this kind (message and root
-	 * cause) in the current context reindex and the trace budget is not exhausted, otherwise as one line.
+	 * Logs an entry failure with its stack trace if it is the first failure of this kind (see
+	 * {@link #failureKind(String, Throwable)}) in the current context reindex and the trace budget is not exhausted,
+	 * otherwise as one line.
 	 */
 	private void logEntryFailure(String message, URI entryURI, Throwable e, Set<String> tracedFailureCauses) {
-		String rootCause = ExceptionUtils.getRootCauseMessage(e);
 		if (tracedFailureCauses.size() < MAX_ENTRY_FAILURE_TRACES
-				&& tracedFailureCauses.add(message + ": " + rootCause)) {
+				&& tracedFailureCauses.add(failureKind(message, e))) {
 			log.error("{} {}", message, entryURI, e);
 		} else {
-			log.error("{} {}: {}", message, entryURI, rootCause);
+			log.error("{} {}: {}", message, entryURI, ExceptionUtils.getRootCauseMessage(e));
 		}
+	}
+
+	/**
+	 * @return the kind of an entry failure: the log message and the classes of the exception and its causes. Not
+	 * the exception messages, which contain the URI of the failing entry, so that the same failure of many entries
+	 * is one kind.
+	 */
+	static String failureKind(String message, Throwable e) {
+		return message + ": " + ExceptionUtils.getThrowableList(e).stream()
+				.map(t -> t.getClass().getName())
+				.collect(Collectors.joining(" <- "));
 	}
 
 	private void storeLiteralsWithLanguages(SolrInputDocument doc, Map<String, Set<String>> literals, String literalType) {
@@ -1717,6 +1733,7 @@ public class SolrSearchIndex implements SearchIndex {
 			hits = sendQueryForEntryURIs(query, entryURIs, facetFields, solrServer, offset);
 			Date before = new Date();
 			for (URI uri : entryURIs) {
+				URI referencedEntryURI = null;
 				try {
 					Entry entry = rm.getContextManager().getEntry(uri);
 					if (entry != null) {
@@ -1729,7 +1746,8 @@ public class SolrSearchIndex implements SearchIndex {
 						// If linkReference or reference to an entry in the same repository
 						// check that the referenced metadata is accessible.
 						if ((entry.getEntryType() == EntryType.Reference || entry.getEntryType() == EntryType.LinkReference)
-								&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper) {
+								&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper wrapper) {
+							referencedEntryURI = wrapper.getReferencedEntryURI();
 							Entry refEntry;
 							try {
 								refEntry = entry.getRepositoryManager().getContextManager()
@@ -1757,14 +1775,15 @@ public class SolrSearchIndex implements SearchIndex {
 				} catch (AuthorizationException | IllegalStateException e) {
 					inaccessibleHits++;
 				} catch (RuntimeException | StackOverflowError e) {
-					// A corrupt entry must not fail the whole search, but other failures, e.g. of the store, must
-					// not turn into an empty result. Corrupt data, e.g. entries whose references form a cycle, can
-					// cause unbounded recursion; the JVM is usable again once it has unwound.
-					if (!isCausedByCorruptData(e)) {
+					// Only corrupt data of the hit, its referenced entry or their context entries skips the hit; other
+					// failures, e.g. of the store or a corrupt principal in an access check, must fail the search
+					if (ExceptionUtils.indexOfType(e, StackOverflowError.class) < 0
+							&& !CorruptData.isCorruptDataOf(e, uri, rm.getRepositoryURL())
+							&& !CorruptData.isCorruptDataOf(e, referencedEntryURI, rm.getRepositoryURL())) {
 						throw e;
 					}
-					log.warn("Skipping search hit {} because its entry is corrupt: {}", uri,
-							ExceptionUtils.getRootCauseMessage(e));
+					log.warn("Skipping search hit {} because its entry or its referenced entry is corrupt: {}", uri,
+							CorruptData.describe(e));
 					inaccessibleHits++;
 				}
 			}

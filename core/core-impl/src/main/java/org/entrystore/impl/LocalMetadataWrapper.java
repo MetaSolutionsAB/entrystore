@@ -20,12 +20,14 @@ import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.Entry;
 import org.entrystore.Metadata;
+import org.entrystore.repository.util.CorruptData;
 import org.entrystore.repository.util.URISplit;
 import org.entrystore.repository.util.URIType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.net.URL;
 
 
 public class LocalMetadataWrapper implements Metadata {
@@ -43,13 +45,29 @@ public class LocalMetadataWrapper implements Metadata {
 		this.entry = entry;
 	}
 
+	/**
+	 * @return the local metadata of the referenced entry, or an empty graph if there is no such entry or it cannot
+	 * be loaded because its data or that of its context entry is corrupt; a reference is then treated like a
+	 * reference to a missing entry
+	 */
 	public Model getGraph() {
 		Entry e = null;
 		URI refEntryURI = getReferencedEntryURI();
 		if (refEntryURI != null) {
 			e = ((ContextImpl) entry.getContext()).getSoftCache().getByEntryURI(refEntryURI);
 			if (e == null) {
-				e = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());
+				try {
+					e = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());
+				} catch (RuntimeException failure) {
+					URL repositoryURL = entry.getRepositoryManager().getRepositoryURL();
+					if (!CorruptData.isCorruptDataOf(failure, refEntryURI, repositoryURL)) {
+						throw failure;
+					}
+					log.warn("Entry {} that entry {} refers to as external metadata cannot be loaded, returning an"
+							+ " empty graph: {}", refEntryURI, entry.getEntryURI(),
+							CorruptData.describe(failure));
+					return new LinkedHashModel();
+				}
 			}
 		}
 		if (e != null && e.getLocalMetadata() != null) {
@@ -65,7 +83,7 @@ public class LocalMetadataWrapper implements Metadata {
 	 * @return the URI of the entry that the external metadata URI belongs to, or null if the URI does not
 	 * belong to an entry of this repository
 	 */
-	private URI getReferencedEntryURI() {
+	public URI getReferencedEntryURI() {
 		try {
 			URISplit split = new URISplit(entry.getExternalMetadataURI(),
 					entry.getRepositoryManager().getRepositoryURL());
