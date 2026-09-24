@@ -702,6 +702,27 @@ class EntryIT extends BaseSpec {
 		EntryStoreClient.getRequest('/' + contextId + '/entry/' + requestedEntryId).getResponseCode() == HTTP_NOT_FOUND
 	}
 
+	def "POST /{context-id}?entrytype=linkreference with the repository base URL followed by query parameters as external metadata should create the entry with empty cached external metadata"() {
+		given:
+		// Accepted in 5.x as well: such a URI does not denote an entry, so its metadata is an empty graph
+		def searchUrl = EntryStoreClient.baseUrl + '/search?type=solr&query=title:x'
+		def params = [entrytype: 'linkreference', resource: resourceUrl, 'cached-external-metadata': searchUrl]
+
+		when:
+		def entryId = createEntry(contextId, params)
+
+		then:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		entryConn.getResponseCode() == HTTP_OK
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		def entryExtMetadata = JSON_PARSER.parseText(entryConn.inputStream.text)['info'][entryUri][NameSpaceConst.TERM_EXTERNAL_METADATA].collect()
+		entryExtMetadata.size() == 1
+		entryExtMetadata[0]['value'] == searchUrl
+		def cachedMetadataConn = EntryStoreClient.getRequest('/' + contextId + '/cached-external-metadata/' + entryId)
+		cachedMetadataConn.getResponseCode() == HTTP_OK
+		(JSON_PARSER.parseText(cachedMetadataConn.inputStream.text) as Map).isEmpty()
+	}
+
 	def "POST /{context-id}?entrytype=linkreference&id=x with an entry graph that sets its own metadata as external metadata should respond with Bad Request and create nothing"() {
 		given:
 		def requestedEntryId = 'selfReferencingEntryGraph'

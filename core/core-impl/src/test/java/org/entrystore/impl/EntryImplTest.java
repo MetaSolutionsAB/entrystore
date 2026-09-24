@@ -309,6 +309,26 @@ public class EntryImplTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void createLinkReferenceAcceptsTheRepositoryBaseUrlFollowedByQueryParametersAsExternalMetadata() {
+		// Accepted in 5.x as well; such a URI does not denote an entry and yields an empty graph
+		URI searchURI = URI.create(rm.getRepositoryURL() + "search?type=solr&query=title:x");
+
+		Entry reference = context.createLinkReference("searchReference", URI.create("http://vk.se/"), searchURI, null);
+
+		assertEquals(searchURI, reference.getExternalMetadataURI());
+		assertTrue(reference.getCachedExternalMetadata().getGraph().isEmpty());
+	}
+
+	@Test
+	public void setExternalMetadataURIAcceptsTheRepositoryBaseUrlFollowedByQueryParameters() {
+		URI searchURI = URI.create(rm.getRepositoryURL() + "search?type=solr&query=title:x");
+
+		refLinkEntry.setExternalMetadataURI(searchURI);
+
+		assertEquals(searchURI, refLinkEntry.getExternalMetadataURI());
+	}
+
+	@Test
 	public void setExternalMetadataURIAcceptsTheMetadataOfAnotherSystem() {
 		URI otherSystemMetadataURI = URI.create("http://example.org/metadata/42");
 
