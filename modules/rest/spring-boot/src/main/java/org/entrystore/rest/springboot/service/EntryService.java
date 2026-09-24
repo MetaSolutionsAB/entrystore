@@ -43,14 +43,18 @@ import org.entrystore.Resource;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
 import org.entrystore.exception.EntryMissingException;
+import org.entrystore.exception.InvalidExternalMetadataURIException;
 import org.entrystore.impl.ContextImpl;
+import org.entrystore.impl.EntryImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.util.ModelUtil;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.repository.util.URISplit;
 import org.entrystore.rest.springboot.model.api.CreateEntryRequestBody;
 import org.entrystore.rest.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.springboot.model.api.ListFilter;
@@ -68,6 +72,7 @@ import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
 
 import java.net.URI;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -309,6 +314,7 @@ public class EntryService {
 		Entry entry = null; // A variable to store the new entry in.
 
 		try {
+			checkExternalMetadataURIOfEntryGraph(context, entryId, body);
 			// Local
 			if (entryType == null || entryType == EntryType.Local) {
 				entry = createLocalEntry(context, entryId, graphType, listUri, groupUri, body);
@@ -779,6 +785,43 @@ public class EntryService {
 				EntryType.LinkReference.equals(entry.getEntryType())) {
 			applyGraph(entry, requestBody.cachedExternalMetadata(), "cached external metadata",
 					graph -> entry.getCachedExternalMetadata().setGraph(graph));
+		}
+	}
+
+	/**
+	 * Validates the external metadata URI that the entry graph in the request body sets, before the entry is
+	 * created: the entry graph is applied only after the entry has been created, and a rejected URI must not leave
+	 * a created entry behind. The entry graph may refer to the new entry as {@code _newId}; as in
+	 * {@link #setEntryGraph}, this is replaced with the given ID, and without one the entry URI that the URI is
+	 * validated against uses {@code _newId} as well.
+	 *
+	 * @throws InvalidExternalMetadataURIException if the entry graph sets an external metadata URI that is not
+	 *                                             acceptable, see {@link EntryImpl#checkExternalMetadataURI}
+	 */
+	private void checkExternalMetadataURIOfEntryGraph(Context context, String entryId, CreateEntryRequestBody body) {
+		if (body == null || StringUtils.isEmpty(body.info())) {
+			return;
+		}
+		Model graph;
+		try {
+			// The entry graph as setEntryGraph applies it
+			String info = entryId != null ? body.info().replaceAll("_newId", entryId) : body.info();
+			graph = RDFJSON.rdfJsonToGraph(new JSONObject(info));
+		} catch (JSONException | RDFParseException e) {
+			return; // Handled as before by the create path of the entry type
+		}
+		if (graph == null) {
+			return;
+		}
+		URL repositoryURL = repositoryManager.getRepositoryURL();
+		URI entryURI = URISplit.createURI(repositoryURL.toString(), context.getEntry().getId(),
+				RepositoryProperties.ENTRY_PATH, entryId != null ? entryId : "_newId");
+		IRI entryIRI = repositoryManager.getValueFactory().createIRI(entryURI.toString());
+		for (Statement statement : graph.filter(entryIRI, RepositoryProperties.externalMetadata, null)) {
+			if (statement.getObject() instanceof IRI externalMetadataIRI) {
+				EntryImpl.checkExternalMetadataURI(URI.create(externalMetadataIRI.stringValue()), entryURI,
+						repositoryURL);
+			}
 		}
 	}
 

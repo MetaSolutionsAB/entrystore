@@ -45,11 +45,15 @@ import org.entrystore.Provenance;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
+import org.entrystore.exception.InvalidExternalMetadataURIException;
+import org.entrystore.exception.SelfReferencingExternalMetadataException;
+import org.entrystore.repository.CorruptEntryException;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.util.ModelUtil;
 import org.entrystore.repository.util.URISplit;
+import org.entrystore.repository.util.URIType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,6 +61,7 @@ import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
 import java.net.URI;
+import java.net.URL;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.GregorianCalendar;
@@ -201,12 +206,8 @@ public class EntryImpl implements Entry {
 		ValueFactory vf = repository.getValueFactory();
 		this.resURI = resURI;
 
-		if (lType == EntryType.LinkReference) {
-			this.cachedExternalMdURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
-			this.externalMdURI = externalMetadataURI;
-		}
-
-		if (lType == EntryType.Reference) {
+		if (lType == EntryType.LinkReference || lType == EntryType.Reference) {
+			checkExternalMetadataURI(URI.create(externalMetadataURI.stringValue()));
 			this.cachedExternalMdURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
 			this.externalMdURI = externalMetadataURI;
 		}
@@ -263,7 +264,22 @@ public class EntryImpl implements Entry {
 		loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, entryURI)));
 	}
 
+	/**
+	 * Loads the entry from the statements of its entry graph.
+	 *
+	 * @throws CorruptEntryException if the entry graph is corrupt, e.g. it lacks the resource statement or
+	 *                               contains a literal where a URI is expected or a malformed date
+	 */
 	private boolean loadFromStatements(List<Statement> existingStatements) throws RepositoryException {
+		try {
+			return parseStatements(existingStatements);
+		} catch (ClassCastException | IllegalArgumentException e) {
+			throw new CorruptEntryException("Entry graph <" + existingStatements.getFirst().getContext()
+					+ "> is corrupt: it contains a malformed value", e);
+		}
+	}
+
+	private boolean parseStatements(List<Statement> existingStatements) throws RepositoryException {
 		if (existingStatements.isEmpty()) {
 			return false;
 		}
@@ -345,6 +361,10 @@ public class EntryImpl implements Entry {
 			}
 		}
 
+		if (resURI == null) {
+			throw new CorruptEntryException(describeGraphWithoutResource(existingStatements));
+		}
+
 		//Detect types.
 		for (Statement statement : existingStatements) {
 			org.eclipse.rdf4j.model.Resource subject = statement.getSubject();
@@ -396,6 +416,22 @@ public class EntryImpl implements Entry {
 		this.invRelations = invRelations;
 
 		return true;
+	}
+
+	/**
+	 * Describes an entry graph that has statements but no {@code es:resource} statement, which leaves the
+	 * entry without a resource URI. Such a graph is typically the leftover of an incompletely removed entry;
+	 * the message names the graph and its predicates so the operator can locate and repair it.
+	 */
+	private static String describeGraphWithoutResource(List<Statement> statements) {
+		String predicates = statements.stream()
+				.map(s -> s.getPredicate().stringValue())
+				.distinct()
+				.sorted()
+				.collect(Collectors.joining(", "));
+		return "Entry graph <" + statements.getFirst().getContext() + "> is corrupt: it contains "
+				+ statements.size() + " statement(s) but no <" + RepositoryProperties.resource
+				+ "> statement; predicates present: " + predicates;
 	}
 
 	private ResourceType getResourceType(Value rt) {
@@ -765,6 +801,7 @@ public class EntryImpl implements Entry {
 		}
 
 		checkAdministerRights();
+		checkExternalMetadataURI(externalMetadataURI);
 
 		ValueFactory vf = getRepositoryManager().getValueFactory();
 		IRI oldExternalMetadataURI = vf.createIRI(getExternalMetadataURI().toString());
@@ -1207,22 +1244,31 @@ public class EntryImpl implements Entry {
 
 		// a client echoes the old resource URI as subject of the type and ACL triples it PUTs back
 		Model metametadata = submitted;
+		URI newResourceURI = null;
+		IRI oldResourceURI = this.resURI;
 		Iterator<Statement> resourceURIStmnts = submitted.filter(this.entryURI, RepositoryProperties.resource, null).iterator();
-		if (resourceURIStmnts.hasNext()) {
-			Value newResourceURI = resourceURIStmnts.next().getObject();
-			IRI oldResourceURI = this.resURI;
-			if (newResourceURI instanceof IRI newResourceIRI && !newResourceIRI.equals(oldResourceURI)) {
-				setResourceURI(toURI(newResourceIRI, "resource URI"));
-				metametadata = ModelUtil.replaceIRI(submitted, oldResourceURI, newResourceIRI);
-			}
+		if (resourceURIStmnts.hasNext() && resourceURIStmnts.next().getObject() instanceof IRI newResourceIRI
+				&& !newResourceIRI.equals(oldResourceURI)) {
+			newResourceURI = toURI(newResourceIRI, "resource URI");
+			metametadata = ModelUtil.replaceIRI(submitted, oldResourceURI, newResourceIRI);
 		}
 
-		Iterator<Statement> externalMdURIStmnts = metametadata.filter(this.entryURI, RepositoryProperties.externalMetadata, null).iterator();
-		if (externalMdURIStmnts.hasNext()) {
-			Value newExternalMetadataURI = externalMdURIStmnts.next().getObject();
-			if (newExternalMetadataURI instanceof IRI newExternalMetadataIRI) {
-				setExternalMetadataURI(toURI(newExternalMetadataIRI, "external metadata URI"));
-			}
+		URI newExternalMetadataURI = null;
+		Iterator<Statement> externalMdURIStmnts =
+				metametadata.filter(this.entryURI, RepositoryProperties.externalMetadata, null).iterator();
+		if (externalMdURIStmnts.hasNext() && externalMdURIStmnts.next().getObject() instanceof IRI externalMdIRI
+				&& (externalMdURI == null || !externalMdIRI.stringValue().equals(externalMdURI.stringValue()))) {
+			newExternalMetadataURI = toURI(externalMdIRI, "external metadata URI");
+			// Validated before anything is changed, so that a rejected URI leaves the entry unchanged. An unchanged
+			// URI is not validated, so that entries created before the validation can still be modified.
+			checkExternalMetadataURI(newExternalMetadataURI);
+		}
+
+		if (newResourceURI != null) {
+			setResourceURI(newResourceURI);
+		}
+		if (newExternalMetadataURI != null) {
+			setExternalMetadataURI(newExternalMetadataURI);
 		}
 		String originalList = this.getOriginalList();
 
@@ -1466,6 +1512,47 @@ public class EntryImpl implements Entry {
             }
         }
     }
+
+	/**
+	 * Validates an external metadata URI for this entry, see {@link #checkExternalMetadataURI(URI, URI, URL)}.
+	 */
+	private void checkExternalMetadataURI(URI externalMetadataURI) {
+		checkExternalMetadataURI(externalMetadataURI, URI.create(entryURI.stringValue()),
+				repositoryManager.getRepositoryURL());
+	}
+
+	/**
+	 * Validates the external metadata URI of a Reference or LinkReference entry. A URI in the repository, i.e.
+	 * one that starts with its base URL, gets its metadata from the local metadata of the entry it denotes (see
+	 * {@link LocalMetadataWrapper}), so it must be a URI that the repository can split, and must not denote the
+	 * entry itself: the entry would be the source of its own cached external metadata. The base URL followed only
+	 * by query parameters, e.g. a search URL, does not denote an entry and is accepted as before; its metadata is
+	 * an empty graph. A URI of another system is not restricted; its metadata is cached in the entry.
+	 *
+	 * @param entryURI the URI of the entry that the external metadata URI is set for
+	 * @throws SelfReferencingExternalMetadataException if the URI belongs to the entry itself
+	 * @throws InvalidExternalMetadataURIException if the URI is in the repository but cannot be split, e.g. the
+	 *                                             base URL itself or an entry path without an entry ID
+	 */
+	public static void checkExternalMetadataURI(URI externalMetadataURI, URI entryURI, URL repositoryURL) {
+		if (!externalMetadataURI.toString().startsWith(repositoryURL.toString())) {
+			return;
+		}
+		URISplit split;
+		try {
+			split = new URISplit(externalMetadataURI, repositoryURL);
+		} catch (IllegalArgumentException e) {
+			throw new InvalidExternalMetadataURIException("The external metadata URI " + externalMetadataURI
+					+ " is in this repository but does not denote an entry");
+		}
+		if (split.getUriType() == URIType.Unknown) {
+			return;
+		}
+		URI referencedEntryURI = split.getMetaMetadataURI();
+		if (referencedEntryURI.equals(entryURI)) {
+			throw new SelfReferencingExternalMetadataException(externalMetadataURI, referencedEntryURI);
+		}
+	}
 
     private void checkAdministerRights() {
 		PrincipalManager pm = this.getRepositoryManager().getPrincipalManager();

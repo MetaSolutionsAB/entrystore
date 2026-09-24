@@ -39,6 +39,7 @@ import org.entrystore.Quota;
 import org.entrystore.QuotaException;
 import org.entrystore.ResourceType;
 import org.entrystore.exception.EntryMissingException;
+import org.entrystore.exception.InvalidExternalMetadataURIException;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.security.DisallowedException;
@@ -340,8 +341,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 					rc.commit();
 				} catch (Exception e) {
 					rc.rollback();
-					log.error(e.getMessage());
-					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.repository.RepositoryException(
+							"Unable to rebuild the entry index of context " + this.resourceURI, e);
 				} finally {
 					rc.close();
 				}
@@ -901,6 +902,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 					softCache.put(newEntry);
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(newEntry, RepositoryEvent.EntryCreated));
 					return newEntry;
+				} catch (InvalidExternalMetadataURIException e) {
+					// Invalid input that is reported to the client; nothing has been written or cached yet
+					rc.rollback();
+					throw e;
 				} catch (Exception e) {
 					if (committed) {
 						log.error("Entry {} in context {} was committed, but the work after the commit failed; "
@@ -913,7 +918,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 					if (newEntry != null) {
 						newEntry.refreshFromRepository(rc);
 					}
-					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.repository.RepositoryException(newEntry != null
+							? "Unable to create entry " + newEntry.getEntryURI()
+							: "Unable to create entry in context " + this.resourceURI, e);
 				}
 			}
 		} catch (RepositoryException e) {
@@ -1163,8 +1170,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		} catch (AuthorizationException ae) {
 			throw ae;
 		} catch (Exception e) {
-			log.error(e.getMessage());
-			throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+			throw new org.entrystore.repository.RepositoryException("Unable to load entry " + entryURI, e);
 		}
 		return newEntry;
 	}
@@ -1327,8 +1333,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 					log.error(e1.getMessage());
 					throw new org.entrystore.repository.RepositoryException("Error when rolling back transaction", e);
 				}
-				log.error(e.getMessage(), e);
-				throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+				throw new org.entrystore.repository.RepositoryException("Unable to remove entry " + entryURI, e);
 			} finally {
 				try {
 					rc.close();

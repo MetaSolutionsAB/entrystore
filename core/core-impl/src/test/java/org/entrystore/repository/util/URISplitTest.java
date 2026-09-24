@@ -24,6 +24,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.net.MalformedURLException;
 import java.net.URI;
+import java.net.URL;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -136,6 +137,12 @@ public class URISplitTest {
 	public void constructor_unknown() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(unknownURIString), URI.create(anyURIStringBase).toURL());
 		assertEquals(URIType.Unknown, uriSplit.getUriType());
+	}
+
+	@Test
+	public void constructor_baseURIFail() throws MalformedURLException {
+		URL base = URI.create(anyURIStringBase).toURL();
+		assertThrows(IllegalArgumentException.class, () -> new URISplit(URI.create(anyURIStringBase), base));
 	}
 
 	@Test
