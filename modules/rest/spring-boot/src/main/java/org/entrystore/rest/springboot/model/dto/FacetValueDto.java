@@ -16,8 +16,6 @@
 
 package org.entrystore.rest.springboot.model.dto;
 
-import java.util.List;
-
 /**
  * One facet bucket. {@code name} is {@code null} for the {@code facet.missing} bucket. The count is Solr's, taken
  * before the per-entry authorization filtering in {@code SolrSearchIndex.sendQuery}, so a drill-down on the label

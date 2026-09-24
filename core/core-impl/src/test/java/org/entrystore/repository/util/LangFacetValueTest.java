@@ -162,28 +162,42 @@ class LangFacetValueTest {
 			"sv, en, false",
 			"en-GB, en-US, false"
 	})
-	void matchesLanguage_appliesRfc4647BasicFiltering(String tag, String facetLang, boolean expected) {
-		assertEquals(expected, LangFacetValue.matchesLanguage(tag, facetLang));
+	void languageMatchesRegex_appliesRfc4647BasicFilteringToTheTag(String tag, String facetLang, boolean expected) {
+		Pattern pattern = Pattern.compile(LangFacetValue.languageMatchesRegex(null, facetLang));
+
+		assertEquals(expected, pattern.matcher("Sverige" + SEPARATOR + tag).matches());
 	}
 
 	@Test
-	void matchesLanguage_isFalseWithoutATagOrARange() {
-		assertFalse(LangFacetValue.matchesLanguage(null, "en"));
-		assertFalse(LangFacetValue.matchesLanguage("en", null));
+	void languageMatchesRegex_alwaysSelectsAnUntaggedLabel() {
+		Pattern pattern = Pattern.compile(LangFacetValue.languageMatchesRegex(null, "sv"));
+
+		assertTrue(pattern.matcher(LangFacetValue.encode(VF.createLiteral("SE-01"))).matches());
+	}
+
+	@Test
+	void languageMatchesRegex_anchorsFacetMatchesToTheWholeLabelPart() {
+		Pattern pattern = Pattern.compile(LangFacetValue.languageMatchesRegex("Sverige", "sv"));
+
+		assertTrue(pattern.matcher(LangFacetValue.encode(VF.createLiteral("Sverige", "sv"))).matches());
+		assertTrue(pattern.matcher(LangFacetValue.encode(VF.createLiteral("Sverige"))).matches());
+		assertFalse(pattern.matcher(LangFacetValue.encode(VF.createLiteral("Sverige-x", "sv"))).matches());
+	}
+
+	@Test
+	void languageMatchesRegex_keepsTheLabelPartCaseSensitive() {
+		// facetMatches is case-sensitive on the client field, so facetLang must not widen it
+		assertFalse(Pattern.compile(LangFacetValue.languageMatchesRegex("sver-1", "sv"))
+				.matcher("Sver-1" + SEPARATOR + "sv").matches());
+		assertFalse(Pattern.compile(LangFacetValue.languageMatchesRegex("Sweden", "en"))
+				.matcher("sweden" + SEPARATOR + "en").matches());
+		assertFalse(Pattern.compile(LangFacetValue.languageMatchesRegex("Sweden", "en"))
+				.matcher("SWEDEN" + SEPARATOR).matches());
 	}
 
 	@Test
 	void exceedsLabelCap_isTrueOnlyAboveTheCap() {
 		assertFalse(LangFacetValue.exceedsLabelCap("x".repeat(LangFacetValue.MAX_LABEL_LENGTH)));
 		assertTrue(LangFacetValue.exceedsLabelCap("x".repeat(LangFacetValue.MAX_LABEL_LENGTH + 1)));
-	}
-
-	@Test
-	void labelMatchesRegex_fullMatchesOnlyTheLabelPart() {
-		Pattern pattern = Pattern.compile(LangFacetValue.labelMatchesRegex("Sverige"));
-
-		assertTrue(pattern.matcher(LangFacetValue.encode(VF.createLiteral("Sverige", "sv"))).matches());
-		assertTrue(pattern.matcher(LangFacetValue.encode(VF.createLiteral("Sverige"))).matches());
-		assertFalse(pattern.matcher(LangFacetValue.encode(VF.createLiteral("Sverige-x", "sv"))).matches());
 	}
 }

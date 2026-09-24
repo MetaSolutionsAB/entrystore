@@ -96,11 +96,13 @@ public class SearchController {
 							+ "buckets of literal facet fields (metadata.predicate.literal_s.<hash> or the "
 							+ "metadata.predicate.literal.<hash> shorthand) whose label occurs in that language (prefix "
 							+ "match, so en also matches en-GB) or untagged. The selection happens in Solr before "
-							+ "facetLimit is applied, and the counts returned are exact. Because the candidates are "
-							+ "gathered with a bounded overrequest, the last places of the top N are approximate, the "
-							+ "same contract Solr's own distributed faceting gives. Labels longer than 256 characters "
-							+ "are not selectable this way and are therefore absent whenever facetLang is set. "
-							+ "Requires facetFields.")
+							+ "facetLimit is applied. A bucket's count is the label's count in all languages, taken "
+							+ "before access filtering; it is not the number of entries in the requested language. "
+							+ "Candidates are gathered with a bounded overrequest ranked by their count in the "
+							+ "requested language, while the final order uses the total count, so a label that is rare "
+							+ "in that language but frequent overall can be missing from the top N entirely. Labels "
+							+ "longer than 256 characters are not selectable this way and are therefore absent "
+							+ "whenever facetLang is set. Requires facetFields.")
 			}
 	)
 	@GetMapping(

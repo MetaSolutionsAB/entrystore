@@ -27,8 +27,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -36,8 +36,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * The guard must refuse to start only on a verifiable schema mismatch: a schema that lacks the fields is a fatal
- * misconfiguration, while an unreachable Solr must keep the established startup behaviour.
+ * The guard must refuse to start on a verifiable misconfiguration (missing fields, a denied schema read, a core that
+ * does not exist), while an unreachable Solr must keep the established startup behaviour and report the schema as
+ * unverified.
  */
 class SolrSchemaCheckTest {
 
@@ -63,11 +64,11 @@ class SolrSchemaCheckTest {
 	}
 
 	@Test
-	void requireDynamicFields_passesWhenEveryRequiredFieldIsDeclared() throws Exception {
+	void requireDynamicFields_reportsTheSchemaVerifiedWhenEveryRequiredFieldIsDeclared() throws Exception {
 		SolrClient client = solrDeclaring("metadata.predicate.uri.*", "metadata.predicate.literal_l.*",
 				"related.metadata.predicate.literal_l.*");
 
-		assertDoesNotThrow(() -> SolrSchemaCheck.requireDynamicFields(client, SOLR_URL, REQUIRED));
+		assertTrue(SolrSchemaCheck.requireDynamicFields(client, SOLR_URL, REQUIRED));
 	}
 
 	@Test
@@ -82,19 +83,32 @@ class SolrSchemaCheckTest {
 	}
 
 	@Test
-	void requireDynamicFields_letsAnUnreachableSolrThrough() throws Exception {
+	void requireDynamicFields_letsAnUnreachableSolrThroughUnverified() throws Exception {
 		SolrClient client = mock(SolrClient.class);
 		when(client.request(any(), any())).thenThrow(new SolrServerException("connection refused"));
 
-		assertDoesNotThrow(() -> SolrSchemaCheck.requireDynamicFields(client, SOLR_URL, REQUIRED));
+		assertFalse(SolrSchemaCheck.requireDynamicFields(client, SOLR_URL, REQUIRED));
 	}
 
 	@Test
-	void requireDynamicFields_letsASolrWithoutTheSchemaApiThrough() throws Exception {
+	void requireDynamicFields_letsASolrStillLoadingTheCoreThroughUnverified() throws Exception {
+		SolrClient client = mock(SolrClient.class);
+		when(client.request(any(), any()))
+				.thenThrow(new RemoteSolrException("solr.example.org", 503, "SolrCore is loading", null));
+
+		assertFalse(SolrSchemaCheck.requireDynamicFields(client, SOLR_URL, REQUIRED));
+	}
+
+	@Test
+	void requireDynamicFields_refusesWhenTheConfiguredCoreDoesNotExist() throws Exception {
 		SolrClient client = mock(SolrClient.class);
 		when(client.request(any(), any())).thenThrow(new RemoteSolrException("solr.example.org", 404, "Not Found", null));
 
-		assertDoesNotThrow(() -> SolrSchemaCheck.requireDynamicFields(client, SOLR_URL, REQUIRED));
+		IllegalStateException thrown = assertThrows(IllegalStateException.class,
+				() -> SolrSchemaCheck.requireDynamicFields(client, SOLR_URL, REQUIRED));
+
+		assertTrue(thrown.getMessage().contains("entrystore.solr.url"), thrown.getMessage());
+		assertTrue(thrown.getMessage().contains("http://host:8983/solr/<core>"), thrown.getMessage());
 	}
 
 	@Test
@@ -120,9 +134,9 @@ class SolrSchemaCheckTest {
 		when(client.request(any(), any()))
 				.thenThrow(new RemoteSolrException("solr.example.org", 500, "Internal Server Error", null));
 
-		assertDoesNotThrow(() -> SolrSchemaCheck.requireDynamicFields(client, "http://solr.example.org/entrystore",
+		assertFalse(SolrSchemaCheck.requireDynamicFields(client, "http://solr.example.org/entrystore",
 				List.of("metadata.predicate.literal_l.*")),
-				"a Solr fault is not evidence the schema is wrong, so startup keeps its established behaviour");
+				"a Solr fault is not evidence the schema is wrong, so startup continues, but unverified");
 	}
 
 	@Test

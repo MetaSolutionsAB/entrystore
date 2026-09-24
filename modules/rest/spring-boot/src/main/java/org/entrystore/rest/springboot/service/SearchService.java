@@ -192,7 +192,11 @@ public class SearchService {
 				results = qResult.getHits();
 				responseFacetFields = LanguageAwareFacets.merge(qResult.getFacetFields(), facetSettings, q, index);
 			} catch (SolrException se) {
-				log.warn("SolrException: {}", se.getMessage());
+				// AppExceptionHandler logs both at a lower level; a Solr failure should be visible in the logs
+				log.warn("SolrException ({}): {}", se.code(), se.getMessage());
+				if (se.code() >= HttpStatus.INTERNAL_SERVER_ERROR.value()) {
+					throw new CustomResponseException("Search is temporarily unavailable", HttpStatus.SERVICE_UNAVAILABLE, se);
+				}
 				throw new BadRequestException("Search failed due to wrong parameters");
 			}
 			return new QueryResultsDto(entries, results, responseFacetFields);

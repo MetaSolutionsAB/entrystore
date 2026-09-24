@@ -35,20 +35,25 @@ import java.util.TreeSet;
  * declares, and the schema has no catch-all field, so an outdated schema rejects nearly every document. Because the
  * first boot after an upgrade wipes and rebuilds the index, that outcome would be an empty index whose version
  * markers say it is current. The check therefore runs before the wipe and refuses to start when the schema
- * verifiably lacks a required field, and equally when Solr answers 401 or 403: Solr is up and reachable there, the
- * check simply may not read the schema, so letting it through ends in exactly the empty index it exists to prevent.
- * A Solr that cannot be reached, or one without the Schema API, is reported and let through: an outage keeps the
- * established startup behaviour instead of becoming a startup failure.
+ * verifiably lacks a required field, and equally when Solr answers 401 or 403 (Solr is up, the check may just not
+ * read the schema) or 404 (the configured core does not exist, so every search and index batch would fail). A Solr
+ * that cannot be reached, or that answers with another error such as 503 while the core is still loading, is
+ * reported and let through: an outage keeps the established startup behaviour instead of becoming a startup
+ * failure. The caller learns
+ * whether the schema was verified, so it can be stricter about the version markers when it was not.
  */
-final class SolrSchemaCheck {
+public final class SolrSchemaCheck {
 
 	private static final Logger log = LoggerFactory.getLogger(SolrSchemaCheck.class);
 
 	private SolrSchemaCheck() {
 	}
 
-	/** Names of the dynamic fields the core declares, read through the read-only Schema API. */
-	static Set<String> dynamicFieldNames(SolrClient client) throws SolrServerException, IOException {
+	/**
+	 * Names of the dynamic fields the core declares, read through the read-only Schema API. Public so the
+	 * integration tests can run exactly this read against a real Solr, since the guard fails open when it breaks.
+	 */
+	public static Set<String> dynamicFieldNames(SolrClient client) throws SolrServerException, IOException {
 		Set<String> names = new LinkedHashSet<>();
 		for (Map<String, Object> field : new SchemaRequest.DynamicFields().process(client).getDynamicFields()) {
 			Object name = field.get("name");
@@ -64,11 +69,15 @@ final class SolrSchemaCheck {
 
 	private static final int HTTP_FORBIDDEN = 403;
 
+	private static final int HTTP_NOT_FOUND = 404;
+
 	/**
+	 * @return {@code true} when the schema was read and declares every field of {@code required}, {@code false} when
+	 * it could not be read and startup continues unverified
 	 * @throws IllegalStateException when the schema could be read and lacks one of {@code required}, or when Solr
-	 * refused the schema request with 401 or 403
+	 * answered the schema request with 401, 403 or 404
 	 */
-	static void requireDynamicFields(SolrClient client, String solrUrl, Collection<String> required) {
+	public static boolean requireDynamicFields(SolrClient client, String solrUrl, Collection<String> required) {
 		Set<String> declared;
 		try {
 			declared = dynamicFieldNames(client);
@@ -78,12 +87,17 @@ final class SolrSchemaCheck {
 						+ e.code() + ". Grant the EntryStore Solr user permission to read the schema (the read-only Schema"
 						+ " API) and start again; starting without the check could rebuild an empty index.", e);
 			}
-			log.error("Could not verify the Solr schema at {}: Solr answered HTTP {}. Continuing without the check: {}",
-					solrUrl, e.code(), e.getMessage());
-			return;
+			if (e.code() == HTTP_NOT_FOUND) {
+				throw new IllegalStateException("Solr answered HTTP 404 for the schema at " + solrUrl + ": the core does"
+						+ " not exist. Check entrystore.solr.url, which must name the core, e.g."
+						+ " http://host:8983/solr/<core>, and start again.", e);
+			}
+			log.error("Could not verify the Solr schema at {}: Solr answered HTTP {}. Continuing without the check",
+					solrUrl, e.code(), e);
+			return false;
 		} catch (SolrServerException | IOException e) {
-			log.warn("Could not verify the Solr schema at {}; continuing without the check: {}", solrUrl, e.getMessage());
-			return;
+			log.warn("Could not verify the Solr schema at {}; continuing without the check", solrUrl, e);
+			return false;
 		}
 		Set<String> missing = new TreeSet<>(required);
 		missing.removeAll(declared);
@@ -93,5 +107,6 @@ final class SolrSchemaCheck {
 					+ " core and start again; starting now would rebuild an empty index.");
 		}
 		log.info("Solr schema at {} declares the required dynamic fields {}", solrUrl, required);
+		return true;
 	}
 }

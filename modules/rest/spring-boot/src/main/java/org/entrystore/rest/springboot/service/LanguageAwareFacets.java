@@ -16,14 +16,13 @@
 
 package org.entrystore.rest.springboot.service;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.solr.client.solrj.request.SolrQuery;
 import org.apache.solr.client.solrj.response.FacetField;
 import org.entrystore.repository.util.LangFacetValue;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.model.dto.FacetValueDto;
 import org.entrystore.rest.springboot.model.dto.FacetValuesDto;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -32,6 +31,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Server-side language filtering for literal facets on {@code GET /search?type=solr}.
@@ -40,20 +40,23 @@ import java.util.Set;
  * support existed, with the configured facet limit applied. With {@code facetLang} the selection happens inside
  * Solr, against the internal companion field {@code metadata.predicate.literal_l.<hash>} whose terms are
  * {@code label + U+001F + language}. Candidate labels come from that companion under a bounded overrequest, and
- * their exact counts from a second {@code rows=0} request on the client field, so the buckets a client sees carry
- * the same counts as an unfiltered facet. Companion fields never reach the client.
+ * the counts of the candidates of all requested fields from one further {@code rows=0} request on the client
+ * fields. Companion fields never reach the client.
  *
- * <p>Two consequences of the overrequest are worth knowing, and are documented on the {@code facetLang} parameter.
- * The counts of the returned buckets are exact, but the last slots of the top N are approximate, which is the same
- * contract Solr's own distributed faceting gives. And a label longer than {@link LangFacetValue#MAX_LABEL_LENGTH}
+ * <p>What a client gets, as documented on the {@code facetLang} parameter: a bucket's count is the label's count in
+ * all languages, not the number of entries in the requested language. Candidates are ranked by their count in the
+ * requested language and the final order uses the total count, so a label that is rare in that language but
+ * frequent overall can be missing from the top N entirely. A label longer than {@link LangFacetValue#MAX_LABEL_LENGTH}
  * has no companion term, so it cannot be selected while {@code facetLang} is set.
  *
  * <p>Counts are Solr's, taken before the per-entry authorization filtering in {@code SolrSearchIndex.sendQuery}, so
  * a caller who may not read every matching entry can see a count higher than the hits a drill-down returns.
  */
+@Slf4j
 final class LanguageAwareFacets {
 
-	private static final Logger log = LoggerFactory.getLogger(LanguageAwareFacets.class);
+	/** Companion fields already reported as missing from the index, so the stale-index WARN is logged once each. */
+	private static final Set<String> REPORTED_STALE_FIELDS = ConcurrentHashMap.newKeySet();
 
 	private static final String LITERAL_SHORTHAND_PREFIX = "metadata.predicate.literal.";
 
@@ -120,14 +123,14 @@ final class LanguageAwareFacets {
 	 * {@code [A-Za-z0-9-]}, so it carries no regex metacharacter.
 	 */
 	private static String languageMatchesRegex(SolrSearchIndex.FacetSettings settings) {
-		String label = settings.matches == null ? null : settings.matches;
 		String range = LangFacetValue.normalizeLanguageTag(settings.lang);
-		return LangFacetValue.languageMatchesRegex(label, range);
+		return LangFacetValue.languageMatchesRegex(settings.matches, range);
 	}
 
 	/**
 	 * Turns the raw Solr facet fields into the client-facing list. Companion fields are consumed and dropped; with
-	 * {@code facetLang} the surviving labels are re-counted exactly and cut to the client's limit.
+	 * {@code facetLang} the candidate labels of every literal field are counted in one request and cut to the
+	 * client's limit.
 	 */
 	static List<FacetValuesDto> merge(List<FacetField> response, SolrSearchIndex.FacetSettings settings,
 									  SolrQuery executedQuery, SolrSearchIndex index) {
@@ -135,19 +138,52 @@ final class LanguageAwareFacets {
 		for (FacetField facetField : response) {
 			byName.putIfAbsent(facetField.getName(), facetField);
 		}
+		Map<String, List<String>> candidatesByField = new LinkedHashMap<>();
+		for (FacetField facetField : byName.values()) {
+			String companionName = LangFacetValue.companionField(facetField.getName());
+			FacetField companion = companionName == null ? null : byName.get(companionName);
+			if (companion != null) {
+				candidatesByField.put(facetField.getName(), candidateLabels(companion));
+			}
+		}
+		Map<String, List<String>> toCount = new LinkedHashMap<>();
+		candidatesByField.forEach((field, candidates) -> {
+			if (!candidates.isEmpty()) {
+				toCount.put(field, candidates);
+			}
+		});
+		Map<String, Map<String, Long>> counts = toCount.isEmpty()
+				? Map.of()
+				: index.facetCountsForLabels(executedQuery, toCount);
+
 		List<FacetValuesDto> result = new ArrayList<>();
 		for (FacetField facetField : byName.values()) {
 			if (LangFacetValue.isLangFacetField(facetField.getName())) {
 				continue;
 			}
-			String companionName = LangFacetValue.companionField(facetField.getName());
-			FacetField companion = companionName == null ? null : byName.get(companionName);
-			List<FacetValueDto> values = companion == null
-					? plainValues(facetField)
-					: languageFilteredValues(facetField, companion, settings, executedQuery, index);
+			List<String> candidates = candidatesByField.get(facetField.getName());
+			List<FacetValueDto> values;
+			if (candidates == null) {
+				values = plainValues(facetField);
+			} else if (candidates.isEmpty()) {
+				values = valuesWithoutCandidates(facetField, index);
+			} else {
+				values = rankedValues(facetField, counts.getOrDefault(facetField.getName(), Map.of()), settings);
+			}
 			result.add(new FacetValuesDto(facetField.getName(), values));
 		}
 		return result;
+	}
+
+	/** Decoded and deduped labels of the companion buckets, in the companion's ranking by in-language count. */
+	private static List<String> candidateLabels(FacetField companion) {
+		Set<String> candidates = new LinkedHashSet<>();
+		for (FacetField.Count bucket : companion.getValues()) {
+			if (bucket.getName() != null) {
+				candidates.add(LangFacetValue.decode(bucket.getName()).label());
+			}
+		}
+		return new ArrayList<>(candidates);
 	}
 
 	private static List<FacetValueDto> plainValues(FacetField facetField) {
@@ -158,32 +194,38 @@ final class LanguageAwareFacets {
 		return values;
 	}
 
-	private static List<FacetValueDto> languageFilteredValues(FacetField facetField, FacetField companion,
-															  SolrSearchIndex.FacetSettings settings,
-															  SolrQuery executedQuery, SolrSearchIndex index) {
-		Set<String> candidates = new LinkedHashSet<>();
-		for (FacetField.Count bucket : companion.getValues()) {
-			if (bucket.getName() != null) {
-				candidates.add(LangFacetValue.decode(bucket.getName()).label());
-			}
-		}
-
+	/**
+	 * No candidate is usually the answer: the filters selected no label in that language. Only when the client field
+	 * has named buckets while the companion holds no term anywhere in the index is it a stale index instead, which
+	 * falls back to the unfiltered facet.
+	 */
+	private static List<FacetValueDto> valuesWithoutCandidates(FacetField facetField, SolrSearchIndex index) {
 		FacetValueDto missing = missingBucket(facetField);
-		if (candidates.isEmpty()) {
-			// No overlap between the filters is an ordinary answer, so the stale index is told apart from it by
-			// asking whether the companion holds any term at all here; only this path pays for that request.
-			if (facetField.getValueCount() > 0 && !index.hasFacetTerms(executedQuery, companion.getName())) {
-				log.warn("facetLang found no language terms on {} although the facet has {} buckets; the index predates "
-								+ "the language companion field. Run a reindex to enable language filtering. Returning "
-								+ "the unfiltered facet.", facetField.getName(), facetField.getValueCount());
-				return plainValues(facetField);
+		String companion = LangFacetValue.companionField(facetField.getName());
+		if (hasNamedBuckets(facetField) && !index.hasFacetTerms(companion)) {
+			if (REPORTED_STALE_FIELDS.add(companion)) {
+				log.warn("facetLang found no language terms for {} anywhere in the index; the index predates the "
+						+ "language companion field. Run a reindex to enable language filtering. Returning the "
+						+ "unfiltered facet until then.", facetField.getName());
 			}
-			return missing == null ? List.of() : List.of(missing);
+			return plainValues(facetField);
 		}
+		return missing == null ? List.of() : List.of(missing);
+	}
 
-		Map<String, Long> exactCounts = index.facetCountsForLabels(executedQuery, facetField.getName(), candidates);
+	private static boolean hasNamedBuckets(FacetField facetField) {
+		for (FacetField.Count bucket : facetField.getValues()) {
+			if (bucket.getName() != null) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static List<FacetValueDto> rankedValues(FacetField facetField, Map<String, Long> counts,
+													SolrSearchIndex.FacetSettings settings) {
 		List<FacetValueDto> values = new ArrayList<>();
-		for (Map.Entry<String, Long> counted : exactCounts.entrySet()) {
+		for (Map.Entry<String, Long> counted : counts.entrySet()) {
 			if (counted.getValue() >= settings.minCount) {
 				values.add(new FacetValueDto(counted.getKey(), counted.getValue()));
 			}
@@ -192,6 +234,7 @@ final class LanguageAwareFacets {
 		if (values.size() > settings.limit) {
 			values = new ArrayList<>(values.subList(0, settings.limit));
 		}
+		FacetValueDto missing = missingBucket(facetField);
 		if (missing != null) {
 			values.add(missing);
 		}

@@ -651,11 +651,12 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			throw new IllegalStateException("Embedded Solr is no longer supported; '" + Settings.SOLR_URL + "' must be an http(s) URL");
 		}
 		if (solrServer != null) {
-			SolrSchemaCheck.requireDynamicFields(solrServer, solrURL,
+			boolean schemaVerified = SolrSchemaCheck.requireDynamicFields(solrServer, solrURL,
 					List.of(LangFacetValue.FIELD_PREFIX + "*", "related." + LangFacetValue.FIELD_PREFIX + "*"));
 			solrIndex = new SolrSearchIndex(this, solrServer);
 			boolean reindexSucceeded = false;
 			SearchIndex.ReindexResult reindexResult = null;
+			boolean reindexComplete = false;
 			if (reindex) {
 				if (reindexWait) {
 					if (!solrIndex.clearSolrIndex(solrServer)) {
@@ -663,14 +664,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					} else {
 						long rejectedBefore = solrIndex.getRejectedDocumentCount();
 						reindexResult = solrIndex.reindexSync();
-						boolean complete = isReindexComplete(reindexResult, solrIndex::waitForQueueDrain);
+						reindexComplete = isReindexComplete(reindexResult, solrIndex::waitForQueueDrain);
 						long rejected = solrIndex.getRejectedDocumentCount() - rejectedBefore;
-						// Rejections are reported but do not block the markers: a document Solr rejects every time
-						// would otherwise wipe the index and reindex on every restart, for good (ENTRYSTORE-1033).
-						// SolrSchemaCheck above already refuses the schema mismatch this gate was added for.
-						reindexSucceeded = complete;
-						if (complete && rejected > 0) {
-							log.error("Solr rejected {} documents during the initial reindex; they are missing from the index until the cause is fixed and a reindex is run. Check the earlier rejection logs for the reason, for example a literal too long for the field or a schema mismatch.", rejected);
+						// On a verified schema a document Solr always rejects must not block the markers, or every restart
+						// would wipe and reindex; unverified, rejections may be a schema mismatch the next start re-checks.
+						reindexSucceeded = reindexComplete && (schemaVerified || rejected == 0);
+						if (reindexComplete && rejected > 0 && !schemaVerified) {
+							log.error("Solr rejected {} documents during the initial reindex and the Solr schema could not be verified; skipping version-marker write so the next restart checks the schema again and re-triggers reindex. Check the earlier rejection logs for the reason.", rejected);
+						} else if (reindexComplete && rejected > 0) {
+							log.error("Solr rejected {} documents during the initial reindex; they are missing from the index. Check the earlier rejection logs for the reason, for example a literal too long for the field. A plain restart does not reindex, so once the cause is fixed start once with {}=on.", rejected, Settings.SOLR_REINDEX_ON_STARTUP);
 						}
 					}
 				} else {
@@ -682,7 +684,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			// The version markers record that a full reindex ran to completion, see isReindexComplete
 			boolean persistMarkers = dataFolder != null && reindex && reindexSucceeded && versionResolved;
 			if (reindexResult != null) {
-				if (!reindexSucceeded) {
+				if (!reindexComplete) {
 					log.warn("Solr {}; skipping version-marker write so the next restart re-triggers reindex.",
 							reindexResult.interrupted() ? "reindex was interrupted" : "submission queue did not drain");
 				}

@@ -68,6 +68,13 @@ class SearchIT extends BaseSpec {
 	static final String LANG_MARKER_FIELD_L = 'metadata.predicate.literal_l.' + LANG_MARKER_HASH
 	static final String LANG_MARKER_FIELD_S = 'metadata.predicate.literal_s.' + LANG_MARKER_HASH
 
+	// Separate predicate for labels that look like Solr macros or query syntax, so the closed bucket sets of
+	// the LANG_MARKER specs stay valid. The plain marker value is what the spec queries on.
+	static final String AWKWARD_MARKER_IRI = 'http://example.org/ns/searchIT-awkward-marker'
+	static final String AWKWARD_MARKER_FIELD_S = 'metadata.predicate.literal_s.' + Hashing.hash(AWKWARD_MARKER_IRI, HashType.MD5).substring(0, 8)
+	static final String AWKWARD_MARKER_VALUE = 'awkwardmarkervalue'
+	static final List<String> AWKWARD_LABELS = ['Price ${amount}', '${facet.query}', '{!lucene}*:*', 'a, "b"']
+
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
@@ -186,6 +193,14 @@ class SearchIT extends BaseSpec {
 							 ]
 						 ]]]
 		assert getOrCreateEntry(contextId, langParams3, langBody3).length() > 0
+
+		def awkwardParams = [id: 'searchAwkwardLabelsEntryId', graphtype: 'string']
+		def awkwardBody = [resource: 'Awkward labels text',
+						   metadata: [(newResourceIri): [
+							   (AWKWARD_MARKER_IRI): AWKWARD_LABELS.collect { [type: 'literal', value: it, lang: 'sv'] }
+								   + [[type: 'literal', value: AWKWARD_MARKER_VALUE]]
+						   ]]]
+		assert getOrCreateEntry(contextId, awkwardParams, awkwardBody).length() > 0
 
 		// Entry whose DECIMAL_PREDICATE_IRI value is typed xsd:double but has a non-numeric lexical
 		// form. The indexer's isDecimalLiteral guard matches (datatype is xsd:double), l.doubleValue()
@@ -1143,6 +1158,22 @@ class SearchIT extends BaseSpec {
 		def facetField = respJson['facetFields'].find { it['name'] == LANG_MARKER_FIELD_S }
 		// "Sweden" (en only) and "Britain" (en-GB only) are gone; the count is unchanged
 		facetField['values'] == [[name: 'Sverige', count: 2]]
+	}
+
+	def "GET /search?type=solr with facetLang should count labels that look like Solr macros or query syntax literally"() {
+		when:
+		// Solr expands ${…} in request parameters unless told not to, and {!lucene} would be a local-params
+		// switch if the label were not taken literally by the field parser
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: AWKWARD_MARKER_FIELD_S + ':' + AWKWARD_MARKER_VALUE, facetFields: AWKWARD_MARKER_FIELD_S,
+			 facetLang: 'sv']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		def facetField = respJson['facetFields'].find { it['name'] == AWKWARD_MARKER_FIELD_S }
+		facetField['values'].collectEntries { [(it['name']): it['count']] } ==
+			(AWKWARD_LABELS + [AWKWARD_MARKER_VALUE]).collectEntries { [(it): 1] }
 	}
 
 	def "GET /search?type=solr with facetMatches and facetLang should run the anchored regex against the real field"() {

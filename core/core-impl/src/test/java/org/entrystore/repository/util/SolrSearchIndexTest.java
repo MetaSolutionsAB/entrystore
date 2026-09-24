@@ -19,6 +19,7 @@ package org.entrystore.repository.util;
 import com.github.benmanes.caffeine.cache.Cache;
 import org.apache.solr.client.solrj.RemoteSolrException;
 import org.apache.solr.client.solrj.SolrClient;
+import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.SolrQuery;
 import org.apache.solr.client.solrj.request.UpdateRequest;
@@ -51,6 +52,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.apache.solr.client.solrj.response.FacetField;
+import org.apache.solr.common.SolrException;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
@@ -65,6 +67,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -86,6 +89,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.after;
@@ -94,6 +98,7 @@ import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -1289,7 +1294,12 @@ public class SolrSearchIndexTest {
 			QueryResponse response = mock(QueryResponse.class);
 			when(response.getResults()).thenReturn(documents);
 			when(response.getFacetFields()).thenReturn(List.of(facetField));
-			when(server.query(any(SolrQuery.class))).thenReturn(response);
+			// the same query object is re-sent, so the facet parameter is recorded at the moment of each call
+			List<String> facetParamPerCall = new ArrayList<>();
+			when(server.query(any(SolrQuery.class))).thenAnswer(invocation -> {
+				facetParamPerCall.add(invocation.<SolrQuery>getArgument(0).get("facet"));
+				return response;
+			});
 
 			SolrQuery query = new SolrQuery("*:*");
 			query.setRows(50);
@@ -1301,9 +1311,11 @@ public class SolrSearchIndexTest {
 
 			assertEquals(1, result.getFacetFields().size(), "a facet field must be reported once, not once per pass");
 			assertEquals("rdfType", result.getFacetFields().getFirst().getName());
-			// SolrJ re-sends the same query object, so its state after the run is what every later pass carried.
-			verify(server, atLeast(2)).query(any(SolrQuery.class));
-			assertNull(query.get("facet"), "every pass after the first must ask Solr to skip faceting");
+			assertTrue(facetParamPerCall.size() >= 2, "the test needs at least one fill pass after the first");
+			assertEquals("true", facetParamPerCall.getFirst(), "the first pass must compute the facets");
+			for (String later : facetParamPerCall.subList(1, facetParamPerCall.size())) {
+				assertNull(later, "every pass after the first must ask Solr to skip faceting");
+			}
 		} finally {
 			searchIndex.shutdown();
 		}
@@ -1311,25 +1323,22 @@ public class SolrSearchIndexTest {
 
 	/**
 	 * The language facet filter reads a negative answer here as "this index was built before the companion field
-	 * existed" and then answers unfiltered, so the probe must ask about the field as a whole: the result set of the
-	 * original query, but none of its term filters.
+	 * existed" and then answers unfiltered, so the probe must ask about the whole index, not the current result set:
+	 * a result set whose labels all exceed the companion's length cap holds no term on a perfectly current index.
 	 */
 	@Test
-	public void hasFacetTermsProbesTheWholeFieldAndReportsAnEmptyOneAsEmpty() throws Exception {
+	public void hasFacetTermsProbesTheWholeIndexWithoutFilters() throws Exception {
 		String companion = "metadata.predicate.literal_l.abc12345";
 		QueryResponse response = mock(QueryResponse.class);
 		when(response.getFacetField(companion)).thenReturn(new FacetField(companion));
 		when(solrServer.query(any(SolrQuery.class))).thenReturn(response);
-		SolrQuery baseQuery = new SolrQuery("title:Sweden");
-		baseQuery.setFilterQueries("public:true");
-		baseQuery.setParam("facet.matches", "Sweden");
 
-		assertFalse(index.hasFacetTerms(baseQuery, companion));
+		assertFalse(index.hasFacetTerms(companion));
 
 		ArgumentCaptor<SolrQuery> probe = ArgumentCaptor.forClass(SolrQuery.class);
 		verify(solrServer).query(probe.capture());
-		assertEquals("title:Sweden", probe.getValue().getQuery());
-		assertEquals(List.of("public:true"), List.of(probe.getValue().getFilterQueries()));
+		assertEquals("*:*", probe.getValue().getQuery());
+		assertNull(probe.getValue().getFilterQueries(), "the probe must not be scoped to the request's filters");
 		assertEquals(Integer.valueOf(0), probe.getValue().getRows(), "the probe must not fetch documents");
 		assertEquals(List.of(companion), List.of(probe.getValue().getFacetFields()));
 		assertEquals("1", probe.getValue().get("facet.limit"), "one term is enough to answer the question");
@@ -1337,11 +1346,144 @@ public class SolrSearchIndexTest {
 	}
 
 	@Test
-	public void hasFacetTermsReportsThePopulatedFieldWhenSolrFails() throws Exception {
-		when(solrServer.query(any(SolrQuery.class))).thenThrow(new SolrServerException("Solr is down"));
+	public void hasFacetTermsCachesAPositiveAnswerButNotANegativeOne() throws Exception {
+		String populated = "metadata.predicate.literal_l.populated";
+		String empty = "metadata.predicate.literal_l.empty";
+		FacetField populatedField = new FacetField(populated);
+		populatedField.add("Sverige" + (char) 0x1F + "sv", 1);
+		QueryResponse response = mock(QueryResponse.class);
+		when(response.getFacetField(populated)).thenReturn(populatedField);
+		when(response.getFacetField(empty)).thenReturn(new FacetField(empty));
+		when(solrServer.query(any(SolrQuery.class))).thenReturn(response);
 
-		assertTrue(index.hasFacetTerms(new SolrQuery("*:*"), "metadata.predicate.literal_l.abc12345"),
-				"a failed probe must not be read as an index predating the field");
+		assertTrue(index.hasFacetTerms(populated));
+		assertTrue(index.hasFacetTerms(populated));
+		assertFalse(index.hasFacetTerms(empty));
+		assertFalse(index.hasFacetTerms(empty));
+
+		// one request for the populated field, which cannot become empty again, and one per probe of the empty one
+		verify(solrServer, times(3)).query(any(SolrQuery.class));
+	}
+
+	@Test
+	public void hasFacetTermsFailsWhenSolrCannotBeReached() throws Exception {
+		SolrServerException cause = new SolrServerException("Solr is down");
+		when(solrServer.query(any(SolrQuery.class))).thenThrow(cause);
+
+		SolrException thrown = assertThrows(SolrException.class,
+				() -> index.hasFacetTerms("metadata.predicate.literal_l.abc12345"),
+				"a failed probe must be neither a populated nor a stale answer");
+		assertEquals(SolrException.ErrorCode.SERVICE_UNAVAILABLE.code, thrown.code());
+		assertSame(cause, thrown.getCause());
+	}
+
+	@Test
+	public void facetCountsForLabelsSendsOneLiteralUncachedClausePerLabelAndMapsTheCountsBackPerField() throws Exception {
+		String titles = "metadata.predicate.literal_s.aaaa1111";
+		String places = "related.metadata.predicate.literal_s.bbbb2222";
+		QueryResponse response = mock(QueryResponse.class);
+		Map<String, Integer> solrCounts = new LinkedHashMap<>();
+		solrCounts.put("{!field cache=false f=" + titles + "}Sverige", 3);
+		solrCounts.put("{!field cache=false f=" + titles + "}Norge", 0);
+		solrCounts.put("{!field cache=false f=" + places + "}Sverige", 1);
+		when(response.getFacetQuery()).thenReturn(solrCounts);
+		when(solrServer.query(any(SolrQuery.class), eq(SolrRequest.METHOD.POST))).thenReturn(response);
+		SolrQuery baseQuery = new SolrQuery("title:Sweden");
+		baseQuery.setFilterQueries("public:true");
+		baseQuery.setStart(40);
+		baseQuery.addSort("modified", SolrQuery.ORDER.desc);
+		baseQuery.addFacetField("rdfType");
+		Map<String, List<String>> candidates = new LinkedHashMap<>();
+		candidates.put(titles, List.of("Sverige", "Norge"));
+		candidates.put(places, List.of("Sverige"));
+
+		Map<String, Map<String, Long>> counts = index.facetCountsForLabels(baseQuery, candidates);
+
+		assertEquals(Map.of("Sverige", 3L), counts.get(titles), "a label counted zero is dropped");
+		assertEquals(Map.of("Sverige", 1L), counts.get(places), "the same label maps back to its own field");
+		ArgumentCaptor<SolrQuery> sent = ArgumentCaptor.forClass(SolrQuery.class);
+		verify(solrServer).query(sent.capture(), eq(SolrRequest.METHOD.POST));
+		SolrQuery countQuery = sent.getValue();
+		assertEquals(Set.copyOf(solrCounts.keySet()), Set.of(countQuery.getFacetQuery()));
+		assertEquals("title:Sweden", countQuery.getQuery());
+		assertEquals(List.of("public:true"), List.of(countQuery.getFilterQueries()));
+		assertEquals(Integer.valueOf(0), countQuery.getRows());
+		assertEquals("false", countQuery.get("expandMacros"), "labels are user text and must not be macro-expanded");
+		assertNull(countQuery.getStart(), "only the query and the filters are reused");
+		assertNull(countQuery.get("sort"), "only the query and the filters are reused");
+		assertNull(countQuery.getFacetFields(), "only the query and the filters are reused");
+		assertNull(countQuery.get("facet.mincount"), "facet.mincount has no effect on facet.query");
+	}
+
+	@Test
+	public void facetCountsForLabelsKeepsLabelsThatLookLikeSolrSyntaxLiteral() throws Exception {
+		String field = "metadata.predicate.literal_s.aaaa1111";
+		List<String> labels = List.of("Price ${amount}", "${facet.query}", "{!lucene}*:*", "a, \"b\"");
+		Map<String, Integer> solrCounts = new LinkedHashMap<>();
+		labels.forEach(label -> solrCounts.put("{!field cache=false f=" + field + "}" + label, 1));
+		QueryResponse response = mock(QueryResponse.class);
+		when(response.getFacetQuery()).thenReturn(solrCounts);
+		when(solrServer.query(any(SolrQuery.class), eq(SolrRequest.METHOD.POST))).thenReturn(response);
+
+		Map<String, Map<String, Long>> counts = index.facetCountsForLabels(new SolrQuery("*:*"), Map.of(field, labels));
+
+		assertEquals(Set.copyOf(labels), counts.get(field).keySet());
+	}
+
+	@Test
+	public void facetCountsForLabelsSharesOneClauseBudgetAcrossTheFieldsInRankedOrder() throws Exception {
+		List<String> manyLabels = new ArrayList<>();
+		for (int i = 0; i < SolrSearchIndex.MAX_COUNT_CLAUSES; i++) {
+			manyLabels.add("label" + i);
+		}
+		Map<String, List<String>> candidates = new LinkedHashMap<>();
+		candidates.put("metadata.predicate.literal_s.aaaa1111", manyLabels);
+		candidates.put("metadata.predicate.literal_s.bbbb2222", manyLabels);
+		QueryResponse response = mock(QueryResponse.class);
+		when(solrServer.query(any(SolrQuery.class), eq(SolrRequest.METHOD.POST))).thenReturn(response);
+
+		index.facetCountsForLabels(new SolrQuery("*:*"), candidates);
+
+		ArgumentCaptor<SolrQuery> sent = ArgumentCaptor.forClass(SolrQuery.class);
+		verify(solrServer).query(sent.capture(), eq(SolrRequest.METHOD.POST));
+		List<String> clauses = List.of(sent.getValue().getFacetQuery());
+		assertEquals(SolrSearchIndex.MAX_COUNT_CLAUSES, clauses.size(), "one request carries at most the budget");
+		int half = SolrSearchIndex.MAX_COUNT_CLAUSES / 2;
+		assertEquals(half, clauses.stream().filter(c -> c.contains("aaaa1111")).count());
+		assertTrue(clauses.contains("{!field cache=false f=metadata.predicate.literal_s.bbbb2222}label" + (half - 1)),
+				"each field keeps the head of its ranked candidates");
+		assertFalse(clauses.contains("{!field cache=false f=metadata.predicate.literal_s.bbbb2222}label" + half));
+	}
+
+	@Test
+	public void facetCountsForLabelsFailsWhenSolrCannotBeReached() throws Exception {
+		SolrServerException cause = new SolrServerException("Solr is down");
+		when(solrServer.query(any(SolrQuery.class), eq(SolrRequest.METHOD.POST))).thenThrow(cause);
+
+		SolrException thrown = assertThrows(SolrException.class, () -> index.facetCountsForLabels(new SolrQuery("*:*"),
+				Map.of("metadata.predicate.literal_s.aaaa1111", List.of("Sverige"))),
+				"a failure must not look like an empty facet");
+		assertEquals(SolrException.ErrorCode.SERVICE_UNAVAILABLE.code, thrown.code());
+		assertSame(cause, thrown.getCause());
+	}
+
+	@Test
+	public void facetCountsForLabelsPropagatesASolrRejection() throws Exception {
+		RemoteSolrException rejection = new RemoteSolrException("localhost", 400, "Request template exceeded max nesting", null);
+		when(solrServer.query(any(SolrQuery.class), eq(SolrRequest.METHOD.POST))).thenThrow(rejection);
+
+		SolrException thrown = assertThrows(SolrException.class, () -> index.facetCountsForLabels(new SolrQuery("*:*"),
+				Map.of("metadata.predicate.literal_s.aaaa1111", List.of("Sverige"))));
+		assertSame(rejection, thrown);
+	}
+
+	@Test
+	public void facetCountsForLabelsSendsNothingWithoutCandidates() throws Exception {
+		Map<String, Map<String, Long>> counts = index.facetCountsForLabels(new SolrQuery("*:*"),
+				Map.of("metadata.predicate.literal_s.aaaa1111", List.of()));
+
+		assertEquals(Map.of("metadata.predicate.literal_s.aaaa1111", Map.of()), counts);
+		verify(solrServer, never()).query(any(SolrQuery.class), any(SolrRequest.METHOD.class));
 	}
 
 	@Disabled("To be implemented")

@@ -20,12 +20,11 @@ import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.util.Literals;
 
 import java.util.IllformedLocaleException;
-import java.util.Locale;
 
 /**
  * One term of the internal {@code metadata.predicate.literal_l.*} Solr field family: the label of a literal together
  * with its normalised language tag. The family is the companion of {@code metadata.predicate.literal_s.*}: the REST
- * layer facets on it server-side to attach the languages a label occurs in and to filter labels by language. It is
+ * layer facets on it server-side to filter labels by language. It is
  * never accepted from clients as a facet or sort field and never returned to them.
  *
  * <p>The indexer stores every literal whose label is at most {@link #MAX_LABEL_LENGTH} characters as
@@ -126,32 +125,11 @@ public record LangFacetValue(String label, String lang) {
 	}
 
 	/**
-	 * RFC 4647 basic filtering, case-insensitive: {@code facetLang} matches a tag that equals it or that continues it
-	 * with a subtag separator, so {@code en} matches {@code en} and {@code en-GB} but not {@code eng}.
-	 */
-	public static boolean matchesLanguage(String tag, String facetLang) {
-		if (tag == null || facetLang == null) {
-			return false;
-		}
-		String candidate = tag.toLowerCase(Locale.ROOT);
-		String range = facetLang.toLowerCase(Locale.ROOT);
-		return candidate.equals(range)
-				|| (candidate.length() > range.length() && candidate.startsWith(range) && candidate.charAt(range.length()) == '-');
-	}
-
-	/**
-	 * Anchors a client {@code facet.matches} pattern to the label part of an encoded term. Solr applies
-	 * {@code facet.matches} as a full-string regex, so a pattern written against the visible label would otherwise
-	 * never match a term that ends in the separator and language tag.
-	 */
-	public static String labelMatchesRegex(String labelRegex) {
-		return "(?:" + labelRegex + ")" + SEPARATOR_REGEX + "[^" + SEPARATOR_REGEX + "]*";
-	}
-
-	/**
-	 * Full-string regex selecting the encoded terms of one language range: the label part, the separator, then
-	 * either an empty tag (untagged labels are always included), the range itself, or the range followed by a
-	 * subtag. Case-insensitive, so it matches the way {@link #matchesLanguage(String, String)} does.
+	 * Full-string regex selecting the encoded terms of one language range, as RFC 4647 basic filtering: the label
+	 * part, the separator, then either an empty tag (untagged labels are always included), the range itself, or the
+	 * range followed by a subtag, so {@code en} selects {@code en} and {@code en-GB} but not {@code eng}. Only the
+	 * language part is case-insensitive; the label part stays as case-sensitive as the client's {@code facetMatches}
+	 * is on the client field, so adding {@code facetLang} can only narrow the labels.
 	 *
 	 * @param labelRegex the client's {@code facetMatches}, or null to accept any label
 	 * @param range a normalised language tag, already restricted to {@code [A-Za-z0-9-]} by input validation and so
@@ -159,6 +137,6 @@ public record LangFacetValue(String label, String lang) {
 	 */
 	public static String languageMatchesRegex(String labelRegex, String range) {
 		String label = labelRegex == null ? "[^" + SEPARATOR_REGEX + "]*" : "(?:" + labelRegex + ")";
-		return "(?i)" + label + SEPARATOR_REGEX + "(?:|" + range + "|" + range + "-[^" + SEPARATOR_REGEX + "]*)";
+		return label + SEPARATOR_REGEX + "(?i:|" + range + "|" + range + "-[^" + SEPARATOR_REGEX + "]*)";
 	}
 }

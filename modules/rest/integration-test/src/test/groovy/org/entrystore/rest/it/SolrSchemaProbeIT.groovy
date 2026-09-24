@@ -17,14 +17,16 @@
 package org.entrystore.rest.it
 
 import groovy.json.JsonSlurper
+import org.apache.solr.client.solrj.jetty.HttpJettySolrClient
+import org.entrystore.impl.SolrSchemaCheck
 
 import static java.net.HttpURLConnection.HTTP_OK
 
 /**
- * The startup schema guard fails open: when it cannot read the schema it logs and lets the boot continue, so a
- * wrong path, a changed Schema API response shape or a parser mismatch would switch the guard off with nothing
- * failing. These specs read the same Schema API endpoint the guard reads, against the real Solr the ITs run on,
- * so the guard's input is pinned rather than assumed.
+ * The startup schema guard fails open on an unreachable Solr: when it cannot read the schema it logs and lets the
+ * boot continue, so a wrong path, a changed Schema API response shape or a parser mismatch would switch the guard
+ * off with nothing failing. These specs run the guard's own schema read, through SolrJ, against the real Solr the
+ * ITs run on, so the guard's input is pinned rather than assumed.
  */
 class SolrSchemaProbeIT extends BaseSpec {
 
@@ -33,24 +35,34 @@ class SolrSchemaProbeIT extends BaseSpec {
 		'related.metadata.predicate.literal_l.*'
 	]
 
+	private static String coreUrl() {
+		return 'http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core'
+	}
+
 	private static Object readSchemaDynamicFields() {
-		def url = new URI('http://localhost:' + solrContainer.getSolrPort()
-			+ '/solr/entrystore-core/schema/dynamicfields?wt=json').toURL()
+		def url = new URI(coreUrl() + '/schema/dynamicfields?wt=json').toURL()
 		def connection = (HttpURLConnection) url.openConnection()
 		connection.setRequestMethod('GET')
 		assert connection.getResponseCode() == HTTP_OK
 		return new JsonSlurper().parseText(connection.inputStream.text)
 	}
 
-	def "the Solr core used by the ITs declares the dynamic fields the startup guard requires"() {
+	def "the startup guard reads the required dynamic fields from the Solr core used by the ITs"() {
+		given:
+		def client = new HttpJettySolrClient.Builder(coreUrl()).useHttp1_1(true).build()
+
 		when:
-		def response = readSchemaDynamicFields()
-		def declared = response['dynamicFields'].collect { it['name'] } as Set
+		def declared = SolrSchemaCheck.dynamicFieldNames(client)
+		def verified = SolrSchemaCheck.requireDynamicFields(client, coreUrl(), REQUIRED_DYNAMIC_FIELDS)
 
 		then:
-		// the guard reads exactly this list; if the endpoint or the response shape ever changes, it silently
-		// stops checking anything, so assert the names are readable and present
+		// the exact read the guard performs at startup: if it ever stops parsing the names, startup would run
+		// unverified, so the names must come back and the guard must report the schema verified
 		declared.containsAll(REQUIRED_DYNAMIC_FIELDS)
+		verified
+
+		cleanup:
+		client?.close()
 	}
 
 	def "the language companion field is declared docValues-only"() {

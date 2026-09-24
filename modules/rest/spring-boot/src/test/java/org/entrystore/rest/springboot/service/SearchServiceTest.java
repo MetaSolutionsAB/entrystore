@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.service;
 
 import org.apache.solr.client.solrj.request.SolrQuery;
+import org.apache.solr.common.SolrException;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
@@ -35,6 +36,8 @@ import org.entrystore.rest.springboot.model.api.FacetSettingsRequestParams;
 import org.entrystore.rest.springboot.model.dto.FacetValueDto;
 import org.entrystore.rest.springboot.model.dto.FacetValuesDto;
 import org.entrystore.rest.springboot.model.dto.QueryResultsDto;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -47,6 +50,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -60,6 +64,8 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
@@ -340,6 +346,33 @@ class SearchServiceTest {
 		assertEquals(List.of("rdfType", "metadata.predicate.literal_s.abc12345"), List.of(query.getFacetFields()),
 				"without facetLang the request must be the one this endpoint sent before language support");
 		assertTrue(query.getParameterNames().stream().noneMatch(name -> name.startsWith("f.")));
+	}
+
+	@Test
+	void findEntriesSolr_aSolrFailureAnswersServiceUnavailableRatherThanBadRequest() {
+		SolrSearchIndex index = mock(SolrSearchIndex.class);
+		when(repositoryManager.getIndex()).thenReturn(index);
+		SolrException failure = new SolrException(SolrException.ErrorCode.SERVICE_UNAVAILABLE, "Solr is down");
+		when(index.sendQuery(any(SolrQuery.class))).thenThrow(failure);
+		var service = new SearchService(repositoryManager, syndicationProperties, realSerializer());
+
+		CustomResponseException thrown = assertThrows(CustomResponseException.class, () -> service.findEntriesSolr(
+				"*:*", null, 0, 10, List.of(), facetSettings("metadata.predicate.literal_s.abc12345", null, "sv")));
+
+		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, thrown.getStatus());
+		assertSame(failure, thrown.getCause());
+	}
+
+	@Test
+	void findEntriesSolr_aSolrRejectionStillAnswersBadRequest() {
+		SolrSearchIndex index = mock(SolrSearchIndex.class);
+		when(repositoryManager.getIndex()).thenReturn(index);
+		when(index.sendQuery(any(SolrQuery.class)))
+				.thenThrow(new SolrException(SolrException.ErrorCode.BAD_REQUEST, "undefined field"));
+		var service = new SearchService(repositoryManager, syndicationProperties, realSerializer());
+
+		assertThrows(BadRequestException.class, () -> service.findEntriesSolr(
+				"*:*", null, 0, 10, List.of(), facetSettings("rdfType", null, null)));
 	}
 
 	@Test

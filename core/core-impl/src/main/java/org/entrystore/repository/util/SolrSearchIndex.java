@@ -81,6 +81,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -165,9 +166,14 @@ public class SolrSearchIndex implements SearchIndex {
 	// queue must wait for this to clear too, otherwise an in-flight batch can be missed.
 	private final AtomicBoolean submitterInFlight = new AtomicBoolean();
 
-	// Documents Solr rejected on an add batch. Startup compares it around the initial reindex so a schema
-	// mismatch cannot end with an empty index whose version markers say it is current.
+	// Documents Solr rejected on an add batch. Startup withholds the version markers over rejections only when
+	// the schema could not be verified, so an unchecked schema mismatch is retried on the next start.
 	private final AtomicLong rejectedDocuments = new AtomicLong();
+
+	/** Total {@code facet.query} clauses one {@link #facetCountsForLabels} request may carry, across all fields. */
+	public static final int MAX_COUNT_CLAUSES = 1600;
+
+	private final Set<String> fieldsKnownToHaveTerms = ConcurrentHashMap.newKeySet();
 
 	private final Map<URI, DelayedContextIndexerInfo> delayedReindex = Collections.synchronizedMap(new HashMap<>());
 
@@ -1687,81 +1693,106 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Exact counts for the given labels of one facet field, as a second bounded request: {@code rows=0}, no ACL
-	 * filtering and one {@code facet.query} per label. The field query parser takes the label literally, so a label
-	 * containing commas, quotes or Solr syntax needs no escaping, and the request goes out as POST because labels
-	 * can be long. Labels the field does not hold are absent from the result rather than present with zero.
+	 * Exact counts for candidate labels of several facet fields, in one bounded {@code rows=0} request without ACL
+	 * filtering: one {@code facet.query} per (field, label), at most {@link #MAX_COUNT_CLAUSES} in total, shared
+	 * round-robin across the fields so each keeps the head of its ranked candidate list. The field query parser takes
+	 * the label literally, {@code cache=false} keeps the clauses out of the filterCache that every other search
+	 * depends on, and macro expansion is switched off because labels are user-written text in which {@code ${…}}
+	 * would otherwise be expanded. The request goes out as POST because labels can be long. Labels the field does not
+	 * hold are absent from the result rather than present with zero.
 	 *
 	 * @param baseQuery the query whose result set the counts apply to; only its query and filters are reused
-	 * @param field the client-facing facet field
-	 * @param labels the labels to count; the caller is responsible for bounding how many
+	 * @param candidatesByField per client-facing facet field, its candidate labels in ranked order
+	 * @return per field, the counted labels; a field whose candidates were all cut by the budget maps to an empty map
+	 * @throws SolrException when Solr rejects the request, or with {@code SERVICE_UNAVAILABLE} when it cannot be
+	 * reached; a failure is never reported as an empty facet
 	 */
-	public Map<String, Long> facetCountsForLabels(SolrQuery baseQuery, String field, Collection<String> labels) {
-		Map<String, Long> counts = new LinkedHashMap<>();
-		if (labels.isEmpty()) {
+	public Map<String, Map<String, Long>> facetCountsForLabels(SolrQuery baseQuery,
+															   Map<String, List<String>> candidatesByField) {
+		Map<String, Map<String, Long>> counts = new LinkedHashMap<>();
+		candidatesByField.keySet().forEach(field -> counts.put(field, new LinkedHashMap<>()));
+		Map<String, Map.Entry<String, String>> fieldAndLabelByQuery = new LinkedHashMap<>();
+		List<Iterator<String>> cursors = new ArrayList<>();
+		List<String> cursorFields = new ArrayList<>();
+		candidatesByField.forEach((field, labels) -> {
+			cursors.add(labels.iterator());
+			cursorFields.add(field);
+		});
+		boolean progressed = true;
+		while (progressed && fieldAndLabelByQuery.size() < MAX_COUNT_CLAUSES) {
+			progressed = false;
+			for (int i = 0; i < cursors.size() && fieldAndLabelByQuery.size() < MAX_COUNT_CLAUSES; i++) {
+				if (cursors.get(i).hasNext()) {
+					String field = cursorFields.get(i);
+					String label = cursors.get(i).next();
+					fieldAndLabelByQuery.put("{!field cache=false f=" + field + "}" + label, Map.entry(field, label));
+					progressed = true;
+				}
+			}
+		}
+		if (fieldAndLabelByQuery.isEmpty()) {
 			return counts;
 		}
-		SolrQuery countQuery = new SolrQuery(baseQuery.getQuery());
-		String[] filters = baseQuery.getFilterQueries();
-		if (filters != null) {
-			countQuery.setFilterQueries(filters);
-		}
-		countQuery.setRows(0);
-		countQuery.setFacet(true);
-		countQuery.setFacetMinCount(1);
-		Map<String, String> labelByQuery = new LinkedHashMap<>();
-		for (String label : labels) {
-			String facetQuery = "{!field f=" + field + "}" + label;
-			labelByQuery.put(facetQuery, label);
-			countQuery.addFacetQuery(facetQuery);
-		}
+		SolrQuery countQuery = facetOnlyQuery(baseQuery.getQuery(), baseQuery.getFilterQueries());
+		countQuery.set("expandMacros", "false");
+		fieldAndLabelByQuery.keySet().forEach(countQuery::addFacetQuery);
+		QueryResponse response;
 		try {
-			// POST: one facet.query per label, and a label can be long
-			QueryResponse response = solrServer.query(countQuery, SolrRequest.METHOD.POST);
-			Map<String, Integer> facetQueryCounts = response.getFacetQuery();
-			if (facetQueryCounts != null) {
-				facetQueryCounts.forEach((facetQuery, count) -> {
-					String label = labelByQuery.get(facetQuery);
-					if (label != null && count != null && count > 0) {
-						counts.put(label, count.longValue());
-					}
-				});
-			}
-		} catch (SolrServerException | IOException | SolrException e) {
-			log.error("Failed to fetch exact facet counts for {} labels on field {}: {}", labels.size(), field, e.getMessage());
+			response = solrServer.query(countQuery, SolrRequest.METHOD.POST);
+		} catch (SolrServerException | IOException e) {
+			throw new SolrException(SolrException.ErrorCode.SERVICE_UNAVAILABLE, "Facet counts could not be fetched from Solr", e);
+		}
+		Map<String, Integer> facetQueryCounts = response.getFacetQuery();
+		if (facetQueryCounts != null) {
+			facetQueryCounts.forEach((facetQuery, count) -> {
+				Map.Entry<String, String> fieldAndLabel = fieldAndLabelByQuery.get(facetQuery);
+				if (fieldAndLabel != null && count != null && count > 0) {
+					counts.get(fieldAndLabel.getKey()).put(fieldAndLabel.getValue(), count.longValue());
+				}
+			});
 		}
 		return counts;
 	}
 
 	/**
-	 * Whether {@code field} holds at least one term in the result set of {@code baseQuery}, as a bounded
-	 * {@code rows=0} request that facets the field with {@code facet.limit=1} and no term filter.
+	 * Whether {@code field} holds at least one term anywhere in the index, as a bounded {@code rows=0} facet with
+	 * {@code facet.limit=1} over {@code *:*}. Callers read a negative answer as an index built before the field
+	 * existed; a positive answer cannot become false again, so it is cached and the probe runs once per field.
 	 *
-	 * <p>Callers use a negative answer to conclude that the index was built before the field existed, so a request
-	 * that fails reports the field as populated: a transient Solr error must not be read as a stale index.
-	 *
-	 * @param baseQuery the query whose result set is probed; only its query and filters are reused
-	 * @param field the field to probe
+	 * @throws SolrException when Solr rejects the request, or with {@code SERVICE_UNAVAILABLE} when it cannot be
+	 * reached; a failed probe is not reported as either answer
 	 */
-	public boolean hasFacetTerms(SolrQuery baseQuery, String field) {
-		SolrQuery probe = new SolrQuery(baseQuery.getQuery());
-		String[] filters = baseQuery.getFilterQueries();
-		if (filters != null) {
-			probe.setFilterQueries(filters);
+	public boolean hasFacetTerms(String field) {
+		if (fieldsKnownToHaveTerms.contains(field)) {
+			return true;
 		}
-		probe.setRows(0);
-		probe.setFacet(true);
+		SolrQuery probe = facetOnlyQuery("*:*", null);
 		probe.addFacetField(field);
 		probe.setFacetLimit(1);
 		probe.setFacetMinCount(1);
 		probe.setFacetMissing(false);
+		FacetField facetField;
 		try {
-			FacetField facetField = solrServer.query(probe).getFacetField(field);
-			return facetField != null && facetField.getValueCount() > 0;
-		} catch (SolrServerException | IOException | SolrException e) {
-			log.error("Failed to probe field {} for terms: {}", field, e.getMessage());
-			return true;
+			facetField = solrServer.query(probe).getFacetField(field);
+		} catch (SolrServerException | IOException e) {
+			throw new SolrException(SolrException.ErrorCode.SERVICE_UNAVAILABLE, "Facet field could not be probed in Solr", e);
 		}
+		boolean hasTerms = facetField != null && facetField.getValueCount() > 0;
+		if (hasTerms) {
+			fieldsKnownToHaveTerms.add(field);
+		}
+		return hasTerms;
+	}
+
+	/** A {@code rows=0} faceting request over the given query and filters, the shared shape of the facet side requests. */
+	private static SolrQuery facetOnlyQuery(String query, String[] filters) {
+		SolrQuery facetQuery = new SolrQuery(query);
+		if (filters != null) {
+			facetQuery.setFilterQueries(filters);
+		}
+		facetQuery.setRows(0);
+		facetQuery.setFacet(true);
+		return facetQuery;
 	}
 
 	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, List<FacetField> facetFields, SolrClient solrServer, int offset) {

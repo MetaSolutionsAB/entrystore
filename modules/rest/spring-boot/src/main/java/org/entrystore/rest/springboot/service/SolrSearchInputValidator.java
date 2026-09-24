@@ -96,9 +96,10 @@ public class SolrSearchInputValidator {
 
 	/**
 	 * Constrains {@code facetLang} to the BCP 47 alphabet (alphanumerics and dash, at most 35 characters, the
-	 * length limit of a well-formed tag). The value is only compared against index terms in memory, but the same
-	 * literal-only discipline as {@link #FACET_MATCHES} keeps it safe to echo in error messages and to hand to Solr
-	 * should a future implementation push the filter into a regex.
+	 * length limit of a well-formed tag). The value is embedded verbatim in the {@code facet.matches} regex that
+	 * Solr evaluates on the language companion field. Any change to this pattern must keep it literal-only, like
+	 * {@link #FACET_MATCHES}: admitting regex metacharacters (e.g. a {@code *-CH} wildcard) reopens the ReDoS and
+	 * regex-injection surface.
 	 */
 	private static final Pattern FACET_LANG = Pattern.compile("^[A-Za-z0-9-]{1,35}$");
 

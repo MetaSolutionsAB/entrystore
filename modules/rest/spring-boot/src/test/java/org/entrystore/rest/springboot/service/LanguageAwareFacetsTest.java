@@ -34,7 +34,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -91,7 +90,7 @@ class LanguageAwareFacetsTest {
 
 	private static SolrSearchIndex indexReturning(Map<String, Long> counts) {
 		SolrSearchIndex index = mock(SolrSearchIndex.class);
-		when(index.facetCountsForLabels(any(), anyString(), any())).thenReturn(counts);
+		when(index.facetCountsForLabels(any(), any())).thenReturn(Map.of(FIELD, counts));
 		return index;
 	}
 
@@ -208,7 +207,7 @@ class LanguageAwareFacetsTest {
 
 		assertEquals(List.of("Sweden", "Sverige", "Britain", "Stockholm"), names(values));
 		assertEquals(List.of(3L, 2L, 1L, 1L), values.stream().map(FacetValueDto::count).toList());
-		verify(index, never()).facetCountsForLabels(any(), anyString(), any());
+		verify(index, never()).facetCountsForLabels(any(), any());
 	}
 
 	@Test
@@ -234,7 +233,7 @@ class LanguageAwareFacetsTest {
 				List.of(clientFacet(), companionFacet(term("Sverige", "sv"), term("Sverige", "sv-FI"), term("Sverige", null))),
 				settings(FIELD, null, "sv", 10), new SolrQuery("*:*"), index));
 
-		verify(index).facetCountsForLabels(any(), eq(FIELD), eq(java.util.Set.of("Sverige")));
+		verify(index).facetCountsForLabels(any(), eq(Map.of(FIELD, List.of("Sverige"))));
 	}
 
 	@Test
@@ -255,7 +254,7 @@ class LanguageAwareFacetsTest {
 	@Test
 	void merge_withFacetLang_andACompanionWithoutAnyTermFallsBackToTheUnfilteredFacet() {
 		SolrSearchIndex index = indexReturning(Map.of());
-		when(index.hasFacetTerms(any(), eq(COMPANION))).thenReturn(false);
+		when(index.hasFacetTerms(COMPANION)).thenReturn(false);
 
 		List<FacetValueDto> values = onlyFacet(LanguageAwareFacets.merge(
 				List.of(clientFacet(), companionFacet()),
@@ -263,13 +262,13 @@ class LanguageAwareFacetsTest {
 
 		assertEquals(List.of("Sweden", "Sverige", "Britain", "Stockholm"), names(values),
 				"an index predating the companion field must still answer, unfiltered rather than empty");
-		verify(index, never()).facetCountsForLabels(any(), anyString(), any());
+		verify(index, never()).facetCountsForLabels(any(), any());
 	}
 
 	@Test
 	void merge_withFacetLang_andNoLabelInThatLanguageReturnsNoBuckets() {
 		SolrSearchIndex index = indexReturning(Map.of());
-		when(index.hasFacetTerms(any(), eq(COMPANION))).thenReturn(true);
+		when(index.hasFacetTerms(COMPANION)).thenReturn(true);
 
 		List<FacetValueDto> values = onlyFacet(LanguageAwareFacets.merge(
 				List.of(clientFacet(), companionFacet()),
@@ -277,7 +276,7 @@ class LanguageAwareFacetsTest {
 
 		assertEquals(List.of(), names(values),
 				"a populated companion that matched nothing is an answer, not a stale index");
-		verify(index, never()).facetCountsForLabels(any(), anyString(), any());
+		verify(index, never()).facetCountsForLabels(any(), any());
 	}
 
 	@Test
@@ -306,6 +305,73 @@ class LanguageAwareFacetsTest {
 
 		assertEquals(List.of("http://example.com/A", "http://example.com/B"), names(result.getFirst().values()),
 				"facetLang concerns literal facets only");
+	}
+
+	@Test
+	void merge_withFacetLang_andOnlyAMissingBucketDoesNotProbeForAStaleIndex() {
+		FacetField onlyMissing = new FacetField(FIELD);
+		onlyMissing.add(null, 4);
+		SolrSearchIndex index = mock(SolrSearchIndex.class);
+
+		List<FacetValueDto> values = onlyFacet(LanguageAwareFacets.merge(
+				List.of(onlyMissing, companionFacet()),
+				settings(FIELD, null, "sv", 10), new SolrQuery("*:*"), index));
+
+		assertEquals(Arrays.asList((String) null), names(values));
+		verify(index, never()).hasFacetTerms(any());
+	}
+
+	@Test
+	void merge_withFacetLang_countsTheCandidatesOfEveryFieldInOneRequest() {
+		String otherField = "metadata.predicate.literal_s.def67890";
+		FacetField other = new FacetField(otherField);
+		other.add("Norge", 1);
+		FacetField otherCompanion = new FacetField("metadata.predicate.literal_l.def67890");
+		otherCompanion.add(term("Norge", "sv"), 1);
+		SolrSearchIndex index = mock(SolrSearchIndex.class);
+		when(index.facetCountsForLabels(any(), any())).thenReturn(Map.of(
+				FIELD, Map.of("Sverige", 2L),
+				otherField, Map.of("Norge", 1L)));
+
+		List<FacetValuesDto> result = LanguageAwareFacets.merge(
+				List.of(clientFacet(), companionFacet(term("Sverige", "sv")), other, otherCompanion),
+				settings(FIELD + "," + otherField, null, "sv", 10), new SolrQuery("*:*"), index);
+
+		assertEquals(List.of(FIELD, otherField), result.stream().map(FacetValuesDto::name).toList());
+		assertEquals(List.of("Sverige"), names(result.get(0).values()));
+		assertEquals(List.of("Norge"), names(result.get(1).values()));
+		verify(index).facetCountsForLabels(any(), eq(Map.of(FIELD, List.of("Sverige"), otherField, List.of("Norge"))));
+	}
+
+	@Test
+	void configureAndMerge_withFacetLang_handleARelatedLiteralFacet() {
+		String relatedField = "related.metadata.predicate.literal_s.abc12345";
+		String relatedCompanion = "related.metadata.predicate.literal_l.abc12345";
+		SolrQuery query = new SolrQuery("*:*");
+
+		LanguageAwareFacets.configure(query, settings(relatedField, null, "sv", 10), MAX_FACET_LIMIT);
+
+		assertEquals(List.of(relatedField, relatedCompanion), List.of(query.getFacetFields()));
+		assertEquals("40", query.get("f." + relatedCompanion + ".facet.limit"));
+		assertTrue(Pattern.compile(query.get("f." + relatedCompanion + ".facet.matches"))
+				.matcher(term("Sverige", "sv")).matches());
+
+		FacetField related = new FacetField(relatedField);
+		related.add("Sweden", 3);
+		related.add("Sverige", 2);
+		FacetField companion = new FacetField(relatedCompanion);
+		companion.add(term("Sverige", "sv"), 2);
+		SolrSearchIndex index = mock(SolrSearchIndex.class);
+		when(index.facetCountsForLabels(any(), any())).thenReturn(Map.of(relatedField, Map.of("Sverige", 2L)));
+
+		List<FacetValuesDto> result = LanguageAwareFacets.merge(List.of(related, companion),
+				settings(relatedField, null, "sv", 10), query, index);
+
+		assertEquals(1, result.size(), "the related companion must not appear as a facet field of its own");
+		assertEquals(relatedField, result.getFirst().name());
+		assertEquals(List.of("Sverige"), names(result.getFirst().values()));
+		assertEquals(2L, result.getFirst().values().getFirst().count());
+		verify(index).facetCountsForLabels(query, Map.of(relatedField, List.of("Sverige")));
 	}
 
 	@Test
