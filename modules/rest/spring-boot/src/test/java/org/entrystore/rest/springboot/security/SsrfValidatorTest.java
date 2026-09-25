@@ -24,19 +24,31 @@ import org.entrystore.rest.springboot.security.SsrfValidator.ValidatedTarget;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SNIHostName;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 import java.net.HttpURLConnection;
 import java.net.Inet4Address;
 import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URI;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -283,5 +295,64 @@ class SsrfValidatorTest {
 		} finally {
 			conn.disconnect();
 		}
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@CsvSource(delimiter = '|', textBlock = """
+			escaped space in path       | http://example.com/a%20b                | 93.184.216.34 | http://93.184.216.34/a%20b
+			escaped slash in query      | http://example.com/wms?q=x%2Fy          | 93.184.216.34 | http://93.184.216.34/wms?q=x%2Fy
+			escaped percent, with port  | https://example.com:8443/p%25?r=%25     | 93.184.216.34 | https://93.184.216.34:8443/p%25?r=%25
+			IPv6, fragment dropped      | http://example.com/a%20b?c=d%26e#frag   | 2001:db8::1   | http://[2001:db8:0:0:0:0:0:1]/a%20b?c=d%26e
+			no path                     | http://example.com                      | 93.184.216.34 | http://93.184.216.34
+			""")
+	void buildPinnedUri_keepsEscapesUnchanged(String description, String original, String ip, String expected)
+			throws Exception {
+		URI pinned = SsrfValidator.buildPinnedUri(new URI(original), InetAddress.getByName(ip));
+		assertEquals(expected, pinned.toString());
+	}
+
+	@Test
+	void openPinnedConnection_https_unconnectedSocketIsPlain() throws Exception {
+		SSLSocketFactory factory = openPinnedHttpsFactory();
+		try (Socket socket = factory.createSocket()) {
+			assertFalse(socket instanceof SSLSocket);
+		}
+	}
+
+	@Test
+	void openPinnedConnection_https_layeredSocketVerifiesOriginalHostname() throws Exception {
+		SSLSocketFactory factory = openPinnedHttpsFactory();
+		try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+			 Socket plain = new Socket(InetAddress.getLoopbackAddress(), server.getLocalPort());
+			 Socket layered = factory.createSocket(plain, "93.184.216.34", 443, true)) {
+			SSLSocket ssl = assertInstanceOf(SSLSocket.class, layered);
+			assertEquals("HTTPS", ssl.getSSLParameters().getEndpointIdentificationAlgorithm());
+			assertEquals(List.of(new SNIHostName("example.com")), ssl.getSSLParameters().getServerNames());
+		}
+	}
+
+	@Test
+	void openPinnedConnection_https_hostNameOverloadsAreUnsupported() throws Exception {
+		SSLSocketFactory factory = openPinnedHttpsFactory();
+		assertThrows(UnsupportedOperationException.class, () -> factory.createSocket("example.com", 443));
+		assertThrows(UnsupportedOperationException.class,
+				() -> factory.createSocket("example.com", 443, InetAddress.getLoopbackAddress(), 0));
+	}
+
+	@Test
+	void openPinnedConnection_https_keepsDefaultHostnameVerifier() throws Exception {
+		// A custom verifier makes the JDK check the URL host (the pinned IP) instead of the handshake result
+		InetAddress ipv4 = Inet4Address.getByAddress("example.com",
+				new byte[]{(byte) 93, (byte) 184, (byte) 216, (byte) 34});
+		HttpsURLConnection conn = (HttpsURLConnection) validator.openPinnedConnection(
+				new URI("https://example.com/path"), ipv4);
+		assertSame(HttpsURLConnection.getDefaultHostnameVerifier(), conn.getHostnameVerifier());
+	}
+
+	private SSLSocketFactory openPinnedHttpsFactory() throws Exception {
+		InetAddress ipv4 = Inet4Address.getByAddress("example.com",
+				new byte[]{(byte) 93, (byte) 184, (byte) 216, (byte) 34});
+		HttpURLConnection conn = validator.openPinnedConnection(new URI("https://example.com/path"), ipv4);
+		return assertInstanceOf(HttpsURLConnection.class, conn).getSSLSocketFactory();
 	}
 }

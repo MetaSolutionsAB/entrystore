@@ -122,12 +122,10 @@ public class ProxyService {
 			return new ProxyResponse(status, contentType, body);
 
 		} catch (SocketTimeoutException | ConnectException e) {
-			log.debug("Proxy request to {} timed out", target.uri());
-			throw new CustomResponseException("Gateway timeout", HttpStatus.GATEWAY_TIMEOUT);
+			throw new CustomResponseException("Gateway timeout", HttpStatus.GATEWAY_TIMEOUT, e);
 		} catch (IOException | URISyntaxException | IllegalArgumentException e) {
 			// IllegalArgumentException: URI.resolve(location) on a malformed upstream Location header.
-			log.debug("Proxy request to {} failed: {}", target.uri(), e.getMessage());
-			throw new CustomResponseException("Proxy request failed", HttpStatus.BAD_GATEWAY);
+			throw new CustomResponseException("Proxy request failed", HttpStatus.BAD_GATEWAY, e);
 		} finally {
 			if (conn != null) {
 				conn.disconnect();
