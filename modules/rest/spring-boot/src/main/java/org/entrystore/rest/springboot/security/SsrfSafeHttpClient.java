@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
+import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Map;
 import java.util.function.Function;
@@ -65,7 +66,8 @@ public class SsrfSafeHttpClient {
 	 *
 	 * @param initialTarget     the already-validated request target
 	 * @param httpMethod        HTTP method to send on every hop
-	 * @param requestHeaders    headers to set on every hop
+	 * @param requestHeaders    headers to set on every hop; never client-chosen names, because
+	 *                          restricted headers such as {@code Host} are unlocked JVM-wide
 	 * @param redirectValidator SSRF re-validation applied to each resolved redirect location
 	 * @param responseHandler   converts the final response; see {@link ResponseHandler}
 	 */
@@ -102,12 +104,12 @@ public class SsrfSafeHttpClient {
 				return responseHandler.handle(status, conn);
 
 			} catch (SocketTimeoutException | ConnectException e) {
-				log.debug("Request to {} timed out", target.uri());
-				throw new CustomResponseException("Gateway timeout", HttpStatus.GATEWAY_TIMEOUT);
+				throw new CustomResponseException("Gateway timeout", HttpStatus.GATEWAY_TIMEOUT,
+						upstreamFailure(target, e));
 			} catch (IOException | URISyntaxException | IllegalArgumentException e) {
 				// IllegalArgumentException: URI.resolve(location) on a malformed upstream Location header.
-				log.debug("Request to {} failed: {}", target.uri(), e.getMessage());
-				throw new CustomResponseException("Proxy request failed", HttpStatus.BAD_GATEWAY);
+				throw new CustomResponseException("Proxy request failed", HttpStatus.BAD_GATEWAY,
+						upstreamFailure(target, e));
 			} finally {
 				if (conn != null) {
 					conn.disconnect();
@@ -122,5 +124,16 @@ public class SsrfSafeHttpClient {
 		log.warn("Upstream exceeded the configured redirect cap of {} (entrystore.proxy.max-redirects), aborting",
 				maxRedirects);
 		throw new CustomResponseException("Too many redirects", HttpStatus.BAD_GATEWAY);
+	}
+
+	/**
+	 * Names the failing hop (which may be a redirect target) for the server log. The query is left
+	 * out because it may carry credentials.
+	 */
+	private static IOException upstreamFailure(SsrfValidator.ValidatedTarget target, Exception cause) {
+		URI uri = target.uri();
+		String path = uri.getRawPath() != null ? uri.getRawPath() : "";
+		return new IOException("Request to " + uri.getScheme() + "://" + uri.getRawAuthority() + path + " failed",
+				cause);
 	}
 }
