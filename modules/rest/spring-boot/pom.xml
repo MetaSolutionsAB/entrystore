@@ -267,6 +267,15 @@
 		into a single executable JAR. The resulting fat jar file size is ~170MB vs. ~300KB of non-fat jar (only compiled classes of this module) -->
 		<plugins>
 			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<!-- Set by EntryStoreApplicationSpringBoot at runtime; SsrfValidator fails pinned
+					     connections without it. @{argLine} keeps the JaCoCo agent. -->
+					<argLine>@{argLine} -Dsun.net.http.allowRestrictedHeaders=true</argLine>
+				</configuration>
+			</plugin>
+			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<configuration>
