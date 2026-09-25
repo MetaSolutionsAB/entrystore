@@ -28,8 +28,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class EntryStoreApplicationSpringBoot {
 
 	static {
-		// Lets SsrfValidator.openPinnedConnection send the original Host header; must run before
-		// HttpURLConnection is first initialized, as the JDK reads the property only once.
+		// Lets SsrfValidator send the Host header; read once when HttpURLConnection initializes.
+		// JVM-wide: it unlocks all restricted headers, so never forward client-chosen header names.
 		System.setProperty("sun.net.http.allowRestrictedHeaders", "true");
 	}
 

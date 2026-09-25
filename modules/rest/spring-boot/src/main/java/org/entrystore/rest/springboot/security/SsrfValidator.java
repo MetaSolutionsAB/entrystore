@@ -34,6 +34,7 @@ import java.net.HttpURLConnection;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.net.SocketException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
@@ -57,6 +58,8 @@ public class SsrfValidator {
 	private Origin rowstoreOrigin;
 
 	private static final Set<String> ALLOWED_SCHEMES = Set.of("http", "https");
+
+	private static final String ALLOW_RESTRICTED_HEADERS = "sun.net.http.allowRestrictedHeaders";
 
 	private static final int CONNECT_TIMEOUT_MS = 30_000;
 	private static final int READ_TIMEOUT_MS = 60_000;
@@ -123,24 +126,27 @@ public class SsrfValidator {
 		log.info("SSRF blacklist consists of following regular expressions: {}", BLACKLIST_REGEX);
 
 		if (!isHostHeaderOverrideEffective()) {
-			log.error("HttpURLConnection drops the Host header, so pinned proxy connections send the IP as Host; "
-					+ "set -Dsun.net.http.allowRestrictedHeaders=true on the JVM command line");
+			log.error("HttpURLConnection drops the Host header, so proxy and remote resource DELETE requests will "
+					+ "fail; set -D{}=true on the JVM command line", ALLOW_RESTRICTED_HEADERS);
 		}
 	}
 
 	/**
 	 * Whether {@link #openPinnedConnection} can set the {@code Host} header. The JDK reads
-	 * {@code sun.net.http.allowRestrictedHeaders} once, when {@code HttpURLConnection} is first
-	 * initialized, and otherwise drops restricted headers without an error.
+	 * {@value #ALLOW_RESTRICTED_HEADERS} once, when {@code HttpURLConnection} is first initialized,
+	 * and otherwise drops restricted headers without an error. A probe that cannot be opened is
+	 * reported as effective; {@link #setHostHeader} still guards every request.
 	 */
 	static boolean isHostHeaderOverrideEffective() {
+		HttpURLConnection probe;
 		try {
-			HttpURLConnection probe = (HttpURLConnection) URI.create("http://127.0.0.1/").toURL().openConnection();
-			probe.setRequestProperty("Host", "probe.invalid");
-			return "probe.invalid".equals(probe.getRequestProperty("Host"));
+			probe = (HttpURLConnection) URI.create("http://127.0.0.1/").toURL().openConnection();
 		} catch (IOException e) {
-			return false;
+			log.warn("Could not probe whether HttpURLConnection accepts the Host header", e);
+			return true;
 		}
+		probe.setRequestProperty("Host", "probe.invalid");
+		return "probe.invalid".equals(probe.getRequestProperty("Host"));
 	}
 
 	/**
@@ -350,11 +356,23 @@ public class SsrfValidator {
 		conn.setInstanceFollowRedirects(false);
 		conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
 		conn.setReadTimeout(READ_TIMEOUT_MS);
-		conn.setRequestProperty("Host", buildHostHeader(originalUri));
+		setHostHeader(conn, buildHostHeader(originalUri));
 		if (conn instanceof HttpsURLConnection httpsConn) {
 			configureSsl(httpsConn, originalUri.getHost());
 		}
 		return conn;
+	}
+
+	/**
+	 * Fails instead of sending the pinned IP as {@code Host}, which virtual-hosted upstreams would
+	 * answer with another site's content or an error indistinguishable from a real response.
+	 */
+	static void setHostHeader(HttpURLConnection conn, String host) throws IOException {
+		conn.setRequestProperty("Host", host);
+		if (!host.equals(conn.getRequestProperty("Host"))) {
+			throw new IOException("HttpURLConnection dropped the Host header; the JVM needs -D"
+					+ ALLOW_RESTRICTED_HEADERS + "=true");
+		}
 	}
 
 	/**
@@ -417,8 +435,8 @@ public class SsrfValidator {
 	 * original hostname is the SSL peer host, which drives SNI, the TLS session cache and, through
 	 * endpoint identification (RFC 6125), certificate verification in the handshake. The JDK calls
 	 * {@link #createSocket()}, connects it to the pinned IP, then layers TLS via
-	 * {@link #createSocket(Socket, String, int, boolean)}. Overloads taking a host name are
-	 * unsupported because opening them would resolve DNS and bypass the pinning.
+	 * {@link #createSocket(Socket, String, int, boolean)}. Overloads taking a host name throw
+	 * because opening them would resolve DNS and bypass the pinning.
 	 */
 	@RequiredArgsConstructor
 	static class SniSSLSocketFactory extends SSLSocketFactory {
@@ -469,14 +487,18 @@ public class SsrfValidator {
 					true);
 		}
 
+		/**
+		 * Throws an {@link IOException} because the JDK calls this as a fallback when layering
+		 * fails and then rethrows the original {@code IOException}.
+		 */
 		@Override
-		public Socket createSocket(String host, int port) {
-			throw new UnsupportedOperationException("Pinned connections must not resolve host names");
+		public Socket createSocket(String host, int port) throws IOException {
+			throw new SocketException("Pinned connections must not resolve host names");
 		}
 
 		@Override
-		public Socket createSocket(String host, int port, InetAddress localHost, int localPort) {
-			throw new UnsupportedOperationException("Pinned connections must not resolve host names");
+		public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
+			throw new SocketException("Pinned connections must not resolve host names");
 		}
 	}
 }

@@ -33,11 +33,13 @@ import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SNIHostName;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
+import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.net.URI;
 import java.util.List;
 import java.util.Set;
@@ -54,6 +56,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ExtendWith(MockitoExtension.class)
 class SsrfValidatorTest {
+
+	static {
+		// Surefire's argLine sets this too; repeated here so the tests also pass when run from an IDE
+		System.setProperty("sun.net.http.allowRestrictedHeaders", "true");
+	}
 
 	@Mock
 	private RepositoryManagerImpl repositoryManager;
@@ -299,11 +306,11 @@ class SsrfValidatorTest {
 
 	@ParameterizedTest(name = "{0}")
 	@CsvSource(delimiter = '|', textBlock = """
-			escaped space in path       | http://example.com/a%20b                | 93.184.216.34 | http://93.184.216.34/a%20b
-			escaped slash in query      | http://example.com/wms?q=x%2Fy          | 93.184.216.34 | http://93.184.216.34/wms?q=x%2Fy
-			escaped percent, with port  | https://example.com:8443/p%25?r=%25     | 93.184.216.34 | https://93.184.216.34:8443/p%25?r=%25
-			IPv6, fragment dropped      | http://example.com/a%20b?c=d%26e#frag   | 2001:db8::1   | http://[2001:db8:0:0:0:0:0:1]/a%20b?c=d%26e
-			no path                     | http://example.com                      | 93.184.216.34 | http://93.184.216.34
+			space in path  | http://a.se/a%20b            | 1.2.3.4     | http://1.2.3.4/a%20b
+			slash in query | http://a.se/wms?q=x%2Fy      | 1.2.3.4     | http://1.2.3.4/wms?q=x%2Fy
+			percent, port  | https://a.se:8443/p%25?r=%25 | 1.2.3.4     | https://1.2.3.4:8443/p%25?r=%25
+			IPv6, fragment | http://a.se/a%20b?c=%26#frag | 2001:db8::1 | http://[2001:db8:0:0:0:0:0:1]/a%20b?c=%26
+			no path        | http://a.se                  | 1.2.3.4     | http://1.2.3.4
 			""")
 	void buildPinnedUri_keepsEscapesUnchanged(String description, String original, String ip, String expected)
 			throws Exception {
@@ -332,11 +339,47 @@ class SsrfValidatorTest {
 	}
 
 	@Test
-	void openPinnedConnection_https_hostNameOverloadsAreUnsupported() throws Exception {
+	void openPinnedConnection_https_hostNameOverloadsThrowIOException() throws Exception {
 		SSLSocketFactory factory = openPinnedHttpsFactory();
-		assertThrows(UnsupportedOperationException.class, () -> factory.createSocket("example.com", 443));
-		assertThrows(UnsupportedOperationException.class,
+		assertThrows(SocketException.class, () -> factory.createSocket("example.com", 443));
+		assertThrows(SocketException.class,
 				() -> factory.createSocket("example.com", 443, InetAddress.getLoopbackAddress(), 0));
+	}
+
+	@Test
+	void openPinnedConnection_setsOriginalHostWithNonDefaultPort() throws Exception {
+		HttpURLConnection conn = validator.openPinnedConnection(new URI("https://example.com:8443/path"),
+				InetAddress.getByName("93.184.216.34"));
+		assertEquals("example.com:8443", conn.getRequestProperty("Host"));
+	}
+
+	@Test
+	void isHostHeaderOverrideEffective_withRestrictedHeadersAllowed_returnsTrue() {
+		assertTrue(SsrfValidator.isHostHeaderOverrideEffective());
+	}
+
+	@Test
+	void setHostHeader_connectionDroppingHost_throwsIOException() throws Exception {
+		// Behaves like HttpURLConnection without sun.net.http.allowRestrictedHeaders
+		HttpURLConnection droppingHost = new HttpURLConnection(new URI("http://93.184.216.34/").toURL()) {
+			@Override
+			public void setRequestProperty(String key, String value) {
+			}
+
+			@Override
+			public void connect() {
+			}
+
+			@Override
+			public void disconnect() {
+			}
+
+			@Override
+			public boolean usingProxy() {
+				return false;
+			}
+		};
+		assertThrows(IOException.class, () -> SsrfValidator.setHostHeader(droppingHost, "example.com"));
 	}
 
 	@Test
@@ -353,6 +396,7 @@ class SsrfValidatorTest {
 		InetAddress ipv4 = Inet4Address.getByAddress("example.com",
 				new byte[]{(byte) 93, (byte) 184, (byte) 216, (byte) 34});
 		HttpURLConnection conn = validator.openPinnedConnection(new URI("https://example.com/path"), ipv4);
+		assertEquals("93.184.216.34", conn.getURL().getHost());
 		return assertInstanceOf(HttpsURLConnection.class, conn).getSSLSocketFactory();
 	}
 }

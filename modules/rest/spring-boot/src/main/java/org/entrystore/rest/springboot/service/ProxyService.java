@@ -122,10 +122,12 @@ public class ProxyService {
 			return new ProxyResponse(status, contentType, body);
 
 		} catch (SocketTimeoutException | ConnectException e) {
-			throw new CustomResponseException("Gateway timeout", HttpStatus.GATEWAY_TIMEOUT, e);
+			throw new CustomResponseException("Gateway timeout", HttpStatus.GATEWAY_TIMEOUT,
+					upstreamFailure(target, e));
 		} catch (IOException | URISyntaxException | IllegalArgumentException e) {
 			// IllegalArgumentException: URI.resolve(location) on a malformed upstream Location header.
-			throw new CustomResponseException("Proxy request failed", HttpStatus.BAD_GATEWAY, e);
+			throw new CustomResponseException("Proxy request failed", HttpStatus.BAD_GATEWAY,
+					upstreamFailure(target, e));
 		} finally {
 			if (conn != null) {
 				conn.disconnect();
@@ -150,6 +152,17 @@ public class ProxyService {
 			validateGlobalAccess(next.host());
 		}
 		return next;
+	}
+
+	/**
+	 * Names the failing hop (which may be a redirect target) for the server log. The query is left
+	 * out because it may carry credentials.
+	 */
+	private static IOException upstreamFailure(SsrfValidator.ValidatedTarget target, Exception cause) {
+		URI uri = target.uri();
+		String path = uri.getRawPath() != null ? uri.getRawPath() : "";
+		return new IOException("Request to " + uri.getScheme() + "://" + uri.getRawAuthority() + path + " failed",
+				cause);
 	}
 
 	private byte[] readWithLimit(InputStream is) throws IOException {

@@ -64,7 +64,8 @@ class ProxyHttpsIT extends BaseSpec {
 		def certs = [
 			good    : [new GeneralName(GeneralName.dNSName, 'localhost')],
 			wrong   : [new GeneralName(GeneralName.dNSName, 'wrong.example')],
-			ipOnly  : [new GeneralName(GeneralName.iPAddress, '127.0.0.1'), new GeneralName(GeneralName.iPAddress, '::1')]
+			ipOnly  : [new GeneralName(GeneralName.iPAddress, '127.0.0.1'),
+			           new GeneralName(GeneralName.iPAddress, '::1')]
 		]
 		KeyStore trusted = defaultTrustStore()
 		certs.each { name, sans ->
