@@ -35,9 +35,10 @@ import static java.lang.annotation.ElementType.RECORD_COMPONENT;
  * {@link org.entrystore.rest.springboot.service.auth.EmailValidator}, so a declarative constraint and
  * a service-layer check cannot drift apart on what counts as a valid address.
  *
- * <p>Deliberately <em>not</em> Bean Validation's own {@code @Email}: that constraint accepts anything
- * with an {@code @} and a non-empty domain, so {@code user@localhost} and {@code user@example.c} pass
- * it and fail here. Swapping it in would silently widen what the sign-up endpoint accepts.
+ * <p>Deliberately <em>not</em> Bean Validation's own {@code @Email}: Hibernate's implementation accepts
+ * {@code user@localhost} and {@code user@example.c}, so swapping it in would silently widen what sign-up
+ * and password reset accept. The domain policy itself is documented on
+ * {@link org.entrystore.rest.springboot.service.auth.EmailValidator}.
  *
  * <p>Null and empty values pass. Presence is a separate concern, so pair this with {@code @NotEmpty}
  * on a required field; without that split a missing address would report both "missing parameter" and

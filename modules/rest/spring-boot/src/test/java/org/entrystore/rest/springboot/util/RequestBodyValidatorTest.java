@@ -16,19 +16,16 @@
 
 package org.entrystore.rest.springboot.util;
 
-import jakarta.validation.ConstraintValidator;
-import jakarta.validation.ConstraintValidatorFactory;
-import jakarta.validation.Validation;
 import jakarta.validation.Validator;
-import jakarta.validation.ValidatorFactory;
 import org.entrystore.rest.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.springboot.model.exception.BadRequestHtmlException;
 import org.entrystore.rest.springboot.model.validation.AuthValidationMessages;
-import org.entrystore.rest.springboot.model.validation.ValidEmailValidator;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
-import org.hibernate.validator.HibernateValidator;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
 import java.util.Map;
 
@@ -47,17 +44,22 @@ class RequestBodyValidatorTest {
 
 	private static final String TITLE = "Sign-up";
 
-	private final ValidatorFactory factory = Validation.byProvider(HibernateValidator.class)
-			.configure()
-			.constraintValidatorFactory(new EmailValidatorFactory())
-			.buildValidatorFactory();
+	// LocalValidatorFactoryBean resolves ValidEmailValidator as a bean so its EmailValidator is injected;
+	// the default factory cannot construct it.
+	private static AnnotationConfigApplicationContext context;
+	private static Validator validator;
 
-	private final Validator validator = factory.getValidator();
 	private final RequestBodyValidator requestBodyValidator = new RequestBodyValidator(validator);
 
-	@AfterEach
-	void tearDown() {
-		factory.close();
+	@BeforeAll
+	static void startContext() {
+		context = new AnnotationConfigApplicationContext(LocalValidatorFactoryBean.class, EmailValidator.class);
+		validator = context.getBean(Validator.class);
+	}
+
+	@AfterAll
+	static void stopContext() {
+		context.close();
 	}
 
 	private static SignupRequestBody body(String email, String password, String first, String last) {
@@ -115,6 +117,15 @@ class RequestBodyValidatorTest {
 		assertEquals(AuthValidationMessages.PARAMETERS_MISSING, thrown.getMessage());
 	}
 
+	@Test
+	void emptyAddress_isReportedAsMissing() {
+		BadRequestHtmlException thrown = assertThrows(BadRequestHtmlException.class,
+				() -> requestBodyValidator.assertValid(
+						body("", "secret12", "Ada", "Lovelace"), TITLE));
+
+		assertEquals(AuthValidationMessages.PARAMETERS_MISSING, thrown.getMessage());
+	}
+
 	/** Whitespace is supplied as far as {@code @NotEmpty} goes, so the address rule is what rejects it. */
 	@Test
 	void whitespaceAddress_isReportedAsMalformedNotMissing() {
@@ -123,27 +134,5 @@ class RequestBodyValidatorTest {
 						body(" ", "secret12", "Ada", "Lovelace"), TITLE));
 
 		assertEquals("Invalid email address:  .", thrown.getMessage());
-	}
-
-	/** Stands in for Spring's SpringConstraintValidatorFactory, which resolves validators as beans. */
-	private static final class EmailValidatorFactory implements ConstraintValidatorFactory {
-
-		@Override
-		@SuppressWarnings("unchecked")
-		public <T extends ConstraintValidator<?, ?>> T getInstance(Class<T> key) {
-			if (key == ValidEmailValidator.class) {
-				return (T) new ValidEmailValidator(new EmailValidator());
-			}
-			try {
-				return key.getDeclaredConstructor().newInstance();
-			} catch (ReflectiveOperationException e) {
-				throw new IllegalStateException("Cannot instantiate " + key, e);
-			}
-		}
-
-		@Override
-		public void releaseInstance(ConstraintValidator<?, ?> instance) {
-			// nothing held
-		}
 	}
 }

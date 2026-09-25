@@ -18,14 +18,23 @@ package org.entrystore.rest.springboot.service;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import jakarta.validation.Validation;
+import jakarta.validation.ValidatorFactory;
 import org.entrystore.Entry;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.configuration.SignupWhitelistProperties;
+import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.springboot.model.auth.SignupInfo;
+import org.entrystore.rest.springboot.model.exception.BadRequestHtmlException;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.task.AsyncTaskExecutor;
@@ -42,6 +51,7 @@ import java.util.concurrent.RejectedExecutionException;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doThrow;
@@ -56,17 +66,47 @@ class AuthServiceTest {
 	@Mock
 	private AsyncTaskExecutor executor;
 
+	private static ValidatorFactory validatorFactory;
+	private static EmailValidator emailValidator;
+
 	private MeterRegistry meterRegistry;
 	private AuthService authService;
 
+	@BeforeAll
+	static void buildValidator() {
+		validatorFactory = Validation.buildDefaultValidatorFactory();
+		emailValidator = new EmailValidator(validatorFactory.getValidator());
+	}
+
+	@AfterAll
+	static void closeFactory() {
+		validatorFactory.close();
+	}
+
 	@BeforeEach
 	void setUp() {
-		// Only meterRegistry and the executor are touched by submitPasswordResetDispatch, so the other
-		// collaborators stay null — except the stateless EmailValidator, which is cheap to pass for
-		// real, and the whitelist properties, which the constructor reads. The empty whitelist suits
-		// this shared instance; the tests that need entries build their own via the same factory.
 		meterRegistry = new SimpleMeterRegistry();
 		authService = authServiceWithSessionRegistry(null);
+	}
+
+	@AfterEach
+	void tearDown() {
+		meterRegistry.close();
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@ValueSource(strings = {
+			"user@localhost", "user@example.c", "user@example..com", "user@[999.999.999.999]"
+	})
+	void pwReset_invalidEmail_reportsTheRejectedAddress(String email) {
+		var body = new PwResetRequestBody(email, null, null, null, null);
+
+		// request is null: validateAndSetEmail runs before clientIp(request)
+		BadRequestHtmlException thrown = assertThrows(BadRequestHtmlException.class,
+				() -> authService.pwReset(null, body, "Password reset"));
+
+		assertEquals("Invalid email address: " + email + ".", thrown.getMessage());
+		assertEquals("Password reset", thrown.getTitle());
 	}
 
 	@Test
@@ -153,7 +193,7 @@ class AuthServiceTest {
 		// email domain, so a whitelist entry configured as "Example.COM" would reject every
 		// alice@example.com sign-up if this normalisation were dropped. Asserted on the field because
 		// the comparison itself sits deep inside signup(), behind collaborators this test has no use for.
-		AuthService service = new AuthService(null, null, null, null, null, null, new EmailValidator(),
+		AuthService service = new AuthService(null, null, null, null, null, null, emailValidator,
 				null, null, null, null, meterRegistry,
 				new SignupWhitelistProperties(Map.of("1", "Example.COM", "2", "OTHER.example.org")), executor);
 
@@ -163,7 +203,8 @@ class AuthServiceTest {
 	}
 
 	private AuthService authServiceWithSessionRegistry(SessionRegistry sessionRegistry) {
-		return new AuthService(null, null, null, null, null, null, new EmailValidator(),
+		// Only the collaborators reached before pwReset's email check and by submitPasswordResetDispatch are real.
+		return new AuthService(null, null, null, null, null, null, emailValidator,
 				null, sessionRegistry, null, null, meterRegistry,
 				new SignupWhitelistProperties(Map.of()), executor);
 	}

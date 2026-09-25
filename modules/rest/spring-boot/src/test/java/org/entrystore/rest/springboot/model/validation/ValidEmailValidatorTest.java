@@ -17,16 +17,15 @@
 package org.entrystore.rest.springboot.model.validation;
 
 import jakarta.validation.ConstraintViolation;
-import jakarta.validation.Validation;
 import jakarta.validation.Validator;
-import jakarta.validation.ValidatorFactory;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
-import org.hibernate.validator.HibernateValidator;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
 import java.util.Set;
 
@@ -42,22 +41,26 @@ class ValidEmailValidatorTest {
 	private record Body(@ValidEmail String email) {
 	}
 
-	private final ValidatorFactory factory = Validation.byProvider(HibernateValidator.class)
-			.configure()
-			// Mirrors Spring's SpringConstraintValidatorFactory, which resolves ConstraintValidator
-			// implementations as beans; without this the no-arg-constructor default cannot build one.
-			.constraintValidatorFactory(new SingleValidatorFactory(new EmailValidator()))
-			.buildValidatorFactory();
+	// LocalValidatorFactoryBean resolves ValidEmailValidator as a bean so its EmailValidator is injected;
+	// the default factory cannot construct it.
+	private static AnnotationConfigApplicationContext context;
+	private static Validator validator;
 
-	private final Validator validator = factory.getValidator();
+	@BeforeAll
+	static void startContext() {
+		context = new AnnotationConfigApplicationContext(LocalValidatorFactoryBean.class, EmailValidator.class);
+		validator = context.getBean(Validator.class);
+	}
 
-	@AfterEach
-	void tearDown() {
-		factory.close();
+	@AfterAll
+	static void stopContext() {
+		context.close();
 	}
 
 	@ParameterizedTest(name = "\"{0}\"")
-	@ValueSource(strings = {"user@example.com", "user@example.notarealtld", "user@[192.168.1.1]"})
+	@ValueSource(strings = {
+			"user@example.com", "user@example.notarealtld", "user@[192.168.1.1]", "user@[IPv6:2001:db8::1]"
+	})
 	void validAddress_producesNoViolation(String email) {
 		assertTrue(validator.validate(new Body(email)).isEmpty());
 	}
@@ -66,11 +69,14 @@ class ValidEmailValidatorTest {
 	 * Null and empty are {@code @NotEmpty}'s business. Reporting them here as well would show the caller
 	 * two messages for one omission.
 	 */
-	@ParameterizedTest(name = "\"{0}\"")
-	@NullSource
-	@ValueSource(strings = {""})
-	void absentAddress_isLeftToNotEmpty(String email) {
-		assertTrue(validator.validate(new Body(email)).isEmpty());
+	@Test
+	void nullAddress_isLeftToNotEmpty() {
+		assertTrue(validator.validate(new Body(null)).isEmpty());
+	}
+
+	@Test
+	void emptyAddress_isLeftToNotEmpty() {
+		assertTrue(validator.validate(new Body("")).isEmpty());
 	}
 
 	/** Present but malformed, so this constraint owns it — unlike null and "". */
@@ -79,11 +85,15 @@ class ValidEmailValidatorTest {
 		assertEquals(1, validator.validate(new Body(" ")).size());
 	}
 
-	@Test
-	void invalidAddress_messageNamesTheRejectedAddress() {
-		Set<ConstraintViolation<Body>> violations = validator.validate(new Body("user@localhost"));
+	@ParameterizedTest(name = "{0}")
+	@ValueSource(strings = {
+			"user@localhost", "user@example.c", "user@example..com", "user@[999.999.999.999]"
+	})
+	void invalidAddress_messageNamesTheRejectedAddress(String email) {
+		Set<ConstraintViolation<Body>> violations = validator.validate(new Body(email));
 
-		assertEquals("Invalid email address: user@localhost.",
+		assertEquals(1, violations.size());
+		assertEquals("Invalid email address: " + email + ".",
 				violations.iterator().next().getMessage());
 	}
 
@@ -107,28 +117,5 @@ class ValidEmailValidatorTest {
 
 		assertEquals("Invalid email address: {email}@localhost.",
 				violations.iterator().next().getMessage());
-	}
-
-	/** Hands the one validator instance this suite needs, standing in for Spring's bean lookup. */
-	private record SingleValidatorFactory(EmailValidator emailValidator)
-			implements jakarta.validation.ConstraintValidatorFactory {
-
-		@Override
-		@SuppressWarnings("unchecked")
-		public <T extends jakarta.validation.ConstraintValidator<?, ?>> T getInstance(Class<T> key) {
-			if (key == ValidEmailValidator.class) {
-				return (T) new ValidEmailValidator(emailValidator);
-			}
-			try {
-				return key.getDeclaredConstructor().newInstance();
-			} catch (ReflectiveOperationException e) {
-				throw new IllegalStateException("Cannot instantiate " + key, e);
-			}
-		}
-
-		@Override
-		public void releaseInstance(jakarta.validation.ConstraintValidator<?, ?> instance) {
-			// nothing held
-		}
 	}
 }
