@@ -53,7 +53,6 @@ import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.util.ModelUtil;
 import org.entrystore.repository.util.URISplit;
-import org.entrystore.repository.util.URIType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,6 +67,7 @@ import java.util.GregorianCalendar;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -802,7 +802,7 @@ public class EntryImpl implements Entry {
 		}
 
 		checkAdministerRights();
-		checkExternalMetadataURI(externalMetadataURI);
+		checkExternalMetadataURIChange(externalMetadataURI);
 
 		ValueFactory vf = getRepositoryManager().getValueFactory();
 		IRI oldExternalMetadataURI = vf.createIRI(getExternalMetadataURI().toString());
@@ -1262,7 +1262,7 @@ public class EntryImpl implements Entry {
 			newExternalMetadataURI = toURI(externalMdIRI, "external metadata URI");
 			// Validated before anything is changed, so that a rejected URI leaves the entry unchanged. An unchanged
 			// URI is not validated, so that entries created before the validation can still be modified.
-			checkExternalMetadataURI(newExternalMetadataURI);
+			checkExternalMetadataURIChange(newExternalMetadataURI);
 		}
 
 		if (newResourceURI != null) {
@@ -1523,12 +1523,35 @@ public class EntryImpl implements Entry {
 	}
 
 	/**
+	 * Validates a change of the external metadata URI to the given one. Only an existing external metadata URI
+	 * can be replaced, so an entry that has none is rejected, e.g. a Local or Link entry, or a Link that was
+	 * converted to a LinkReference.
+	 *
+	 * @throws InvalidExternalMetadataURIException if the entry has no external metadata URI, or the new one is
+	 *                                             not acceptable, see {@link #checkExternalMetadataURI(URI, URI, URL)}
+	 */
+	private void checkExternalMetadataURIChange(URI newExternalMetadataURI) {
+		if (externalMdURI == null) {
+			throw new InvalidExternalMetadataURIException("The entry " + entryURI.stringValue()
+					+ " has no external metadata URI that could be changed");
+		}
+		checkExternalMetadataURI(newExternalMetadataURI);
+	}
+
+	/**
 	 * Validates the external metadata URI of a Reference or LinkReference entry. A URI in the repository, i.e.
 	 * one that starts with its base URL, gets its metadata from the local metadata of the entry it denotes (see
 	 * {@link LocalMetadataWrapper}), so it must be a URI that the repository can split, and must not denote the
 	 * entry itself: the entry would be the source of its own cached external metadata. The base URL followed only
 	 * by query parameters, e.g. a search URL, does not denote an entry and is accepted as before; its metadata is
 	 * an empty graph. A URI of another system is not restricted; its metadata is cached in the entry.
+	 * <p>
+	 * The check for the entry itself compares the entry URI that {@link URISplit} derives from the URI, so it
+	 * detects every URI that splits into the entry's context and ID: its entry, resource, metadata and cached
+	 * external metadata URIs, also with a trailing slash. It does not detect URIs that denote the entry over HTTP
+	 * but split differently, e.g. with a query string appended to the ID ({@code .../metadata/2?}), or with
+	 * another host name of the same server. Such URIs are only kept from recursing by {@link LocalMetadataWrapper}
+	 * resolving the referenced entry lazily.
 	 *
 	 * @param entryURI the URI of the entry that the external metadata URI is set for
 	 * @throws SelfReferencingExternalMetadataException if the URI belongs to the entry itself
@@ -1546,12 +1569,8 @@ public class EntryImpl implements Entry {
 			throw new InvalidExternalMetadataURIException("The external metadata URI " + externalMetadataURI
 					+ " is in this repository but does not denote an entry");
 		}
-		if (split.getUriType() == URIType.Unknown) {
-			return;
-		}
-		URI referencedEntryURI = split.getMetaMetadataURI();
-		if (referencedEntryURI.equals(entryURI)) {
-			throw new SelfReferencingExternalMetadataException(externalMetadataURI, referencedEntryURI);
+		if (split.getEntryURI().equals(Optional.of(entryURI))) {
+			throw new SelfReferencingExternalMetadataException(externalMetadataURI, entryURI);
 		}
 	}
 

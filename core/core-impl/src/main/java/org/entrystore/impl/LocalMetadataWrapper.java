@@ -22,7 +22,6 @@ import org.entrystore.Entry;
 import org.entrystore.Metadata;
 import org.entrystore.repository.util.CorruptData;
 import org.entrystore.repository.util.URISplit;
-import org.entrystore.repository.util.URIType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,44 +38,52 @@ public class LocalMetadataWrapper implements Metadata {
 	/**
 	 * Does not resolve the referenced entry: the wrapper is created while its entry is being loaded, and
 	 * resolving a referenced entry that refers back to the entry being loaded would load that entry again
-	 * without end.
+	 * without end. This must stay lazy even though external metadata URIs of the entry itself are rejected (see
+	 * {@link EntryImpl#checkExternalMetadataURI}): that check does not detect every URI that denotes the entry.
 	 */
 	public LocalMetadataWrapper(Entry entry) {
 		this.entry = entry;
 	}
 
 	/**
-	 * @return the local metadata of the referenced entry, or an empty graph if there is no such entry or it cannot
-	 * be loaded because its data or that of its context entry is corrupt; a reference is then treated like a
-	 * reference to a missing entry
+	 * @return the local metadata of the referenced entry, or an empty graph if the external metadata URI does not
+	 * denote an entry, there is no such entry, it has no local metadata, or it cannot be loaded because its data or
+	 * that of its context entry is corrupt; a reference is then treated like a reference to a missing entry
 	 */
 	public Model getGraph() {
-		Entry e = null;
+		URI externalMetadataURI = entry.getExternalMetadataURI();
 		URI refEntryURI = getReferencedEntryURI();
-		if (refEntryURI != null) {
-			e = ((ContextImpl) entry.getContext()).getSoftCache().getByEntryURI(refEntryURI);
-			if (e == null) {
-				try {
-					e = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());
-				} catch (RuntimeException failure) {
-					URL repositoryURL = entry.getRepositoryManager().getRepositoryURL();
-					if (!CorruptData.isCorruptDataOf(failure, refEntryURI, repositoryURL)) {
-						throw failure;
-					}
-					log.warn("Entry {} that entry {} refers to as external metadata cannot be loaded, returning an"
-							+ " empty graph: {}", refEntryURI, entry.getEntryURI(),
-							CorruptData.describe(failure));
-					return new LinkedHashModel();
-				}
-			}
-		}
-		if (e != null && e.getLocalMetadata() != null) {
-			return e.getLocalMetadata().getGraph();
-		} else {
-			log.warn("No local metadata found for external metadata URI {}, returning an empty graph",
-					entry.getExternalMetadataURI());
+		if (refEntryURI == null) {
+			log.warn("External metadata URI {} of entry {} does not denote an entry, returning an empty graph",
+					externalMetadataURI, entry.getEntryURI());
 			return new LinkedHashModel();
 		}
+		Entry e = ((ContextImpl) entry.getContext()).getSoftCache().getByEntryURI(refEntryURI);
+		if (e == null) {
+			try {
+				e = entry.getRepositoryManager().getContextManager().getEntry(refEntryURI);
+			} catch (RuntimeException failure) {
+				URL repositoryURL = entry.getRepositoryManager().getRepositoryURL();
+				if (!CorruptData.isCorruptDataOf(failure, refEntryURI, repositoryURL)) {
+					throw failure;
+				}
+				log.warn("Entry {} that entry {} refers to with external metadata URI {} cannot be loaded, returning"
+						+ " an empty graph: {}", refEntryURI, entry.getEntryURI(), externalMetadataURI,
+						CorruptData.describe(failure));
+				return new LinkedHashModel();
+			}
+		}
+		if (e == null) {
+			log.warn("Entry {} that entry {} refers to with external metadata URI {} does not exist, returning an "
+					+ "empty graph", refEntryURI, entry.getEntryURI(), externalMetadataURI);
+			return new LinkedHashModel();
+		}
+		if (e.getLocalMetadata() == null) {
+			log.warn("Entry {} that entry {} refers to with external metadata URI {} has no local metadata, "
+					+ "returning an empty graph", refEntryURI, entry.getEntryURI(), externalMetadataURI);
+			return new LinkedHashModel();
+		}
+		return e.getLocalMetadata().getGraph();
 	}
 
 	/**
@@ -84,13 +91,8 @@ public class LocalMetadataWrapper implements Metadata {
 	 * belong to an entry of this repository
 	 */
 	public URI getReferencedEntryURI() {
-		try {
-			URISplit split = new URISplit(entry.getExternalMetadataURI(),
-					entry.getRepositoryManager().getRepositoryURL());
-			return split.getUriType() == URIType.Unknown ? null : split.getMetaMetadataURI();
-		} catch (IllegalArgumentException e) {
-			return null;
-		}
+		return URISplit.entryURIOf(entry.getExternalMetadataURI(), entry.getRepositoryManager().getRepositoryURL())
+				.orElse(null);
 	}
 
 	public URI getResourceURI() {

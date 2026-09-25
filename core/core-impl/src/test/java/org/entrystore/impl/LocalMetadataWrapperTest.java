@@ -16,12 +16,10 @@
 
 package org.entrystore.impl;
 
-import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
-import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.AuthorizationException;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
@@ -203,7 +201,7 @@ public class LocalMetadataWrapperTest extends AbstractCoreTest {
 			throws Exception {
 		URI externalMetadataURI = URI.create(rm.getRepositoryURL() + "2/metadata/1");
 		ContextManager contextManager = mock(ContextManager.class);
-		when(contextManager.getEntry(externalMetadataURI)).thenThrow(failure);
+		when(contextManager.getEntry(URI.create(rm.getRepositoryURL() + "2/entry/1"))).thenThrow(failure);
 		RepositoryManager repositoryManager = mock(RepositoryManager.class);
 		when(repositoryManager.getContextManager()).thenReturn(contextManager);
 		when(repositoryManager.getRepositoryURL()).thenReturn(rm.getRepositoryURL());
@@ -228,15 +226,6 @@ public class LocalMetadataWrapperTest extends AbstractCoreTest {
 		Model graph = new LinkedHashModel();
 		graph.add(vf.createIRI(entry.getResourceURI().toString()), DCTERMS.TITLE, vf.createLiteral(title));
 		entry.getLocalMetadata().setGraph(graph);
-	}
-
-	private void replaceExternalMetadataInStore(Entry entry, URI externalMetadataURI) {
-		IRI entryIRI = vf.createIRI(entry.getEntryURI().toString());
-		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
-			rc.remove(entryIRI, RepositoryProperties.externalMetadata, null, entryIRI);
-			rc.add(entryIRI, RepositoryProperties.externalMetadata, vf.createIRI(externalMetadataURI.toString()),
-					entryIRI);
-		}
 	}
 
 	@Disabled("To be implemented")

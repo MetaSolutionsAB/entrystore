@@ -854,6 +854,81 @@ class EntryIT extends BaseSpec {
 		entryInfo[NameSpaceConst.TERM_EXTERNAL_METADATA].collect { it['value'] } == [newMetadataUrl]
 	}
 
+	def "PUT /{context-id}/entry/{entry-id} setting external metadata for a link should respond with Bad Request and leave the entry unchanged"() {
+		given:
+		def entryId = createEntry(contextId, [entrytype: 'link', resource: resourceUrl])
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		def putBody = """
+@prefix es: <http://entrystore.org/terms/> .
+
+<${entryUri}> a es:Link;
+  es:resource <https://bbc.co.uk/v2>;
+  es:externalMetadata <https://bbc.co.uk/metadata> .
+"""
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId, putBody, 'admin', 'text/turtle')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(editEntryConn.errorStream.text)['error'].toString().contains('has no external metadata URI')
+
+		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		getEntryConn.getResponseCode() == HTTP_OK
+		def entryInfo = JSON_PARSER.parseText(getEntryConn.inputStream.text)['info'][entryUri]
+		entryInfo[NameSpaceConst.TERM_RESOURCE].collect { it['value'] } == [resourceUrl]
+		entryInfo[NameSpaceConst.TERM_EXTERNAL_METADATA] == null
+	}
+
+	def "POST /{context-id}?entrytype=link&id=x with an entry graph that sets external metadata should respond with Bad Request and create nothing"() {
+		given:
+		def requestedEntryId = 'linkWithExternalMetadata'
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + requestedEntryId
+		def params = [entrytype: 'link', resource: resourceUrl, id: requestedEntryId]
+		def body = [info: [(entryUri): [(NameSpaceConst.TERM_EXTERNAL_METADATA): [[type: 'uri', value: 'https://bbc.co.uk/metadata']]]]]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), JsonOutput.toJson(body))
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(connection.errorStream.text)['error'].toString().contains('has no external metadata URI')
+		EntryStoreClient.getRequest('/' + contextId + '/entry/' + requestedEntryId).getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} changing the resource of a reference to a local entry with metadata should apply it and leave the referenced metadata unchanged"() {
+		given:
+		def targetResourceUrl = 'https://bbc.co.uk/local-target'
+		def title = [(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: 'Local target']]]
+		def targetId = createEntry(contextId, [entrytype: 'link', resource: targetResourceUrl], [metadata: [(targetResourceUrl): title]])
+		def targetMetadataUrl = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + targetId
+		def entryId = createEntry(contextId, [entrytype: 'reference', resource: targetResourceUrl, 'cached-external-metadata': targetMetadataUrl])
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		def newResourceUrl = 'https://bbc.co.uk/local-target/v2'
+		def putBody = """
+@prefix es: <http://entrystore.org/terms/> .
+
+<${entryUri}> a es:Reference;
+  es:resource <${newResourceUrl}>;
+  es:externalMetadata <${targetMetadataUrl}> .
+"""
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId, putBody, 'admin', 'text/turtle')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_NO_CONTENT
+
+		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		getEntryConn.getResponseCode() == HTTP_OK
+		def entryInfo = JSON_PARSER.parseText(getEntryConn.inputStream.text)['info'][entryUri]
+		entryInfo[NameSpaceConst.TERM_RESOURCE].collect { it['value'] } == [newResourceUrl]
+
+		def targetMetadataConn = EntryStoreClient.getRequest(targetMetadataUrl)
+		targetMetadataConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(targetMetadataConn.inputStream.text) == [(targetResourceUrl): title]
+	}
+
 	def "POST /{context-id}?entrytype=link should not create a new entry if context does not exist"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
