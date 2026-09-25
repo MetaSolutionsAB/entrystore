@@ -25,7 +25,10 @@ import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
 
 import java.io.File;
@@ -55,6 +58,31 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	File tempDir;
 
 	private RefreshableRelyingPartyRegistrationRepository repository;
+
+	@Test
+	void relaxedEnabledSettingCreatesTheMetadataRepository() throws Exception {
+		File metadata = writeIdpMetadata("idp.xml", List.of(selfSignedCertBase64("idp-signing")));
+		var properties = new Saml2RelyingPartyProperties();
+		var registration = new Saml2RelyingPartyProperties.Registration();
+		registration.setEntityId("https://sp.entrystore.example/keycloak");
+		registration.getAssertingparty().setMetadataUri(metadata.toURI().toString());
+		properties.getRegistration().put("keycloak", registration);
+
+		new ApplicationContextRunner()
+				.withUserConfiguration(SamlBinding.class, RefreshableRelyingPartyRegistrationRepository.class)
+				.withBean(Saml2RelyingPartyProperties.class, () -> properties)
+				.withPropertyValues("entrystore.auth.saml.enabled=on")
+				.run(context -> {
+					assertNull(context.getStartupFailure());
+					assertTrue(context.getBean(SamlCustomConfiguration.class).enabled());
+					var boundRepository = context.getBean(RefreshableRelyingPartyRegistrationRepository.class);
+					assertNotNull(boundRepository.findByRegistrationId("keycloak"));
+				});
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@EnableConfigurationProperties(SamlCustomConfiguration.class)
+	static class SamlBinding {}
 
 	@AfterEach
 	void tearDown() {

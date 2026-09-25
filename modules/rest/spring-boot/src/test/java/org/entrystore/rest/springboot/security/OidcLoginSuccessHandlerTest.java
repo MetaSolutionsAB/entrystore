@@ -29,12 +29,8 @@ import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.annotation.ConditionContext;
-import org.springframework.mock.env.MockEnvironment;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
@@ -49,8 +45,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -98,9 +92,6 @@ class OidcLoginSuccessHandlerTest {
 
 	@Mock
 	private User adminUser;
-
-	@Mock
-	private ConditionContext conditionContext;
 
 	private OidcLoginSuccessHandler handler;
 
@@ -235,35 +226,6 @@ class OidcLoginSuccessHandlerTest {
 	private void givenEnabledUserIsLoaded(String username) {
 		when(userService.loadUser(username)).thenReturn(esUser);
 		givenUserIsEnabled();
-	}
-
-	// OidcEnabledCondition must mirror the relaxed Boolean binding OidcCustomConfiguration.enabled()
-	// uses — a literal-string match would make values like 'on' boot the SecurityConfig OIDC branch
-	// without the handler bean and fail startup.
-	@ParameterizedTest(name = "entrystore.auth.oidc.enabled={0} -> bean active: {1}")
-	@CsvSource({
-			"true, true",
-			"on, true",
-			"yes, true",
-			"1, true",
-			"false, false",
-			"off, false",
-			"no, false",
-			"0, false"
-	})
-	void oidcEnabledConditionUsesRelaxedBooleanBinding(String value, boolean expected) {
-		var environment = new MockEnvironment().withProperty("entrystore.auth.oidc.enabled", value);
-		when(conditionContext.getEnvironment()).thenReturn(environment);
-
-		assertEquals(expected,
-				new OidcLoginSuccessHandler.OidcEnabledCondition().matches(conditionContext, null));
-	}
-
-	@Test
-	void oidcEnabledConditionDefaultsToDisabledWhenPropertyAbsent() {
-		when(conditionContext.getEnvironment()).thenReturn(new MockEnvironment());
-
-		assertFalse(new OidcLoginSuccessHandler.OidcEnabledCondition().matches(conditionContext, null));
 	}
 
 	// Stubs the principalManager round-trip BasicVerifier.isUserDisabled performs so the handler

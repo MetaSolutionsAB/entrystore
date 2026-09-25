@@ -21,7 +21,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
 import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -44,23 +43,14 @@ import java.util.Optional;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@ConditionalOnBooleanConfig("entrystore.backup.scheduler")
 public class BackupSchedulerStarter {
 
 	private final Optional<BackupScheduler> backupScheduler;
 	private final PrincipalManager principalManager;
 
-	// Read even though an absent Optional already implies "not on" (the bean carries
-	// @ConditionalOnProperty), so the two cases can be told apart in the log: switched off entirely
-	// versus switched on but declined by createInstance.
-	@Value("${entrystore.backup.scheduler:off}")
-	private String backupSchedulerSetting;
-
 	@EventListener(ApplicationReadyEvent.class)
 	public void startBackupScheduler() {
-		if (!"on".equalsIgnoreCase(backupSchedulerSetting)) {
-			log.warn("Backup is disabled in configuration");
-			return;
-		}
 		backupScheduler.ifPresentOrElse(scheduler -> {
 			log.info("Starting backup scheduler");
 			PrincipalManagerUtil.runAsAdmin(principalManager, scheduler::run);

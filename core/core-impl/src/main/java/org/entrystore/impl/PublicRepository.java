@@ -251,7 +251,7 @@ public class PublicRepository {
 		}
 
 		if (getTripleCount() == 0 ||
-				"on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PUBLIC_REBUILD_ON_STARTUP, "off"))) {
+				config.getBoolean(Settings.REPOSITORY_PUBLIC_REBUILD_ON_STARTUP, false)) {
 			rebuildRepository();
 		}
 

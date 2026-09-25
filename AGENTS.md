@@ -79,6 +79,7 @@ springboot/
 - Controllers: `@RestController` + `@RequiredArgsConstructor` (Lombok) + `@Operation` (Swagger)
 - Services: `@Slf4j` + `@Service` + `@RequiredArgsConstructor`
 - Read config via Spring Boot mechanisms (`@Value("${prop:default}")` or `@ConfigurationProperties`). The REST layer must not inject the legacy `Config` bean or read `repositoryManager.getConfiguration()`; that bean exists only for core.
+- Property keys in annotations (`@Value`, `@ConditionalOnBooleanConfig`, `@ConditionalOnProperty`) are string literals, not `Settings` constants — Spring Boot style, and the key stays greppable from `entrystore.properties`.
 - Indexed list settings (`key.1`, `key.2`, …) bind as `Map<String, String>`, which differs from the legacy `Config.getStringList`: a gap no longer truncates the list, and a bare un-indexed value no longer wins over the indexed entries. Register new such keys in `IndexedListConfigValidator` so both shapes are reported at startup.
 - `@ConfigurationProperties` records must declare only the canonical constructor — a second constructor silently makes nested binding return empty values (no error).
 - Config: `application.yaml` imports `entrystore.properties` via `spring.config.import` — every `entrystore.*` key is bound to the Spring `Environment` and is readable via `@Value`, `@ConfigurationProperties`, and `@ConditionalOnProperty`, not only via the legacy `Config` wrapper
