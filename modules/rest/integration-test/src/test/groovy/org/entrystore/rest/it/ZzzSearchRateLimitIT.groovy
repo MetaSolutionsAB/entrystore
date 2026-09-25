@@ -33,8 +33,7 @@ class ZzzSearchRateLimitIT extends BaseSpec {
 		startOwnedApp([
 			'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
 			'--entrystore.solr.search.rate.limit.max=3',
-			'--entrystore.solr.search.rate.limit.window=10m',
-			'--entrystore.trust.x-forwarded-for=true'
+			'--entrystore.solr.search.rate.limit.window=10m'
 		])
 	}
 

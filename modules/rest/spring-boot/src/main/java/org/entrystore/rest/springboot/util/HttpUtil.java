@@ -16,14 +16,11 @@
 
 package org.entrystore.rest.springboot.util;
 
-import com.google.common.net.InetAddresses;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.ArrayUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -33,13 +30,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.util.Date;
 import java.util.regex.Pattern;
 
-import static com.google.common.base.Preconditions.checkArgument;
-
 @Slf4j
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class HttpUtil {
-
-	private static final String HEADER_X_FORWARDED_FOR = "X-Forwarded-For";
 
 	/**
 	 * Determines the media type based on the provided format parameter or content type header.
@@ -139,36 +132,6 @@ public class HttpUtil {
 		}
 
 		return repSize > maxSize;
-	}
-
-	/**
-	 * Returns the client IP.
-	 * <p>
-	 * When {@code trustForwardedFor} is {@code false} (the secure default), returns the TCP remote
-	 * address as reported by the servlet container. When {@code true}, returns the leftmost address
-	 * in {@code X-Forwarded-For} if it parses as a valid IP literal; otherwise falls back to the
-	 * remote address.
-	 * <p>
-	 * SECURITY: enable {@code X-Forwarded-For} trust only when running behind a reverse proxy that
-	 * overwrites or strips client-supplied {@code X-Forwarded-For} headers. With trust enabled and
-	 * direct internet exposure, clients can spoof the header to defeat any per-IP logic that uses
-	 * this value.
-	 */
-	public static String getClientIpAddress(HttpServletRequest request, boolean trustForwardedFor) {
-		checkArgument(request != null, "request must not be null");
-		if (trustForwardedFor) {
-			String xff = request.getHeader(HEADER_X_FORWARDED_FOR);
-			if (StringUtils.isNotBlank(xff)) {
-				String[] clientIpArray = StringUtils.split(xff, ',');
-				if (ArrayUtils.isNotEmpty(clientIpArray)) {
-					String first = clientIpArray[0].trim();
-					if (InetAddresses.isInetAddress(first)) {
-						return first;
-					}
-				}
-			}
-		}
-		return request.getRemoteAddr();
 	}
 
 	public static void checkRequestSize(HttpServletRequest request, int maxRequestSize) {

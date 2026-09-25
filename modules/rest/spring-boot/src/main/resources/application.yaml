@@ -1,10 +1,12 @@
 server:
   port: 8080
   shutdown: graceful
-  # forward-headers-strategy: framework honours X-Forwarded-Proto/Host/Port/Prefix via Spring's
-  # ForwardedHeaderFilter. Spring does NOT validate which client sent the headers — the reverse
-  # proxy in front of EntryStore MUST strip inbound X-Forwarded-* on untrusted requests before
-  # forwarding, otherwise a client can spoof them and influence baseURL resolution (and
+  # forward-headers-strategy: framework honours Forwarded and X-Forwarded-For/Proto/Host/Port/Prefix
+  # via Spring's ForwardedHeaderFilter; request.getRemoteAddr() becomes the leftmost X-Forwarded-For
+  # entry, which keys the per-IP rate limiters and is logged. Spring does NOT validate which client
+  # sent the headers — the reverse proxy in front of EntryStore MUST strip inbound Forwarded and
+  # X-Forwarded-* (including X-Forwarded-For) on untrusted requests before forwarding, otherwise a
+  # client can spoof them to bypass the rate limits and influence baseURL resolution (and
   # potentially poison shared caches via X-Forwarded-Prefix).
   forward-headers-strategy: framework
   jetty:

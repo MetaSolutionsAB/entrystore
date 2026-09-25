@@ -151,9 +151,6 @@ public class AuthService {
 	@Value("${entrystore.auth.signup.create-home-context:off}")
 	private String signupCreateHomeContext;
 
-	@Value("${entrystore.trust.x-forwarded-for:false}")
-	private boolean trustForwardedFor;
-
 	// Shared SecureRandom (thread-safe) — used for all token generation, both from the executor's
 	// worker threads and from the request-thread signup path. Reseeding a fresh SecureRandom every
 	// request is an unnecessary entropy hit and was also a residual timing discriminator before
@@ -286,7 +283,7 @@ public class AuthService {
 	 * failed email attempt.
 	 */
 	public ConfirmationResult confirmPassword(HttpServletRequest request, String token, String email, String newPassword, String title) {
-		passwordResetRateLimiter.acquirePermit(clientIp(request));
+		passwordResetRateLimiter.acquirePermit(request.getRemoteAddr());
 		// Validate the chosen password before touching the token so a malformed password neither
 		// consumes the token nor counts as a failed email attempt.
 		String validatedPassword = validatePasswordFormat(newPassword, title);
@@ -370,7 +367,7 @@ public class AuthService {
 
 		log.info("Received password reset request for {}", ci.getEmail());
 
-		passwordResetRateLimiter.acquirePermit(clientIp(request));
+		passwordResetRateLimiter.acquirePermit(request.getRemoteAddr());
 
 		if ("on".equalsIgnoreCase(recaptcha)
 				&& recaptchaPrivateKey != null) {
@@ -507,7 +504,7 @@ public class AuthService {
 	 * invalidated after the configured number of failed attempts.
 	 */
 	public ConfirmationResult confirmSignup(HttpServletRequest request, String token, String email, String password, String title) {
-		signupRateLimiter.acquirePermit(clientIp(request));
+		signupRateLimiter.acquirePermit(request.getRemoteAddr());
 		ConfirmAttemptResult attempt = signupTokenCache.confirmAttempt(token,
 				ci -> credentialsMatch(ci, email, password), maxConfirmationAttempts());
 		return switch (attempt.status()) {
@@ -725,7 +722,7 @@ public class AuthService {
 
 		log.info("Received sign-up request for {}", ci.getEmail());
 
-		signupRateLimiter.acquirePermit(clientIp(request));
+		signupRateLimiter.acquirePermit(request.getRemoteAddr());
 
 		if ("on".equalsIgnoreCase(recaptcha)
 				&& recaptchaPrivateKey != null) {
@@ -852,9 +849,5 @@ public class AuthService {
 		}
 
 		entry.getLocalMetadata().setGraph(graph);
-	}
-
-	private String clientIp(HttpServletRequest request) {
-		return HttpUtil.getClientIpAddress(request, trustForwardedFor);
 	}
 }
