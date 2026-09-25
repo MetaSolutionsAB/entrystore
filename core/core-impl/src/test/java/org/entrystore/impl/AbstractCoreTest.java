@@ -18,6 +18,7 @@ package org.entrystore.impl;
 
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.ContextManager;
@@ -70,6 +71,20 @@ public abstract class AbstractCoreTest {
 	public void tearDown() {
 		rm.shutdown();
 		rm = null;
+	}
+
+	/**
+	 * Replaces the external metadata URI of an entry directly in the store, bypassing its validation, as data
+	 * stored before the validation existed.
+	 */
+	protected void replaceExternalMetadataInStore(Entry entry, URI externalMetadataURI) {
+		ValueFactory vf = rm.getValueFactory();
+		IRI entryIRI = vf.createIRI(entry.getEntryURI().toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.remove(entryIRI, RepositoryProperties.externalMetadata, null, entryIRI);
+			rc.add(entryIRI, RepositoryProperties.externalMetadata, vf.createIRI(externalMetadataURI.toString()),
+					entryIRI);
+		}
 	}
 
 	/**

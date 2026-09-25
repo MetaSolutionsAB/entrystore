@@ -20,17 +20,22 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 public class URISplitTest {
@@ -296,5 +301,34 @@ public class URISplitTest {
 			// a query string is not separated off; no call site passes a URI carrying one
 			arguments(baseFollowedByParamsURIString,
 				"search?type=solr&query=rdfType:http%5C%3A%2F%2Fpurl.org%2Fdc%2Fdcmitype%2FText"));
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@CsvSource({
+			"https://slashdot.org/12/entry/13, https://slashdot.org/12/entry/13",
+			"https://slashdot.org/12/metadata/13, https://slashdot.org/12/entry/13",
+			"https://slashdot.org/12/resource/13, https://slashdot.org/12/entry/13",
+			"https://slashdot.org/12/cached-external-metadata/13, https://slashdot.org/12/entry/13",
+			"https://slashdot.org/12/entry/13/, https://slashdot.org/12/entry/13",
+			"https://slashdot.org/12, https://slashdot.org/_contexts/entry/12",
+			"https://slashdot.org/_principals/resource/_guest, https://slashdot.org/_principals/entry/_guest"
+	})
+	public void entryURIOf_uriOfAnEntry(String uri, String expectedEntryURI) throws MalformedURLException {
+		assertEquals(Optional.of(URI.create(expectedEntryURI)),
+				URISplit.entryURIOf(URI.create(uri), URI.create(anyURIStringBase).toURL()));
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@NullSource
+	@ValueSource(strings = {
+			unknownURIString,
+			anyURIStringBase,
+			"https://slashdot.org/12/entry",
+			baseFollowedByParamsURIString
+	})
+	public void entryURIOf_uriThatDoesNotDenoteAnEntry(String uri) throws MalformedURLException {
+		URI uriOrNull = uri != null ? URI.create(uri) : null;
+
+		assertTrue(URISplit.entryURIOf(uriOrNull, URI.create(anyURIStringBase).toURL()).isEmpty());
 	}
 }

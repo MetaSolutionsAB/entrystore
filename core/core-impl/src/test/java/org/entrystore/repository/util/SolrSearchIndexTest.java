@@ -1097,7 +1097,7 @@ public class SolrSearchIndexTest {
 	}
 
 	@Test
-	public void sendQueryKeepsReferenceHitWhoseExternalMetadataUriDoesNotDenoteAnEntry() throws Exception {
+	public void sendQueryKeepsReferenceHitWhoseReferencedEntryCannotBeResolved() throws Exception {
 		ContextManager cm = contextManagerListing();
 		URI baseURI = URI.create("http://localhost:8181/");
 		Entry reference = mock(Entry.class);
@@ -1106,8 +1106,9 @@ public class SolrSearchIndexTest {
 		when(reference.getCachedExternalMetadata()).thenReturn(mock(LocalMetadataWrapper.class));
 		when(reference.getExternalMetadataURI()).thenReturn(baseURI);
 		when(cm.getEntry(ENTRY_1_1)).thenReturn(reference);
-		// As URISplit rejects the base URL, stored before such external metadata URIs were rejected
-		when(cm.getEntry(baseURI)).thenThrow(new IllegalArgumentException("URI is incompatible with EntryStore"));
+		// As ContextManager.getEntry answers for a URI that does not denote an entry, e.g. the base URL stored
+		// before such external metadata URIs were rejected
+		when(cm.getEntry(baseURI)).thenReturn(null);
 		solrReturnsHits(ENTRY_1_1);
 
 		QueryResult result = index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
