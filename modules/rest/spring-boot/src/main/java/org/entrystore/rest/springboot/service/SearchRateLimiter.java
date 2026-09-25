@@ -26,7 +26,9 @@ import java.time.Duration;
  * Per-IP rate limiter for the guest-accessible {@code /search} endpoint. The endpoint forwards
  * user input into Solr; without a rate limit a single client can issue expensive queries
  * unboundedly. The limit defaults to 60 requests per minute and is keyed by the resolved client
- * IP (honouring {@code entrystore.trust.x-forwarded-for} when proxied). Set
+ * IP ({@code request.getRemoteAddr()}, which Spring's forwarded-header handling takes from
+ * {@code Forwarded: for=}, else the leftmost {@code X-Forwarded-For} entry, on any request that
+ * carries them). Set
  * {@code entrystore.solr.search.rate.limit.max=0} to disable the limiter (used in shared-app
  * integration tests so unrelated specs do not trip it).
  */

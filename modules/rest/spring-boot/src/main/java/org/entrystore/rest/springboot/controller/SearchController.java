@@ -31,9 +31,7 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.SearchRateLimiter;
 import org.entrystore.rest.springboot.service.SearchService;
 import org.entrystore.rest.springboot.service.SolrSearchInputValidator;
-import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.Syndication;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -55,12 +53,6 @@ public class SearchController {
 	private final SolrSearchInputValidator solrSearchInputValidator;
 	private final SearchRateLimiter searchRateLimiter;
 
-	// Bound via the same Spring @Value channel as AuthService so both rate limiters agree on whether to
-	// honour X-Forwarded-For. Reading it here via the legacy Config.getBoolean instead would diverge:
-	// Config coerces yes/1 to false while Spring's relaxed binding maps them to true.
-	@Value("${entrystore.trust.x-forwarded-for:false}")
-	private boolean trustForwardedFor;
-
 	@Operation(summary = "Searches the repository and returns entries")
 	@GetMapping(
 			params = "type=sparql"
@@ -76,7 +68,7 @@ public class SearchController {
 			@RequestParam(defaultValue = "" + SearchService.DEFAULT_LIMIT) int limit
 	) {
 
-		searchRateLimiter.acquirePermit(HttpUtil.getClientIpAddress(request, trustForwardedFor));
+		searchRateLimiter.acquirePermit(request.getRemoteAddr());
 
 		limit = searchService.clampLimit(limit);
 
@@ -123,7 +115,7 @@ public class SearchController {
 			FacetSettingsRequestParams facetRequest
 	) {
 
-		searchRateLimiter.acquirePermit(HttpUtil.getClientIpAddress(request, trustForwardedFor));
+		searchRateLimiter.acquirePermit(request.getRemoteAddr());
 
 		solrSearchInputValidator.validateQuery(query);
 		solrSearchInputValidator.validateSort(sort);

@@ -41,8 +41,7 @@ class ZzzPasswordResetRateLimiterIT extends BaseSpec {
 		startOwnedApp([
 			'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
 			'--entrystore.auth.password-reset.rate.limit.max=2',
-			'--entrystore.auth.password-reset.rate.limit.window=1h',
-			'--entrystore.trust.x-forwarded-for=true'
+			'--entrystore.auth.password-reset.rate.limit.window=1h'
 		])
 
 		// pwReset only sends an email when the user exists; create the targets up-front.

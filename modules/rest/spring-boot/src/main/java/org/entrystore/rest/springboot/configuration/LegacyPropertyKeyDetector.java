@@ -36,6 +36,9 @@ import java.util.Set;
  * legacy values are detected; fail-fast {@link IllegalStateException} when any value is truthy, with
  * the falsy hits surfaced in the exception message rather than logged separately.
  *
+ * <p>Keys that were removed without a replacement are listed in {@link #REMOVED_KEYS} and always
+ * produce a WARN, whatever their value: the operator relied on a setting that no longer exists.
+ *
  * <p>Adding a future rename: append one {@code map.put(...)} call in {@link #buildLegacyKeys()} — but
  * only if the legacy string does not also bind to a live new key (see the exclusion note in
  * {@link #buildLegacyKeys()}).
@@ -43,6 +46,16 @@ import java.util.Set;
 public final class LegacyPropertyKeyDetector implements EnvironmentPostProcessor, Ordered {
 
 	private static final Map<String, String> LEGACY_KEYS = buildLegacyKeys();
+
+	// Removed key -> what applies instead.
+	private static final Map<String, String> REMOVED_KEYS = Map.of(
+			"entrystore.trust.x-forwarded-for",
+			"The client IP used for rate limiting and logging is always resolved from the Forwarded "
+					+ "(for=) header, else the leftmost X-Forwarded-For entry "
+					+ "(server.forward-headers-strategy=framework). The reverse proxy must drop "
+					+ "client-supplied Forwarded and X-Forwarded-* headers and set X-Forwarded-For to the "
+					+ "connecting client's address; without a reverse proxy, set "
+					+ "server.forward-headers-strategy=none.");
 
 	private static final Set<String> TRUTHY_VALUES = Set.of("true", "on", "yes", "enabled", "1");
 
@@ -54,6 +67,13 @@ public final class LegacyPropertyKeyDetector implements EnvironmentPostProcessor
 
 	@Override
 	public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
+		for (var entry : REMOVED_KEYS.entrySet()) {
+			if (environment.getProperty(entry.getKey()) != null) {
+				log.warn("EntryStore property '" + entry.getKey() + "' was removed in 6.1 and is ignored. "
+						+ entry.getValue());
+			}
+		}
+
 		var truthyHits = new LinkedHashMap<String, String>();
 		var falsyHits = new LinkedHashMap<String, String>();
 

@@ -1,11 +1,15 @@
 server:
   port: 8080
   shutdown: graceful
-  # forward-headers-strategy: framework honours X-Forwarded-Proto/Host/Port/Prefix via Spring's
-  # ForwardedHeaderFilter. Spring does NOT validate which client sent the headers — the reverse
-  # proxy in front of EntryStore MUST strip inbound X-Forwarded-* on untrusted requests before
-  # forwarding, otherwise a client can spoof them and influence baseURL resolution (and
-  # potentially poison shared caches via X-Forwarded-Prefix).
+  # forward-headers-strategy: framework honours Forwarded and X-Forwarded-For/Proto/Host/Port/Prefix
+  # via Spring's ForwardedHeaderFilter; request.getRemoteAddr() becomes Forwarded's for=, else the
+  # leftmost X-Forwarded-For entry, which keys the per-IP rate limiters and is logged. Spring does
+  # NOT validate which client sent the headers — the reverse proxy in front of EntryStore MUST drop
+  # inbound Forwarded and X-Forwarded-* and set X-Forwarded-For to the connecting client's address
+  # instead of appending to it (nginx: proxy_set_header Forwarded ""; proxy_set_header
+  # X-Forwarded-For $remote_addr;), otherwise a client can spoof them to bypass the rate limits and
+  # influence baseURL resolution (and potentially poison shared caches via X-Forwarded-Prefix).
+  # Without a reverse proxy, set server.forward-headers-strategy=none.
   forward-headers-strategy: framework
   jetty:
     # Cap form-body parsing at 32 KB so an oversized POST is rejected during request parsing

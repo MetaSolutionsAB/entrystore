@@ -42,8 +42,7 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 		startOwnedApp([
 			'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
 			'--entrystore.auth.signup.rate.limit.max=2',
-			'--entrystore.auth.signup.rate.limit.window=1h',
-			'--entrystore.trust.x-forwarded-for=true'
+			'--entrystore.auth.signup.rate.limit.window=1h'
 		])
 	}
 

@@ -293,6 +293,20 @@ class LegacyPropertyKeyDetectorTest {
 		assertFalse(map.containsKey("entrystore.auth.saml.redirect-failure.url"));
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = {"true", "false"})
+	void removedTrustForwardedForKey_warnsWhateverTheValue(String value) {
+		var warnings = new ArrayList<String>();
+		var detector = newDetector(warnings);
+		var env = new MockEnvironment().withProperty("entrystore.trust.x-forwarded-for", value);
+
+		detector.postProcessEnvironment(env, null);
+
+		assertEquals(1, warnings.size());
+		assertTrue(warnings.getFirst().contains("'entrystore.trust.x-forwarded-for'"));
+		assertTrue(warnings.getFirst().contains("server.forward-headers-strategy=none"));
+	}
+
 	@Test
 	void legacyKeysMap_isImmutable() {
 		assertThrows(UnsupportedOperationException.class,

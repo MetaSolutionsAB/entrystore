@@ -152,12 +152,15 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.message.rate.limit.window=1h
 
 ## Rate limiting for POST /auth/signup by client IP
-## SECURITY: X-Forwarded-For is consulted only when entrystore.trust.x-forwarded-for=true.
-## Enable only when running behind a reverse proxy that overwrites or strips client-supplied
-## X-Forwarded-For; otherwise the limit is bypassable by spoofing the header.
+## SECURITY: the client IP comes from the Forwarded (for=) header, else the leftmost
+## X-Forwarded-For entry (server.forward-headers-strategy in application.yaml), for every request
+## that carries them. The reverse proxy must drop client-supplied Forwarded and X-Forwarded-*
+## headers and set X-Forwarded-For to the connecting client's address, not append to it (nginx:
+## proxy_set_header Forwarded ""; proxy_set_header X-Forwarded-For $remote_addr;). Otherwise this
+## and the other per-IP limits are bypassable by spoofing either header. Without a reverse proxy,
+## set server.forward-headers-strategy=none.
 # entrystore.auth.signup.rate.limit.max=10
 # entrystore.auth.signup.rate.limit.window=1h
-# entrystore.trust.x-forwarded-for=false
 
 ## Rate limiting for POST /auth/pwreset by client IP (0 to disable)
 # entrystore.auth.password-reset.rate.limit.max=5
@@ -165,7 +168,8 @@ entrystore.data.folder=/srv/entrystore/files/
 
 ## Search input constraints and per-IP rate limiting for /search.
 ## The endpoint is guest-accessible; these caps protect Solr from expensive or abusive input.
-## Rate limit is keyed by client IP (X-Forwarded-For honoured only when trust.x-forwarded-for=true).
+## Rate limit is keyed by client IP (Forwarded for=, else the leftmost X-Forwarded-For entry; see
+## signup rate limiting).
 ## Set rate.limit.max=0 to disable rate limiting.
 # entrystore.solr.search.rate.limit.max=60
 # entrystore.solr.search.rate.limit.window=1m
