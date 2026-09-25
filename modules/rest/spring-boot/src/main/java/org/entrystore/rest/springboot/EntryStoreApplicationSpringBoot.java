@@ -27,6 +27,12 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class EntryStoreApplicationSpringBoot {
 
+	static {
+		// Lets SsrfValidator send the Host header; read once when HttpURLConnection initializes.
+		// JVM-wide: it unlocks all restricted headers, so never forward client-chosen header names.
+		System.setProperty("sun.net.http.allowRestrictedHeaders", "true");
+	}
+
 	static void main(String[] args) {
 		try {
 			SpringApplication.run(EntryStoreApplicationSpringBoot.class, args);

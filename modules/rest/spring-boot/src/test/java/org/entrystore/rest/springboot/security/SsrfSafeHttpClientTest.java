@@ -34,6 +34,7 @@ import java.net.URI;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -217,6 +218,27 @@ class SsrfSafeHttpClientTest {
 				() -> client.execute(target, "GET", Map.of(), location -> null, (status, c) -> status));
 
 		assertEquals(HttpStatus.BAD_GATEWAY, ex.getStatus());
+	}
+
+	@Test
+	void execute_ioExceptionOnRedirectHop_causeNamesHopWithoutQuery() throws Exception {
+		SsrfValidator.ValidatedTarget first = validatedTarget("http://upstream.example.com/a", "192.0.2.10");
+		SsrfValidator.ValidatedTarget second = validatedTarget("http://next.example.com/b?token=secret", "192.0.2.11");
+		HttpURLConnection firstConn = mock(HttpURLConnection.class);
+		HttpURLConnection secondConn = mock(HttpURLConnection.class);
+		when(ssrfValidator.openPinnedConnection(first.uri(), first.resolved())).thenReturn(firstConn);
+		when(ssrfValidator.openPinnedConnection(second.uri(), second.resolved())).thenReturn(secondConn);
+		when(firstConn.getResponseCode()).thenReturn(302);
+		when(firstConn.getHeaderField("Location")).thenReturn("http://next.example.com/b?token=secret");
+		IOException failure = new IOException("boom");
+		when(secondConn.getResponseCode()).thenThrow(failure);
+
+		CustomResponseException ex = assertThrows(CustomResponseException.class,
+				() -> client.execute(first, "GET", Map.of(), location -> second, (status, c) -> status));
+
+		assertEquals("Proxy request failed", ex.getMessage());
+		assertEquals("Request to http://next.example.com/b failed", ex.getCause().getMessage());
+		assertSame(failure, ex.getCause().getCause());
 	}
 
 	@Test

@@ -83,6 +83,22 @@ class ProxyIT extends BaseSpec {
 			exchange.close()
 		}
 
+		mockServer.createContext('/echo-host') { exchange ->
+			def hostHeader = exchange.requestHeaders.getFirst('Host') ?: ''
+			exchange.responseHeaders.set('Content-Type', 'text/plain')
+			exchange.sendResponseHeaders(200, hostHeader.bytes.length)
+			exchange.responseBody.write(hostHeader.bytes)
+			exchange.responseBody.close()
+		}
+
+		mockServer.createContext('/echo-target') { exchange ->
+			def target = exchange.requestURI.toString()
+			exchange.responseHeaders.set('Content-Type', 'text/plain')
+			exchange.sendResponseHeaders(200, target.bytes.length)
+			exchange.responseBody.write(target.bytes)
+			exchange.responseBody.close()
+		}
+
 		mockServer.start()
 		log.info('Mock HTTP server started on {}', mockOrigin)
 	}
@@ -231,6 +247,25 @@ class ProxyIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.inputStream.text == 'text/html'
+	}
+
+	def 'GET /proxy should send the original Host header to upstream, not the pinned IP'() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: mockOrigin + '/echo-host']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.inputStream.text == "localhost:${mockServer.address.port}"
+	}
+
+	def 'GET /proxy should forward percent-escapes in path and query unchanged'() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy'
+			+ convertMapToQueryParams([url: mockOrigin + '/echo-target/a%20b?q=x%2Fy&r=%25']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.inputStream.text == '/echo-target/a%20b?q=x%2Fy&r=%25'
 	}
 
 	def 'GET /proxy should follow redirects'() {

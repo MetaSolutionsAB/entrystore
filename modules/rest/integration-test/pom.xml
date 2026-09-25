@@ -189,6 +189,13 @@
 			<scope>test</scope>
 		</dependency>
 
+		<!-- Generates the upstream certificates in ProxyHttpsIT. Version managed by the parent. -->
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcpkix-jdk18on</artifactId>
+			<scope>test</scope>
+		</dependency>
+
 		<dependency>
 			<groupId>com.icegreen</groupId>
 			<artifactId>greenmail</artifactId>
