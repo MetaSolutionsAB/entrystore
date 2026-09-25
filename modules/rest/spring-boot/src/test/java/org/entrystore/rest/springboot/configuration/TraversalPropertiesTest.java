@@ -16,9 +16,12 @@
 
 package org.entrystore.rest.springboot.configuration;
 
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.context.properties.bind.BindException;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
@@ -191,11 +194,31 @@ class TraversalPropertiesTest {
 	}
 
 	@ParameterizedTest(name = "repository-scope={0} -> {1}")
-	@CsvSource({"on, true", "off, false", "true, true", "false, false", "garbage, false"})
-	void repositoryScope_parsesOnOffAndBooleanLiterals(String configured, boolean expected) {
-		// Anything unrecognised is false, reproducing PropertiesConfiguration.getBoolean.
+	@CsvSource({
+			"true, true", "on, true", "yes, true", "1, true",
+			"false, false", "off, false", "no, false", "0, false",
+			"ON, true", "OFF, false", "' yes ', true", "' no ', false"
+	})
+	void repositoryScope_parsesRelaxedBooleanSpellings(String configured, boolean expected) {
 		assertEquals(Optional.of(expected),
 				new TraversalProperties(Map.of("p.repository-scope", configured)).repositoryScope("p"));
+	}
+
+	@ParameterizedTest(name = "repository-scope=''{0}'' -> empty")
+	@ValueSource(strings = {"", "  "})
+	void repositoryScope_blankValueIsEmpty(String configured) {
+		// Empty, not false, so MetadataService's default applies, reproducing PropertiesConfiguration.getBoolean.
+		assertEquals(Optional.empty(),
+				new TraversalProperties(Map.of("p.repository-scope", configured)).repositoryScope("p"));
+	}
+
+	@ParameterizedTest(name = "repository-scope={0} fails binding")
+	@ValueSource(strings = {"garbage", "enabled", "context", "2"})
+	void repositoryScope_unrecognisedValueFailsBinding(String configured) {
+		var exception = assertThrows(BindException.class,
+				() -> bind(Map.of("entrystore.traversal.p.repository-scope", configured)));
+
+		assertTrue(ExceptionUtils.getRootCauseMessage(exception).contains("entrystore.traversal.p.repository-scope"));
 	}
 
 	@Test

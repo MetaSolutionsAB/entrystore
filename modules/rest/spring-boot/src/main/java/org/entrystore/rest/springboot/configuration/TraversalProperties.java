@@ -18,10 +18,11 @@ package org.entrystore.rest.springboot.configuration;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.convert.ApplicationConversionService;
+import org.springframework.core.convert.ConversionFailedException;
 
 import java.math.BigInteger;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -72,12 +73,16 @@ public record TraversalProperties(Map<String, String> traversal) {
 	public TraversalProperties {
 		// Copy so the singleton never hands out the binder's mutable LinkedHashMap by reference.
 		traversal = (traversal == null) ? Map.of() : Map.copyOf(traversal);
-		// Warned once at bind time, not in blacklistTuples: that accessor runs per traversal request.
+		// Checked once at bind time: blacklistTuples and repositoryScope run per traversal request.
 		traversal.forEach((key, value) -> {
 			if (key.endsWith(".blacklist") && !value.isBlank()) {
 				log.warn("Configuration key 'entrystore.traversal.{}' has a bare, un-indexed value; it is "
 						+ "honoured as a single blacklist tuple so the denylist cannot fail open, but write "
 						+ "it as 'entrystore.traversal.{}.1={}'.", key, key, value);
+			}
+			if (key.endsWith(".repository-scope") && !value.isBlank() && parseBoolean(value) == null) {
+				throw new IllegalArgumentException("Invalid boolean value '" + value + "' for entrystore.traversal."
+						+ key + ": expected true/on/yes/1 or false/off/no/0");
 			}
 		});
 	}
@@ -110,20 +115,12 @@ public record TraversalProperties(Map<String, String> traversal) {
 	}
 
 	/**
-	 * The profile's {@code repository-scope} setting, empty when unset. Parses {@code on}/{@code off}
-	 * and standard boolean literals (anything unrecognised is false), matching the legacy
-	 * {@code Config.getBoolean} behaviour.
+	 * The profile's {@code repository-scope} setting, using relaxed boolean spellings. Empty when unset or
+	 * blank, so the caller's default applies; an unrecognised value fails binding.
 	 */
 	public Optional<Boolean> repositoryScope(String profile) {
-		String value = traversal.get(profile + ".repository-scope");
-		if (value == null) {
-			return Optional.empty();
-		}
-		return Optional.of(switch (value.toLowerCase(Locale.ROOT)) {
-			case "on" -> true;
-			case "off" -> false;
-			default -> Boolean.parseBoolean(value);
-		});
+		return Optional.ofNullable(traversal.get(profile + ".repository-scope"))
+				.map(TraversalProperties::parseBoolean);
 	}
 
 	/**
@@ -165,6 +162,15 @@ public record TraversalProperties(Map<String, String> traversal) {
 	 */
 	private static boolean isAsciiDigits(String value) {
 		return !value.isEmpty() && value.chars().allMatch(c -> c >= '0' && c <= '9');
+	}
+
+	/** Null for a blank or unrecognised value. */
+	private static Boolean parseBoolean(String value) {
+		try {
+			return ApplicationConversionService.getSharedInstance().convert(value, Boolean.class);
+		} catch (ConversionFailedException e) {
+			return null;
+		}
 	}
 
 	private OptionalInt intSetting(String profile, String setting) {

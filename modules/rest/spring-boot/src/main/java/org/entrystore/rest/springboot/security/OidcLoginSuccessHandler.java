@@ -20,17 +20,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
+import org.entrystore.rest.springboot.configuration.ConditionalOnBooleanConfig;
 import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration.Provider;
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.service.OidcAuthService;
 import org.entrystore.rest.springboot.service.auth.OidcAuthStateCache;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
-import org.springframework.boot.context.properties.bind.Binder;
-import org.springframework.context.annotation.Condition;
-import org.springframework.context.annotation.ConditionContext;
-import org.springframework.context.annotation.Conditional;
-import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
@@ -40,7 +36,7 @@ import java.io.IOException;
 
 @Slf4j
 @Component
-@Conditional(OidcLoginSuccessHandler.OidcEnabledCondition.class)
+@ConditionalOnBooleanConfig("entrystore.auth.oidc.enabled")
 public class OidcLoginSuccessHandler
 		extends AbstractSsoLoginSuccessHandler<OAuth2AuthenticationToken, OidcLoginSuccessHandler.OidcContext> {
 
@@ -142,19 +138,4 @@ public class OidcLoginSuccessHandler
 	// authenticated the user and the state-keyed entry carrying custom success/failure URLs
 	// (whitelist-validated at use).
 	record OidcContext(String providerId, AuthState cachedAuthState) {}
-
-	/**
-	 * Activates the bean via the same relaxed Boolean binding {@code OidcCustomConfiguration.enabled()}
-	 * uses, so values like {@code on}/{@code yes}/{@code 1} enable the bean exactly when the
-	 * {@code SecurityConfig} OIDC branch runs. {@code @ConditionalOnProperty(havingValue = "true")}
-	 * would match only the literal string and fail startup for relaxed spellings.
-	 */
-	static class OidcEnabledCondition implements Condition {
-		@Override
-		public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
-			return Binder.get(context.getEnvironment())
-					.bind("entrystore.auth.oidc.enabled", Boolean.class)
-					.orElse(false);
-		}
-	}
 }

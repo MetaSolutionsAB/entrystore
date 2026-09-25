@@ -18,19 +18,28 @@ package org.entrystore.rest.springboot.configuration;
 
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.backup.BackupScheduler;
+import org.entrystore.repository.config.Settings;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -59,51 +68,76 @@ class BackupSchedulerStarterTest {
 		when(principalManager.getAdminUser()).thenReturn(adminUser);
 		when(adminUser.getURI()).thenReturn(ADMIN_URI);
 
-		starter(Optional.of(backupScheduler), "on").startBackupScheduler();
+		starter(Optional.of(backupScheduler)).startBackupScheduler();
 
 		verify(backupScheduler).run();
 		verify(principalManager).setAuthenticatedUserURI(ADMIN_URI);
 	}
 
 	@Test
-	void startBackupScheduler_disabled_leavesTheScheduleUnarmed() {
-		// The Optional is empty in this case too (@ConditionalOnProperty), but an "off" setting must not
-		// arm anything even if a scheduler bean somehow exists.
-		starter(Optional.of(backupScheduler), "off").startBackupScheduler();
+	void disabledSetting_omitsTheStarter() {
+		// The scheduler bean is conditional too, but an "off" setting must not arm anything even if a
+		// scheduler bean somehow exists.
+		new ApplicationContextRunner()
+				.withUserConfiguration(BackupSchedulerStarter.class)
+				.withBean(BackupScheduler.class, () -> backupScheduler)
+				.withBean(PrincipalManager.class, () -> principalManager)
+				.withPropertyValues("entrystore.backup.scheduler=off")
+				.run(context -> {
+					assertNull(context.getStartupFailure());
+					assertFalse(context.containsBean("backupSchedulerStarter"));
 
-		verify(backupScheduler, never()).run();
+					context.publishEvent(new ApplicationReadyEvent(new SpringApplication(), new String[0],
+							context.getSourceApplicationContext(), Duration.ZERO));
+
+					verify(backupScheduler, never()).run();
+				});
 	}
 
 	@Test
 	void startBackupScheduler_enabledButNoSchedulerCreated_doesNotThrow() {
 		// createInstance returns null without a cron expression, which leaves the injection point empty.
-		assertDoesNotThrow(() -> starter(Optional.empty(), "on").startBackupScheduler());
+		var starter = starter(Optional.empty());
+		assertDoesNotThrow(starter::startBackupScheduler);
 	}
 
 	@Test
-	void backupSchedulerSetting_bindsFromTheConfiguredProperty() {
-		// Pins the placeholder key itself, which the reflection-set field above cannot: a misspelt
-		// @Value key would leave the cases above green while a production entrystore.backup.scheduler=on
-		// resolved to the "off" default and backups silently never ran.
+	void schedulerBeanAndStarterShareOneGate() throws NoSuchMethodException {
+		// A gate that disagrees would create the starter without a scheduler, so backups would never run.
+		var starterGate = BackupSchedulerStarter.class.getAnnotation(ConditionalOnBooleanConfig.class);
+		var schedulerGate = EntryStoreConfiguration.class
+				.getMethod("backupScheduler", RepositoryManagerImpl.class)
+				.getAnnotation(ConditionalOnBooleanConfig.class);
+
+		assertEquals(Settings.BACKUP_SCHEDULER, schedulerGate.value());
+		assertEquals(schedulerGate, starterGate);
+	}
+
+	@ParameterizedTest(name = "entrystore.backup.scheduler={0} arms the schedule only when ready")
+	@ValueSource(strings = {"true", "on", "yes", "1"})
+	void enabledStarterWaitsForApplicationReadyEvent(String value) {
 		when(principalManager.getAdminUser()).thenReturn(adminUser);
 		when(adminUser.getURI()).thenReturn(ADMIN_URI);
 
 		new ApplicationContextRunner()
-				.withBean(PropertySourcesPlaceholderConfigurer.class)
+				.withUserConfiguration(BackupSchedulerStarter.class)
 				.withBean(BackupScheduler.class, () -> backupScheduler)
 				.withBean(PrincipalManager.class, () -> principalManager)
-				.withBean(BackupSchedulerStarter.class)
-				.withPropertyValues("entrystore.backup.scheduler=on")
+				.withPropertyValues("entrystore.backup.scheduler=" + value)
 				.run(context -> {
-					context.getBean(BackupSchedulerStarter.class).startBackupScheduler();
+					assertNull(context.getStartupFailure());
+					assertTrue(context.containsBean("backupSchedulerStarter"));
+					verify(backupScheduler, never()).run();
+
+					context.publishEvent(new ApplicationReadyEvent(new SpringApplication(), new String[0],
+							context.getSourceApplicationContext(), Duration.ZERO));
+
 					verify(backupScheduler).run();
+					verify(principalManager).setAuthenticatedUserURI(ADMIN_URI);
 				});
 	}
 
-	private BackupSchedulerStarter starter(Optional<BackupScheduler> scheduler, String setting) {
-		BackupSchedulerStarter starter = new BackupSchedulerStarter(scheduler, principalManager);
-		// @Value-injected field — set via reflection since we're not using a Spring context here.
-		ReflectionTestUtils.setField(starter, "backupSchedulerSetting", setting);
-		return starter;
+	private BackupSchedulerStarter starter(Optional<BackupScheduler> scheduler) {
+		return new BackupSchedulerStarter(scheduler, principalManager);
 	}
 }

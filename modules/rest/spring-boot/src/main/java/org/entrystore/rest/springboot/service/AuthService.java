@@ -19,6 +19,7 @@ package org.entrystore.rest.springboot.service;
 import com.google.common.base.Joiner;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -142,14 +143,14 @@ public class AuthService {
 	@Value("${entrystore.auth.confirmation.max-attempts:3}")
 	private String confirmationMaxAttempts;
 
-	@Value("${entrystore.auth.recaptcha:off}")
-	private String recaptcha;
+	@Value("${entrystore.auth.recaptcha:false}")
+	private boolean recaptcha;
 
 	@Value("${entrystore.auth.recaptcha.private-key:#{null}}")
 	private String recaptchaPrivateKey;
 
-	@Value("${entrystore.auth.signup.create-home-context:off}")
-	private String signupCreateHomeContext;
+	@Value("${entrystore.auth.signup.create-home-context:false}")
+	private boolean signupCreateHomeContext;
 
 	// Shared SecureRandom (thread-safe) — used for all token generation, both from the executor's
 	// worker threads and from the request-thread signup path. Reseeding a fresh SecureRandom every
@@ -204,6 +205,14 @@ public class AuthService {
 		this.passwordResetRejectedCounter = Counter.builder("auth.pwreset.rejected")
 				.description("Password-reset dispatches dropped because the executor queue was saturated or shutting down")
 				.register(meterRegistry);
+	}
+
+	@PostConstruct
+	void warnIfRecaptchaHasNoPrivateKey() {
+		if (recaptcha && recaptchaPrivateKey == null) {
+			log.warn("{} is enabled but {} is not set; signup and password reset skip the reCAPTCHA check",
+					Settings.AUTH_RECAPTCHA, Settings.AUTH_RECAPTCHA_PRIVATE_KEY);
+		}
 	}
 
 	public List<SessionInformation> getAllUserSessions(URI userURI, boolean includeExpiredSessions) {
@@ -369,8 +378,7 @@ public class AuthService {
 
 		passwordResetRateLimiter.acquirePermit(request.getRemoteAddr());
 
-		if ("on".equalsIgnoreCase(recaptcha)
-				&& recaptchaPrivateKey != null) {
+		if (recaptcha && recaptchaPrivateKey != null) {
 			if (StringUtils.isNotEmpty(requestBody.rcResponseV2())) {
 				log.info("Checking reCaptcha for {}", ci.getEmail());
 				rcResponseV2 = requestBody.rcResponseV2();
@@ -542,7 +550,7 @@ public class AuthService {
 				}
 				log.info("Created user {}", u.getURI());
 
-				if ("on".equalsIgnoreCase(signupCreateHomeContext)) {
+				if (signupCreateHomeContext) {
 					// Create context and set ACL and alias
 					Entry homeContext = contextManager.createResource(null, GraphType.Context, null, null);
 					homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
@@ -724,8 +732,7 @@ public class AuthService {
 
 		signupRateLimiter.acquirePermit(request.getRemoteAddr());
 
-		if ("on".equalsIgnoreCase(recaptcha)
-				&& recaptchaPrivateKey != null) {
+		if (recaptcha && recaptchaPrivateKey != null) {
 			if (StringUtils.isNotEmpty(requestBody.rcResponseV2())) {
 				log.info("Checking reCaptcha for {}", ci.getEmail());
 				rcResponseV2 = requestBody.rcResponseV2();

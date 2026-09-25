@@ -26,10 +26,15 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.CasVersion;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.cas.authentication.CasAuthenticationProvider;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import javax.net.ssl.HttpsURLConnection;
@@ -37,9 +42,13 @@ import java.net.URI;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class CasConfigTest {
@@ -52,6 +61,30 @@ class CasConfigTest {
 
 	@Mock
 	private RepositoryManagerImpl repositoryManager;
+
+	@Test
+	void relaxedEnabledSettingCreatesTheProviderAndSuccessHandler() throws Exception {
+		when(repositoryManager.getRepositoryURL()).thenReturn(URI.create("https://sp.entrystore.example/").toURL());
+
+		new ApplicationContextRunner()
+				.withUserConfiguration(CasBinding.class, CasConfig.class)
+				.withBean(ESUserDetailsService.class, () -> userDetailsService)
+				.withBean(PrincipalManager.class, () -> principalManager)
+				.withBean(RepositoryManagerImpl.class, () -> repositoryManager)
+				.withBean(ErrorResponseWriter.class, () -> mock(ErrorResponseWriter.class))
+				.withPropertyValues("entrystore.auth.cas.enabled=yes",
+						"entrystore.auth.cas.server.url=https://cas.example.org/cas")
+				.run(context -> {
+					assertNull(context.getStartupFailure());
+					assertTrue(context.getBean(CasCustomConfiguration.class).enabled());
+					assertNotNull(context.getBean(CasAuthenticationProvider.class));
+					assertNotNull(context.getBean(CasLoginSuccessHandler.class));
+				});
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@EnableConfigurationProperties(CasCustomConfiguration.class)
+	static class CasBinding {}
 
 	private CasConfig configWithVersion(CasVersion version) {
 		var server = new CasCustomConfiguration.Server("https://cas.example.org/cas", null);

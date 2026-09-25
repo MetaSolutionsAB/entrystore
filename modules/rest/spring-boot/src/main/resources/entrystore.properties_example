@@ -1,3 +1,13 @@
+## Boolean EntryStore settings (entrystore.* and logging.http.enabled) accept, case-insensitively:
+## true/on/yes/1 to enable and false/off/no/0 to disable; surrounding whitespace is ignored.
+## An unrecognised value fails startup for settings read by the REST layer (e.g. entrystore.cors,
+## entrystore.auth.recaptcha, entrystore.backup.scheduler, entrystore.traversal.<profile>.repository-scope,
+## logging.http.enabled); settings read by the repository core (e.g. entrystore.solr,
+## entrystore.data.quota, entrystore.harvester.oai) log a warning and use their default.
+## Leave a setting out rather than blank: a blank value fails startup for some settings.
+## Spring Boot and third-party settings (spring.*, server.*, management.*, springdoc.*) must use
+## true/false: some of them treat off, no or 0 as enabled.
+
 ## Base URI how it is seen from external clients.
 ## When running behind a reverse proxy, configure the proxy to send
 ## X-Forwarded-Proto, X-Forwarded-Host, X-Forwarded-Port, and X-Forwarded-Prefix headers.

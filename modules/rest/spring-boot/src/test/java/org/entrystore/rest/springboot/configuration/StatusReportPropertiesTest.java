@@ -16,8 +16,14 @@
 
 package org.entrystore.rest.springboot.configuration;
 
+import org.entrystore.repository.config.PropertiesConfiguration;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.core.env.MapPropertySource;
+
+import java.util.Map;
 
 import static org.entrystore.rest.springboot.configuration.StatusReportProperties.UNCONFIGURED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -27,10 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * No other {@code @Value} in the REST layer reads these keys, and only two of them are covered by an IT,
  * so a typo here makes {@code GET /management/status/extended} report a default for a value the operator
- * did configure. Several are also read by core through {@code Settings} — {@code entrystore.data.quota},
- * {@code .repository.provenance}, {@code .solr} and {@code .harvester.oai} — each with its own literal
- * comparison, which the record's per-consumer predicates deliberately mirror, so the report cannot
- * disagree with the behaviour it reports on and a stray spelling cannot abort startup over a cosmetic DTO.
+ * did configure. The boolean accessors must agree with core's relaxed parsing without making a
+ * report-only component fail startup on an invalid value tolerated by core.
  *
  * <p>Each string key gets a distinct value, and the booleans alternate, so transposing two adjacent
  * constructor parameters fails. Two booleans further apart that happen to share a value cannot be
@@ -107,28 +111,43 @@ class StatusReportPropertiesTest {
 		});
 	}
 
-	@Test
-	void booleans_mirrorEachKeysActualConsumer() {
-		// Each key is resolved with the predicate its real consumer uses, so the report cannot disagree
-		// with the behaviour it reports on: RepositoryManagerImpl/ListRecordsJob enable only on the
-		// literal "on" (so "true"/"1"/"enabled" report false), while OAIHarvesterFactory disables only on
-		// the literal "off" — entrystore.harvester.oai=yes runs the harvester, and must report true.
-		runner().withPropertyValues(
-						"entrystore.data.quota=on",
-						"entrystore.harvester.oai=yes",
-						"entrystore.harvester.oai.multithreaded=true",
-						"entrystore.repository.provenance=1",
-						"entrystore.solr=enabled",
-						"entrystore.auth.signup=off")
+	@ParameterizedTest(name = "{0} reports enabled: {1}")
+	@CsvSource({
+			"true, true", "on, true", "yes, true", "1, true",
+			"false, false", "off, false", "no, false", "0, false",
+			"ON, true", "OFF, false", "' yes ', true", "' no ', false",
+			"enabled, false", "typo, false", "'', false"
+	})
+	void booleans_mirrorEachKeysActualConsumer(String value, boolean expected) {
+		// Pins core to the same table, so neither parser can drift from the other alone.
+		var core = new PropertiesConfiguration("test");
+		core.setProperty("feature", value);
+		assertEquals(expected, core.getBoolean("feature", false));
+
+		// Raw property source: withPropertyValues trims, which would hide the whitespace rows.
+		runner().withInitializer(context -> context.getEnvironment().getPropertySources()
+						.addFirst(new MapPropertySource("raw", Map.of(
+								"entrystore.data.quota", value,
+								"entrystore.harvester.oai", value,
+								"entrystore.harvester.oai.multithreaded", value,
+								"entrystore.repository.provenance", value,
+								"entrystore.solr", value,
+								"entrystore.solr.reindex-on-startup", value,
+								"entrystore.backup.maintenance", value,
+								"entrystore.auth.signup", value,
+								"entrystore.auth.password-reset", value))))
 				.run(context -> {
 					StatusReportProperties properties = context.getBean(StatusReportProperties.class);
 
-					assertTrue(properties.quota());
-					assertTrue(properties.oaiHarvester(), "anything but the literal 'off' runs the harvester");
-					assertFalse(properties.oaiHarvesterMultiThreaded(), "ListRecordsJob requires the literal 'on'");
-					assertFalse(properties.provenance());
-					assertFalse(properties.solrEnabled(), "RepositoryManagerImpl requires the literal 'on'");
-					assertFalse(properties.signup());
+					assertEquals(expected, properties.quota());
+					assertEquals(expected, properties.oaiHarvester());
+					assertEquals(expected, properties.oaiHarvesterMultiThreaded());
+					assertEquals(expected, properties.provenance());
+					assertEquals(expected, properties.solrEnabled());
+					assertEquals(expected, properties.solrReindexOnStartup());
+					assertEquals(expected, properties.backupMaintenance());
+					assertEquals(expected, properties.signup());
+					assertEquals(expected, properties.passwordReset());
 				});
 	}
 

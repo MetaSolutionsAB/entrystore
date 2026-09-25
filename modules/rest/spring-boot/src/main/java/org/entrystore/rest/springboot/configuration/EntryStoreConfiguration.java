@@ -29,7 +29,6 @@ import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.config.SortedProperties;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.context.annotation.Bean;
@@ -110,7 +109,7 @@ public class EntryStoreConfiguration {
 	 * the {@code Optional<BackupScheduler>} injection points empty.
 	 */
 	@Bean
-	@ConditionalOnProperty(name = Settings.BACKUP_SCHEDULER, havingValue = "on")
+	@ConditionalOnBooleanConfig("entrystore.backup.scheduler")
 	public BackupScheduler backupScheduler(RepositoryManagerImpl repositoryManager) {
 		PrincipalManager pm = repositoryManager.getPrincipalManager();
 		return PrincipalManagerUtil.runAsAdmin(pm, () -> BackupScheduler.createInstance(repositoryManager));
