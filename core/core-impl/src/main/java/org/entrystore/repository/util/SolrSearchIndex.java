@@ -88,8 +88,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import static java.lang.Thread.interrupted;
-
 
 /**
  * @author Hannes Ebner
@@ -466,8 +464,8 @@ public class SolrSearchIndex implements SearchIndex {
 		this.rm = rm;
 		valueFactory = this.rm.getValueFactory();
 		this.solrServer = solrServer;
-		extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_EXTRACT_FULLTEXT, "off"));
-		related = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_RELATED, "off"));
+		extractFulltext = rm.getConfiguration().getBoolean(Settings.SOLR_EXTRACT_FULLTEXT, false);
+		related = rm.getConfiguration().getBoolean(Settings.SOLR_RELATED, false);
 		defaultSortLang = rm.getConfiguration().getString(Settings.SOLR_DEFAULT_SORTING_LANG);
 		if (related) {
 			List<String> relPropsSetting = rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<>());

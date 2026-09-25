@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2025 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Properties;
 
 /**
@@ -400,20 +401,25 @@ public class PropertiesConfiguration implements Config {
 		return getBoolean(key, false);
 	}
 
+	/**
+	 * Accepts true/on/yes/1 and false/off/no/0, case-insensitively and trimmed. A missing or blank value
+	 * returns {@code defaultValue}; any other value logs a warning and returns {@code defaultValue}.
+	 */
 	@Override
 	public boolean getBoolean(String key, boolean defaultValue) {
-		String strValue = config.getProperty(key);
-		if ("on".equalsIgnoreCase(strValue)) {
-			return true;
-		} else if ("off".equalsIgnoreCase(strValue)) {
-			return false;
-		}
-
-		if (strValue != null) {
-			return Boolean.parseBoolean(strValue);
-		} else {
+		String value = config.getProperty(key);
+		if (value == null || value.isBlank()) {
 			return defaultValue;
 		}
+		return switch (value.trim().toLowerCase(Locale.ROOT)) {
+			case "true", "on", "yes", "1" -> true;
+			case "false", "off", "no", "0" -> false;
+			default -> {
+				log.warn("Unrecognised boolean value '{}' for {}: expected true/on/yes/1 or false/off/no/0; using {}",
+						value, key, defaultValue);
+				yield defaultValue;
+			}
+		};
 	}
 
 	@Override

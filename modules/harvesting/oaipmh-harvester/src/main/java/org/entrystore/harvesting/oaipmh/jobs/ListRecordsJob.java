@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -123,7 +123,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		String until = dataMap.getString("until");
 		String set = dataMap.getString("set");
 		replaceMetadata = "replace".equalsIgnoreCase(rm.getConfiguration().getString(Settings.HARVESTER_OAI_METADATA_POLICY, "skip"));
-		boolean fromAutoDetect = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.HARVESTER_OAI_FROM_AUTO_DETECT, "on"));
+		boolean fromAutoDetect = rm.getConfiguration().getBoolean(Settings.HARVESTER_OAI_FROM_AUTO_DETECT, true);
 
 		if (from == null && fromAutoDetect) {
 			Date latestEntry = null;
@@ -162,7 +162,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		}
 
 		ThreadPoolExecutor exService = null;
-		if ("on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.HARVESTER_OAI_MULTITHREADED, "off"))) {
+		if (rm.getConfiguration().getBoolean(Settings.HARVESTER_OAI_MULTITHREADED, false)) {
 			int cpuCount = Runtime.getRuntime().availableProcessors();
 			if (cpuCount == 1) {
 				log.info("Multi-threaded harvesting activated, but only one CPU found; continuing single-threaded");

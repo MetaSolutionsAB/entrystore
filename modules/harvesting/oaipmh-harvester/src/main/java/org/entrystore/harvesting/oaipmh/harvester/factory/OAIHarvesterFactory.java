@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,8 +45,7 @@ public class OAIHarvesterFactory implements HarvesterFactory {
 	static Logger log = LoggerFactory.getLogger(OAIHarvesterFactory.class);
 
 	public Harvester createHarvester(String target, String metadataType, String set, String timeRegExp, RepositoryManagerImpl rm, URI ownerContextURI) throws HarvesterFactoryException {
-		String oai = rm.getConfiguration().getString(Settings.HARVESTER_OAI, "off"); 
-		if (oai.equals("off")) {
+		if (!rm.getConfiguration().getBoolean(Settings.HARVESTER_OAI, false)) {
 			throw new HarvesterFactoryException("The OAI-PMH harvester module is not enabled"); 
 		}
 		
@@ -66,8 +65,7 @@ public class OAIHarvesterFactory implements HarvesterFactory {
 	}
 
 	public Harvester getHarvester(RepositoryManagerImpl rm, URI ownerContextURI) throws HarvesterFactoryException {
-		String oai = rm.getConfiguration().getString(Settings.HARVESTER_OAI, "off"); 
-		if(oai.equals("off")) {
+		if (!rm.getConfiguration().getBoolean(Settings.HARVESTER_OAI, false)) {
 			throw new HarvesterFactoryException("The OAI-PMH harvester module is not enabled"); 
 		}
 
