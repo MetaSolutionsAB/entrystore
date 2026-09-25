@@ -23,7 +23,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.util.HttpQueryRedactor;
 import org.jetbrains.annotations.NotNull;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -39,7 +38,7 @@ import java.io.IOException;
 @Slf4j
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
-@ConditionalOnProperty(name = "logging.http.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnBooleanConfig(value = "logging.http.enabled", matchIfMissing = true)
 public class RequestResponseLoggingFilter extends OncePerRequestFilter {
 
 	@Override

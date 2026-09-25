@@ -28,12 +28,8 @@ import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.annotation.ConditionContext;
-import org.springframework.mock.env.MockEnvironment;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.saml2.provider.service.authentication.DefaultSaml2AuthenticatedPrincipal;
 import org.springframework.security.saml2.provider.service.authentication.Saml2Authentication;
@@ -43,8 +39,6 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -91,9 +85,6 @@ class SamlLoginSuccessHandlerTest {
 
 	@Mock
 	private User adminUser;
-
-	@Mock
-	private ConditionContext conditionContext;
 
 	private SamlLoginSuccessHandler handler;
 
@@ -212,35 +203,6 @@ class SamlLoginSuccessHandlerTest {
 	private void givenEnabledUserIsLoaded(String username) {
 		when(userService.loadUser(username)).thenReturn(esUser);
 		givenUserIsEnabled();
-	}
-
-	// SamlEnabledCondition must mirror the relaxed Boolean binding SamlCustomConfiguration.enabled()
-	// uses — a literal-string match would make values like 'on' boot the SecurityConfig SAML branch
-	// without the handler bean and fail startup.
-	@ParameterizedTest(name = "entrystore.auth.saml.enabled={0} -> bean active: {1}")
-	@CsvSource({
-			"true, true",
-			"on, true",
-			"yes, true",
-			"1, true",
-			"false, false",
-			"off, false",
-			"no, false",
-			"0, false"
-	})
-	void samlEnabledConditionUsesRelaxedBooleanBinding(String value, boolean expected) {
-		var environment = new MockEnvironment().withProperty("entrystore.auth.saml.enabled", value);
-		when(conditionContext.getEnvironment()).thenReturn(environment);
-
-		assertEquals(expected,
-				new SamlLoginSuccessHandler.SamlEnabledCondition().matches(conditionContext, null));
-	}
-
-	@Test
-	void samlEnabledConditionDefaultsToDisabledWhenPropertyAbsent() {
-		when(conditionContext.getEnvironment()).thenReturn(new MockEnvironment());
-
-		assertFalse(new SamlLoginSuccessHandler.SamlEnabledCondition().matches(conditionContext, null));
 	}
 
 	// Stubs the principalManager round-trip BasicVerifier.isUserDisabled performs so the handler

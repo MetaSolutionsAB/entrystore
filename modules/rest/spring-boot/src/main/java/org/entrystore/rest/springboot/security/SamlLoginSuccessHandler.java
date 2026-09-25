@@ -20,16 +20,12 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
+import org.entrystore.rest.springboot.configuration.ConditionalOnBooleanConfig;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration.Idp;
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.service.SamlAuthService;
 import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
-import org.springframework.boot.context.properties.bind.Binder;
-import org.springframework.context.annotation.Condition;
-import org.springframework.context.annotation.ConditionContext;
-import org.springframework.context.annotation.Conditional;
-import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.springframework.security.saml2.provider.service.authentication.DefaultSaml2AuthenticatedPrincipal;
 import org.springframework.security.saml2.provider.service.authentication.Saml2Authentication;
 import org.springframework.stereotype.Component;
@@ -38,7 +34,7 @@ import java.io.IOException;
 
 @Slf4j
 @Component
-@Conditional(SamlLoginSuccessHandler.SamlEnabledCondition.class)
+@ConditionalOnBooleanConfig("entrystore.auth.saml.enabled")
 public class SamlLoginSuccessHandler
 		extends AbstractSsoLoginSuccessHandler<Saml2Authentication, SamlLoginSuccessHandler.SamlContext> {
 
@@ -132,19 +128,4 @@ public class SamlLoginSuccessHandler
 	// Per-request SAML state resolved once after the token-type guard: the IdP that authenticated the
 	// user and the relay-state entry carrying custom success/failure URLs (whitelist-validated at use).
 	record SamlContext(String idpId, AuthState cachedAuthState) {}
-
-	/**
-	 * Activates the bean via the same relaxed Boolean binding {@code SamlCustomConfiguration.enabled()}
-	 * uses, so values like {@code on}/{@code yes}/{@code 1} enable the bean exactly when the
-	 * {@code SecurityConfig} SAML branch runs. {@code @ConditionalOnProperty(havingValue = "true")}
-	 * would match only the literal string and fail startup for relaxed spellings.
-	 */
-	static class SamlEnabledCondition implements Condition {
-		@Override
-		public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
-			return Binder.get(context.getEnvironment())
-					.bind("entrystore.auth.saml.enabled", Boolean.class)
-					.orElse(false);
-		}
-	}
 }

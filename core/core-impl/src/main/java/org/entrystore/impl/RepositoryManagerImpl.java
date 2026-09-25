@@ -241,7 +241,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		// create soft cache
 		softCache = new SoftCache();
 
-		quotaEnabled = configuration.getString(Settings.DATA_QUOTA, "off").equalsIgnoreCase("on");
+		quotaEnabled = configuration.getBoolean(Settings.DATA_QUOTA, false);
 		if (quotaEnabled) {
 			log.info("Context quotas enabled");
 			String quotaValue = configuration.getString(Settings.DATA_QUOTA_DEFAULT);
@@ -284,7 +284,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				log.error(e.getMessage());
 			}
 
-			if ("on".equalsIgnoreCase(configuration.getString(Settings.REPOSITORY_PROVENANCE, "off"))) {
+			if (configuration.getBoolean(Settings.REPOSITORY_PROVENANCE, false)) {
 				initializeProvenanceRepository();
 			}
 
@@ -308,13 +308,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			DataCorrection.cleanupTrackedDeletedEntries(repository);
 		}
 
-		if ("on".equalsIgnoreCase(configuration.getString(Settings.SOLR, "off")) && configuration.containsKey(Settings.SOLR_URL)) {
+		if (configuration.getBoolean(Settings.SOLR, false) && configuration.containsKey(Settings.SOLR_URL)) {
 			log.info("Initializing Solr");
 			initSolr();
 			registerSolrListeners();
 		}
 
-		if ("on".equalsIgnoreCase(configuration.getString(Settings.REPOSITORY_PUBLIC, "off"))) {
+		if (configuration.getBoolean(Settings.REPOSITORY_PUBLIC, false)) {
 			log.info("Initializing public repository");
 			publicRepository = new PublicRepository(this);
 			registerPublicRepositoryListeners();

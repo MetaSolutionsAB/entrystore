@@ -170,6 +170,12 @@ public class AuthService {
 			}
 		}
 
+		if (config.getBoolean(Settings.AUTH_RECAPTCHA, false)
+				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) == null) {
+			log.warn("{} is enabled but {} is not set; signup and password reset skip the reCAPTCHA check",
+					Settings.AUTH_RECAPTCHA, Settings.AUTH_RECAPTCHA_PRIVATE_KEY);
+		}
+
 		AtomicInteger threadIndex = new AtomicInteger();
 		ThreadFactory threadFactory = r -> {
 			Thread t = new Thread(r, "password-reset-async-" + threadIndex.incrementAndGet());
@@ -332,7 +338,7 @@ public class AuthService {
 
 		passwordResetRateLimiter.acquirePermit(clientIp(request));
 
-		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
+		if (config.getBoolean(Settings.AUTH_RECAPTCHA, false)
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
 			if (StringUtils.isNotEmpty(requestBody.rcResponseV2())) {
 				log.info("Checking reCaptcha for {}", ci.getEmail());
@@ -499,7 +505,7 @@ public class AuthService {
 				}
 				log.info("Created user {}", u.getURI());
 
-				if ("on".equalsIgnoreCase(repositoryManager.getConfiguration().getString(Settings.SIGNUP_CREATE_HOME_CONTEXT, "off"))) {
+				if (config.getBoolean(Settings.SIGNUP_CREATE_HOME_CONTEXT, false)) {
 					// Create context and set ACL and alias
 					Entry homeContext = contextManager.createResource(null, GraphType.Context, null, null);
 					homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
@@ -578,7 +584,7 @@ public class AuthService {
 
 		signupRateLimiter.acquirePermit(clientIp(request));
 
-		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
+		if (config.getBoolean(Settings.AUTH_RECAPTCHA, false)
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
 			if (StringUtils.isNotEmpty(requestBody.rcResponseV2())) {
 				log.info("Checking reCaptcha for {}", ci.getEmail());
