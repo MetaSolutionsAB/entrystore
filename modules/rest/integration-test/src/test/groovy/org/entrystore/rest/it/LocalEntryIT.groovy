@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
@@ -230,6 +246,29 @@ class LocalEntryIT extends BaseSpec {
 		def entriesAfter = (JSON_PARSER.parseText(afterConn.inputStream.text) as List).toSet()
 		(entriesAfter - entriesBefore).isEmpty()
 		(entriesBefore - entriesAfter).isEmpty()
+	}
+
+	def "POST /_principals?graphtype=user with a groupURI that does not denote an entry should return 400 and not leave an orphan entry"() {
+		given:
+		// An entry path without an entry ID; answered with 400 in 5.x as well
+		def params = [graphtype: 'user', groupURI: EntryStoreClient.baseUrl + '/_principals/entry']
+		def body = JsonOutput.toJson([resource: [name: 'groupUriUser']])
+
+		def beforeConn = EntryStoreClient.getRequest('/_principals')
+		assert beforeConn.getResponseCode() == HTTP_OK
+		def entriesBefore = (JSON_PARSER.parseText(beforeConn.inputStream.text) as List).toSet()
+
+		when:
+		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(connection.errorStream.text)['error'].toString().contains('No group found')
+
+		def afterConn = EntryStoreClient.getRequest('/_principals')
+		afterConn.getResponseCode() == HTTP_OK
+		def entriesAfter = (JSON_PARSER.parseText(afterConn.inputStream.text) as List).toSet()
+		entriesAfter == entriesBefore
 	}
 
 	def "POST /_principals?graphtype=user with malformed RDFJSON in info field should return 400 and not leave an orphan entry"() {

@@ -21,8 +21,8 @@ import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
-import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
@@ -255,11 +255,7 @@ public class EntryImplTest extends AbstractCoreTest {
 		ValueFactory vf = rm.getValueFactory();
 		IRI entryIRI = vf.createIRI(refLinkEntry.getEntryURI().toString());
 		// Such entries were created before the self-reference check, so the self-reference is written to the store
-		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
-			rc.remove(entryIRI, RepositoryProperties.externalMetadata, null, entryIRI);
-			rc.add(entryIRI, RepositoryProperties.externalMetadata,
-					vf.createIRI(refLinkEntry.getLocalMetadataURI().toString()), entryIRI);
-		}
+		replaceExternalMetadataInStore(refLinkEntry, refLinkEntry.getLocalMetadataURI());
 		((ContextImpl) context).softCache.remove(refLinkEntry);
 		Entry legacyEntry = context.get(refLinkEntry.getId());
 		Model graph = legacyEntry.getGraph();
@@ -342,6 +338,62 @@ public class EntryImplTest extends AbstractCoreTest {
 		refLinkEntry.setExternalMetadataURI(linkEntry.getLocalMetadataURI());
 
 		assertEquals(linkEntry.getLocalMetadataURI(), refLinkEntry.getExternalMetadataURI());
+	}
+
+	@Test
+	public void setExternalMetadataURIRejectsAnEntryWithoutExternalMetadataURI() {
+		assertThrows(InvalidExternalMetadataURIException.class,
+				() -> listEntry.setExternalMetadataURI(URI.create("http://example.org/metadata/42")));
+
+		assertNull(listEntry.getExternalMetadataURI());
+	}
+
+	@Test
+	public void setGraphRejectsExternalMetadataForALinkBeforeChangingTheEntry() {
+		ValueFactory vf = rm.getValueFactory();
+		IRI entryIRI = vf.createIRI(linkEntry.getEntryURI().toString());
+		Model graph = linkEntry.getGraph();
+		graph.remove(entryIRI, RepositoryProperties.resource, null);
+		graph.add(entryIRI, RepositoryProperties.resource, vf.createIRI("http://slashdot.org/changed"));
+		graph.add(entryIRI, RepositoryProperties.externalMetadata, vf.createIRI("http://example.org/metadata/42"));
+
+		assertThrows(InvalidExternalMetadataURIException.class, () -> linkEntry.setGraph(graph));
+
+		assertEquals(URI.create("http://slashdot.org/"), linkEntry.getResourceURI());
+		assertNull(linkEntry.getExternalMetadataURI());
+	}
+
+	@Test
+	public void setGraphChangesTheExternalMetadataOfALinkThatKeptItFromBeingALinkReference() {
+		// Changing the entry type keeps the external metadata URI, and such an entry could change it in 5.x
+		refLinkEntry.setEntryType(EntryType.Link);
+		ValueFactory vf = rm.getValueFactory();
+		IRI entryIRI = vf.createIRI(refLinkEntry.getEntryURI().toString());
+		Model graph = refLinkEntry.getGraph();
+		graph.remove(entryIRI, RepositoryProperties.externalMetadata, null);
+		graph.add(entryIRI, RepositoryProperties.externalMetadata, vf.createIRI("http://vk.se/md2"));
+
+		refLinkEntry.setGraph(graph);
+
+		assertEquals(URI.create("http://vk.se/md2"), refLinkEntry.getExternalMetadataURI());
+	}
+
+	@Test
+	public void setResourceURIOfAReferenceToALocalEntryLeavesTheMetadataOfTheReferencedEntryUnchanged() {
+		ValueFactory vf = rm.getValueFactory();
+		IRI linkResourceIRI = vf.createIRI(linkEntry.getResourceURI().toString());
+		Model metadata = new LinkedHashModel();
+		metadata.add(linkResourceIRI, DCTERMS.TITLE, vf.createLiteral("Slashdot"));
+		linkEntry.getLocalMetadata().setGraph(metadata);
+		Entry reference = context.createReference(null, linkEntry.getResourceURI(), linkEntry.getLocalMetadataURI(),
+				null);
+
+		reference.setResourceURI(URI.create("http://slashdot.org/changed"));
+
+		assertEquals(URI.create("http://slashdot.org/changed"), reference.getResourceURI());
+		Model referencedMetadata = linkEntry.getLocalMetadata().getGraph();
+		assertEquals(1, referencedMetadata.size());
+		assertTrue(referencedMetadata.contains(linkResourceIRI, DCTERMS.TITLE, vf.createLiteral("Slashdot")));
 	}
 
 	@Test

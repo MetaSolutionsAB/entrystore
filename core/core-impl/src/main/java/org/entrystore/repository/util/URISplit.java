@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.net.URL;
+import java.util.Optional;
 import java.util.StringTokenizer;
 
 @Getter
@@ -116,6 +117,44 @@ public class URISplit {
 
 	public URI getMetaMetadataURI() {
 		return createURI(base, contextId, RepositoryProperties.ENTRY_PATH, id);
+	}
+
+	/**
+	 * @return the URI of the entry that the split URI belongs to, i.e. its entry, metadata, resource or cached
+	 * external metadata URI, or the URI of a context, or empty if the URI does not belong to an entry of this
+	 * repository
+	 */
+	public Optional<URI> getEntryURI() {
+		// Checked first: for a URI of type Unknown, getMetaMetadataURI() would build a URI that is not an entry URI
+		if (uriType == URIType.Unknown) {
+			return Optional.empty();
+		}
+		try {
+			return Optional.of(getMetaMetadataURI());
+		} catch (IllegalArgumentException e) {
+			return Optional.empty();
+		}
+	}
+
+	/**
+	 * @return the split URI, or empty if the URI cannot be split, e.g. a null URI or a URI in the repository that
+	 * is incompatible with it; a URI of another system can be split, as a URI of type {@link URIType#Unknown}
+	 */
+	public static Optional<URISplit> of(URI anyURI, URL baseURL) {
+		try {
+			return Optional.of(new URISplit(anyURI, baseURL));
+		} catch (IllegalArgumentException e) {
+			return Optional.empty();
+		}
+	}
+
+	/**
+	 * @return the URI of the entry that the given URI belongs to, see {@link #getEntryURI()}, or empty if the URI
+	 * does not belong to an entry of this repository, including a null URI and a URI in the repository that
+	 * cannot be split
+	 */
+	public static Optional<URI> entryURIOf(URI anyURI, URL baseURL) {
+		return of(anyURI, baseURL).flatMap(URISplit::getEntryURI);
 	}
 
 	public URI getMetadataURI() {

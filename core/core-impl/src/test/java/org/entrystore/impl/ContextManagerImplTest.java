@@ -215,4 +215,27 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 
 	}
 
+	@Test
+	public void getEntryReturnsNullForAnUriInTheRepositoryThatCannotBeSplit() {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		// An entry path without an entry ID
+		URI entryPathWithoutId = URI.create(rm.getRepositoryURL() + contextEntry.getId() + "/entry");
+
+		assertNull(cm.getEntry(entryPathWithoutId));
+	}
+
+	@Test
+	public void entryMetadataOfAReferenceWhoseExternalMetadataUriCannotBeResolvedIsReadable() {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		Entry reference = context.createLinkReference(null, URI.create("http://example.com/resource"),
+				URI.create("http://example.com/metadata"), null);
+		// Stored before URIs in the repository that do not denote an entry were rejected
+		replaceExternalMetadataInStore(reference, URI.create(rm.getRepositoryURL() + contextEntry.getId() + "/entry"));
+		context.softCache.remove(reference);
+		Entry loaded = context.get(reference.getId());
+
+		assertTrue(((ContextManagerImpl) cm).isEntryMetadataReadable(loaded));
+	}
+
 }

@@ -326,7 +326,7 @@ public class EntryService {
 		Entry entry = null; // A variable to store the new entry in.
 
 		try {
-			checkExternalMetadataURIOfEntryGraph(context, entryId, body);
+			checkExternalMetadataURIOfEntryGraph(context, entryId, entryType, body);
 			// Local
 			if (entryType == null || entryType == EntryType.Local) {
 				entry = createLocalEntry(context, entryId, graphType, listUri, groupUri, body);
@@ -725,6 +725,9 @@ public class EntryService {
 
 				if (groupUri != null) {
 					Entry groupEntry = cm.getEntry(groupUri);
+					if (groupEntry == null) {
+						throw new BadRequestException("No group found with URI " + groupUri);
+					}
 					Group group = (Group) groupEntry.getResource();
 					group.addMember(user);
 				}
@@ -852,12 +855,15 @@ public class EntryService {
 	 * created: the entry graph is applied only after the entry has been created, and a rejected URI must not leave
 	 * a created entry behind. The entry graph may refer to the new entry as {@code _newId}; as in
 	 * {@link #setEntryGraph}, this is replaced with the given ID, and without one the entry URI that the URI is
-	 * validated against uses {@code _newId} as well.
+	 * validated against uses {@code _newId} as well. An entry that is not a Reference or LinkReference has no
+	 * external metadata URI, so its entry graph must not set one.
 	 *
 	 * @throws InvalidExternalMetadataURIException if the entry graph sets an external metadata URI that is not
-	 *                                             acceptable, see {@link EntryImpl#checkExternalMetadataURI}
+	 *                                             acceptable, see {@link EntryImpl#checkExternalMetadataURI}, or
+	 *                                             sets one for an entry of another type
 	 */
-	private void checkExternalMetadataURIOfEntryGraph(Context context, String entryId, CreateEntryRequestBody body) {
+	private void checkExternalMetadataURIOfEntryGraph(Context context, String entryId, EntryType entryType,
+													  CreateEntryRequestBody body) {
 		if (body == null || StringUtils.isEmpty(body.info())) {
 			return;
 		}
@@ -878,6 +884,10 @@ public class EntryService {
 		IRI entryIRI = repositoryManager.getValueFactory().createIRI(entryURI.toString());
 		for (Statement statement : graph.filter(entryIRI, RepositoryProperties.externalMetadata, null)) {
 			if (statement.getObject() instanceof IRI externalMetadataIRI) {
+				if (entryType != Reference && entryType != LinkReference) {
+					throw new InvalidExternalMetadataURIException("An entry of type "
+							+ (entryType != null ? entryType : Local) + " has no external metadata URI");
+				}
 				EntryImpl.checkExternalMetadataURI(URI.create(externalMetadataIRI.stringValue()), entryURI,
 						repositoryURL);
 			}

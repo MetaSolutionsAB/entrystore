@@ -85,6 +85,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TimeZone;
@@ -892,34 +893,30 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	}
 
 	private Entry getEntry(URI uri, boolean withACL) {
-		URISplit usplit = new URISplit(uri, entry.getRepositoryManager().getRepositoryURL());
-		URI entryURI;
-		try {
-			entryURI = usplit.getMetaMetadataURI();
-		} catch (IllegalArgumentException e) {
-			log.warn("Unable to construct entry URI based on likely incorrect URI [{}], error was: {}", uri, e.getMessage());
+		Optional<URISplit> split = URISplit.of(uri, entry.getRepositoryManager().getRepositoryURL());
+		URI entryURI = split.flatMap(URISplit::getEntryURI).orElse(null);
+		if (entryURI == null) {
+			log.warn("Unable to construct entry URI based on likely incorrect URI [{}]", uri);
 			return null;
 		}
-		if (usplit.getUriType() != URIType.Unknown) {
-			Entry item = softCache.getByEntryURI(entryURI);
-			if (item != null) {
-				if (withACL) {
-					((ContextImpl) item.getContext()).checkAccess(item, AccessProperty.ReadMetadata);
-				}
-				return item;
+		Entry item = softCache.getByEntryURI(entryURI);
+		if (item != null) {
+			if (withACL) {
+				((ContextImpl) item.getContext()).checkAccess(item, AccessProperty.ReadMetadata);
 			}
-			log.debug("SoftCache miss for entry URI {}, falling back to repository lookup", entryURI);
-			Entry contextEntry = getByEntryURI(usplit.getContextMetaMetadataURI());
-			if (contextEntry != null) {
-				Entry resolved = ((Context) contextEntry.getResource()).getByEntryURI(usplit.getMetaMetadataURI());
-				if (resolved == null) {
-					log.warn("Context {} found but entry not resolvable for URI {}", usplit.getContextMetaMetadataURI(), uri);
-				}
-				return resolved;
-			} else {
-				log.warn("No context found for entry with URI {} (context URI: {})", uri, usplit.getContextMetaMetadataURI());
-			}
+			return item;
 		}
+		log.debug("SoftCache miss for entry URI {}, falling back to repository lookup", entryURI);
+		URI contextEntryURI = split.get().getContextMetaMetadataURI();
+		Entry contextEntry = getByEntryURI(contextEntryURI);
+		if (contextEntry != null) {
+			Entry resolved = ((Context) contextEntry.getResource()).getByEntryURI(entryURI);
+			if (resolved == null) {
+				log.warn("Context {} found but entry not resolvable for URI {}", contextEntryURI, uri);
+			}
+			return resolved;
+		}
+		log.warn("No context found for entry with URI {} (context URI: {})", uri, contextEntryURI);
 		return null;
 	}
 
@@ -1180,7 +1177,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					|| entry.getEntryType() == EntryType.LinkReference)
 					&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper) {
 				Entry refEntry = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());
-				pm.checkAuthenticatedUserAuthorized(refEntry, AccessProperty.ReadMetadata);
+				// Without a referenced entry, e.g. for a URI that does not denote an entry, the entry itself is checked
+				pm.checkAuthenticatedUserAuthorized(refEntry != null ? refEntry : entry, AccessProperty.ReadMetadata);
 			} else {
 				//Check that the local metadata is accessible.
 				pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
