@@ -27,7 +27,8 @@ import java.time.Duration;
  * user input into Solr; without a rate limit a single client can issue expensive queries
  * unboundedly. The limit defaults to 60 requests per minute and is keyed by the resolved client
  * IP ({@code request.getRemoteAddr()}, which Spring's forwarded-header handling takes from
- * {@code X-Forwarded-For} when proxied). Set
+ * {@code Forwarded: for=}, else the leftmost {@code X-Forwarded-For} entry, on any request that
+ * carries them). Set
  * {@code entrystore.solr.search.rate.limit.max=0} to disable the limiter (used in shared-app
  * integration tests so unrelated specs do not trip it).
  */

@@ -86,4 +86,15 @@ class ZzzSearchRateLimitIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 	}
+
+	def "GET /search — the same X-Forwarded-For IP is rate-limited once its budget is used"() {
+		when:
+		def codes = (1..3).collect {
+			EntryStoreClient.getRequest(QUERY, '', 'application/json',
+				['X-Forwarded-For': '203.0.113.42']).getResponseCode()
+		}
+
+		then:
+		codes == [HTTP_OK, HTTP_OK, HTTP_TOO_MANY_REQUESTS]
+	}
 }
