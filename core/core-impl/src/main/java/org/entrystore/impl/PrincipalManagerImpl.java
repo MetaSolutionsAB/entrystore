@@ -392,6 +392,22 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	}
 
 	protected boolean hasAccess(User currentUser, Entry entry, AccessProperty prop) {
+		if (currentUser == null) {
+			// Fail closed on a principal that could not be resolved. Without this, the "_users" check below
+			// reads currentUser != getGuestUser() as true, so every entry granting the user group would be
+			// granted to an unresolvable principal, and the check after it dereferences null. getUser
+			// returns null whenever the principal's resHasEntry mapping is unreadable — for instance from a
+			// context whose index is incomplete (ENTRYSTORE-1095) — and "I could not read the principal"
+			// must not answer the same as "this principal is allowed".
+			//
+			// This deliberately returns before the guest check below, so an unresolvable principal is also
+			// denied entries that are explicitly guest-readable: a session carrying the URI of a deleted
+			// user entry loses access to public content it could read before. That is the conservative
+			// direction — the alternative is to keep serving a session whose principal we demonstrably
+			// cannot read, and public content is reachable by simply not authenticating.
+			log.warn("Denying {} access: the authenticated principal could not be resolved to a user", prop);
+			return false;
+		}
 		Set<URI> principals = entry.getAllowedPrincipalsFor(prop);
 		if (!principals.isEmpty()) {
 

@@ -584,6 +584,20 @@ public class SolrSearchIndexTest {
 	}
 
 	@Test
+	public void reindexOfContextDoesNotPurgeWhenItsUriIndexIsIncomplete() throws Exception {
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		Context context = resolvableContext(cm, "1", deletedEntry(cm, ENTRY_1_1));
+		// Entries missing from the listing would otherwise lose their documents (ENTRYSTORE-1095)
+		when(context.isIndexComplete()).thenReturn(false);
+		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+
+		index.reindexSync(CONTEXT_1, false);
+		index.shutdown(); // waits for a delayed purge, if one was scheduled
+
+		verify(solrServer, never()).request(any(), any());
+	}
+
+	@Test
 	public void reindexOfEmptyContextDoesNotPurge() throws Exception {
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1");
@@ -750,12 +764,14 @@ public class SolrSearchIndexTest {
 	}
 
 	/**
-	 * Stubs a context with the given ID that lists the given entries.
+	 * Stubs a context with the given ID that lists the given entries and whose URI index is complete.
 	 */
-	private static void resolvableContext(ContextManager cm, String contextId, URI... entryURIs) {
+	private static Context resolvableContext(ContextManager cm, String contextId, URI... entryURIs) {
 		Context context = mock(Context.class);
 		when(context.getEntries()).thenReturn(new LinkedHashSet<>(List.of(entryURIs)));
+		when(context.isIndexComplete()).thenReturn(true);
 		when(cm.getContext(contextId)).thenReturn(context);
+		return context;
 	}
 
 	/**

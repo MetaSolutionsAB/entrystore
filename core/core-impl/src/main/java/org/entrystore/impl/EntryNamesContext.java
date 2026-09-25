@@ -75,8 +75,8 @@ public class EntryNamesContext extends ContextImpl {
 		return getByEntryURI(names2EntryURI.get(name));
 	}
 
-    protected void removeFromIndex(EntryImpl entry, RepositoryConnection rc) throws RepositoryException {
-        super.removeFromIndex(entry, rc);
+    protected void removeFromIndex(EntryImpl entry, RepositoryConnection rc, java.util.List<IndexOp> txOps) throws RepositoryException {
+        super.removeFromIndex(entry, rc, txOps);
         if(names2EntryURI == null) {
             loadNameIndex();
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -119,28 +119,68 @@ public interface Context extends Resource{
 	Entry getByEntryURI(URI entryURI);
 
 	/**
+	 * Looks up the entries referencing an external metadata URI.
+	 *
+	 * <p>Served from an index built from the repository on first use, so the returned set is an
+	 * independent snapshot: mutating it does not affect the context, and it does not reflect entries
+	 * added or removed after the call. See {@link #isIndexComplete()} before deriving a destructive
+	 * action or a persisted total from it.
+	 *
 	 * @param metadataURI is the URI to an external Metadata referenced by an item in this context.
-	 * @return a set of Entries referencing this metadata, never null.
+	 * @return a set of Entries referencing this metadata, never null; empty if {@code metadataURI} is null.
+	 * @throws org.entrystore.repository.RepositoryException if the index cannot be loaded.
 	 */
 	Set<Entry> getByExternalMdURI(URI metadataURI);
 
 	/**
+	 * Looks up the entries with a given resource URI. Index-backed and snapshot-returning; see
+	 * {@link #getByExternalMdURI(URI)}.
+	 *
 	 * @param resourceURI is the URI to the resource for a set of entries in this context.
-	 * @return a set of Entries that has this resourceURI.
+	 * @return a set of Entries that has this resourceURI, never null; empty if {@code resourceURI} is null.
+	 * @throws org.entrystore.repository.RepositoryException if the index cannot be loaded.
 	 */
 	Set<Entry> getByResourceURI(URI resourceURI);
-	
+
 	/**
+	 * Index-backed and snapshot-returning; see {@link #getByExternalMdURI(URI)}.
+	 *
 	 * @return the set of all resources managed in this context
 	 * (each resource represented by its URI).
+	 * @throws org.entrystore.repository.RepositoryException if the index cannot be loaded.
 	 */
 	Set<URI> getResources();
 
 	/**
+	 * Index-backed and snapshot-returning; see {@link #getByExternalMdURI(URI)}.
+	 *
 	 * @return the set of all entries managed in this context
 	 * (each entry represented by its mmd URI).
+	 * @throws org.entrystore.repository.RepositoryException if the index cannot be loaded.
 	 */
 	Set<URI> getEntries();
+
+	/**
+	 * Whether every statement in this context's index graph could be indexed.
+	 *
+	 * <p>False means the listings above are <em>short</em>: an entry exists that they do not name, because
+	 * the statement naming it could not be parsed. Listing anyway is deliberate — refusing would make one
+	 * malformed triple deny every read of the context, and repairing it requires reading the context — but
+	 * a caller that deletes, purges or persists a total derived from a listing must check this first and
+	 * refuse, or it will act on data it cannot see.
+	 *
+	 * <p>Refusing is only the right answer while the destructive step is still ahead of the check. A
+	 * caller that has already destroyed something by the time it could ask — a rebuild that clears its
+	 * target first, or a purge-then-import — must instead enumerate from the store, where the listing
+	 * cannot be short, rather than skip its work on a short one and lose more than it saves.
+	 *
+	 * @return true when the index is known to be complete, which is also the answer for implementations
+	 * that do not maintain one.
+	 * @throws org.entrystore.repository.RepositoryException if the index cannot be loaded.
+	 */
+	default boolean isIndexComplete() {
+		return true;
+	}
 	
 	//***********************************************************************//
 	// Administration methods, since we do not subclass the MetaMetadata     //
