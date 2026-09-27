@@ -62,13 +62,12 @@ public class ListImpl extends RDFResource implements List {
 	 * {@code addChild}, {@code moveChildAfter}, {@code moveChildBefore} and {@code removeChild} mutate while
 	 * holding {@code entry.repository} alone. Per list rather than {@code entry.repository}, which is one object
 	 * shared by every entry in the instance: holding that across the store read in {@link #getGraph()} blocks each
-	 * cold list read for the duration of an import (45cdc777 moved the analogous lazy
-	 * {@code ContextImpl.loadIndex()} off it for the same reason).
+	 * cold list read for the duration of an import.
 	 * <p>
 	 * <b>This lock is innermost. Never acquire {@code entry.repository} while holding it.</b> The paths that take
 	 * both take {@code entry.repository} first: the mutators reach this one through {@link #loadChildren()}, and
 	 * {@link #invalidateChildren()} takes them in that order. The rest — {@link #getChildren()}, the pre-monitor
-	 * {@link #loadChildren()} of {@code setChildren} and {@code removeChild}, {@code removeTree} and
+	 * {@link #loadChildren()} of {@code addChild}, {@code setChildren} and {@code removeChild}, {@code removeTree} and
 	 * {@code applyACLtoChildren} — hold this lock alone, which is why acquiring the repository monitor under it
 	 * anywhere would deadlock every write in the instance.
 	 */
@@ -200,9 +199,8 @@ public class ListImpl extends RDFResource implements List {
 	 * because neither carries the caller's uncommitted change: the field still holds the pre-change membership
 	 * whenever the caller built its vector without assigning it, as {@link #removeChildrenInTransaction} does
 	 * from its own {@code rc.getStatements}, and when the field is null {@link #loadChildren()} reaches
-	 * {@link #getGraph()}, which opens a connection that cannot see the caller's transaction either. Threading
-	 * the caller's connection into the read would therefore fix only the second half and still persist stale
-	 * membership. Package-private so a same-package test can hold a writer inside the member-list write.
+	 * {@link #getGraph()}, which opens a connection that cannot see the caller's transaction either.
+	 * Package-private so a same-package test can hold a writer inside the member-list write.
 	 */
 	void saveChildren(Vector<URI> childrenToSave, RepositoryConnection rc) throws RepositoryException {
 		ValueFactory vf = entry.repository.getValueFactory();
@@ -242,12 +240,15 @@ public class ListImpl extends RDFResource implements List {
 			&& !childEntry.getReferringListsInSameContext().isEmpty()) {
 			throw new org.entrystore.repository.RepositoryException("The entry " + nEntry + " cannot be added since it is a list which already have another parent, try moving it instead");
 		}
-		Vector<URI> currentChildren = loadChildren();
-		if (orderedSetRequirement && currentChildren.contains(nEntry)) {
-			throw new org.entrystore.repository.RepositoryException("The entry " + nEntry + " is already a child in this list.");
-		}
+		// Warmed outside the monitor: a cold list would otherwise read the whole member graph while holding
+		// the one monitor every writer in the instance shares.
+		loadChildren();
 		try {
 			synchronized (this.entry.repository) {
+				Vector<URI> currentChildren = loadChildren();
+				if (orderedSetRequirement && currentChildren.contains(nEntry)) {
+					throw new org.entrystore.repository.RepositoryException("The entry " + nEntry + " is already a child in this list.");
+				}
 				RepositoryConnection rc = entry.repository.getConnection();
 				try {
 					ValueFactory vf = entry.repository.getValueFactory();
@@ -461,8 +462,8 @@ public class ListImpl extends RDFResource implements List {
 	 * throws: unlike {@link #removeChild(URI)}, a refusal is never a {@code false} return, so branching on the
 	 * result is dead code. {@code singleParentForListsRequirement} switches off the rule that a child list may
 	 * belong to one parent, and {@code orderedSetRequirement} the rule that a member may not appear twice; both
-	 * exist for callers that already know the rule is satisfied or irrelevant — {@code removeTree} empties the
-	 * list, {@code moveEntryHere} re-parents a child it has just detached.
+	 * exist for callers that already know the rule is satisfied or irrelevant, such as {@code removeTree}, which
+	 * empties the list.
 	 */
 	public boolean setChildren(java.util.List<URI> newChildren, boolean singleParentForListsRequirement, boolean orderedSetRequirement) {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
@@ -516,7 +517,6 @@ public class ListImpl extends RDFResource implements List {
 		try {
 			synchronized (this.entry.repository) {
 				RepositoryConnection rc = entry.repository.getConnection();
-				Vector<URI> oldChildrenList = currentChildren;
 				try {
 					rc.begin();
 					Vector<URI> newChildrenVector = new Vector<>(newChildren);
@@ -562,7 +562,8 @@ public class ListImpl extends RDFResource implements List {
 						childEntry.refreshFromRepository(rc);
 						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 					}
-					publishChildren(oldChildrenList);
+					// Not the pre-monitor snapshot: a commit that landed before this monitor was taken must survive.
+					publishChildren(null);
 					throw new org.entrystore.repository.RepositoryException("Cannot set the list since: " + e.getMessage());
 				} finally {
 					rc.close();
@@ -581,9 +582,8 @@ public class ListImpl extends RDFResource implements List {
 		if (currentChildren == null) {
 			currentChildren = loadChildren();
 		}
-		// A copy, not a view: the mutators change this vector in place, so an iterating caller would race them.
-		// Not List.copyOf: a gap in the stored rdf:_N sequence leaves a null member, which every other reader
-		// of this list tolerates and which this call must not start rejecting.
+		// A copy, not a view, since the mutators change this vector in place; not List.copyOf, which would reject
+		// the null member a gap in the stored rdf:_N sequence leaves.
 		return Collections.unmodifiableList(new ArrayList<>(currentChildren));
 	}
 
@@ -671,14 +671,11 @@ public class ListImpl extends RDFResource implements List {
 	 * writes go through the supplied connection only, so earlier uncommitted removals in the same transaction
 	 * are seen and nothing uncommitted is published to concurrent readers; the in-memory members are cleared so
 	 * they are reloaded on next access whatever the transaction outcome. The list entry's modification date
-	 * and contributors are updated in memory, so after a rollback the caller must refresh it. No repository event
-	 * is fired here either.
+	 * and contributors are updated in memory, so after a rollback the caller must refresh it.
 	 * <p>
-	 * Clearing them here is not on its own enough, so after the commit the caller must call
-	 * {@link #invalidateChildren()} and only then publish the list's change ({@code importContext} does both per
-	 * pruned list). A reader that does not hold the transaction can reload the members from the pre-commit store
-	 * at any point while it is open, which puts them back; the user-to-groups cache would otherwise re-scan that
-	 * reloaded list as authoritative once the event has bumped its epoch.
+	 * Clearing them here is not on its own enough: a reader that does not hold the transaction can reload the
+	 * members from the pre-commit store while it is open, so a caller that needs them current must call
+	 * {@link #invalidateChildren()} again after the commit.
 	 */
 	protected void removeChildrenInTransaction(Collection<URI> childrenToRemove, RepositoryConnection rc) throws RepositoryException {
 		synchronized (this.entry.repository) {

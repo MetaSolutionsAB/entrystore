@@ -21,6 +21,7 @@ import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -44,14 +45,13 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.Future;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ExecutorService;
+import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
-import java.util.Vector;
-import java.time.Duration;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -463,6 +463,109 @@ public class ListImplTest extends AbstractCoreTest {
 			releaseWriter.countDown();
 			writer.shutdownNow();
 		}
+	}
+
+	/**
+	 * An {@code addChild} that waited for the repository monitor while another writer replaced the members must
+	 * append to what that writer committed; working from its pre-monitor snapshot it writes a second
+	 * {@code rdf:_4} and appends to a vector nothing reads any more.
+	 */
+	@Test
+	public void addChildUsesTheMembersCommittedWhileItWaitedForTheMonitor() throws Exception {
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		java.util.List<URI> members = new ArrayList<>();
+		for (String host : java.util.List.of("a", "b", "c", "d", "e")) {
+			members.add(duck.createLink(null, URI.create("https://" + host + ".example/"), null).getEntryURI());
+		}
+		URI added = duck.createLink(null, URI.create("https://x.example/"), null).getEntryURI();
+		ListImpl list = (ListImpl) listEntry.getResource();
+		list.setChildren(members.subList(0, 3));
+
+		ExecutorService adder = Executors.newSingleThreadExecutor();
+		try {
+			CountDownLatch adderStarted = new CountDownLatch(1);
+			AtomicReference<Thread> adderThread = new AtomicReference<>();
+			Future<?> addition;
+			synchronized (((EntryImpl) listEntry).repository) {
+				addition = adder.submit(() -> {
+					adderThread.set(Thread.currentThread());
+					adderStarted.countDown();
+					pm.setAuthenticatedUserURI(donald);
+					list.addChild(added);
+				});
+				assertTrue(adderStarted.await(10, TimeUnit.SECONDS), "precondition: the adder must have started");
+				assertEquals(Thread.State.BLOCKED, awaitBlockedOrTerminated(adderThread.get()),
+					"precondition: the adder must wait for the repository monitor");
+				list.setChildren(members);
+			}
+			addition.get(10, TimeUnit.SECONDS);
+
+			list.invalidateChildren();
+			java.util.List<URI> expected = new ArrayList<>(members);
+			expected.add(added);
+			assertEquals(expected, list.getChildren(),
+				"the addition must follow the members committed while it waited, with no duplicate or gap");
+		} finally {
+			adder.shutdownNow();
+		}
+	}
+
+	@Test
+	public void getChildrenReturnsASnapshotNotAView() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null);
+		URI first = duck.createLink(null, URI.create("https://slashdot.org/"), null).getEntryURI();
+		URI second = duck.createLink(null, URI.create("https://digg.com/"), null).getEntryURI();
+		List list = (List) listEntry.getResource();
+		list.addChild(first);
+
+		java.util.List<URI> before = list.getChildren();
+		list.addChild(second);
+
+		assertEquals(java.util.List.of(first), before, "a returned member list must not change under its caller");
+	}
+
+	@Test
+	public void getChildrenKeepsTheNullMemberOfAGappedSequence() throws Exception {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null);
+		URI first = duck.createLink(null, URI.create("https://slashdot.org/"), null).getEntryURI();
+		URI third = duck.createLink(null, URI.create("https://digg.com/"), null).getEntryURI();
+
+		ValueFactory vf = rm.getRepository().getValueFactory();
+		IRI listResource = vf.createIRI(listEntry.getResourceURI().toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.add(listResource, vf.createIRI(RDF.NAMESPACE + "_1"), vf.createIRI(first.toString()), listResource);
+			rc.add(listResource, vf.createIRI(RDF.NAMESPACE + "_3"), vf.createIRI(third.toString()), listResource);
+		}
+		ListImpl list = (ListImpl) listEntry.getResource();
+		list.invalidateChildren();
+
+		assertEquals(Arrays.asList(first, null, third), list.getChildren());
+	}
+
+	@Test
+	public void moveChildAfterReordersAndPersists() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null);
+		URI a = duck.createLink(null, URI.create("https://a.example/"), null).getEntryURI();
+		URI b = duck.createLink(null, URI.create("https://b.example/"), null).getEntryURI();
+		URI c = duck.createLink(null, URI.create("https://c.example/"), null).getEntryURI();
+		List list = (List) listEntry.getResource();
+		list.setChildren(java.util.List.of(a, b, c));
+
+		list.moveChildAfter(a, b);
+
+		assertEquals(java.util.List.of(b, a, c), list.getChildren());
+		((ContextImpl) duck).softCache.remove(listEntry);
+		List reloaded = (List) duck.getByEntryURI(listEntry.getEntryURI()).getResource();
+		assertEquals(java.util.List.of(b, a, c), reloaded.getChildren(), "the new order must be persisted");
 	}
 
 	/** Waits until {@code thread} settles on a monitor or finishes, so a test can tell those two apart. */
