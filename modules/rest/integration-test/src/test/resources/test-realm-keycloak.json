@@ -78,7 +78,8 @@
       "publicClient": true,
       "redirectUris": [
         "http://host.docker.internal:8181/*",
-        "http://localhost:8181/*"
+        "http://localhost:8181/*",
+        "http://localhost:8181/store/auth/saml?idp=keycloak"
       ],
       "baseUrl": "http://host.docker.internal:8181",
       "adminUrl": "http://host.docker.internal:8181",

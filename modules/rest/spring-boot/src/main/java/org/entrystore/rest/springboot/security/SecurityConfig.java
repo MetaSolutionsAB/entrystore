@@ -34,6 +34,7 @@ import org.entrystore.rest.springboot.filter.CsrfCookieFilter;
 import org.entrystore.rest.springboot.filter.IgnoreAuthFilter;
 import org.entrystore.rest.springboot.filter.ReloadUserPropertiesFilter;
 import org.entrystore.rest.springboot.filter.SetUserURIAfterAuthenticationFilter;
+import org.entrystore.rest.springboot.filter.StaleSessionCookieFilter;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.springboot.service.OidcAuthService;
@@ -55,6 +56,7 @@ import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.cas.authentication.CasAuthenticationProvider;
 import org.springframework.security.cas.web.CasAuthenticationFilter;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -65,18 +67,22 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
 import org.springframework.security.saml2.provider.service.web.DefaultRelyingPartyRegistrationResolver;
+import org.springframework.security.saml2.provider.service.web.OpenSaml5AuthenticationTokenConverter;
 import org.springframework.security.saml2.provider.service.web.authentication.OpenSaml5AuthenticationRequestResolver;
 import org.springframework.security.saml2.provider.service.web.authentication.Saml2AuthenticationRequestResolver;
+import org.springframework.security.saml2.provider.service.web.authentication.Saml2WebSsoAuthenticationFilter;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.session.SessionInformationExpiredEvent;
 import org.springframework.security.web.util.matcher.AndRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
@@ -111,6 +117,7 @@ public class SecurityConfig {
 	private final Optional<SamlLoginSuccessHandler> samlLoginSuccessHandler;
 	private final Optional<RelyingPartyRegistrationRepository> repo; // optional as it will be injected only when Spring's SAML properties are configured
 	private final SamlRelayStateResolver samlRelayStateResolver;
+	private final CacheSaml2AuthenticationRequestRepository saml2AuthenticationRequestRepository;
 
 	// CAS-auth related beans (optional — only present when entrystore.auth.cas.enabled=true)
 	private final CasCustomConfiguration casConfiguration;
@@ -139,6 +146,12 @@ public class SecurityConfig {
 	// X-XSRF-TOKEN header on mutations — see ENTRYSTORE-1008 for the compatibility discussion.
 	@Value("${entrystore.csrf.enabled:false}")
 	private boolean csrfEnabled;
+
+	@Value("${server.servlet.session.cookie.name:auth_token}")
+	private String sessionCookieName;
+
+	@Value("${entrystore.auth.cookie.invalid-token-error:true}")
+	private boolean invalidTokenError;
 
 	private Cookie.SameSite sessionCookieSameSite;
 
@@ -176,6 +189,7 @@ public class SecurityConfig {
 		}
 
 		var entryPoint = httpBasicConfig.enabled() ? authChallengeAwareEntryPoint(customEntryPoint) : customEntryPoint;
+		var staleSessionCookieFilter = new StaleSessionCookieFilter(sessionCookieName);
 
 		http
 				// Disable Spring Security's default CacheControlHeadersWriter so that CacheControlFilter
@@ -189,12 +203,7 @@ public class SecurityConfig {
 						.sessionConcurrency(concurrency -> concurrency
 								.maximumSessions(-1)
 								.sessionRegistry(sessionRegistry)
-								.expiredSessionStrategy(event ->
-										errorResponseWriter.writeErrorResponseAsJson(event.getResponse(), ErrorResponse.builder()
-											.status(HttpStatus.UNAUTHORIZED.value())
-											.path(event.getRequest().getRequestURI())
-											.error("Session expired")
-											.build())))
+								.expiredSessionStrategy(invalidTokenError ? this::writeSessionExpired : staleSessionCookieFilter))
 						.invalidSessionStrategy((request, response) ->
 								errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 										.status(HttpStatus.UNAUTHORIZED.value())
@@ -223,7 +232,7 @@ public class SecurityConfig {
 						// from a relaxed-SameSite cookie context cannot force-log-out the user.
 						// CsrfRequestMatcher then requires a valid X-XSRF-TOKEN on the POST.
 						.logoutRequestMatcher(PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/auth/logout"))
-						.deleteCookies("auth_token")
+						.deleteCookies(sessionCookieName)
 						.logoutSuccessHandler((_, response, _) ->
 								response.setStatus(HttpStatus.NO_CONTENT.value())
 						)
@@ -237,6 +246,12 @@ public class SecurityConfig {
 						.authenticationEntryPoint(entryPoint)
 						.accessDeniedHandler(customAccessDeniedHandler)
 				);
+
+		if (!invalidTokenError) {
+			log.info("Invalid or expired session cookies are dropped and the request continues as guest "
+					+ "(entrystore.auth.cookie.invalid-token-error=false)");
+			http.addFilterBefore(staleSessionCookieFilter, SecurityContextHolderFilter.class);
+		}
 
 		if (httpBasicConfig.enabled()) {
 			log.info("Basic Auth Enabled (credential cache TTL={}, max entries={})",
@@ -267,11 +282,23 @@ public class SecurityConfig {
 			// cannot run after a committed response, so the redirect strategy closes that gap.
 			samlHandler.setRedirectStrategy(cacheAwareRedirectStrategy);
 
+			// Also processes SAML responses posted to the 5.x assertion consumer service (POST /auth/saml?idp=<id>).
+			var acsMatcher = new SamlAcsRequestMatcher();
 			http.saml2Login(samlLogin -> samlLogin
 					.loginPage("/auth/saml")
 					.failureUrl(samlConfiguration.redirectFailure().url())
 					.authenticationRequestResolver(createCustomResolver())
-					.successHandler(samlHandler));
+					.authenticationConverter(createAcsTokenConverter(acsMatcher))
+					.successHandler(samlHandler)
+					// An anonymous class, not a lambda: the configurer applies a post-processor whose type
+					// argument it cannot resolve to every object it builds.
+					.withObjectPostProcessor(new ObjectPostProcessor<Saml2WebSsoAuthenticationFilter>() {
+						@Override
+						public <O extends Saml2WebSsoAuthenticationFilter> O postProcess(O filter) {
+							filter.setRequiresAuthenticationRequestMatcher(acsMatcher);
+							return filter;
+						}
+					}));
 		} else {
 			log.info("SAML Auth Disabled");
 		}
@@ -407,6 +434,15 @@ public class SecurityConfig {
 		};
 	}
 
+	// For a session the registry marked as expired: a deleted token, or a user's sessions expired by an admin.
+	private void writeSessionExpired(SessionInformationExpiredEvent event) throws IOException {
+		errorResponseWriter.writeErrorResponseAsJson(event.getResponse(), ErrorResponse.builder()
+				.status(HttpStatus.UNAUTHORIZED.value())
+				.path(event.getRequest().getRequestURI())
+				.error("Session expired")
+				.build());
+	}
+
 	private AuthenticationEntryPoint authChallengeAwareEntryPoint(AuthenticationEntryPoint delegate) {
 		return (request, response, authException) -> {
 			if (!"false".equalsIgnoreCase(request.getParameter("auth_challenge"))) {
@@ -454,17 +490,28 @@ public class SecurityConfig {
 	}
 
 	private Saml2AuthenticationRequestResolver createCustomResolver() {
-
-		if (repo.isEmpty()) {
-			throw new RuntimeException("RelyingPartyRegistrationRepository was not injected - missing SAML2 autoconfiguration?");
-		}
-
-		var registrationResolver = new DefaultRelyingPartyRegistrationResolver(repo.get());
+		var registrationResolver = new DefaultRelyingPartyRegistrationResolver(registrationRepository());
 		var resolver = new OpenSaml5AuthenticationRequestResolver(registrationResolver);
 
 		resolver.setRelayStateResolver(samlRelayStateResolver);
 
 		return resolver;
+	}
+
+	/**
+	 * The converter Spring would build by default, but matching {@code acsMatcher}. A converter passed to
+	 * the configurer is used as is, so the request repository has to be set here as well.
+	 */
+	private OpenSaml5AuthenticationTokenConverter createAcsTokenConverter(SamlAcsRequestMatcher acsMatcher) {
+		var converter = new OpenSaml5AuthenticationTokenConverter(registrationRepository());
+		converter.setRequestMatcher(acsMatcher);
+		converter.setAuthenticationRequestRepository(saml2AuthenticationRequestRepository);
+		return converter;
+	}
+
+	private RelyingPartyRegistrationRepository registrationRepository() {
+		return repo.orElseThrow(() -> new IllegalStateException(
+				"RelyingPartyRegistrationRepository was not injected - missing SAML2 autoconfiguration?"));
 	}
 
 	@Bean

@@ -17,14 +17,10 @@
 package org.entrystore.rest.springboot.configuration;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.EnvironmentPostProcessor;
-import org.springframework.boot.logging.DeferredLogFactory;
-import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
-import org.springframework.core.io.support.SpringFactoriesLoader;
 import org.springframework.mock.env.MockEnvironment;
 
-import java.util.List;
+import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -280,11 +276,10 @@ class IndexedListConfigValidatorTest {
 	}
 
 	@Test
-	void runsAheadOfTheLegacyKeyDetector() {
-		// LegacyPropertyKeyDetector throws on a truthy legacy key at LOWEST_PRECEDENCE; at the same order
-		// its throw would suppress every finding in this class on that boot. Still after
-		// ConfigDataEnvironmentPostProcessor, so entrystore.properties is loaded when we scan.
-		assertEquals(Ordered.LOWEST_PRECEDENCE - 1, new IndexedListConfigValidator().getOrder());
+	void runsAheadOfTheLegacyPropertyTranslator() {
+		// The translator's own fail-fast throw would otherwise suppress every finding in this class on that boot.
+		var translator = new LegacyPropertyTranslator(_ -> new RecordingLog(new ArrayList<>()));
+		assertTrue(new IndexedListConfigValidator().getOrder() < translator.getOrder());
 	}
 
 	@Test
@@ -302,17 +297,8 @@ class IndexedListConfigValidatorTest {
 
 	@Test
 	void isRegisteredAsAnEnvironmentPostProcessor() {
-		// Loaded the way Boot loads it, so this proves META-INF/spring.factories lists the validator under
-		// the EnvironmentPostProcessor key AND that it can be instantiated — not merely that the file
-		// contains the expected text. Without the registration every diagnostic above is dead code.
-		DeferredLogFactory logFactory = _ -> null;
-		var loader = SpringFactoriesLoader.forDefaultResourceLocation(getClass().getClassLoader());
-
-		List<EnvironmentPostProcessor> processors = loader.load(EnvironmentPostProcessor.class,
-				SpringFactoriesLoader.ArgumentResolver.of(DeferredLogFactory.class, logFactory),
-				// Boot's own EnvironmentPostProcessors need constructor args this test does not supply;
-				// skip them so only processors constructable from the resolver are instantiated.
-				(factoryType, factoryImplementationName, failure) -> { });
+		// Without the registration every diagnostic above is dead code.
+		var processors = RegisteredEnvironmentPostProcessors.load();
 
 		assertTrue(processors.stream().anyMatch(IndexedListConfigValidator.class::isInstance),
 				"IndexedListConfigValidator must be registered in META-INF/spring.factories; got: "

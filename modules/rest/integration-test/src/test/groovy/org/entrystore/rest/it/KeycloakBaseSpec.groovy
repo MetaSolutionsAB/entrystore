@@ -18,9 +18,12 @@ package org.entrystore.rest.it
 
 import dasniko.testcontainers.keycloak.KeycloakContainer
 import org.apache.commons.text.StringEscapeUtils
+import org.entrystore.rest.it.util.EntryStoreClient
 import org.testcontainers.containers.output.Slf4jLogConsumer
 import org.testcontainers.utility.MountableFile
 import spock.lang.Shared
+
+import static java.net.HttpURLConnection.HTTP_OK
 
 // Child Spec classes of this base must have a Zzz* prefix so Failsafe's alphabetical runOrder
 // schedules them after all shared-app ITs. The shared Spring Boot app runs for all shared-app
@@ -77,6 +80,42 @@ abstract class KeycloakBaseSpec extends BaseSpec {
 		// otherwise be returned as the login endpoint.
 		assert formActionUrl.contains('login-actions/authenticate'): 'not a credential-form action URL: ' + formActionUrl
 		return StringEscapeUtils.unescapeHtml4(formActionUrl)
+	}
+
+	/**
+	 * Plays the IdP side of a SAML login up to Keycloak's self-submitting SAMLResponse form: posts the
+	 * SAMLRequest, opens the login page and submits the credentials. Returns the HTML of that form.
+	 */
+	protected static String samlResponsePageFromKeycloak(String samlRequest, String relayState,
+														 String username, String password) {
+		def postData = [SAMLRequest: samlRequest]
+		if (relayState) {
+			postData['RelayState'] = relayState
+		}
+		def samlRequestConn = EntryStoreClient.postRequest(getKeycloakSamlRealmUrl(), createFormBody(postData),
+			null, 'application/x-www-form-urlencoded')
+		assert samlRequestConn.getResponseCode() in [302, 303, 307]
+		def cookieHeader = EntryStoreClient.toCookieHeader(samlRequestConn.getHeaderFields()['Set-Cookie'])
+		def loginPageConn = EntryStoreClient.getRequest(samlRequestConn.getHeaderField('Location'), null, null,
+			[Cookie: cookieHeader])
+		assert loginPageConn.getResponseCode() == HTTP_OK
+		def loginConn = EntryStoreClient.postRequest(extractFormActionUrl(loginPageConn.inputStream.text),
+			createFormBody([username: username, password: password]), null, 'application/x-www-form-urlencoded',
+			[Cookie: cookieHeader])
+		assert loginConn.getResponseCode() == HTTP_OK
+		return loginConn.inputStream.text
+	}
+
+	/** The (HTML-unescaped) value of the named hidden input of a SAML form page, or null. */
+	protected static String hiddenInputValue(String html, String name) {
+		def matcher = html =~ /name=['"]${name}['"][^>]*\bvalue=['"]([^'"]+)['"]/
+		return matcher ? StringEscapeUtils.unescapeHtml4(matcher[0][1]) : null
+	}
+
+	/** The (HTML-unescaped) action URL of the first form of a SAML form page, or null. */
+	protected static String formActionUrl(String html) {
+		def matcher = html =~ /action=['"]([^'"]+)['"]/
+		return matcher ? StringEscapeUtils.unescapeHtml4(matcher[0][1]) : null
 	}
 
 }

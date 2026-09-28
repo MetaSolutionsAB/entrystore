@@ -30,6 +30,7 @@ import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyPr
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
+import org.springframework.security.saml2.provider.service.registration.Saml2MessageBinding;
 
 import java.io.File;
 import java.math.BigInteger;
@@ -43,6 +44,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -53,6 +55,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RefreshableRelyingPartyRegistrationRepositoryTest {
+
+	private static final String POST_SSO_URL = "https://idp.entrystore.example/sso/post";
+	private static final String REDIRECT_SSO_URL = "https://idp.entrystore.example/sso/redirect";
 
 	@TempDir
 	File tempDir;
@@ -146,6 +151,48 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	}
 
 	@Test
+	void initialize_noRegistrations_namesTheIdpIdsEntryStoreSettingsReferTo() {
+		var samlConfig = new SamlCustomConfiguration(true, "keycloak", List.of(),
+				Map.of("google", new SamlCustomConfiguration.Idp(null, false, null)), null, null);
+		var repo = new RefreshableRelyingPartyRegistrationRepository(new Saml2RelyingPartyProperties(), samlConfig);
+
+		var ex = assertThrows(IllegalStateException.class, repo::initialize);
+		assertTrue(ex.getMessage().contains("[google, keycloak]"), ex.getMessage());
+		assertTrue(ex.getMessage().contains(
+				"spring.security.saml2.relyingparty.registration.<id>.assertingparty.metadata-uri"), ex.getMessage());
+	}
+
+	@Test
+	void findByRegistrationId_configuredBinding_selectsThatBindingsSingleSignOnUrl() throws Exception {
+		repository = repositoryWithSingleSignOn(Saml2MessageBinding.REDIRECT, null);
+
+		var assertingParty = repository.findByRegistrationId("keycloak").getAssertingPartyMetadata();
+
+		assertEquals(Saml2MessageBinding.REDIRECT, assertingParty.getSingleSignOnServiceBinding());
+		assertEquals(REDIRECT_SSO_URL, assertingParty.getSingleSignOnServiceLocation(),
+				"the metadata's first endpoint is the POST one; the configured binding must pick its own URL");
+	}
+
+	@Test
+	void findByRegistrationId_noConfiguredBinding_keepsTheMetadatasFirstEndpoint() throws Exception {
+		repository = repositoryWithSingleSignOn(null, null);
+
+		var assertingParty = repository.findByRegistrationId("keycloak").getAssertingPartyMetadata();
+
+		assertEquals(Saml2MessageBinding.POST, assertingParty.getSingleSignOnServiceBinding());
+		assertEquals(POST_SSO_URL, assertingParty.getSingleSignOnServiceLocation());
+	}
+
+	@Test
+	void findByRegistrationId_configuredUrl_winsOverTheMetadataUrlForTheBinding() throws Exception {
+		repository = repositoryWithSingleSignOn(Saml2MessageBinding.REDIRECT, "https://idp.entrystore.example/explicit");
+
+		var assertingParty = repository.findByRegistrationId("keycloak").getAssertingPartyMetadata();
+
+		assertEquals("https://idp.entrystore.example/explicit", assertingParty.getSingleSignOnServiceLocation());
+	}
+
+	@Test
 	void initialize_failsFast_whenMetadataUriMissing() {
 		var properties = new Saml2RelyingPartyProperties();
 		properties.getRegistration().put("keycloak", new Saml2RelyingPartyProperties.Registration());
@@ -202,13 +249,17 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 
 	private RefreshableRelyingPartyRegistrationRepository repositoryFor(String registrationId, File metadataFile,
 																		String assertingPartyEntityId) {
+		return repositoryWith(registrationId, metadataFile,
+				registration -> registration.getAssertingparty().setEntityId(assertingPartyEntityId));
+	}
+
+	private RefreshableRelyingPartyRegistrationRepository repositoryWith(String registrationId, File metadataFile,
+			Consumer<Saml2RelyingPartyProperties.Registration> customizer) {
 		var properties = new Saml2RelyingPartyProperties();
 		var registration = new Saml2RelyingPartyProperties.Registration();
 		registration.setEntityId("https://sp.entrystore.example/" + registrationId);
 		registration.getAssertingparty().setMetadataUri(metadataFile.toURI().toString());
-		if (assertingPartyEntityId != null) {
-			registration.getAssertingparty().setEntityId(assertingPartyEntityId);
-		}
+		customizer.accept(registration);
 		properties.getRegistration().put(registrationId, registration);
 
 		var repo = new RefreshableRelyingPartyRegistrationRepository(properties, enabledSamlConfig());
@@ -220,7 +271,27 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 		return new SamlCustomConfiguration(true, null, List.of(), Map.of(), null, null);
 	}
 
+	// Metadata whose first single sign-on endpoint is the POST one, with a different URL per binding.
+	private RefreshableRelyingPartyRegistrationRepository repositoryWithSingleSignOn(Saml2MessageBinding binding,
+																					  String url) throws Exception {
+		File metadata = writeIdpMetadata("idp-bindings.xml", List.of(selfSignedCertBase64("idp")), """
+				    <md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="%s"/>
+				    <md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="%s"/>"""
+				.formatted(POST_SSO_URL, REDIRECT_SSO_URL));
+		return repositoryWith("keycloak", metadata, registration -> {
+			registration.getAssertingparty().getSinglesignon().setBinding(binding);
+			registration.getAssertingparty().getSinglesignon().setUrl(url);
+		});
+	}
+
 	private File writeIdpMetadata(String fileName, List<String> signingCertsBase64) throws Exception {
+		return writeIdpMetadata(fileName, signingCertsBase64, """
+				    <md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+				                            Location="https://idp.entrystore.example/test/sso"/>""");
+	}
+
+	private File writeIdpMetadata(String fileName, List<String> signingCertsBase64, String singleSignOnServices)
+			throws Exception {
 		String keyDescriptors = signingCertsBase64.stream()
 				.map("""
 						<md:KeyDescriptor use="signing">
@@ -236,10 +307,9 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 				  <md:IDPSSODescriptor WantAuthnRequestsSigned="false"
 				                       protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
 				%s
-				    <md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-				                            Location="https://idp.entrystore.example/test/sso"/>
+				%s
 				  </md:IDPSSODescriptor>
-				</md:EntityDescriptor>""".formatted(keyDescriptors);
+				</md:EntityDescriptor>""".formatted(keyDescriptors, singleSignOnServices);
 		File file = new File(tempDir, fileName);
 		Files.writeString(file.toPath(), xml);
 		return file;

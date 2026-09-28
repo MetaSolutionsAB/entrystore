@@ -93,10 +93,19 @@ class CsrfRequestMatcherTest {
 	}
 
 	@Test
+	void unsafeMethodWithSessionCookieOnFiveXSamlAcs_skipsCsrf() {
+		var request = new MockHttpServletRequest("POST", "/auth/saml");
+		request.setParameter("idp", "keycloak");
+		request.setParameter("SAMLResponse", "PHNhbWxwOlJlc3BvbnNlLz4=");
+		request.setCookies(new Cookie("auth_token", "session-id"));
+		assertFalse(matcher.matches(request));
+	}
+
+	@Test
 	void exemptPathOnUnboundMethod_requiresCsrf() {
 		// Exempt paths are bound to a specific HTTP method (POST). A regression that drops the
 		// HttpMethod argument would silently exempt PUT /auth/cookie, DELETE /auth/signup, etc.
-		for (String path : new String[]{"/auth/cookie", "/auth/signup", "/auth/pwreset"}) {
+		for (String path : new String[]{"/auth/cookie", "/auth/signup", "/auth/pwreset", "/auth/saml"}) {
 			var request = new MockHttpServletRequest("PUT", path);
 			request.setCookies(new Cookie("auth_token", "session-id"));
 			assertTrue(matcher.matches(request), "PUT " + path + " must NOT be exempt");

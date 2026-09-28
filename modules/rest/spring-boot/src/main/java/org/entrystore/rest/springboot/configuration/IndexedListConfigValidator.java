@@ -19,18 +19,11 @@ package org.entrystore.rest.springboot.configuration;
 import org.entrystore.repository.config.Settings;
 import org.springframework.boot.EnvironmentPostProcessor;
 import org.springframework.boot.SpringApplication;
-import org.springframework.boot.context.properties.source.ConfigurationPropertyName;
-import org.springframework.boot.context.properties.source.ConfigurationPropertyName.Form;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
-import org.springframework.core.env.EnumerablePropertySource;
-import org.springframework.core.env.PropertySource;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
@@ -59,17 +52,18 @@ import java.util.TreeSet;
  * environment-variable spellings — the only forms {@code Config.getStringList} could ever have been fed.
  * A bracketed entry ({@code ...local[0]}, a YAML sequence, a CLI {@code --key[0]=} override) is
  * Spring-native, always zero-based and carries no changed meaning, so it is accepted silently; only its
- * non-numeric variant is a finding.
+ * non-numeric variant is a finding. This validator is the sole guard for these keys — the records
+ * deliberately do not re-filter.
  *
- * <p>An {@link EnvironmentPostProcessor} rather than a bean, for the same reason as
- * {@link LegacyPropertyKeyDetector}: it runs before any bean is created, so the diagnostic is the first
- * failure rather than being buried under an unrelated bean or bind error. It orders itself just ahead of
- * that detector, whose own fail-fast throw would otherwise suppress these findings on the same boot.
+ * <p>An {@link EnvironmentPostProcessor} rather than a bean: it runs before any bean is created, so the
+ * diagnostic is the first failure rather than being buried under an unrelated bean or bind error. It orders
+ * itself just ahead of {@link LegacyPropertyTranslator}, whose own fail-fast throw would otherwise suppress
+ * these findings on the same boot.
  *
  * <p>Deliberately aborts rather than logging or dropping entries: honouring a changed list would widen an
  * access-control decision silently on upgrade, and re-implementing the legacy contiguous-from-one
  * semantics per record would keep two readers alive forever. The same policy as
- * {@link LegacyPropertyKeyDetector} applies — a config whose meaning changed must be fixed before the
+ * {@link LegacyPropertyTranslator} applies — a config whose meaning cannot be kept must be fixed before the
  * application serves requests — and the exception carries the per-key remedy.
  * {@code entrystore.traversal.*} is out of scope: its profile names are operator-chosen, so a key there
  * would have to be discovered rather than looked up, and its list divergence is documented in the
@@ -102,23 +96,22 @@ public final class IndexedListConfigValidator implements EnvironmentPostProcesso
 
 	// Must run after ConfigDataEnvironmentPostProcessor so entrystore.properties (imported via
 	// spring.config.import) is part of the Environment when we scan, and just ahead of
-	// LegacyPropertyKeyDetector, whose own fail-fast throw would otherwise suppress these findings.
+	// LegacyPropertyTranslator, whose own fail-fast throw would otherwise suppress these findings.
 	@Override
 	public int getOrder() {
 		return Ordered.LOWEST_PRECEDENCE - 1;
 	}
 
 	private static void validateKey(ConfigurableEnvironment environment, String key, List<String> findings) {
-		ConfiguredSuffixes suffixes = configuredSuffixes(environment, key);
+		IndexedKeySuffixes suffixes = IndexedKeySuffixes.of(environment, key);
 		if (!suffixes.nonNumeric().isEmpty()) {
 			findings.add("Configuration key '" + key + "' has entries with non-numeric index suffixes "
 					+ suffixes.nonNumeric() + ". The previous release never read them and they would bind as "
 					+ "active list entries now; list entries must use numeric indices (.1, .2, ...).");
 		}
-		// containsProperty covers non-enumerable sources; bareNames covers spellings that only
-		// canonicalise to the bare key (see classify).
-		boolean hasBareValue = environment.containsProperty(key) || !suffixes.bareNames().isEmpty();
-		boolean hasIndexedEntries = !suffixes.legacyNumeric().isEmpty() || !suffixes.bracketNumeric().isEmpty();
+		boolean hasBareValue = suffixes.hasBareValue();
+		SortedSet<String> legacyNumeric = suffixes.legacyNumeric();
+		boolean hasIndexedEntries = !legacyNumeric.isEmpty() || !suffixes.bracketNumeric().isEmpty();
 		if (hasBareValue && !hasIndexedEntries) {
 			findings.add("Configuration key '" + key + "' has a bare, un-indexed value. Before 6.1 that "
 					+ "was read as a single-element list; it no longer binds. Write it as '" + key
@@ -126,25 +119,24 @@ public final class IndexedListConfigValidator implements EnvironmentPostProcesso
 			return;
 		}
 		if (hasBareValue) {
-			SortedSet<String> allIndexed = new TreeSet<>(indexOrder());
-			allIndexed.addAll(suffixes.legacyNumeric());
+			SortedSet<String> allIndexed = new TreeSet<>(legacyNumeric);
 			allIndexed.addAll(suffixes.bracketNumeric());
 			findings.add("Configuration key '" + key + "' has both a bare value and indexed entries "
 					+ allIndexed + ". Before 6.1 the bare value was used and the indexed entries were "
 					+ "ignored; now the bare value would be ignored and the indexed entries would apply. "
 					+ "Remove one of the two forms.");
 		}
-		if (suffixes.legacyNumeric().isEmpty()) {
+		if (legacyNumeric.isEmpty()) {
 			return;
 		}
 		// With a bare value present the legacy reader stopped at a count of 1 and never probed .1 at all,
 		// so every legacy-form entry is newly applied, not just the ones after the first hole.
 		SortedSet<String> droppedBefore = hasBareValue
-				? suffixes.legacyNumeric()
-				: entriesTheLegacyReaderDropped(suffixes.legacyNumeric());
+				? legacyNumeric
+				: IndexedKeySuffixes.droppedByLegacyReader(legacyNumeric);
 		if (!droppedBefore.isEmpty()) {
 			findings.add("Configuration key '" + key + "' has entries the previous release never read (found "
-					+ suffixes.legacyNumeric() + "; newly applied: " + droppedBefore + "). Before 6.1 counting "
+					+ legacyNumeric + "; newly applied: " + droppedBefore + "). Before 6.1 counting "
 					+ "started at .1 and stopped at the first missing index."
 					+ (hasBareValue ? " Remove the bare value above, then renumber" : " Renumber")
 					+ " contiguously from .1, without leading zeros, to restore the previous list.");
@@ -160,128 +152,5 @@ public final class IndexedListConfigValidator implements EnvironmentPostProcesso
 			message.append("  - ").append(finding).append('\n');
 		}
 		return message.toString();
-	}
-
-	/**
-	 * The suffixes the legacy reader never read, assuming no bare value is set. It probed the literal keys
-	 * {@code .1}, {@code .2}, … and stopped at the first one absent, so this is everything from the first
-	 * hole onwards — and also {@code .0}, which it never probed, and any zero-padded spelling such as
-	 * {@code .01}, which does not match the literal key it looked for. All of them bind now, which is why
-	 * they are compared as written rather than parsed to a number.
-	 */
-	private static SortedSet<String> entriesTheLegacyReaderDropped(SortedSet<String> suffixes) {
-		SortedSet<String> dropped = new TreeSet<>(suffixes);
-		int reached = 1;
-		while (dropped.remove(Integer.toString(reached))) {
-			reached++;
-		}
-		return dropped;
-	}
-
-	/**
-	 * Index suffixes across the spellings that all bind to the same list, classified into the
-	 * legacy-relevant forms (dotted and the container-native environment-variable form — the only
-	 * spellings {@code Config.getStringList} could ever have been fed), the Spring-native bracket
-	 * form ({@code ...local[0]}, YAML sequences, CLI overrides — which the legacy reader could never
-	 * parse, so no meaning changed there), and non-numeric suffixes (hazardous in every spelling).
-	 *
-	 * <p>Names are matched the way the binder matches them, not literally: the dotted/bracket forms go
-	 * through {@link ConfigurationPropertyName#adapt}, so a relaxed spelling such as
-	 * {@code ...remoteResource.delete.whitelist.evil} is seen exactly where the binder would bind it,
-	 * and the environment-variable prefix is compared case-insensitively (Boot's
-	 * {@code SystemEnvironmentPropertyMapper} removes dashes and accepts lowercase variables, so
-	 * {@code entrystore.proxy.remote-resource.delete.whitelist} binds from
-	 * {@code ENTRYSTORE_PROXY_REMOTERESOURCE_DELETE_WHITELIST_1}). This validator is the sole guard for
-	 * these keys — the records deliberately do not re-filter — so it must see every spelling the binder
-	 * accepts.
-	 */
-	private static ConfiguredSuffixes configuredSuffixes(ConfigurableEnvironment environment, String key) {
-		ConfigurationPropertyName canonicalKey = ConfigurationPropertyName.of(key);
-		String environmentVariable = key.toUpperCase(Locale.ROOT).replace("-", "").replace('.', '_') + "_";
-		ConfiguredSuffixes suffixes = new ConfiguredSuffixes(
-				new TreeSet<>(indexOrder()), new TreeSet<>(indexOrder()), new TreeSet<>(), new TreeSet<>());
-		for (PropertySource<?> source : environment.getPropertySources()) {
-			if (!(source instanceof EnumerablePropertySource<?> enumerable)) {
-				continue;
-			}
-			for (String name : enumerable.getPropertyNames()) {
-				classify(name, canonicalKey, environmentVariable, suffixes);
-			}
-		}
-		return suffixes;
-	}
-
-	private record ConfiguredSuffixes(SortedSet<String> legacyNumeric, SortedSet<String> bracketNumeric,
-			SortedSet<String> nonNumeric, SortedSet<String> bareNames) {}
-
-	private static void classify(String name, ConfigurationPropertyName key, String environmentVariable,
-			ConfiguredSuffixes suffixes) {
-		// Environment-variable branch first: the underscore form is not parseable as a dotted name.
-		if (name.regionMatches(true, 0, environmentVariable, 0, environmentVariable.length())) {
-			String suffix = name.substring(environmentVariable.length());
-			if (!suffix.isEmpty()) {
-				(isAsciiDigits(suffix) ? suffixes.legacyNumeric() : suffixes.nonNumeric()).add(suffix);
-			}
-			return;
-		}
-		ConfigurationPropertyName adapted;
-		try {
-			adapted = ConfigurationPropertyName.adapt(name, '.');
-		} catch (RuntimeException e) {
-			return; // not a name the binder could use either
-		}
-		if (key.equals(adapted)) {
-			// A spelling that canonicalises to the key itself is the bare, un-indexed value.
-			suffixes.bareNames().add(name);
-			return;
-		}
-		if (!key.isAncestorOf(adapted)) {
-			// Includes names whose suffix consists entirely of characters adapt() rejects (e.g. a
-			// non-ASCII digit such as ٢): adapt classifies that element as EMPTY, leaving a name that is
-			// neither the key nor its descendant — and the Binder ignores such a property completely
-			// (verified empirically), so it is as inert now as it was under the legacy reader.
-			return;
-		}
-		int keyLength = key.getNumberOfElements();
-		if (adapted.getNumberOfElements() == keyLength + 1) {
-			String suffix = adapted.getElement(keyLength, Form.ORIGINAL);
-			if (!isAsciiDigits(suffix)) {
-				suffixes.nonNumeric().add(suffix);
-			} else if (adapted.isLastElementIndexed()) {
-				suffixes.bracketNumeric().add(suffix);
-			} else {
-				suffixes.legacyNumeric().add(suffix);
-			}
-			return;
-		}
-		// A deeper descendant (e.g. whitelist.1.extra) is never a list entry in any spelling.
-		StringBuilder suffix = new StringBuilder();
-		for (int i = keyLength; i < adapted.getNumberOfElements(); i++) {
-			if (!suffix.isEmpty()) {
-				suffix.append('.');
-			}
-			suffix.append(adapted.getElement(i, Form.ORIGINAL));
-		}
-		suffixes.nonNumeric().add(suffix.toString());
-	}
-
-	/**
-	 * Numeric first, so a gap reads as {@code [1, 2, 10]} rather than the lexicographic {@code [1, 10, 2]},
-	 * then by text so that {@code .1} and a zero-padded {@code .01} stay distinct entries.
-	 */
-	private static Comparator<String> indexOrder() {
-		return (left, right) -> {
-			int byIndex = new BigInteger(left).compareTo(new BigInteger(right));
-			return byIndex != 0 ? byIndex : left.compareTo(right);
-		};
-	}
-
-	/**
-	 * Not {@code StringUtils.isNumeric}, which accepts any Unicode digit: a suffix such as {@code ٢} would
-	 * pass that and then blow up in {@link BigInteger}, and it is not an index the legacy reader could
-	 * ever have matched either.
-	 */
-	private static boolean isAsciiDigits(String value) {
-		return !value.isEmpty() && value.chars().allMatch(c -> c >= '0' && c <= '9');
 	}
 }
