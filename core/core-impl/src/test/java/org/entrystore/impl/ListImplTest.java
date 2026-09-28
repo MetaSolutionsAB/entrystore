@@ -21,6 +21,7 @@ import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -31,6 +32,7 @@ import org.entrystore.QuotaException;
 import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.config.Settings;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -43,8 +45,18 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 
 public class ListImplTest extends AbstractCoreTest {
 
@@ -337,5 +349,233 @@ public class ListImplTest extends AbstractCoreTest {
 		assertTrue(copiedMetadata.contains(vf.createIRI(copy.getResourceURI().toString()), DCTERMS.TITLE, null));
 		assertFalse(copiedMetadata.contains(originalResource, null, null));
 		assertEquals("carried over", ((StringResource) copy.getResource()).getString());
+	}
+
+	/**
+	 * A reader that is already loading the members when a prune commits must not publish its copy afterwards:
+	 * an authorization scan would then read a membership the store no longer holds. The reader and
+	 * {@link ListImpl#invalidateChildren()} therefore have to contend for one monitor.
+	 */
+	@Test
+	public void invalidateChildren_waitsForAReaderThatIsLoadingThePrePruneList() throws Exception {
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry kept = duck.createLink(null, URI.create("https://slashdot.org/"), listEntry.getResourceURI());
+		Entry pruned = duck.createLink(null, URI.create("https://digg.com/"), listEntry.getResourceURI());
+
+		ListImpl list = spy((ListImpl) listEntry.getResource());
+		list.invalidateChildren();
+		CountDownLatch readerHoldsPrePruneGraph = new CountDownLatch(1);
+		CountDownLatch pruneCommitted = new CountDownLatch(1);
+		doAnswer(invocation -> {
+			Model graph = (Model) invocation.callRealMethod();
+			readerHoldsPrePruneGraph.countDown();
+			if (!pruneCommitted.await(10, TimeUnit.SECONDS)) {
+				throw new IllegalStateException("the loading reader was never released");
+			}
+			return graph;
+		}).when(list).getGraph();
+
+		ExecutorService reader = Executors.newSingleThreadExecutor();
+		try {
+			Future<java.util.List<URI>> readerView = reader.submit(() -> {
+				pm.setAuthenticatedUserURI(donald);
+				return list.getChildren();
+			});
+			assertTrue(readerHoldsPrePruneGraph.await(10, TimeUnit.SECONDS),
+				"precondition: the reader must have loaded the graph as it was before the prune");
+
+			// commit the prune the way a transaction on another thread does: through its own connection,
+			// taking none of the monitors this class uses
+			ValueFactory vf = rm.getRepository().getValueFactory();
+			IRI listResource = vf.createIRI(listEntry.getResourceURI().toString());
+			try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+				rc.remove(listResource, null, vf.createIRI(pruned.getEntryURI().toString()), listResource);
+			}
+
+			Thread invalidator = new Thread(list::invalidateChildren, "invalidate-children");
+			invalidator.start();
+			assertEquals(Thread.State.BLOCKED, awaitBlockedOrTerminated(invalidator),
+				"invalidateChildren() must wait for the monitor the loading reader holds; on a different "
+					+ "monitor it drops the members before the reader publishes them again");
+
+			pruneCommitted.countDown();
+			assertTrue(readerView.get(10, TimeUnit.SECONDS).contains(pruned.getEntryURI()),
+				"precondition: the reader really did load the pre-prune members");
+			invalidator.join(TimeUnit.SECONDS.toMillis(10));
+
+			assertFalse(list.getChildren().contains(pruned.getEntryURI()),
+				"a read after the invalidation must reflect the committed prune, not the reader's copy");
+			assertTrue(list.getChildren().contains(kept.getEntryURI()), "the surviving member must remain");
+		} finally {
+			pruneCommitted.countDown();
+			reader.shutdownNow();
+		}
+	}
+
+	/**
+	 * {@code invalidateChildren()} must not land inside another writer's open transaction. If it does, a reader
+	 * reloads the pre-commit membership into the field and nothing drops it afterwards, so the writer's change is
+	 * invisible to every later read — and on a group's member list the authorization cache then re-publishes the
+	 * stale membership as authoritative.
+	 */
+	@Test
+	public void invalidateChildrenWaitsForAWriterHoldingTheRepositoryMonitor() throws Exception {
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry member = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+
+		ListImpl list = spy((ListImpl) listEntry.getResource());
+		CountDownLatch writerIsInTheTransaction = new CountDownLatch(1);
+		CountDownLatch releaseWriter = new CountDownLatch(1);
+		doAnswer(invocation -> {
+			writerIsInTheTransaction.countDown();
+			if (!releaseWriter.await(10, TimeUnit.SECONDS)) {
+				throw new IllegalStateException("the writer was never released");
+			}
+			return invocation.callRealMethod();
+		}).when(list).saveChildren(any(), any(RepositoryConnection.class));
+
+		ExecutorService writer = Executors.newSingleThreadExecutor();
+		try {
+			writer.submit(() -> {
+				pm.setAuthenticatedUserURI(donald);
+				list.setChildren(java.util.List.of(member.getEntryURI()));
+			});
+			assertTrue(writerIsInTheTransaction.await(10, TimeUnit.SECONDS),
+				"precondition: the writer is inside its open transaction");
+
+			Thread invalidator = new Thread(list::invalidateChildren, "invalidate-children");
+			invalidator.start();
+
+			assertEquals(Thread.State.BLOCKED, awaitBlockedOrTerminated(invalidator),
+				"invalidateChildren() must wait for a writer holding the repository monitor; landing inside an "
+					+ "open transaction lets a reader republish the pre-commit membership with nothing to drop it");
+
+			releaseWriter.countDown();
+			invalidator.join(TimeUnit.SECONDS.toMillis(10));
+			assertTrue(list.getChildren().contains(member.getEntryURI()), "the write itself must still land");
+		} finally {
+			releaseWriter.countDown();
+			writer.shutdownNow();
+		}
+	}
+
+	/**
+	 * An {@code addChild} that waited for the repository monitor while another writer replaced the members must
+	 * append to what that writer committed; working from its pre-monitor snapshot it writes a second
+	 * {@code rdf:_4} and appends to a vector nothing reads any more.
+	 */
+	@Test
+	public void addChildUsesTheMembersCommittedWhileItWaitedForTheMonitor() throws Exception {
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		java.util.List<URI> members = new ArrayList<>();
+		for (String host : java.util.List.of("a", "b", "c", "d", "e")) {
+			members.add(duck.createLink(null, URI.create("https://" + host + ".example/"), null).getEntryURI());
+		}
+		URI added = duck.createLink(null, URI.create("https://x.example/"), null).getEntryURI();
+		ListImpl list = (ListImpl) listEntry.getResource();
+		list.setChildren(members.subList(0, 3));
+
+		ExecutorService adder = Executors.newSingleThreadExecutor();
+		try {
+			CountDownLatch adderStarted = new CountDownLatch(1);
+			AtomicReference<Thread> adderThread = new AtomicReference<>();
+			Future<?> addition;
+			synchronized (((EntryImpl) listEntry).repository) {
+				addition = adder.submit(() -> {
+					adderThread.set(Thread.currentThread());
+					adderStarted.countDown();
+					pm.setAuthenticatedUserURI(donald);
+					list.addChild(added);
+				});
+				assertTrue(adderStarted.await(10, TimeUnit.SECONDS), "precondition: the adder must have started");
+				assertEquals(Thread.State.BLOCKED, awaitBlockedOrTerminated(adderThread.get()),
+					"precondition: the adder must wait for the repository monitor");
+				list.setChildren(members);
+			}
+			addition.get(10, TimeUnit.SECONDS);
+
+			list.invalidateChildren();
+			java.util.List<URI> expected = new ArrayList<>(members);
+			expected.add(added);
+			assertEquals(expected, list.getChildren(),
+				"the addition must follow the members committed while it waited, with no duplicate or gap");
+		} finally {
+			adder.shutdownNow();
+		}
+	}
+
+	@Test
+	public void getChildrenReturnsASnapshotNotAView() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null);
+		URI first = duck.createLink(null, URI.create("https://slashdot.org/"), null).getEntryURI();
+		URI second = duck.createLink(null, URI.create("https://digg.com/"), null).getEntryURI();
+		List list = (List) listEntry.getResource();
+		list.addChild(first);
+
+		java.util.List<URI> before = list.getChildren();
+		list.addChild(second);
+
+		assertEquals(java.util.List.of(first), before, "a returned member list must not change under its caller");
+	}
+
+	@Test
+	public void getChildrenKeepsTheNullMemberOfAGappedSequence() throws Exception {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null);
+		URI first = duck.createLink(null, URI.create("https://slashdot.org/"), null).getEntryURI();
+		URI third = duck.createLink(null, URI.create("https://digg.com/"), null).getEntryURI();
+
+		ValueFactory vf = rm.getRepository().getValueFactory();
+		IRI listResource = vf.createIRI(listEntry.getResourceURI().toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.add(listResource, vf.createIRI(RDF.NAMESPACE + "_1"), vf.createIRI(first.toString()), listResource);
+			rc.add(listResource, vf.createIRI(RDF.NAMESPACE + "_3"), vf.createIRI(third.toString()), listResource);
+		}
+		ListImpl list = (ListImpl) listEntry.getResource();
+		list.invalidateChildren();
+
+		assertEquals(Arrays.asList(first, null, third), list.getChildren());
+	}
+
+	@Test
+	public void moveChildAfterReordersAndPersists() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null);
+		URI a = duck.createLink(null, URI.create("https://a.example/"), null).getEntryURI();
+		URI b = duck.createLink(null, URI.create("https://b.example/"), null).getEntryURI();
+		URI c = duck.createLink(null, URI.create("https://c.example/"), null).getEntryURI();
+		List list = (List) listEntry.getResource();
+		list.setChildren(java.util.List.of(a, b, c));
+
+		list.moveChildAfter(a, b);
+
+		assertEquals(java.util.List.of(b, a, c), list.getChildren());
+		((ContextImpl) duck).softCache.remove(listEntry);
+		List reloaded = (List) duck.getByEntryURI(listEntry.getEntryURI()).getResource();
+		assertEquals(java.util.List.of(b, a, c), reloaded.getChildren(), "the new order must be persisted");
+	}
+
+	/** Waits until {@code thread} settles on a monitor or finishes, so a test can tell those two apart. */
+	private static Thread.State awaitBlockedOrTerminated(Thread thread) throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		Thread.State state = thread.getState();
+		while (state != Thread.State.BLOCKED && state != Thread.State.TERMINATED && System.nanoTime() < deadline) {
+			Thread.sleep(1);
+			state = thread.getState();
+		}
+		return state;
 	}
 }
