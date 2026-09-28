@@ -20,19 +20,16 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Entry;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
+import org.entrystore.rest.springboot.configuration.ConditionalOnBooleanConfig;
 import org.springframework.beans.factory.SmartInitializingSingleton;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Service responsible for loading test data into the system.
- * This service checks if test data should be loaded upon application startup
- * and prevents duplicate loading of test data if it already exists in the store.
- * <p>
- * The initialization logic is controlled by the "init-with-test-data" configuration
- * property, which determines whether test data should be loaded. If test data is already found,
- * it skips the data loading process.
+ * Loads the Disney test suite at startup. The bean exists only when
+ * {@code entrystore.repository.store.init-with-test-data} is enabled, and loading is skipped when the
+ * {@code Donald} principal already exists, so a persisted store is not populated twice.
  * <p>
  * Runs as a {@link SmartInitializingSingleton} rather than from {@code @PostConstruct}: mutating the
  * repository is runtime work, and {@code @PostConstruct} runs mid-refresh, while this bean's own
@@ -44,27 +41,21 @@ import org.springframework.stereotype.Service;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@ConditionalOnBooleanConfig("entrystore.repository.store.init-with-test-data")
 public class TestDataLoadService implements SmartInitializingSingleton {
 
 	private final RepositoryManagerImpl repositoryManager;
 
-	@Value("${entrystore.repository.store.init-with-test-data:off}")
-	private String initWithTestData;
-
 	@Override
 	public void afterSingletonsInstantiated() {
-		if ("on".equalsIgnoreCase(initWithTestData)) {
-			// Check for the existence of Donald
-			Entry donald = repositoryManager.getPrincipalManager().getPrincipalEntry("Donald");
-			// We only initialize of test suite has not been loaded before,
-			// otherwise we end up with duplicates (if store is persisted)
-			if (donald == null) {
-				log.info("Initializing store with test data");
-				loadTestData();
-				log.info("Initialized store with test data");
-			} else {
-				log.warn("Test data is already present, not loading it again");
-			}
+		Entry donald = repositoryManager.getPrincipalManager().getPrincipalEntry("Donald");
+		if (donald == null) {
+			log.warn("Loading test users with publicly known passwords because {} is enabled",
+					Settings.STORE_INIT_WITH_TEST_DATA);
+			loadTestData();
+			log.info("Initialized store with test data");
+		} else {
+			log.warn("Test data is already present, not loading it again");
 		}
 	}
 

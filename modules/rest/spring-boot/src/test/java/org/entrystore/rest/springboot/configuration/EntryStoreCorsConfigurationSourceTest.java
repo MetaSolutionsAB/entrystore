@@ -20,6 +20,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.web.cors.CorsConfiguration;
 
 import java.util.List;
@@ -40,6 +42,29 @@ class EntryStoreCorsConfigurationSourceTest {
 
 	private static final String ORIGINS = "http://example.com,http://other.com,*.test.example.com,http://prefix.*";
 	private static final String CREDENTIAL_ORIGINS = "http://localhost:3000";
+
+	@ParameterizedTest(name = "entrystore.cors={0} permits an allowed origin: {1}")
+	@CsvSource({
+			"true, true", "on, true", "yes, true", "1, true",
+			"false, false", "off, false", "no, false", "0, false"
+	})
+	void relaxedBooleanSettingControlsCors(String value, boolean expected) {
+		new ApplicationContextRunner().withUserConfiguration(CorsProperties.class)
+				.withPropertyValues("entrystore.cors=" + value, "entrystore.cors.origins=http://example.com")
+				.run(context -> {
+					assertNull(context.getStartupFailure());
+					var config = resolve(context.getBean(CorsProperties.class), "http://example.com");
+					assertEquals(expected, config != null);
+				});
+	}
+
+	@ParameterizedTest(name = "entrystore.cors=''{0}'' fails startup")
+	@ValueSource(strings = {"", "enabled", "typo", "2"})
+	void blankOrUnrecognisedValueFailsStartup(String value) {
+		new ApplicationContextRunner().withUserConfiguration(CorsProperties.class)
+				.withPropertyValues("entrystore.cors=" + value)
+				.run(context -> assertNotNull(context.getStartupFailure()));
+	}
 
 	@ParameterizedTest(name = "{0} -> allowed={1}, credentials={2}")
 	@CsvSource({
@@ -140,7 +165,7 @@ class EntryStoreCorsConfigurationSourceTest {
 
 	@Test
 	void getCorsConfiguration_corsDisabled_returnsNullForOtherwiseAllowedOrigin() {
-		CorsProperties disabled = new CorsProperties("off", ORIGINS, CREDENTIAL_ORIGINS, "X-Custom-Header", 7200);
+		CorsProperties disabled = new CorsProperties(false, ORIGINS, CREDENTIAL_ORIGINS, "X-Custom-Header", 7200);
 
 		assertNull(resolve(disabled, "http://example.com"));
 	}
@@ -165,7 +190,7 @@ class EntryStoreCorsConfigurationSourceTest {
 	}
 
 	private static CorsProperties properties(String origins, String credentialOrigins) {
-		return new CorsProperties("on", origins, credentialOrigins, "X-Custom-Header", 7200);
+		return new CorsProperties(true, origins, credentialOrigins, "X-Custom-Header", 7200);
 	}
 
 	private static CorsConfiguration resolve(CorsProperties properties, String origin) {

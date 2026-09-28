@@ -43,27 +43,23 @@ import java.util.Locale;
  */
 @Component
 public record CorsProperties(
-		String mode,
+		boolean enabled,
 		String origins,
 		String originsAllowCredentials,
 		String headers,
 		int maxAge) {
 
 	public CorsProperties(
-			@Value("${entrystore.cors:off}") String mode,
+			@Value("${entrystore.cors:false}") boolean enabled,
 			@Value("${entrystore.cors.origins:*}") String origins,
 			@Value("${entrystore.cors.origins.allow-credentials:}") String originsAllowCredentials,
 			@Value("${entrystore.cors.headers:}") String headers,
 			@Value("${entrystore.cors.max-age:-1}") int maxAge) {
-		this.mode = mode;
+		this.enabled = enabled;
 		this.origins = origins;
 		this.originsAllowCredentials = originsAllowCredentials;
 		this.headers = headers;
 		this.maxAge = maxAge;
-	}
-
-	public boolean enabled() {
-		return "on".equalsIgnoreCase(mode);
 	}
 
 	/**

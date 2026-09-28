@@ -17,6 +17,8 @@
 package org.entrystore.rest.springboot.configuration;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.convert.ApplicationConversionService;
+import org.springframework.core.convert.ConversionFailedException;
 import org.springframework.stereotype.Component;
 
 /**
@@ -30,22 +32,10 @@ import org.springframework.stereotype.Component;
  * {@code entrystore.backup.maintenance}) are simultaneously a scalar and the prefix of further keys —
  * a layout a record component can never express.
  *
- * <p>The boolean keys bind as raw strings and each accessor resolves its key with the predicate the
- * key's <em>actual consumer</em> uses, so the report cannot disagree with the behaviour it reports on
- * and no boolean parse can abort startup over a report-only DTO (a strict bind on this
- * eagerly-instantiated component would refuse to boot, naming {@code constructor parameter N} rather
- * than the key, for a value the real consumer tolerates):
- * <ul>
- * <li>{@link #literalOn} — {@code data.quota}, {@code repository.provenance}, {@code solr}
- * ({@code RepositoryManagerImpl}) and {@code harvester.oai.multithreaded} ({@code ListRecordsJob}) are
- * enabled only by the literal {@code on}, case-insensitively.</li>
- * <li>{@link #anythingButOff} — {@code harvester.oai} ({@code OAIHarvesterFactory}) is disabled only by
- * the literal, case-sensitive {@code off}; hence its {@code off} default below.</li>
- * <li>{@link #relaxedBoolean} — {@code solr.reindex-on-startup} and {@code backup.maintenance} are
- * genuine {@code Config.getBoolean} reads ({@code on}/{@code off}, else {@code Boolean.parseBoolean});
- * {@code auth.signup} and {@code auth.password-reset} have no runtime consumer at all — nothing gates
- * on them — so the report applies the same lenient parse.</li>
- * </ul>
+ * <p>Boolean accessors use Spring's relaxed spellings and report blank or invalid values as the default
+ * false, matching {@code Config.getBoolean}. Binding raw strings keeps this report from failing startup
+ * for a value tolerated by core. {@code auth.signup} and {@code auth.password-reset} have no other
+ * reader: nothing gates signup or password reset on them.
  *
  * <p>The {@code @Value} annotations sit on the explicit canonical constructor's parameters rather than
  * on the record components — see {@link CorsProperties} for why that distinction matters at startup.
@@ -80,9 +70,7 @@ public record StatusReportProperties(
 			@Value("${entrystore.repository.store.indexes:" + UNCONFIGURED + "}") String repositoryIndices,
 			@Value("${entrystore.data.quota:false}") String quotaRaw,
 			@Value("${entrystore.data.quota.default:" + UNCONFIGURED + "}") String quotaDefault,
-			// Default off, not false: the consumer (OAIHarvesterFactory) enables for anything that is not
-			// the literal "off", so any other default would report an unset harvester as running.
-			@Value("${entrystore.harvester.oai:off}") String oaiHarvesterRaw,
+			@Value("${entrystore.harvester.oai:false}") String oaiHarvesterRaw,
 			@Value("${entrystore.harvester.oai.multithreaded:false}") String oaiHarvesterMultiThreadedRaw,
 			@Value("${entrystore.repository.provenance:false}") String provenanceRaw,
 			@Value("${entrystore.auth.signup:false}") String signupRaw,
@@ -117,19 +105,19 @@ public record StatusReportProperties(
 	}
 
 	public boolean quota() {
-		return literalOn(quotaRaw);
+		return relaxedBoolean(quotaRaw);
 	}
 
 	public boolean oaiHarvester() {
-		return anythingButOff(oaiHarvesterRaw);
+		return relaxedBoolean(oaiHarvesterRaw);
 	}
 
 	public boolean oaiHarvesterMultiThreaded() {
-		return literalOn(oaiHarvesterMultiThreadedRaw);
+		return relaxedBoolean(oaiHarvesterMultiThreadedRaw);
 	}
 
 	public boolean provenance() {
-		return literalOn(provenanceRaw);
+		return relaxedBoolean(provenanceRaw);
 	}
 
 	public boolean signup() {
@@ -141,7 +129,7 @@ public record StatusReportProperties(
 	}
 
 	public boolean solrEnabled() {
-		return literalOn(solrEnabledRaw);
+		return relaxedBoolean(solrEnabledRaw);
 	}
 
 	public boolean solrReindexOnStartup() {
@@ -152,24 +140,12 @@ public record StatusReportProperties(
 		return relaxedBoolean(backupMaintenanceRaw);
 	}
 
-	/** Mirrors {@code RepositoryManagerImpl} and {@code ListRecordsJob}: only the literal {@code on} enables. */
-	private static boolean literalOn(String value) {
-		return "on".equalsIgnoreCase(value);
-	}
-
-	/** Mirrors {@code OAIHarvesterFactory}: only the literal, case-sensitive {@code off} disables. */
-	private static boolean anythingButOff(String value) {
-		return !"off".equals(value);
-	}
-
-	/** Mirrors {@code Config.getBoolean}: {@code on}/{@code true} enable, everything else is false — never throws. */
 	private static boolean relaxedBoolean(String value) {
-		if ("on".equalsIgnoreCase(value)) {
-			return true;
-		}
-		if ("off".equalsIgnoreCase(value)) {
+		try {
+			return Boolean.TRUE.equals(ApplicationConversionService.getSharedInstance().convert(value, Boolean.class));
+		} catch (ConversionFailedException e) {
+			// Core falls back to the default for invalid values, and every key here defaults to false.
 			return false;
 		}
-		return Boolean.parseBoolean(value);
 	}
 }

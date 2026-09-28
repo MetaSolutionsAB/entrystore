@@ -18,9 +18,9 @@ package org.entrystore.rest.springboot.security;
 
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
+import org.entrystore.rest.springboot.configuration.ConditionalOnBooleanConfig;
 import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.context.annotation.Conditional;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.stereotype.Component;
 
@@ -38,7 +38,7 @@ import java.util.Optional;
  * check in {@code AuthController.startOidcLogin} remains as a backstop.
  */
 @Component
-@Conditional(OidcLoginSuccessHandler.OidcEnabledCondition.class)
+@ConditionalOnBooleanConfig("entrystore.auth.oidc.enabled")
 @RequiredArgsConstructor
 public class OidcProviderRegistrationValidator implements InitializingBean {
 

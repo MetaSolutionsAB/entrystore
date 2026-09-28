@@ -57,7 +57,7 @@ public class RecaptchaVerifier {
 	private final RestClient recaptchaRestClient;
 
 	// Read through the same Spring property channel as the AuthService enable-gate
-	// (@Value("${entrystore.auth.recaptcha.private-key}") + "${entrystore.auth.recaptcha:off}"). Reading
+	// (@Value("${entrystore.auth.recaptcha.private-key}") + "${entrystore.auth.recaptcha:false}"). Reading
 	// the secret via the legacy Config bean instead would diverge: EntryStoreConfiguration only copies
 	// Spring keys literally starting with "entrystore." into Config, so a key supplied only as an env var
 	// (ENTRYSTORE_AUTH_RECAPTCHA_PRIVATE_KEY) would pass the gate yet leave this secret null.

@@ -19,16 +19,16 @@ package org.entrystore.rest.springboot.security;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.springboot.configuration.ConditionalOnBooleanConfig;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.opensaml.core.xml.config.XMLObjectProviderRegistrySupport;
 import org.opensaml.saml.metadata.resolver.impl.AbstractReloadingMetadataResolver;
 import org.opensaml.saml.metadata.resolver.impl.ResourceBackedMetadataResolver;
 import org.opensaml.saml.metadata.resolver.index.impl.RoleMetadataIndex;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.PropertyMapper;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties.AssertingParty;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties.Registration;
-import org.springframework.boot.context.properties.PropertyMapper;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.security.saml2.core.OpenSamlInitializationService;
 import org.springframework.security.saml2.provider.service.registration.AssertingPartyMetadata;
@@ -73,7 +73,7 @@ import java.util.function.Consumer;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(prefix = "entrystore.auth.saml", name = "enabled", havingValue = "true")
+@ConditionalOnBooleanConfig("entrystore.auth.saml.enabled")
 public class RefreshableRelyingPartyRegistrationRepository implements IterableRelyingPartyRegistrationRepository {
 
 	// Minimum delay between background metadata refreshes — matches OpenSAML's own default (5 min) so a
