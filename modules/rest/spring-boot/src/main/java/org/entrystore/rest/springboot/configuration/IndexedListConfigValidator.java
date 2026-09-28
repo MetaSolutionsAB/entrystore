@@ -68,9 +68,8 @@ import java.util.TreeSet;
  *
  * <p>Deliberately aborts rather than logging or dropping entries: honouring a changed list would widen an
  * access-control decision silently on upgrade, and re-implementing the legacy contiguous-from-one
- * semantics per record would keep two readers alive forever. The same policy as
- * {@link LegacyPropertyKeyDetector} applies — a config whose meaning changed must be fixed before the
- * application serves requests — and the exception carries the per-key remedy.
+ * semantics per record would keep two readers alive forever. The exception carries the per-key remedy.
+ * SAML lists are handled separately by {@link LegacyAuthProperties}, which preserves their legacy values.
  * {@code entrystore.traversal.*} is out of scope: its profile names are operator-chosen, so a key there
  * would have to be discovered rather than looked up, and its list divergence is documented in the
  * CHANGELOG instead.

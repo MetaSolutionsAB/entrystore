@@ -16,20 +16,28 @@
 
 package org.entrystore.rest.springboot.security;
 
+import org.apache.commons.logging.LogFactory;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.entrystore.rest.springboot.configuration.LegacyPropertyKeyDetector;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.mock.env.MockEnvironment;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.saml2.provider.service.authentication.Saml2PostAuthenticationRequest;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
+import org.springframework.security.saml2.provider.service.web.DefaultRelyingPartyRegistrationResolver;
+import org.springframework.security.saml2.provider.service.web.authentication.OpenSaml5AuthenticationRequestResolver;
 
 import java.io.File;
 import java.math.BigInteger;
@@ -47,6 +55,7 @@ import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -58,6 +67,38 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	File tempDir;
 
 	private RefreshableRelyingPartyRegistrationRepository repository;
+
+	@Test
+	void legacyConfigurationCreatesAuthnRequestWithoutSigningCredentials() throws Exception {
+		String signingCert = selfSignedCertBase64("idp-signing");
+		File metadata = writeIdpMetadata("legacy-idp.xml", List.of(signingCert), true);
+		var env = new MockEnvironment()
+				.withProperty("entrystore.auth.saml", "on")
+				.withProperty("entrystore.auth.saml.idps.1", "legacy")
+				.withProperty("entrystore.auth.saml.idp.legacy.relying-party-id", "legacy-sp")
+				.withProperty("entrystore.auth.saml.idp.legacy.metadata.url", metadata.toURI().toString())
+				.withProperty("entrystore.auth.saml.idp.legacy.redirect-method", "post")
+				.withProperty("entrystore.auth.saml.assertion-consumer-service.url", "https://sp.example/auth/saml");
+		new LegacyPropertyKeyDetector(_ -> LogFactory.getLog(LegacyPropertyKeyDetector.class))
+				.postProcessEnvironment(env, null);
+		var binder = Binder.get(env);
+		repository = new RefreshableRelyingPartyRegistrationRepository(
+				binder.bind("spring.security.saml2.relyingparty", Saml2RelyingPartyProperties.class).get(),
+				binder.bind("entrystore.auth.saml", SamlCustomConfiguration.class).get());
+		repository.initialize();
+		var resolver = new OpenSaml5AuthenticationRequestResolver(
+				new DefaultRelyingPartyRegistrationResolver(repository));
+		var request = new MockHttpServletRequest("GET", "/saml2/authenticate/legacy");
+		request.setServletPath("/saml2/authenticate/legacy");
+
+		Saml2PostAuthenticationRequest authnRequest = resolver.resolve(request);
+
+		assertNotNull(authnRequest);
+		assertFalse(authnRequest.getSamlRequest().isBlank());
+		var registration = repository.findByRegistrationId("legacy");
+		assertTrue(registration.getSigningX509Credentials().isEmpty());
+		assertEquals(Set.of(signingCert), verificationCerts(registration));
+	}
 
 	@Test
 	void relaxedEnabledSettingCreatesTheMetadataRepository() throws Exception {
@@ -143,6 +184,8 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 
 		var ex = assertThrows(IllegalStateException.class, repo::initialize);
 		assertTrue(ex.getMessage().contains("no relying-party registrations"));
+		assertTrue(ex.getMessage().contains("Discovered entrystore.auth.saml.idp IDs"));
+		assertTrue(ex.getMessage().contains("spring.security.saml2.relyingparty.registration.<id>.assertingparty.metadata-uri"));
 	}
 
 	@Test
@@ -153,6 +196,7 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 
 		var ex = assertThrows(IllegalStateException.class, repo::initialize);
 		assertTrue(ex.getMessage().contains("metadata-uri"));
+		assertTrue(ex.getMessage().contains("entrystore.auth.saml.idp.keycloak.metadata.url"));
 	}
 
 	@Test
@@ -221,6 +265,11 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	}
 
 	private File writeIdpMetadata(String fileName, List<String> signingCertsBase64) throws Exception {
+		return writeIdpMetadata(fileName, signingCertsBase64, false);
+	}
+
+	private File writeIdpMetadata(String fileName, List<String> signingCertsBase64, boolean wantAuthnRequestsSigned)
+			throws Exception {
 		String keyDescriptors = signingCertsBase64.stream()
 				.map("""
 						<md:KeyDescriptor use="signing">
@@ -233,13 +282,13 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 				<?xml version="1.0" encoding="UTF-8"?>
 				<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
 				                     entityID="https://idp.entrystore.example/test" validUntil="2099-01-01T00:00:00Z">
-				  <md:IDPSSODescriptor WantAuthnRequestsSigned="false"
+				  <md:IDPSSODescriptor WantAuthnRequestsSigned="%s"
 				                       protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
 				%s
 				    <md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
 				                            Location="https://idp.entrystore.example/test/sso"/>
 				  </md:IDPSSODescriptor>
-				</md:EntityDescriptor>""".formatted(keyDescriptors);
+				</md:EntityDescriptor>""".formatted(wantAuthnRequestsSigned, keyDescriptors);
 		File file = new File(tempDir, fileName);
 		Files.writeString(file.toPath(), xml);
 		return file;

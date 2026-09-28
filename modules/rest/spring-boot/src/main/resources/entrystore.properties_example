@@ -203,6 +203,10 @@ entrystore.data.folder=/srv/entrystore/files/
 # is renewed based on the current time/date. (default: off)
 # entrystore.auth.cookie.update.expiry=on|off
 
+## Invalid session cookies return 401 by default. With false, stale cookies are cleared
+## and the request continues as guest; protected resources still require authorization.
+# entrystore.auth.cookie.invalid-token-error=true
+
 ## User-initiated sign-up (default: off)
 # entrystore.auth.signup=off
 # entrystore.auth.signup.email.subject=User sign-up request
@@ -261,8 +265,7 @@ entrystore.auth.temp.lockout.duration=0ms
 
 ## HTTP Basic authentication (default: false)
 ## Renamed in 6.0 — previously `entrystore.auth.http-basic`. The legacy key is
-## detected at startup: a truthy value (true/on/yes/enabled/1) aborts startup,
-## anything else logs a WARN and continues. Check the startup log for
+## accepted with a deprecation WARN; the explicit .enabled key wins. Check the startup log for
 ## "Basic Auth Enabled" / "Basic Auth Disabled" to verify the state.
 # entrystore.auth.http-basic.enabled=true|false
 
@@ -283,8 +286,7 @@ entrystore.auth.temp.lockout.duration=0ms
 
 ## SAML authentication (default: false)
 ## Renamed in 6.0 — previously `entrystore.auth.saml`. The legacy key is
-## detected at startup: a truthy value (true/on/yes/enabled/1) aborts startup,
-## anything else logs a WARN and continues. Check the startup log for
+## accepted with a deprecation WARN; the explicit .enabled key wins. Check the startup log for
 ## "SAML Auth Enabled" / "SAML Auth Disabled" to verify the state.
 # entrystore.auth.saml.enabled=true|false
 ## Default IdP id used when the request carries no idp/username hint.
@@ -296,6 +298,12 @@ entrystore.auth.temp.lockout.duration=0ms
 ## metadata.max-age: seconds before this IdP's asserting-party metadata is re-fetched at runtime, so
 ## signing-certificate rollovers are picked up without a restart (default: 604800 = 7 days, minimum 60).
 ## The metadata location itself is set via spring.security.saml2.relyingparty.registration.{id}.assertingparty.metadata-uri.
+# spring.security.saml2.relyingparty.registration.myIdp.assertingparty.metadata-uri=https://idp.example/metadata
+## Preserve the existing SP entity ID when migrating; otherwise Spring chooses its metadata URL.
+# spring.security.saml2.relyingparty.registration.myIdp.entity-id=https://sp.example/entrystore
+# spring.security.saml2.relyingparty.registration.myIdp.assertingparty.singlesignon.binding=post
+## New setups receive SAML responses at {baseUrl}/login/saml2/sso/{registrationId}.
+# spring.security.saml2.relyingparty.registration.myIdp.acs.location=https://sp.example/store/login/saml2/sso/myIdp
 # entrystore.auth.saml.idp.myIdp.domains=example.com,example.org
 # entrystore.auth.saml.idp.myIdp.user-auto-provisioning=true
 # entrystore.auth.saml.idp.myIdp.metadata.max-age=86400
@@ -303,12 +311,30 @@ entrystore.auth.temp.lockout.duration=0ms
 ## a redirect to any host not listed here is dropped (open-redirect protection).
 # entrystore.auth.saml.redirect-domain-whitelist=app.example.com,portal.example.com
 
+## 5.x compatibility: deprecated keys remain accepted with WARNs; explicit modern keys win.
+## idps / idps.1 identify registrations; idp.<id>.metadata.url maps to assertingparty.metadata-uri,
+## idp.<id>.relying-party-id to entity-id, and idp.<id>.redirect-method to
+## assertingparty.singlesignon.binding (get -> redirect, post -> post; legacy default: get).
+## Legacy registrations default assertingparty.singlesignon.sign-request to false, preserving
+## unsigned AuthnRequests; an explicit modern sign-request setting takes precedence.
+## Single-IdP idp-metadata.url, relying-party-id, redirect-method, idp-metadata.max-age and
+## user-auto-provisioning use default-idp, or "legacy" when absent; per-IdP settings win over these.
+## assertion-consumer-service.url maps to each registration's acs.location with idp=<id> appended.
+## POST /auth/saml?idp=<id> and the configured legacy ACS path remain supported, so IdPs need
+## no changes. GET /auth/saml starts login. Changing acs.location also requires updating the IdP;
+## a custom legacy callback must retain its configured public path/proxy routing.
+## domains and redirect-domain-whitelist accept comma-separated values, zero-based [0] lists,
+## or legacy .1/.2 lists. Legacy lists stop at the first gap; a bare value wins over legacy numbered
+## entries. Ignored entries produce WARNs. Modern lists use source precedence.
+
 ## CAS authentication (default: false)
 ## Renamed in 6.0 — previously `entrystore.auth.cas`. The legacy key is
-## detected at startup: a truthy value (true/on/yes/enabled/1) aborts startup,
-## anything else logs a WARN and continues. Check the startup log for
+## accepted with a deprecation WARN; the explicit .enabled key wins. Check the startup log for
 ## "CAS Auth Enabled" / "CAS Auth Disabled" to verify the state.
 # entrystore.auth.cas.enabled=true|false
+## The legacy server.url.login spelling is accepted with a WARN; server.url-login wins.
+# entrystore.auth.cas.server.url=https://cas.example
+# entrystore.auth.cas.server.url-login=https://cas.example/custom-login
 
 ## OpenID Connect (OIDC) authentication (default: false)
 ## Check the startup log for "OIDC Auth Enabled" / "OIDC Auth Disabled" to verify the state.

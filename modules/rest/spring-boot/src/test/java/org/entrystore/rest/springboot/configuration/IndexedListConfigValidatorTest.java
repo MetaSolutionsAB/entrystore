@@ -281,9 +281,7 @@ class IndexedListConfigValidatorTest {
 
 	@Test
 	void runsAheadOfTheLegacyKeyDetector() {
-		// LegacyPropertyKeyDetector throws on a truthy legacy key at LOWEST_PRECEDENCE; at the same order
-		// its throw would suppress every finding in this class on that boot. Still after
-		// ConfigDataEnvironmentPostProcessor, so entrystore.properties is loaded when we scan.
+		// Report changed list semantics before authentication translation can fail.
 		assertEquals(Ordered.LOWEST_PRECEDENCE - 1, new IndexedListConfigValidator().getOrder());
 	}
 

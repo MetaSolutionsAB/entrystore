@@ -54,7 +54,8 @@ public class CsrfRequestMatcher implements RequestMatcher {
 	private final String sessionCookieName;
 	private final RequestMatcher exemptPaths;
 
-	public CsrfRequestMatcher(@Value("${server.servlet.session.cookie.name:auth_token}") String sessionCookieName) {
+	public CsrfRequestMatcher(@Value("${server.servlet.session.cookie.name:auth_token}") String sessionCookieName,
+			SamlAcsRequestMatcher samlAcsRequestMatcher) {
 		this.sessionCookieName = sessionCookieName;
 		var pathMatcher = PathPatternRequestMatcher.withDefaults();
 		this.exemptPaths = new OrRequestMatcher(
@@ -63,7 +64,8 @@ public class CsrfRequestMatcher implements RequestMatcher {
 				pathMatcher.matcher(HttpMethod.POST, "/auth/signup/confirm"),
 				pathMatcher.matcher(HttpMethod.POST, "/auth/pwreset"),
 				pathMatcher.matcher(HttpMethod.POST, "/auth/pwreset/confirm"),
-				pathMatcher.matcher(HttpMethod.POST, "/login/saml2/sso/**")
+				pathMatcher.matcher(HttpMethod.POST, "/login/saml2/sso/**"),
+				samlAcsRequestMatcher::isLegacy
 		);
 	}
 

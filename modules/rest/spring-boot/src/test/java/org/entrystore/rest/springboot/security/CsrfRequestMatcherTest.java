@@ -25,7 +25,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CsrfRequestMatcherTest {
 
-	private final CsrfRequestMatcher matcher = new CsrfRequestMatcher("auth_token");
+	private final CsrfRequestMatcher matcher = new CsrfRequestMatcher("auth_token", new SamlAcsRequestMatcher(""));
+
+	@Test
+	void legacySamlCallbackIsExemptWithAnExistingSessionCookie() {
+		var request = new MockHttpServletRequest("POST", "/store/auth/saml");
+		request.setContextPath("/store");
+		request.setCookies(new Cookie("auth_token", "session"));
+		request.setParameter("idp", "acme");
+		assertFalse(matcher.matches(request));
+	}
+
+	@Test
+	void configuredLegacyCallbackIsExemptWithAnExistingSessionCookie() {
+		var request = new MockHttpServletRequest("POST", "/store/custom/acs");
+		request.setContextPath("/store");
+		request.setCookies(new Cookie("auth_token", "session"));
+		var custom = new CsrfRequestMatcher("auth_token",
+				new SamlAcsRequestMatcher("https://sp.example/store/custom/acs"));
+		assertFalse(custom.matches(request));
+	}
 
 	@Test
 	void safeMethods_neverRequireCsrf() {
@@ -85,9 +104,16 @@ class CsrfRequestMatcherTest {
 
 	@Test
 	void unsafeMethodWithSessionCookieOnMultiSegmentSamlAcs_skipsCsrf() {
-		// `/login/saml2/sso/**` must match multi-segment registration ids (e.g. nested IdP paths) —
-		// a regression dropping `**` to `*` would silently break SAML logins through those endpoints.
+		// Preserve the historical CSRF exemption for the entire modern ACS subtree.
 		var request = new MockHttpServletRequest("POST", "/login/saml2/sso/idp/extra/segment");
+		request.setCookies(new Cookie("auth_token", "session-id"));
+		assertFalse(matcher.matches(request));
+	}
+
+	@Test
+	void multiSegmentSamlAcsWithContextPath_skipsCsrf() {
+		var request = new MockHttpServletRequest("POST", "/store/login/saml2/sso/idp/extra/segment");
+		request.setContextPath("/store");
 		request.setCookies(new Cookie("auth_token", "session-id"));
 		assertFalse(matcher.matches(request));
 	}
@@ -96,7 +122,8 @@ class CsrfRequestMatcherTest {
 	void exemptPathOnUnboundMethod_requiresCsrf() {
 		// Exempt paths are bound to a specific HTTP method (POST). A regression that drops the
 		// HttpMethod argument would silently exempt PUT /auth/cookie, DELETE /auth/signup, etc.
-		for (String path : new String[]{"/auth/cookie", "/auth/signup", "/auth/pwreset"}) {
+		for (String path : new String[]{"/auth/cookie", "/auth/signup", "/auth/pwreset",
+				"/auth/saml", "/login/saml2/sso/keycloak", "/login/saml2/sso/idp/extra/segment"}) {
 			var request = new MockHttpServletRequest("PUT", path);
 			request.setCookies(new Cookie("auth_token", "session-id"));
 			assertTrue(matcher.matches(request), "PUT " + path + " must NOT be exempt");
@@ -160,7 +187,7 @@ class CsrfRequestMatcherTest {
 
 	@Test
 	void customSessionCookieName_usedForDetection() {
-		var customMatcher = new CsrfRequestMatcher("custom_session");
+		var customMatcher = new CsrfRequestMatcher("custom_session", new SamlAcsRequestMatcher(""));
 		var request = new MockHttpServletRequest("POST", "/_principals/groups");
 		request.setCookies(new Cookie("custom_session", "session-id"));
 		assertTrue(customMatcher.matches(request));

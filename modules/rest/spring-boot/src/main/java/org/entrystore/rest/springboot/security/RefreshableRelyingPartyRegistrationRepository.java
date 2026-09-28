@@ -101,12 +101,17 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 		Map<String, Registration> registrations = relyingPartyProperties.getRegistration();
 		if (registrations.isEmpty()) {
 			throw new IllegalStateException("SAML is enabled but no relying-party registrations are configured "
-					+ "(spring.security.saml2.relyingparty.registration.*)");
+					+ "(spring.security.saml2.relyingparty.registration.*). Discovered entrystore.auth.saml.idp IDs: "
+					+ samlConfiguration.idp().keySet()
+					+ ". Set spring.security.saml2.relyingparty.registration.<id>.assertingparty.metadata-uri "
+					+ "and .entity-id, or their deprecated entrystore.auth.saml.idp.<id>.metadata.url "
+					+ "and .relying-party-id equivalents.");
 		}
 		registrations.forEach((id, registration) -> {
 			String metadataUri = registration.getAssertingparty().getMetadataUri();
 			if (!StringUtils.hasText(metadataUri)) {
-				throw new IllegalStateException("Missing assertingparty.metadata-uri for SAML registration '" + id + "'");
+				throw new IllegalStateException("Missing spring.security.saml2.relyingparty.registration." + id
+						+ ".assertingparty.metadata-uri (legacy: entrystore.auth.saml.idp." + id + ".metadata.url)");
 			}
 			warnOnUnsupportedStaticCredentials(id, registration);
 			long maxAge = maxAgeSeconds(id);

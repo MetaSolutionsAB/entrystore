@@ -16,10 +16,10 @@ server:
 info.app.version: @project.version@
 
 
-# imported properties from "entrystore-it.properties" take precedence over properties here (when same key exists in both property sources)
+# Allow lifecycle-owned specs to replace the shared properties without importing both configurations.
 spring:
   config.import:
-    - classpath:entrystore-it.properties
+    - "${entrystore-test.config-uri:classpath:entrystore-it.properties}"
   lifecycle:
     timeout-per-shutdown-phase: 5s
   mvc.problemdetails.enabled: false
