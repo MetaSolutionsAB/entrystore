@@ -768,7 +768,14 @@ public class SolrSearchIndex implements SearchIndex {
 
 		Entry contextEntry = rm.getContextManager().getByEntryURI(contextURI);
 
-		if (purgeAllBeforeReindex) {
+		// Both purges below delete Solr documents for entries this reindex did not repost, and what it
+		// reposts comes from context.getEntries(). An incomplete index makes that listing short, so
+		// purging would delete the unlisted entries from the search index — data loss driven by a triple
+		// nobody can parse. Reindex without purging instead: a stale document is recoverable, a deleted
+		// one is not (ENTRYSTORE-1095).
+		boolean purgeIsSafe = indexIsComplete(contextURI);
+
+		if (purgeAllBeforeReindex && purgeIsSafe) {
 			if (!clearSolrIndex(solrServer, null, contextEntry)) {
 				log.warn("Pre-reindex purge of context {} failed; proceeding with reindex against potentially dirty index", contextURI);
 			}
@@ -787,11 +794,13 @@ public class SolrSearchIndex implements SearchIndex {
 						contextURI, new Date().getTime() - reindexStart.getTime());
 				case UNRESOLVED -> log.warn("Context {} could not be resolved; its entries were not reindexed and its"
 						+ " documents {}", contextURI,
-						purgeAllBeforeReindex ? "were removed from the index" : "in the index were left unchanged");
+						purgeAllBeforeReindex && purgeIsSafe
+								? "were removed from the index" : "in the index were left unchanged");
 				case INTERRUPTED -> log.info(
 						"Reindexing of context {} was interrupted; expired documents are not purged", contextURI);
 			}
-			purgeExpiredDocumentsAfterReindex(contextURI, contextEntry, reindexStart, purgeAllBeforeReindex, posted);
+			purgeExpiredDocumentsAfterReindex(contextURI, contextEntry, reindexStart, purgeAllBeforeReindex,
+					purgeIsSafe, posted);
 			return posted;
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
@@ -803,6 +812,8 @@ public class SolrSearchIndex implements SearchIndex {
 	 * the reindex posted last has left the submission queue. Nothing is purged if
 	 * <ul>
 	 *     <li>the documents of the context were removed before the reindex,</li>
+	 *     <li>the context's URI index is incomplete, because the purge would remove the documents of the entries
+	 *     missing from its listing (ENTRYSTORE-1095),</li>
 	 *     <li>the context could not be resolved or its reindex was interrupted,</li>
 	 *     <li>entries of the context could not be loaded because of a failure that is not caused by their data,
 	 *     e.g. of the store, or loaded but could not be indexed, because their previous documents would be removed
@@ -815,8 +826,8 @@ public class SolrSearchIndex implements SearchIndex {
 	 * the purge removes the documents of entries that cannot be found, see {@link #postContextEntriesToQueue(URI)}.
 	 */
 	private void purgeExpiredDocumentsAfterReindex(URI contextURI, Entry contextEntry, Date reindexStart,
-			boolean purgedBeforeReindex, ContextPostResult posted) {
-		if (purgedBeforeReindex || posted.outcome() != ContextPostOutcome.COMPLETED) {
+			boolean purgedBeforeReindex, boolean purgeIsSafe, ContextPostResult posted) {
+		if (purgedBeforeReindex || !purgeIsSafe || posted.outcome() != ContextPostOutcome.COMPLETED) {
 			return;
 		}
 		if (posted.keptEntries() > 0) {
@@ -970,6 +981,27 @@ public class SolrSearchIndex implements SearchIndex {
 				delayedReindex.put(contextURI, info);
 			}
 		}
+	}
+
+	/**
+	 * Whether the context's URI index carries every entry, so a purge keyed on "not reposted by this
+	 * reindex" is safe. Answers false rather than propagating if the context cannot be resolved at all,
+	 * since a purge is not safe in that case either.
+	 */
+	private boolean indexIsComplete(URI contextURI) {
+		String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
+		Context context = rm.getContextManager().getContext(id);
+		if (context == null) {
+			log.warn("Context {} could not be resolved; skipping the reindex purge", contextURI);
+			return false;
+		}
+		if (context.isIndexComplete()) {
+			return true;
+		}
+		log.error("Context {} has an incomplete URI index, so entries missing from its listing would be "
+				+ "deleted from the Solr index by the post-reindex purge. Reindexing without purging; "
+				+ "expired documents may remain until the underlying data is repaired", contextURI);
+		return false;
 	}
 
 	private enum ContextPostOutcome {
