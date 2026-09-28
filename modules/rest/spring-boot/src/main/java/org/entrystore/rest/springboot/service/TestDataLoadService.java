@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.service;
 
 import jakarta.annotation.PostConstruct;
@@ -30,13 +46,14 @@ public class TestDataLoadService {
 	@PostConstruct
 	public void init() {
 		// Runs after class constructor
-		if ("on".equalsIgnoreCase(config.getString(Settings.STORE_INIT_WITH_TEST_DATA, "off"))) {
+		if (config.getBoolean(Settings.STORE_INIT_WITH_TEST_DATA, false)) {
 			// Check for the existence of Donald
 			Entry donald = repositoryManager.getPrincipalManager().getPrincipalEntry("Donald");
 			// We only initialize of test suite has not been loaded before,
 			// otherwise we end up with duplicates (if store is persisted)
 			if (donald == null) {
-				log.info("Initializing store with test data");
+				log.warn("Loading test users with publicly known passwords because {} is enabled",
+						Settings.STORE_INIT_WITH_TEST_DATA);
 				loadTestData();
 				log.info("Initialized store with test data");
 			} else {

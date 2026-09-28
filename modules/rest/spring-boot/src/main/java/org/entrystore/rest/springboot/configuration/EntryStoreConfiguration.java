@@ -31,7 +31,6 @@ import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.config.SortedProperties;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.context.annotation.Bean;
@@ -56,7 +55,7 @@ public class EntryStoreConfiguration {
 
 	@PostConstruct
 	public void logBeanStatus() {
-		if (!"on".equalsIgnoreCase(environment.getProperty(Settings.BACKUP_SCHEDULER))) {
+		if (!environment.getProperty(Settings.BACKUP_SCHEDULER, Boolean.class, false)) {
 			log.warn("Backup is disabled in configuration");
 		}
 	}
@@ -111,7 +110,7 @@ public class EntryStoreConfiguration {
 	}
 
 	@Bean
-	@ConditionalOnProperty(name = Settings.BACKUP_SCHEDULER, havingValue = "on")
+	@ConditionalOnBooleanConfig("entrystore.backup.scheduler")
 	public BackupScheduler backupScheduler(RepositoryManagerImpl repositoryManager) {
 		log.info("Starting backup scheduler");
 		PrincipalManager pm = repositoryManager.getPrincipalManager();
