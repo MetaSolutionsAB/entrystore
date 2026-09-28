@@ -56,16 +56,10 @@ public class RecaptchaVerifier {
 	@Qualifier("recaptchaRestClient")
 	private final RestClient recaptchaRestClient;
 
-	// Read through the same Spring property channel as the AuthService enable-gate
-	// (@Value("${entrystore.auth.recaptcha.private-key}") + "${entrystore.auth.recaptcha:false}"). Reading
-	// the secret via the legacy Config bean instead would diverge: EntryStoreConfiguration only copies
-	// Spring keys literally starting with "entrystore." into Config, so a key supplied only as an env var
-	// (ENTRYSTORE_AUTH_RECAPTCHA_PRIVATE_KEY) would pass the gate yet leave this secret null.
+	private final RecaptchaSettings recaptchaSettings;
+
 	@Value("${entrystore.auth.recaptcha.url:https://www.google.com/recaptcha/api/siteverify}")
 	private String url;
-
-	@Value("${entrystore.auth.recaptcha.private-key:#{null}}")
-	private String secret;
 
 	/**
 	 * Verifies a user response token using reCaptcha 2.0 API.
@@ -80,7 +74,7 @@ public class RecaptchaVerifier {
 		log.debug("Verifying reCaptcha response via {}", url);
 
 		MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
-		params.add("secret", secret);
+		params.add("secret", recaptchaSettings.getSecret());
 		params.add("response", rcResponseV2);
 		if (userIP != null) {
 			params.add("remoteip", userIP);

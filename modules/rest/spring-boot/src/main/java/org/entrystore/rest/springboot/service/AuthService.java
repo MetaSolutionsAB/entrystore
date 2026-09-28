@@ -19,7 +19,6 @@ package org.entrystore.rest.springboot.service;
 import com.google.common.base.Joiner;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -53,6 +52,7 @@ import org.entrystore.rest.springboot.model.exception.PwResetEntityNotFoundHtmlE
 import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException;
 import org.entrystore.rest.springboot.model.validation.AuthValidationMessages;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
+import org.entrystore.rest.springboot.service.auth.RecaptchaSettings;
 import org.entrystore.rest.springboot.service.auth.RecaptchaVerifier;
 import org.entrystore.rest.springboot.service.auth.PasswordResetRateLimiter;
 import org.entrystore.rest.springboot.service.auth.RedirectUrlValidator;
@@ -127,6 +127,7 @@ public class AuthService {
 	private final PrincipalManager principalManager;
 	private final ContextManager contextManager;
 	private final RecaptchaVerifier rcVerifier;
+	private final RecaptchaSettings recaptchaSettings;
 	private final SignupTokenCache signupTokenCache;
 	private final RedirectUrlValidator redirectUrlValidator;
 	private final EmailValidator emailValidator;
@@ -142,12 +143,6 @@ public class AuthService {
 	// maxConfirmationAttempts() rather than failing application startup on bind — see that method.
 	@Value("${entrystore.auth.confirmation.max-attempts:3}")
 	private String confirmationMaxAttempts;
-
-	@Value("${entrystore.auth.recaptcha:false}")
-	private boolean recaptcha;
-
-	@Value("${entrystore.auth.recaptcha.private-key:#{null}}")
-	private String recaptchaPrivateKey;
 
 	@Value("${entrystore.auth.signup.create-home-context:false}")
 	private boolean signupCreateHomeContext;
@@ -168,6 +163,7 @@ public class AuthService {
 					   PrincipalManager principalManager,
 					   ContextManager contextManager,
 					   RecaptchaVerifier rcVerifier,
+					   RecaptchaSettings recaptchaSettings,
 					   SignupTokenCache signupTokenCache,
 					   RedirectUrlValidator redirectUrlValidator,
 					   EmailValidator emailValidator,
@@ -182,6 +178,7 @@ public class AuthService {
 		this.principalManager = principalManager;
 		this.contextManager = contextManager;
 		this.rcVerifier = rcVerifier;
+		this.recaptchaSettings = recaptchaSettings;
 		this.signupTokenCache = signupTokenCache;
 		this.redirectUrlValidator = redirectUrlValidator;
 		this.emailValidator = emailValidator;
@@ -205,14 +202,6 @@ public class AuthService {
 		this.passwordResetRejectedCounter = Counter.builder("auth.pwreset.rejected")
 				.description("Password-reset dispatches dropped because the executor queue was saturated or shutting down")
 				.register(meterRegistry);
-	}
-
-	@PostConstruct
-	void warnIfRecaptchaHasNoPrivateKey() {
-		if (recaptcha && recaptchaPrivateKey == null) {
-			log.warn("{} is enabled but {} is not set; signup and password reset skip the reCAPTCHA check",
-					Settings.AUTH_RECAPTCHA, Settings.AUTH_RECAPTCHA_PRIVATE_KEY);
-		}
 	}
 
 	public List<SessionInformation> getAllUserSessions(URI userURI, boolean includeExpiredSessions) {
@@ -348,11 +337,25 @@ public class AuthService {
 		return CONFIRM_PASSWORD_RESET_SUCCESS_MESSAGE;
 	}
 
+	/** No-op unless reCAPTCHA is on; otherwise rejects a missing or unverifiable token. */
+	private void verifyRecaptcha(HttpServletRequest request, String token, String email, String title) {
+		if (!recaptchaSettings.isEnabled()) {
+			return;
+		}
+		if (StringUtils.isEmpty(token)) {
+			throw new BadRequestHtmlException(RECAPTCHA_MISSING_MESSAGE, title);
+		}
+		log.info("Checking reCaptcha for {}", email);
+		if (!rcVerifier.verify(token, request.getRemoteAddr())) {
+			log.info("Invalid reCaptcha for {}", email);
+			throw new BadRequestHtmlException(RECAPTCHA_INVALID_MESSAGE, title);
+		}
+		log.info("Valid reCaptcha for {}", email);
+	}
+
 	public String pwReset(HttpServletRequest request, PwResetRequestBody requestBody, String title) {
 		SignupInfo ci = new SignupInfo();
 		ci.setExpirationDate(new Date(new Date().getTime() + TTL)); // 24 hours later
-
-		String rcResponseV2;
 
 		validateAndSetEmail(requestBody.email(), ci, title);
 
@@ -378,22 +381,7 @@ public class AuthService {
 
 		passwordResetRateLimiter.acquirePermit(request.getRemoteAddr());
 
-		if (recaptcha && recaptchaPrivateKey != null) {
-			if (StringUtils.isNotEmpty(requestBody.rcResponseV2())) {
-				log.info("Checking reCaptcha for {}", ci.getEmail());
-				rcResponseV2 = requestBody.rcResponseV2();
-				String remoteAddr = request.getRemoteAddr();
-
-				if (rcVerifier.verify(rcResponseV2, remoteAddr)) {
-					log.info("Valid reCaptcha for {}", ci.getEmail());
-				} else {
-					log.info("Invalid reCaptcha for {}", ci.getEmail());
-					throw new BadRequestHtmlException(RECAPTCHA_INVALID_MESSAGE, title);
-				}
-			} else {
-				throw new BadRequestHtmlException(RECAPTCHA_MISSING_MESSAGE, title);
-			}
-		}
+		verifyRecaptcha(request, requestBody.rcResponseV2(), ci.getEmail(), title);
 
 		boolean shouldSend = PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(ci.getEmail());
@@ -688,8 +676,6 @@ public class AuthService {
 		SignupInfo ci = new SignupInfo();
 		ci.setExpirationDate(new Date(new Date().getTime() + TTL)); // 24 hours later
 
-		String rcResponseV2;
-
 		if (StringUtils.isEmpty(requestBody.email()) || StringUtils.isEmpty(requestBody.firstName())
 				|| StringUtils.isEmpty(requestBody.lastName())) {
 			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
@@ -732,22 +718,7 @@ public class AuthService {
 
 		signupRateLimiter.acquirePermit(request.getRemoteAddr());
 
-		if (recaptcha && recaptchaPrivateKey != null) {
-			if (StringUtils.isNotEmpty(requestBody.rcResponseV2())) {
-				log.info("Checking reCaptcha for {}", ci.getEmail());
-				rcResponseV2 = requestBody.rcResponseV2();
-				String remoteAddr = request.getRemoteAddr();
-
-				if (rcVerifier.verify(rcResponseV2, remoteAddr)) {
-					log.info("Valid reCaptcha for {}", ci.getEmail());
-				} else {
-					log.info("Invalid reCaptcha for {}", ci.getEmail());
-					throw new BadRequestHtmlException(RECAPTCHA_INVALID_MESSAGE, title);
-				}
-			} else {
-				throw new BadRequestHtmlException(RECAPTCHA_MISSING_MESSAGE, title);
-			}
-		}
+		verifyRecaptcha(request, requestBody.rcResponseV2(), ci.getEmail(), title);
 
 		String token = RandomStringUtils.random(16, 0, 0, true, true, null, SECURE_RANDOM);
 		String confirmationLink = repositoryManager.getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;

@@ -193,7 +193,7 @@ class AuthServiceTest {
 		// email domain, so a whitelist entry configured as "Example.COM" would reject every
 		// alice@example.com sign-up if this normalisation were dropped. Asserted on the field because
 		// the comparison itself sits deep inside signup(), behind collaborators this test has no use for.
-		AuthService service = new AuthService(null, null, null, null, null, null, emailValidator,
+		AuthService service = new AuthService(null, null, null, null, null, null, null, emailValidator,
 				null, null, null, null, meterRegistry,
 				new SignupWhitelistProperties(Map.of("1", "Example.COM", "2", "OTHER.example.org")), executor);
 
@@ -204,7 +204,7 @@ class AuthServiceTest {
 
 	private AuthService authServiceWithSessionRegistry(SessionRegistry sessionRegistry) {
 		// Only the collaborators reached before pwReset's email check and by submitPasswordResetDispatch are real.
-		return new AuthService(null, null, null, null, null, null, emailValidator,
+		return new AuthService(null, null, null, null, null, null, null, emailValidator,
 				null, sessionRegistry, null, null, meterRegistry,
 				new SignupWhitelistProperties(Map.of()), executor);
 	}

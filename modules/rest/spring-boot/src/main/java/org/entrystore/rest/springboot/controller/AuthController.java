@@ -32,6 +32,7 @@ import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.service.AuthService;
 import org.entrystore.rest.springboot.service.OidcAuthService;
 import org.entrystore.rest.springboot.service.SamlAuthService;
+import org.entrystore.rest.springboot.service.auth.RecaptchaSettings;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.RequestBodyValidator;
 import org.entrystore.rest.springboot.util.WebResourceUrls;
@@ -60,6 +61,7 @@ import java.util.Optional;
 public class AuthController {
 
 	private final WebResourceUrls webResourceUrls;
+	private final RecaptchaSettings recaptchaSettings;
 
 	private static final int MAX_REQUEST_SIZE = 32 * 1024;
 	private static final String SIGNUP_TITLE = "Sign-up";
@@ -82,6 +84,12 @@ public class AuthController {
 	@ModelAttribute("stylesheetPath")
 	String stylesheetPath() {
 		return webResourceUrls.getStylesheetPath();
+	}
+
+	/** The site key the sign-up and password-reset forms render the widget with; null hides the widget. */
+	@ModelAttribute("recaptchaSiteKey")
+	String recaptchaSiteKey() {
+		return recaptchaSettings.getSiteKey();
 	}
 
 	@Value("${entrystore.auth.saml.enabled:false}")

@@ -412,7 +412,9 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_OK
 		confirmConn.getContentType().contains('text/html')
-		confirmConn.inputStream.text.contains('<input type=\"submit\" value=\"Sign-up\" />')
+		def html = confirmConn.inputStream.text
+		html.contains('<input type=\"submit\" value=\"Sign-up\" />')
+		html.contains('data-sitekey="it-recaptcha-site-key"')
 	}
 
 	def "GET /auth/signup should confirm creating new user after signing up with a valid token"() {

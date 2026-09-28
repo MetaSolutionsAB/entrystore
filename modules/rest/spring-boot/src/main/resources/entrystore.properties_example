@@ -195,6 +195,7 @@ entrystore.data.folder=/srv/entrystore/files/
 ## entrystore.smtp.email.* equivalent is unset, with a deprecation warning logged at startup.
 # entrystore.auth.email.from=signup@yourdomain.tld
 # entrystore.auth.email.bcc=info+signup@yourdomain.tld
+## With reCAPTCHA on, both keys are required; startup fails if either is missing.
 # entrystore.auth.recaptcha=on (default: off)
 # entrystore.auth.recaptcha.public-key=your-public-recaptcha-key
 # entrystore.auth.recaptcha.private-key=your-private-recaptcha-key

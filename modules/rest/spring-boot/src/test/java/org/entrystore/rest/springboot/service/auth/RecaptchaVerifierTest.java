@@ -60,10 +60,9 @@ class RecaptchaVerifierTest {
 		// so the stubbed transport intercepts the verifier's siteverify POST.
 		RestClient.Builder builder = RestClient.builder();
 		server = MockRestServiceServer.bindTo(builder).build();
-		verifier = new RecaptchaVerifier(builder.build());
-		// url/secret are @Value-injected in production; seed them directly for this unit test.
+		verifier = new RecaptchaVerifier(builder.build(), new RecaptchaSettings(true, "test-site-key", SECRET));
+		// url is @Value-injected in production; seed it directly for this unit test.
 		ReflectionTestUtils.setField(verifier, "url", VERIFIER_URL);
-		ReflectionTestUtils.setField(verifier, "secret", SECRET);
 	}
 
 	private ResponseActions expectSiteverifyPost() {

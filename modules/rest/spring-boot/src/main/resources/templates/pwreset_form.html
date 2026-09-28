@@ -13,10 +13,12 @@
     <form action="" method="post">
         E-Mail address<br/><input type="text" name="email"><br/>
         New password<br/><input type="password" name="password"><br/>
+        <th:block th:if="${recaptchaSiteKey}">
         <script src="https://www.google.com/recaptcha/api.js" async defer></script>
         <p>
-        <div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"></div>
+        <div class="g-recaptcha" th:attr="data-sitekey=${recaptchaSiteKey}"></div>
         </p>
+        </th:block>
         <br/>
         <input type="submit" value="Reset password" />
     </form>

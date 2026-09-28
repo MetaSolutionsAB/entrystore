@@ -313,7 +313,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_OK
 		confirmConn.getContentType().contains('text/html')
-		confirmConn.inputStream.text.contains('<input type=\"submit\" value=\"Reset password\" />')
+		def html = confirmConn.inputStream.text
+		html.contains('<input type=\"submit\" value=\"Reset password\" />')
+		html.contains('data-sitekey="it-recaptcha-site-key"')
 	}
 
 	def "GET /auth/pwreset should confirm password reset for a valid token"() {
