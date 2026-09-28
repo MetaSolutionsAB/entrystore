@@ -95,9 +95,10 @@ entrystore.data.folder=/srv/entrystore/files/
 
 ## Search input constraints and per-IP rate limiting for /search.
 ## The endpoint is guest-accessible; these caps protect Solr from expensive or abusive input.
-## Rate limit is keyed by client IP (X-Forwarded-For honoured only when trust.x-forwarded-for=true).
-## Set rate.limit.max=0 to disable rate limiting.
-# entrystore.solr.search.rate.limit.max=60
+## The rate limit is disabled by default (max=0). It is keyed by client IP only (X-Forwarded-For
+## honoured only when trust.x-forwarded-for=true) and applies to authenticated users too, so clients
+## sharing an IP (pipelines, EntryScape API, users behind NAT) share one budget.
+# entrystore.solr.search.rate.limit.max=0
 # entrystore.solr.search.rate.limit.window=1m
 # entrystore.solr.search.query.max-length=1024
 # entrystore.solr.search.sort.max-length=1024

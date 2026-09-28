@@ -23,20 +23,19 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 
 /**
- * Per-IP rate limiter for the guest-accessible {@code /search} endpoint. The endpoint forwards
- * user input into Solr; without a rate limit a single client can issue expensive queries
- * unboundedly. The limit defaults to 60 requests per minute and is keyed by the resolved client
- * IP (honouring {@code entrystore.trust.x-forwarded-for} when proxied). Set
- * {@code entrystore.solr.search.rate.limit.max=0} to disable the limiter (used in shared-app
- * integration tests so unrelated specs do not trip it).
+ * Opt-in per-IP rate limiter for the guest-accessible {@code /search} endpoint, keyed by the resolved
+ * client IP (honouring {@code entrystore.trust.x-forwarded-for} when proxied). Disabled by default:
+ * it applies to every caller, so pipelines, the EntryScape API and users behind one NAT address share
+ * a single budget and are blocked. Enable it with {@code entrystore.solr.search.rate.limit.max} only
+ * where no high-volume clients share an IP.
  */
 @Service
 public class SearchRateLimiter extends FixedWindowRateLimiter {
 
 	public SearchRateLimiter(
-			@Value("${entrystore.solr.search.rate.limit.max:60}") int max,
+			@Value("${entrystore.solr.search.rate.limit.max:0}") int max,
 			@Value("${entrystore.solr.search.rate.limit.window:1m}") Duration window,
 			Ticker ticker) {
-		super(max, window, "search", ticker);
+		super(max, window, "search", ticker, false);
 	}
 }

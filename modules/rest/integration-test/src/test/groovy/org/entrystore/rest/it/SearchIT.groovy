@@ -906,4 +906,19 @@ class SearchIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
 	}
+
+	def "GET /search?type=solr burst of 100 guest requests from one IP should not be rate-limited by default"() {
+		when:
+		def statuses = (1..100).collect {
+			def conn = EntryStoreClient.getRequest('/search?type=solr&query=description.pl:opissearch', '')
+			try {
+				conn.getResponseCode()
+			} finally {
+				conn.disconnect()
+			}
+		}
+
+		then:
+		statuses.every { it == HTTP_OK }
+	}
 }
