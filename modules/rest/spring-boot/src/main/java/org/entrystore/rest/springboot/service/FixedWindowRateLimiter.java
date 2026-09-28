@@ -22,6 +22,7 @@ import com.github.benmanes.caffeine.cache.Ticker;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
+import org.slf4j.event.Level;
 import org.springframework.http.HttpStatus;
 
 import java.time.Duration;
@@ -44,6 +45,15 @@ public abstract class FixedWindowRateLimiter implements CaffeineCacheSource {
 	private final String rateLimitName;
 
 	protected FixedWindowRateLimiter(int max, Duration window, String rateLimitName, Ticker ticker) {
+		this(max, window, rateLimitName, ticker, true);
+	}
+
+	/**
+	 * @param warnWhenDisabled whether a disabled limiter logs at WARN; pass {@code false} for limiters
+	 *                         that are off by default so a default startup does not warn.
+	 */
+	protected FixedWindowRateLimiter(int max, Duration window, String rateLimitName, Ticker ticker,
+			boolean warnWhenDisabled) {
 		this.max = max;
 		this.window = window;
 		this.rateLimitName = rateLimitName;
@@ -57,8 +67,9 @@ public abstract class FixedWindowRateLimiter implements CaffeineCacheSource {
 			log.info("Rate limiter [{}] enabled: max={}, window={}", rateLimitName, max, window);
 		} else {
 			this.attemptMap = null;
-			log.warn("Rate limiter [{}] DISABLED (max={}, window={}); all requests will pass",
-					rateLimitName, max, window);
+			log.atLevel(warnWhenDisabled ? Level.WARN : Level.INFO)
+					.log("Rate limiter [{}] DISABLED (max={}, window={}); all requests will pass",
+							rateLimitName, max, window);
 		}
 	}
 
