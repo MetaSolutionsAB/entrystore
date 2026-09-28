@@ -1,2 +1,2 @@
 org.springframework.boot.EnvironmentPostProcessor=\
-  org.entrystore.rest.springboot.configuration.LegacyPropertyKeyDetector
+  org.entrystore.rest.springboot.configuration.LegacyPropertyTranslator

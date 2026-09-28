@@ -107,6 +107,7 @@ springboot/
 - Services: `@Slf4j` + `@Service` + `@RequiredArgsConstructor`
 - For new services, read config via Spring Boot mechanisms (`@Value("${prop:default}")` or `@ConfigurationProperties`). Some services still call `repositoryManager.getConfiguration().get*` directly — migrate when touching them.
 - Property keys in annotations (`@Value`, `@ConditionalOnBooleanConfig`, `@ConditionalOnProperty`) are string literals, not `Settings` constants — Spring Boot style, and the key stays greppable from `entrystore.properties`.
+- Renamed 5.x keys are translated at startup by `LegacyPropertyTranslator` into a lowest-precedence property source, so an explicitly set 6.x key wins; add a future rename there.
 - Config: `application.yaml` imports `entrystore.properties` via `spring.config.import` — every `entrystore.*` key is bound to the Spring `Environment` and is readable via `@Value`, `@ConfigurationProperties`, and `@ConditionalOnProperty`, not only via the legacy `Config` wrapper
 - Default port: 8080 (production), 8181 (integration tests)
 - Embedded server: Jetty 12 (`spring-boot-starter-jetty`), not Tomcat

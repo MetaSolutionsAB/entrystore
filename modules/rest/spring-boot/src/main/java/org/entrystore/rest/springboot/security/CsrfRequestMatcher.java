@@ -61,7 +61,9 @@ public class CsrfRequestMatcher implements RequestMatcher {
 				pathMatcher.matcher(HttpMethod.POST, "/auth/cookie"),
 				pathMatcher.matcher(HttpMethod.POST, "/auth/signup"),
 				pathMatcher.matcher(HttpMethod.POST, "/auth/pwreset"),
-				pathMatcher.matcher(HttpMethod.POST, "/login/saml2/sso/**")
+				pathMatcher.matcher(HttpMethod.POST, "/login/saml2/sso/**"),
+				// Also the 5.x assertion consumer service URL, still accepted.
+				new SamlAcsRequestMatcher()
 		);
 	}
 
