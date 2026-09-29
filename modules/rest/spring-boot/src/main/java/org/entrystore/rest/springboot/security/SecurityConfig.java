@@ -257,7 +257,6 @@ public class SecurityConfig {
 			samlConfiguration.idp().forEach((id, idp) ->
 					log.info("SAML IdP \"{}\" - Domains: {}, Auto Provisioning: {}", id, idp.domains(), idp.userAutoProvisioning()));
 			log.info("SAML Default IdP: {}", samlConfiguration.defaultIdp());
-			samlConfiguration.redirectDomainWhitelist().forEach(domain -> log.info("Allowed domain for redirects: {}", domain));
 
 			var samlHandler = samlLoginSuccessHandler.orElseThrow(() -> new IllegalStateException(
 					"SAML is enabled but SamlLoginSuccessHandler bean is missing — check the " +

@@ -196,9 +196,11 @@ entrystore.auth.temp.lockout.duration=0ms
 # entrystore.auth.saml.idp.myIdp.domains=example.com,example.org
 # entrystore.auth.saml.idp.myIdp.user-auto-provisioning=true
 # entrystore.auth.saml.idp.myIdp.metadata.max-age=86400
-## Comma-separated host whitelist for post-login successurl/failureurl redirects;
+## Host whitelist for post-login successurl/failureurl redirects, comma-separated or indexed from .1;
 ## a redirect to any host not listed here is dropped (open-redirect protection).
 # entrystore.auth.saml.redirect-domain-whitelist=app.example.com,portal.example.com
+# entrystore.auth.saml.redirect-domain-whitelist.1=app.example.com
+# entrystore.auth.saml.redirect-domain-whitelist.2=portal.example.com
 
 ## CAS authentication (default: false)
 ## Renamed in 6.0 — previously `entrystore.auth.cas`. The legacy key is

@@ -23,22 +23,30 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.mock.env.MockEnvironment;
 
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SamlAuthServiceTest {
+
+	private static final String WHITELIST = "entrystore.auth.saml.redirect-domain-whitelist";
+	private static final String DEV = "dev.entryscape.com";
+	private static final String DEMO = "demo.entryscape.com";
 
 	private SamlAuthService service;
 
 	@BeforeEach
 	void setUp() {
 		var config = new SamlCustomConfiguration(true, "keycloak", List.of("localhost"), Map.of(), null, null);
-		service = new SamlAuthService(config);
+		service = new SamlAuthService(config, new MockEnvironment());
 	}
 
 	static Stream<Arguments> redirectUrls() {
@@ -65,7 +73,41 @@ class SamlAuthServiceTest {
 	}
 
 	private static SamlAuthService serviceWithIdps(String defaultIdp, Map<String, Idp> idps) {
-		return new SamlAuthService(new SamlCustomConfiguration(true, defaultIdp, List.of(), idps, null, null));
+		return new SamlAuthService(new SamlCustomConfiguration(true, defaultIdp, List.of(), idps, null, null),
+				new MockEnvironment());
+	}
+
+	static Stream<Arguments> redirectWhitelistForms() {
+		return Stream.of(
+				Arguments.of("5.x indexed form", Map.of(WHITELIST + ".1", DEV, WHITELIST + ".2", DEMO),
+						List.of(DEV, DEMO), List.of()),
+				Arguments.of("5.x indexed form stops at the first gap",
+						Map.of(WHITELIST + ".1", DEV, WHITELIST + ".3", DEMO),
+						List.of(DEV), List.of(DEMO)),
+				Arguments.of("zero-based indexed form", Map.of(WHITELIST + ".0", DEV, WHITELIST + ".1", DEMO),
+						List.of(DEV, DEMO), List.of()),
+				Arguments.of("comma-separated form", Map.of(WHITELIST, DEV + "," + DEMO),
+						List.of(DEV, DEMO), List.of()),
+				Arguments.of("bare value wins over indexed entries", Map.of(WHITELIST, DEV, WHITELIST + ".1", DEMO),
+						List.of(DEV), List.of(DEMO)),
+				Arguments.of("empty bare value still disables indexed entries",
+						Map.of(WHITELIST, "", WHITELIST + ".1", DEV),
+						List.of(), List.of(DEV))
+		);
+	}
+
+	/** Binds the configuration record from the same environment the service reads, as the application does. */
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("redirectWhitelistForms")
+	void redirectWhitelistAcceptsConfiguredForms(String form, Map<String, String> properties,
+			List<String> acceptedHosts, List<String> rejectedHosts) {
+		var environment = new MockEnvironment();
+		properties.forEach(environment::setProperty);
+		var config = Binder.get(environment).bindOrCreate("entrystore.auth.saml", SamlCustomConfiguration.class);
+		var svc = new SamlAuthService(config, environment);
+
+		acceptedHosts.forEach(host -> assertTrue(svc.isValidRedirectUrl("https://" + host + "/x"), host));
+		rejectedHosts.forEach(host -> assertFalse(svc.isValidRedirectUrl("https://" + host + "/x"), host));
 	}
 
 	@Test
