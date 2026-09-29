@@ -128,6 +128,12 @@ entrystore.data.folder=/srv/entrystore/files/
 # is renewed based on the current time/date. (default: off)
 # entrystore.auth.cookie.update.expiry=on|off
 
+# Path of the auth_token cookie; "auto" uses the path of entrystore.baseurl.folder. (default: auto)
+# entrystore.auth.cookie.path=auto
+# Whether an unknown or expired auth_token is answered with 401; with off the request is served
+# as guest. The cookie is expired in both cases. (default: on)
+# entrystore.auth.cookie.invalid-token-error=on|off
+
 ## User-initiated sign-up (default: off)
 # entrystore.auth.signup=off
 # entrystore.auth.signup.email.subject=User sign-up request

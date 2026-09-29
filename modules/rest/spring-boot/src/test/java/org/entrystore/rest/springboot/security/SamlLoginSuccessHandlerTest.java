@@ -72,6 +72,9 @@ class SamlLoginSuccessHandlerTest {
 	private PrincipalManager principalManager;
 
 	@Mock
+	private AuthTokenCookies authTokenCookies;
+
+	@Mock
 	private HttpServletRequest request;
 
 	@Mock
@@ -95,7 +98,7 @@ class SamlLoginSuccessHandlerTest {
 				new SamlCustomConfiguration.RedirectUrl(SUCCESS_URL),
 				new SamlCustomConfiguration.RedirectUrl(FAILURE_URL));
 		handler = new SamlLoginSuccessHandler(userService, samlAuthService, samlAuthStateCache,
-				principalManager, samlConfiguration);
+				principalManager, authTokenCookies, samlConfiguration);
 		// Custom-success redirects route through the RedirectStrategy; the failure path writes the
 		// redirect directly to the response. Mocking the strategy keeps the success-path assertions
 		// independent of the default strategy's encodeRedirectURL handling.
