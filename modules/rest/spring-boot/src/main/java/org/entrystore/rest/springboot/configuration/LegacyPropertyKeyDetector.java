@@ -65,6 +65,6 @@ public final class LegacyPropertyKeyDetector implements EnvironmentPostProcessor
 	// (imported via spring.config.import) is part of the Environment when we scan.
 	@Override
 	public int getOrder() {
-		return Ordered.LOWEST_PRECEDENCE - 2;
+		return Ordered.LOWEST_PRECEDENCE;
 	}
 }

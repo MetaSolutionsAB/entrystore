@@ -17,10 +17,9 @@
 package org.entrystore.rest.springboot.configuration;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.mock.env.MockEnvironment;
-
-import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -276,10 +275,9 @@ class IndexedListConfigValidatorTest {
 	}
 
 	@Test
-	void runsAheadOfTheLegacyPropertyTranslator() {
-		// The translator's own fail-fast throw would otherwise suppress every finding in this class on that boot.
-		var translator = new LegacyPropertyTranslator(_ -> new RecordingLog(new ArrayList<>()));
-		assertTrue(new IndexedListConfigValidator().getOrder() < translator.getOrder());
+	void runsAfterConfigData() {
+		// After ConfigDataEnvironmentPostProcessor, so entrystore.properties is loaded when we scan.
+		assertEquals(Ordered.LOWEST_PRECEDENCE - 1, new IndexedListConfigValidator().getOrder());
 	}
 
 	@Test

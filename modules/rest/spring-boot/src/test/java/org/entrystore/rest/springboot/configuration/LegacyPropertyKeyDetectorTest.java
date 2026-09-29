@@ -54,21 +54,8 @@ class LegacyPropertyKeyDetectorTest {
 	}
 
 	@Test
-	void renamedKeys_areLeftToTheTranslator() {
-		var warnings = new ArrayList<String>();
-		var env = new MockEnvironment()
-				.withProperty("entrystore.auth.saml", "on")
-				.withProperty("entrystore.auth.cas", "on")
-				.withProperty("entrystore.auth.saml.relying-party-id", "urn:example:sp");
-
-		newDetector(warnings).postProcessEnvironment(env, null);
-
-		assertTrue(warnings.isEmpty());
-	}
-
-	@Test
 	void runsAfterConfigData() {
-		assertEquals(Ordered.LOWEST_PRECEDENCE - 2, newDetector(new ArrayList<>()).getOrder(),
+		assertEquals(Ordered.LOWEST_PRECEDENCE, newDetector(new ArrayList<>()).getOrder(),
 				"Must run after ConfigDataEnvironmentPostProcessor so it sees entrystore.properties imported "
 						+ "via spring.config.import");
 	}

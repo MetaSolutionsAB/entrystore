@@ -203,10 +203,6 @@ entrystore.data.folder=/srv/entrystore/files/
 # is renewed based on the current time/date. (default: off)
 # entrystore.auth.cookie.update.expiry=on|off
 
-## Response to a session cookie naming an unknown or expired session (default: true)
-## true: 401. false: the cookie is cleared and the request continues as guest.
-# entrystore.auth.cookie.invalid-token-error=true|false
-
 ## User-initiated sign-up (default: off)
 # entrystore.auth.signup=off
 # entrystore.auth.signup.email.subject=User sign-up request

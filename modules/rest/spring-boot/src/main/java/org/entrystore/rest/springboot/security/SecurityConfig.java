@@ -34,7 +34,6 @@ import org.entrystore.rest.springboot.filter.CsrfCookieFilter;
 import org.entrystore.rest.springboot.filter.IgnoreAuthFilter;
 import org.entrystore.rest.springboot.filter.ReloadUserPropertiesFilter;
 import org.entrystore.rest.springboot.filter.SetUserURIAfterAuthenticationFilter;
-import org.entrystore.rest.springboot.filter.StaleSessionCookieFilter;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.springboot.service.OidcAuthService;
@@ -77,12 +76,10 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
-import org.springframework.security.web.session.SessionInformationExpiredEvent;
 import org.springframework.security.web.util.matcher.AndRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
@@ -147,12 +144,6 @@ public class SecurityConfig {
 	@Value("${entrystore.csrf.enabled:false}")
 	private boolean csrfEnabled;
 
-	@Value("${server.servlet.session.cookie.name:auth_token}")
-	private String sessionCookieName;
-
-	@Value("${entrystore.auth.cookie.invalid-token-error:true}")
-	private boolean invalidTokenError;
-
 	private Cookie.SameSite sessionCookieSameSite;
 
 	@PostConstruct
@@ -189,7 +180,6 @@ public class SecurityConfig {
 		}
 
 		var entryPoint = httpBasicConfig.enabled() ? authChallengeAwareEntryPoint(customEntryPoint) : customEntryPoint;
-		var staleSessionCookieFilter = new StaleSessionCookieFilter(sessionCookieName);
 
 		http
 				// Disable Spring Security's default CacheControlHeadersWriter so that CacheControlFilter
@@ -203,7 +193,12 @@ public class SecurityConfig {
 						.sessionConcurrency(concurrency -> concurrency
 								.maximumSessions(-1)
 								.sessionRegistry(sessionRegistry)
-								.expiredSessionStrategy(invalidTokenError ? this::writeSessionExpired : staleSessionCookieFilter))
+								.expiredSessionStrategy(event ->
+										errorResponseWriter.writeErrorResponseAsJson(event.getResponse(), ErrorResponse.builder()
+											.status(HttpStatus.UNAUTHORIZED.value())
+											.path(event.getRequest().getRequestURI())
+											.error("Session expired")
+											.build())))
 						.invalidSessionStrategy((request, response) ->
 								errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 										.status(HttpStatus.UNAUTHORIZED.value())
@@ -232,7 +227,7 @@ public class SecurityConfig {
 						// from a relaxed-SameSite cookie context cannot force-log-out the user.
 						// CsrfRequestMatcher then requires a valid X-XSRF-TOKEN on the POST.
 						.logoutRequestMatcher(PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/auth/logout"))
-						.deleteCookies(sessionCookieName)
+						.deleteCookies("auth_token")
 						.logoutSuccessHandler((_, response, _) ->
 								response.setStatus(HttpStatus.NO_CONTENT.value())
 						)
@@ -246,12 +241,6 @@ public class SecurityConfig {
 						.authenticationEntryPoint(entryPoint)
 						.accessDeniedHandler(customAccessDeniedHandler)
 				);
-
-		if (!invalidTokenError) {
-			log.info("Invalid or expired session cookies are dropped and the request continues as guest "
-					+ "(entrystore.auth.cookie.invalid-token-error=false)");
-			http.addFilterBefore(staleSessionCookieFilter, SecurityContextHolderFilter.class);
-		}
 
 		if (httpBasicConfig.enabled()) {
 			log.info("Basic Auth Enabled (credential cache TTL={}, max entries={})",
@@ -432,15 +421,6 @@ public class SecurityConfig {
 						.build());
 			}
 		};
-	}
-
-	// For a session the registry marked as expired: a deleted token, or a user's sessions expired by an admin.
-	private void writeSessionExpired(SessionInformationExpiredEvent event) throws IOException {
-		errorResponseWriter.writeErrorResponseAsJson(event.getResponse(), ErrorResponse.builder()
-				.status(HttpStatus.UNAUTHORIZED.value())
-				.path(event.getRequest().getRequestURI())
-				.error("Session expired")
-				.build());
 	}
 
 	private AuthenticationEntryPoint authChallengeAwareEntryPoint(AuthenticationEntryPoint delegate) {
