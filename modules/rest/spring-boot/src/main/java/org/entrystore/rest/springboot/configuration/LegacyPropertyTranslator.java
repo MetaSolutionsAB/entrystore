@@ -192,10 +192,18 @@ public final class LegacyPropertyTranslator implements EnvironmentPostProcessor,
 		/**
 		 * Translates a list in the 5.x numbering ({@code key.1}, {@code key.2}, … up to the first gap), which 6.x
 		 * binds as an empty list, into {@code key[0]}, {@code key[1]}, …. A bare value or an entry at index 0 is
-		 * left to Spring, which binds it.
+		 * left to Spring, which binds it. A bare value, even an empty one, overrides numbered entries, as in 5.x,
+		 * and a WARN says so.
 		 */
 		private void list(String key) {
-			if (isSet(key) || isSet(key + "[0]")) {
+			if (isSet(key)) {
+				if (environment.containsProperty(key + ".1")) {
+					log.warn("EntryStore property '" + key + ".1', '" + key + ".2', ... is ignored because '" + key
+							+ "' is set.");
+				}
+				return;
+			}
+			if (isSet(key + "[0]")) {
 				return;
 			}
 			List<String> values = numberedValues(key);

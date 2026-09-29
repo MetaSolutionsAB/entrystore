@@ -309,6 +309,18 @@ class LegacyPropertyTranslatorTest {
 				.withProperty("entrystore.auth.saml.redirect-domain-whitelist.1", "portal.example.org"));
 
 		assertEquals(List.of("app.example.org"), saml(env).redirectDomainWhitelist());
+		assertWarned("'entrystore.auth.saml.redirect-domain-whitelist.1'",
+				"ignored because 'entrystore.auth.saml.redirect-domain-whitelist' is set");
+	}
+
+	@Test
+	void emptyBareWhitelistWithNumberedEntries_keepsTheWhitelistEmpty() {
+		var env = translate(new MockEnvironment()
+				.withProperty("entrystore.auth.saml.redirect-domain-whitelist", "")
+				.withProperty("entrystore.auth.saml.redirect-domain-whitelist.1", "portal.example.org"));
+
+		assertEquals(List.of(), saml(env).redirectDomainWhitelist());
+		assertWarned("ignored because 'entrystore.auth.saml.redirect-domain-whitelist' is set");
 	}
 
 	@Test
