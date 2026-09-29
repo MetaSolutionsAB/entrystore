@@ -147,7 +147,8 @@ public class CasConfig {
 	}
 
 	@Bean
-	public CasLoginSuccessHandler casLoginSuccessHandler() {
-		return new CasLoginSuccessHandler(userDetailsService, principalManager, errorResponseWriter, casConfiguration);
+	public CasLoginSuccessHandler casLoginSuccessHandler(AuthTokenCookies authTokenCookies) {
+		return new CasLoginSuccessHandler(userDetailsService, principalManager, errorResponseWriter, authTokenCookies,
+				casConfiguration);
 	}
 }

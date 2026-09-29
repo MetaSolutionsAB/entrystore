@@ -62,6 +62,9 @@ class CasConfigTest {
 	@Mock
 	private RepositoryManagerImpl repositoryManager;
 
+	@Mock
+	private AuthTokenCookies authTokenCookies;
+
 	@Test
 	void relaxedEnabledSettingCreatesTheProviderAndSuccessHandler() throws Exception {
 		when(repositoryManager.getRepositoryURL()).thenReturn(URI.create("https://sp.entrystore.example/").toURL());
@@ -72,6 +75,7 @@ class CasConfigTest {
 				.withBean(PrincipalManager.class, () -> principalManager)
 				.withBean(RepositoryManagerImpl.class, () -> repositoryManager)
 				.withBean(ErrorResponseWriter.class, () -> mock(ErrorResponseWriter.class))
+				.withBean(AuthTokenCookies.class, () -> authTokenCookies)
 				.withPropertyValues("entrystore.auth.cas.enabled=yes",
 						"entrystore.auth.cas.server.url=https://cas.example.org/cas")
 				.run(context -> {
