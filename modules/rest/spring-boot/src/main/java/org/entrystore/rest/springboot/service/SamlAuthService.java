@@ -16,22 +16,64 @@
 
 package org.entrystore.rest.springboot.service;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration.Idp;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.springframework.boot.context.properties.bind.BindResult;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class SamlAuthService {
 
+	private static final String REDIRECT_DOMAIN_WHITELIST = "entrystore.auth.saml.redirect-domain-whitelist";
+
 	private final SamlCustomConfiguration samlConfiguration;
+
+	private final List<String> redirectDomainWhitelist;
+
+	public SamlAuthService(SamlCustomConfiguration samlConfiguration, Environment environment) {
+		this.samlConfiguration = samlConfiguration;
+		this.redirectDomainWhitelist = resolveRedirectDomainWhitelist(samlConfiguration, Binder.get(environment));
+		if (samlConfiguration.enabled()) {
+			redirectDomainWhitelist.forEach(domain -> log.info("Allowed domain for redirects: {}", domain));
+		}
+	}
+
+	/**
+	 * The bound list covers the bare and comma-separated value, but Spring counts list indices from 0, so the
+	 * 5.x indexed form ({@code .1}, {@code .2}, …) binds to an empty list. That form is read here the way 5.x
+	 * read it: from {@code .1} up to the first missing index, and ignored when a bare value is set, even an
+	 * empty one.
+	 */
+	private static List<String> resolveRedirectDomainWhitelist(SamlCustomConfiguration config, Binder binder) {
+		boolean bareValue = binder.bind(REDIRECT_DOMAIN_WHITELIST, String.class).isBound();
+		if (bareValue && indexedEntry(binder, 1).isBound()) {
+			log.warn("{} has both a bare value and indexed entries; the indexed entries are ignored",
+					REDIRECT_DOMAIN_WHITELIST);
+		}
+		if (bareValue || !config.redirectDomainWhitelist().isEmpty()) {
+			return config.redirectDomainWhitelist();
+		}
+		var hosts = new ArrayList<String>();
+		BindResult<String> entry;
+		for (int i = 1; (entry = indexedEntry(binder, i)).isBound(); i++) {
+			hosts.add(entry.get());
+		}
+		return List.copyOf(hosts);
+	}
+
+	private static BindResult<String> indexedEntry(Binder binder, int index) {
+		return binder.bind(REDIRECT_DOMAIN_WHITELIST + "." + index, String.class);
+	}
 
 	public boolean isValidRedirectUrl(String url) {
 		if (StringUtils.isEmpty(url)) {
@@ -46,7 +88,7 @@ public class SamlAuthService {
 			// A hostless URL (relative path, opaque URI) can never match a host whitelist; guard
 			// explicitly because the whitelist is an immutable List, whose contains(null) throws.
 			var host = uri.getHost();
-			return host != null && samlConfiguration.redirectDomainWhitelist().contains(host);
+			return host != null && redirectDomainWhitelist.contains(host);
 		} catch (IllegalArgumentException e) {
 			return false;
 		}
