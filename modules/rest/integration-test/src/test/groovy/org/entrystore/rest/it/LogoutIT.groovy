@@ -49,6 +49,11 @@ class LogoutIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_NO_CONTENT
 
+		and: 'the cookie is expired on the 6.0 path /store and the 5.x path /store/, with SameSite and Secure kept'
+		def expired = EntryStoreClient.expiredCookies(connection, 'auth_token')
+		expired.keySet() == ['/store', '/store/'] as Set
+		expired.values().every { it['samesite'] == 'None' && it.containsKey('secure') }
+
 		when: 'we query backend with the same cookie'
 		def userConn2 = EntryStoreClient.getRequest('/auth/user', '', 'application/json', userCookies)
 

@@ -45,6 +45,7 @@ import java.net.URI;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -66,6 +67,9 @@ class AbstractSsoLoginSuccessHandlerTest {
 
 	@Mock
 	private PrincipalManager principalManager;
+
+	@Mock
+	private AuthTokenCookies authTokenCookies;
 
 	@Mock
 	private HttpServletRequest request;
@@ -161,6 +165,26 @@ class AbstractSsoLoginSuccessHandlerTest {
 	}
 
 	@Test
+	void successfulLoginExpiresStaleAuthTokenBeforeRedirecting() throws Exception {
+		when(userService.loadUser("existinguser")).thenReturn(esUser);
+		givenUserIsEnabled();
+
+		handler.onAuthenticationSuccess(request, response, token("existinguser"));
+
+		var inOrder = inOrder(authTokenCookies, redirectStrategy);
+		inOrder.verify(authTokenCookies).expireStale(request, response);
+		inOrder.verify(redirectStrategy).sendRedirect(request, response, SUCCESS_URL);
+	}
+
+	@Test
+	void rejectedLoginKeepsAuthToken() throws Exception {
+		handler.onAuthenticationSuccess(request, response, token("admin"));
+
+		verify(response).sendRedirect(FAILURE_URL);
+		verify(authTokenCookies, never()).expireStale(any(), any());
+	}
+
+	@Test
 	void autoProvisioningFailureRedirectsToFailure() throws Exception {
 		when(userService.loadUser("collidinguser")).thenReturn(null);
 		when(userService.createUser("collidinguser"))
@@ -217,7 +241,7 @@ class AbstractSsoLoginSuccessHandlerTest {
 		callbackRequest.setSession(httpSession);
 		new HttpSessionRequestCache().saveRequest(callbackRequest, new MockHttpServletResponse());
 
-		var realRedirectHandler = new TestSsoLoginSuccessHandler(userService, principalManager, FAILURE_URL, true);
+		var realRedirectHandler = new TestSsoLoginSuccessHandler(userService, principalManager, authTokenCookies, FAILURE_URL, true);
 		realRedirectHandler.setDefaultTargetUrl(SUCCESS_URL);
 		when(userService.loadUser("jane")).thenReturn(esUser);
 		givenUserIsEnabled();
@@ -259,7 +283,8 @@ class AbstractSsoLoginSuccessHandlerTest {
 	}
 
 	private TestSsoLoginSuccessHandler newHandler(String failureUrl, boolean autoProvisioning) {
-		var newHandler = new TestSsoLoginSuccessHandler(userService, principalManager, failureUrl, autoProvisioning);
+		var newHandler = new TestSsoLoginSuccessHandler(userService, principalManager, authTokenCookies, failureUrl,
+				autoProvisioning);
 		// The success path routes through the RedirectStrategy; the failure path writes the redirect
 		// directly to the response. Mocking the strategy keeps the success-path assertions independent
 		// of the default strategy's encodeRedirectURL handling.
@@ -289,8 +314,9 @@ class AbstractSsoLoginSuccessHandlerTest {
 		private final boolean autoProvisioning;
 
 		private TestSsoLoginSuccessHandler(ESUserDetailsService userService, PrincipalManager principalManager,
-										   String failureUrl, boolean autoProvisioning) {
-			super(userService, principalManager, new ErrorResponseWriter(JsonMapper.builder().build()));
+										   AuthTokenCookies authTokenCookies, String failureUrl, boolean autoProvisioning) {
+			super(userService, principalManager, new ErrorResponseWriter(JsonMapper.builder().build()),
+					authTokenCookies);
 			this.failureUrl = failureUrl;
 			this.autoProvisioning = autoProvisioning;
 		}

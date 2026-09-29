@@ -53,6 +53,7 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 	protected final ESUserDetailsService userService;
 	protected final PrincipalManager principalManager;
 	protected final ErrorResponseWriter errorResponseWriter;
+	private final AuthTokenCookies authTokenCookies;
 
 	@Override
 	public final void onAuthenticationSuccess(HttpServletRequest request,
@@ -124,6 +125,7 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 			return;
 		}
 
+		authTokenCookies.expireStale(request, response);
 		if (tryCustomSuccessRedirect(request, response, context)) {
 			return;
 		}

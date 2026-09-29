@@ -295,6 +295,31 @@ class EntryStoreClient {
 		return headerValues.find { it != null && it.startsWith(cookieName + '=') }
 	}
 
+	/** Returns all Set-Cookie response header lines for {@code cookieName}, in response order. */
+	def static List<String> findSetCookies(HttpURLConnection connection, String cookieName) {
+		def headerValues = connection.getHeaderFields().get('Set-Cookie') ?: []
+		return headerValues.findAll { it != null && it.startsWith(cookieName + '=') }
+	}
+
+	/**
+	 * Maps the Path of every Set-Cookie line that expires {@code cookieName} (Max-Age=0) to that line's
+	 * attributes, keyed by lower-case attribute name; flag attributes such as Secure map to ''.
+	 */
+	def static Map<String, Map<String, String>> expiredCookies(HttpURLConnection connection, String cookieName) {
+		return findSetCookies(connection, cookieName)
+				.collect { parseSetCookieAttributes(it) }
+				.findAll { it['max-age'] == '0' }
+				.collectEntries { [(it['path']): it] }
+	}
+
+	/** Parses the attributes after the name=value pair of a Set-Cookie line, keyed by lower-case name. */
+	def static Map<String, String> parseSetCookieAttributes(String setCookieLine) {
+		return setCookieLine.split(';').drop(1).collectEntries { String attribute ->
+			def parts = attribute.trim().split('=', 2)
+			[(parts[0].toLowerCase()): parts.length > 1 ? parts[1] : '']
+		}
+	}
+
 	private static String extractCookieValue(String setCookieLine, String cookieName) {
 		def prefix = cookieName + '='
 		def idx = setCookieLine.indexOf(prefix)
