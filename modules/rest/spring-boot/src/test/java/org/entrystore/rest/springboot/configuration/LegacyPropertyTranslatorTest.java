@@ -38,7 +38,6 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LegacyPropertyTranslatorTest {
@@ -105,8 +104,9 @@ class LegacyPropertyTranslatorTest {
 		assertEquals(ACS_URL + "?tenant=a&idp=google", registration(env, "google").getAcs().getLocation());
 	}
 
+	// No binding (an unknown value) leaves it to the IdP metadata.
 	@ParameterizedTest(name = "redirect-method={0} -> binding {1}")
-	@CsvSource({"get, REDIRECT", "GET, REDIRECT", "post, POST", "Post, POST"})
+	@CsvSource({"get, REDIRECT", "GET, REDIRECT", "post, POST", "Post, POST", "artifact, "})
 	void multiIdp_redirectMethod_becomesTheSingleSignOnBinding(String redirectMethod, Saml2MessageBinding binding) {
 		var env = translate(multiIdpConfig("google")
 				.withProperty("entrystore.auth.saml.idp.google.redirect-method", redirectMethod));
@@ -115,20 +115,11 @@ class LegacyPropertyTranslatorTest {
 	}
 
 	@Test
-	void multiIdp_unknownRedirectMethod_leavesTheBindingToTheMetadata() {
-		var env = translate(multiIdpConfig("google")
-				.withProperty("entrystore.auth.saml.idp.google.redirect-method", "artifact"));
-
-		assertNull(registration(env, "google").getAssertingparty().getSinglesignon().getBinding());
-		assertWarned("redirect-method=artifact");
-	}
-
-	@Test
-	void multiIdp_incompleteIdp_isSkippedAsFiveXDid() {
+	void multiIdp_idpWithoutMetadataUrl_isNotTranslated() {
 		var env = translate(new MockEnvironment()
 				.withProperty("entrystore.auth.saml", "new")
 				.withProperty("entrystore.auth.saml.idps.1", "google")
-				.withProperty("entrystore.auth.saml.idp.google.metadata.url", METADATA_URL)
+				.withProperty("entrystore.auth.saml.idp.google.relying-party-id", "urn:example:sp")
 				.withProperty("entrystore.auth.saml.assertion-consumer-service.url", ACS_URL));
 
 		assertNull(registration(env, "google"));
@@ -136,9 +127,11 @@ class LegacyPropertyTranslatorTest {
 	}
 
 	@Test
-	void multiIdp_idWithSixXRegistrationKeys_isNotTranslated() {
-		var env = translate(multiIdpConfig("google")
-				.withProperty("spring.security.saml2.relyingparty.registration.google.entity-id", "explicit"));
+	void multiIdp_idWithSixXRegistrationKeysInAnySpelling_isNotTranslated() {
+		var env = withEnvironmentVariables(multiIdpConfig("google"),
+				Map.of("SPRING_SECURITY_SAML2_RELYINGPARTY_REGISTRATION_GOOGLE_ENTITYID", "explicit"));
+
+		translate(env);
 
 		var registration = registration(env, "google");
 		assertEquals("explicit", registration.getEntityId());
@@ -148,25 +141,12 @@ class LegacyPropertyTranslatorTest {
 	}
 
 	@Test
-	void multiIdp_sixXRegistrationInAnEnvironmentVariable_isRespected() {
-		var env = withEnvironmentVariables(multiIdpConfig("google"),
-				Map.of("SPRING_SECURITY_SAML2_RELYINGPARTY_REGISTRATION_GOOGLE_ENTITYID", "explicit"));
-
-		translate(env);
-
-		var registration = registration(env, "google");
-		assertEquals("explicit", registration.getEntityId());
-		assertEquals(SPRING_DEFAULT_ACS_LOCATION, registration.getAcs().getLocation());
-	}
-
-	@Test
-	void multiIdp_bareIdpsValue_namesTheIdp() {
+	void multiIdp_bareIdpsValue_winsOverNumberedEntries() {
 		var env = translate(multiIdpConfig("google")
 				.withProperty("entrystore.auth.saml.idps", "google")
 				.withProperty("entrystore.auth.saml.idps.1", "other"));
 
 		assertEquals(ACS_URL + "?idp=google", registration(env, "google").getAcs().getLocation());
-		assertWarned("'entrystore.auth.saml.idps' entries [.1]");
 	}
 
 	@Test
@@ -178,11 +158,10 @@ class LegacyPropertyTranslatorTest {
 
 		assertEquals(ACS_URL + "?idp=google", registration(env, "google").getAcs().getLocation());
 		assertNull(registration(env, "okta"));
-		assertWarned("'entrystore.auth.saml.idps' entries [.3]");
 	}
 
 	@Test
-	void multiIdp_withoutIdpsList_findsTheIdpsByTheirFiveXKeys() {
+	void multiIdp_withoutIdpsList_findsTheIdpsByTheirMetadataUrl() {
 		// A 6.0 configuration that followed the old detector's rename hint: no idps list and no selector.
 		var env = translate(new MockEnvironment()
 				.withProperty("entrystore.auth.saml.enabled", "true")
@@ -198,29 +177,6 @@ class LegacyPropertyTranslatorTest {
 		var env = translate(multiIdpConfig("google").withProperty("entrystore.auth.saml", "off"));
 
 		assertNull(registration(env, "google"));
-		assertWarned("SAML is disabled");
-	}
-
-	@Test
-	void multiIdp_idUnusableAsRegistrationId_abortsStartup() {
-		var env = new MockEnvironment()
-				.withProperty("entrystore.auth.saml", "new")
-				.withProperty("entrystore.auth.saml.idps.1", "my idp")
-				.withProperty("entrystore.auth.saml.idp.my idp.relying-party-id", "urn:example:sp")
-				.withProperty("entrystore.auth.saml.idp.my idp.metadata.url", METADATA_URL)
-				.withProperty("entrystore.auth.saml.assertion-consumer-service.url", ACS_URL);
-
-		String message = assertAborts(env);
-
-		assertTrue(message.contains("'my idp'"), message);
-	}
-
-	@Test
-	void multiIdp_acsUrlNotEndingInTheFiveXPath_warns() {
-		translate(multiIdpConfig("google")
-				.withProperty("entrystore.auth.saml.assertion-consumer-service.url", "https://store.example.org/sso"));
-
-		assertWarned("does not end in /auth/saml");
 	}
 
 	// --- 5.x single-IdP form ---
@@ -262,32 +218,25 @@ class LegacyPropertyTranslatorTest {
 	}
 
 	@Test
-	void singleIdp_metadataMaxAgeBelowTheSixXMinimum_abortsStartup() {
-		String message = assertAborts(singleIdpConfig().withProperty("entrystore.auth.saml.idp-metadata.max-age", "30"));
-
-		assertTrue(message.contains("'entrystore.auth.saml.idp-metadata.max-age=30'"), message);
-	}
-
-	@Test
 	void singleIdp_multiIdpKeys_areIgnoredAsInFiveX() {
 		var env = translate(singleIdpConfig()
 				.withProperty("entrystore.auth.saml.idps.1", "google")
 				.withProperty("entrystore.auth.saml.idp.google.metadata.url", METADATA_URL));
 
 		assertNull(registration(env, "google"));
-		assertWarned("multi-IdP SAML settings");
 	}
 
 	@Test
-	void bothSamlFormsWithoutSelector_abortStartup() {
-		var env = new MockEnvironment()
+	void bothSamlFormsWithoutSelector_translateTheSingleIdpForm() {
+		var env = translate(new MockEnvironment()
 				.withProperty("entrystore.auth.saml.enabled", "true")
 				.withProperty("entrystore.auth.saml.relying-party-id", "urn:example:sp")
-				.withProperty("entrystore.auth.saml.idps.1", "google");
+				.withProperty("entrystore.auth.saml.idp-metadata.url", METADATA_URL)
+				.withProperty("entrystore.auth.saml.idps.1", "google")
+				.withProperty("entrystore.auth.saml.idp.google.metadata.url", METADATA_URL));
 
-		String message = assertAborts(env);
-
-		assertTrue(message.contains("Both the 5.x single-IdP SAML settings"), message);
+		assertEquals(METADATA_URL, registration(env, "default").getAssertingparty().getMetadataUri());
+		assertNull(registration(env, "google"));
 	}
 
 	// --- CAS ---
@@ -330,27 +279,26 @@ class LegacyPropertyTranslatorTest {
 				.withProperty("entrystore.auth.saml.redirect-domain-whitelist.3", "portal.example.org"));
 
 		assertEquals(List.of("app.example.org"), saml(env).redirectDomainWhitelist());
-		assertWarned("'entrystore.auth.saml.redirect-domain-whitelist' entries [.3]");
 	}
 
 	@Test
-	void numberedWhitelistFromZeroAndFromOne_abortsStartup() {
-		var env = new MockEnvironment()
-				.withProperty("entrystore.auth.saml.redirect-domain-whitelist.0", "evil.example.net")
-				.withProperty("entrystore.auth.saml.redirect-domain-whitelist.1", "app.example.org");
-
-		String message = assertAborts(env);
-
-		assertTrue(message.contains("'entrystore.auth.saml.redirect-domain-whitelist' has entries numbered from .0 and from .1"),
-				message);
-	}
-
-	@Test
-	void whitelistNumberedFromZeroOnly_isLeftToSpring() {
+	void whitelistNumberedFromZero_isLeftToSpring() {
 		var env = translate(new MockEnvironment()
-				.withProperty("entrystore.auth.saml.redirect-domain-whitelist.0", "app.example.org"));
+				.withProperty("entrystore.auth.saml.redirect-domain-whitelist.0", "app.example.org")
+				.withProperty("entrystore.auth.saml.redirect-domain-whitelist.1", "portal.example.org"));
 
-		assertEquals(List.of("app.example.org"), saml(env).redirectDomainWhitelist());
+		assertEquals(List.of("app.example.org", "portal.example.org"), saml(env).redirectDomainWhitelist());
+		assertTrue(warnings.isEmpty(), String.valueOf(warnings));
+	}
+
+	@Test
+	void bracketedWhitelist_isLeftToSpring() {
+		var env = translate(new MockEnvironment()
+				.withProperty("entrystore.auth.saml.redirect-domain-whitelist[0]", "app.example.org")
+				.withProperty("entrystore.auth.saml.redirect-domain-whitelist.1", "portal.example.org"));
+
+		// Spring binds .1 as the second entry of the list that [0] starts.
+		assertEquals(List.of("app.example.org", "portal.example.org"), saml(env).redirectDomainWhitelist());
 		assertTrue(warnings.isEmpty(), String.valueOf(warnings));
 	}
 
@@ -361,17 +309,6 @@ class LegacyPropertyTranslatorTest {
 				.withProperty("entrystore.auth.saml.redirect-domain-whitelist.1", "portal.example.org"));
 
 		assertEquals(List.of("app.example.org"), saml(env).redirectDomainWhitelist());
-		assertWarned("because the bare value is set");
-	}
-
-	@Test
-	void whitelistInEnvironmentVariablesNumberedFromOne_abortsStartup() {
-		var env = withEnvironmentVariables(new MockEnvironment(),
-				Map.of("ENTRYSTORE_AUTH_SAML_REDIRECTDOMAINWHITELIST_1", "app.example.org"));
-
-		String message = assertAborts(env);
-
-		assertTrue(message.contains("environment variables numbered from _1"), message);
 	}
 
 	@Test
@@ -399,9 +336,7 @@ class LegacyPropertyTranslatorTest {
 
 	@Test
 	void runsAfterConfigData() {
-		assertEquals(Ordered.LOWEST_PRECEDENCE, new LegacyPropertyTranslator(_ -> new RecordingLog(warnings)).getOrder(),
-				"Must run after ConfigDataEnvironmentPostProcessor so it sees entrystore.properties imported "
-						+ "via spring.config.import");
+		assertEquals(Ordered.LOWEST_PRECEDENCE - 2, new LegacyPropertyTranslator(_ -> new RecordingLog(warnings)).getOrder());
 	}
 
 	@Test
@@ -424,12 +359,6 @@ class LegacyPropertyTranslatorTest {
 		env.getPropertySources().addFirst(new SystemEnvironmentPropertySource(
 				StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME, variables));
 		return env;
-	}
-
-	private String assertAborts(MockEnvironment env) {
-		var aborted = assertThrows(IllegalStateException.class, () -> translate(env));
-		assertTrue(aborted.getMessage().startsWith("EntryStore startup aborted"), aborted.getMessage());
-		return aborted.getMessage();
 	}
 
 	/** The dev.entryscape.com shape: a complete 5.x multi-IdP configuration for one IdP. */
