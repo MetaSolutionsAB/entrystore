@@ -55,6 +55,9 @@ class CasLoginSuccessHandlerTest {
 	private PrincipalManager principalManager;
 
 	@Mock
+	private AuthTokenCookies authTokenCookies;
+
+	@Mock
 	private HttpServletRequest request;
 
 	@Mock
@@ -138,7 +141,7 @@ class CasLoginSuccessHandlerTest {
 		var casConfiguration = new CasCustomConfiguration(true, CasVersion.CAS2, server, userAutoProvisioning,
 				new CasCustomConfiguration.RedirectSuccess(SUCCESS_URL),
 				new CasCustomConfiguration.RedirectFailure(FAILURE_URL));
-		var newHandler = new CasLoginSuccessHandler(userService, principalManager, casConfiguration);
+		var newHandler = new CasLoginSuccessHandler(userService, principalManager, authTokenCookies, casConfiguration);
 		// CAS has no custom-success hook, so success flows through super.onAuthenticationSuccess ->
 		// determineTargetUrl -> RedirectStrategy. Mocking the strategy and default target makes the
 		// success redirect observable; the failure path writes directly to the response.

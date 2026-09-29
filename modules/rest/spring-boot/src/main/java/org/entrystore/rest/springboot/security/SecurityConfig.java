@@ -68,6 +68,7 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.session.SessionManagementFilter;
 import org.springframework.security.web.util.matcher.AndRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
@@ -96,6 +97,8 @@ public class SecurityConfig {
 	private final CsrfRequestMatcher csrfRequestMatcher;
 	private final CsrfCookieFilter csrfCookieFilter;
 
+	private final AuthTokenCookies authTokenCookies;
+
 	// SAML-auth related beans (success handler optional — only present when entrystore.auth.saml.enabled=true)
 	private final SamlCustomConfiguration samlConfiguration;
 	private final Optional<SamlLoginSuccessHandler> samlLoginSuccessHandler;
@@ -121,6 +124,10 @@ public class SecurityConfig {
 	// X-XSRF-TOKEN header on mutations — see ENTRYSTORE-1008 for the compatibility discussion.
 	@Value("${entrystore.csrf.enabled:false}")
 	private boolean csrfEnabled;
+
+	// When false, an unknown or expired session cookie is expired and the request is served as guest instead of 401
+	@Value("${entrystore.auth.cookie.invalid-token-error:true}")
+	private boolean invalidTokenError;
 
 	private Cookie.SameSite sessionCookieSameSite;
 
@@ -167,23 +174,33 @@ public class SecurityConfig {
 				// needs (private,no-store for authenticated; no header for anonymous so static and
 				// controller-set values can pass through unchanged).
 				.headers(headers -> headers.cacheControl(HeadersConfigurer.CacheControlConfig::disable))
-				.sessionManagement(session -> session
-						.sessionConcurrency(concurrency -> concurrency
-								.maximumSessions(-1)
-								.sessionRegistry(sessionRegistry)
-								.expiredSessionStrategy(event ->
-										HttpUtil.writeErrorResponseAsJson(event.getResponse(), ErrorResponse.builder()
-											.status(HttpStatus.UNAUTHORIZED.value())
-											.path(event.getRequest().getRequestURI())
-											.error("Session expired")
-											.build())))
-						.invalidSessionStrategy((request, response) ->
-								HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				.sessionManagement(session -> {
+					// ConcurrentSessionFilter runs the logout handlers, and thereby expires the cookie, before this strategy
+					session.sessionConcurrency(concurrency -> concurrency
+							.maximumSessions(-1)
+							.sessionRegistry(sessionRegistry)
+							.expiredSessionStrategy(event -> {
+								if (!invalidTokenError) {
+									event.getFilterChain().doFilter(event.getRequest(), event.getResponse());
+									return;
+								}
+								HttpUtil.writeErrorResponseAsJson(event.getResponse(), ErrorResponse.builder()
 										.status(HttpStatus.UNAUTHORIZED.value())
-										.path(request.getRequestURI())
-										.error("Session expired or invalid")
-										.build()))
-				)
+										.path(event.getRequest().getRequestURI())
+										.error("Session expired")
+										.build());
+							}));
+					if (invalidTokenError) {
+						session.invalidSessionStrategy((request, response) -> {
+							authTokenCookies.expireAll(request, response);
+							HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+									.status(HttpStatus.UNAUTHORIZED.value())
+									.path(request.getRequestURI())
+									.error("Session expired or invalid")
+									.build());
+						});
+					}
+				})
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(EndpointRequest.toAnyEndpoint()).hasRole(UserAuthRole.ADMIN.name())
 						.requestMatchers("/management/status/extended").hasRole(UserAuthRole.ADMIN.name())
@@ -205,7 +222,7 @@ public class SecurityConfig {
 						// from a relaxed-SameSite cookie context cannot force-log-out the user.
 						// CsrfRequestMatcher then requires a valid X-XSRF-TOKEN on the POST.
 						.logoutRequestMatcher(PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/auth/logout"))
-						.deleteCookies("auth_token")
+						.addLogoutHandler(authTokenCookies)
 						.logoutSuccessHandler((_, response, _) ->
 								response.setStatus(HttpStatus.NO_CONTENT.value())
 						)
@@ -219,6 +236,11 @@ public class SecurityConfig {
 						.authenticationEntryPoint(entryPoint)
 						.accessDeniedHandler(customAccessDeniedHandler)
 				);
+
+		if (!invalidTokenError) {
+			// Without an invalid-session strategy, SessionManagementFilter lets the request continue as guest
+			http.addFilterBefore(new InvalidSessionCookieFilter(authTokenCookies), SessionManagementFilter.class);
+		}
 
 		if (httpBasicConfig.enabled()) {
 			log.info("Basic Auth Enabled (credential cache TTL={}, max entries={})",
@@ -475,6 +497,7 @@ public class SecurityConfig {
 	@Bean
 	public ServletContextInitializer servletContextInitializer() {
 		return servletContext -> {
+			servletContext.getSessionCookieConfig().setPath(authTokenCookies.getIssuingPath());
 			if (sessionCookieSameSite == Cookie.SameSite.NONE) {
 				servletContext.getSessionCookieConfig().setSecure(true);
 			}

@@ -44,8 +44,8 @@ public class SamlLoginSuccessHandler
 
 	public SamlLoginSuccessHandler(ESUserDetailsService userService, SamlAuthService samlAuthService,
 								   SamlAuthStateCache samlAuthStateCache, PrincipalManager principalManager,
-								   SamlCustomConfiguration samlConfiguration) {
-		super(userService, principalManager);
+								   AuthTokenCookies authTokenCookies, SamlCustomConfiguration samlConfiguration) {
+		super(userService, principalManager, authTokenCookies);
 		this.samlAuthService = samlAuthService;
 		this.samlAuthStateCache = samlAuthStateCache;
 		this.samlConfiguration = samlConfiguration;

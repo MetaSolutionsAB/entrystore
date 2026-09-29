@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -72,6 +73,9 @@ class SamlLoginSuccessHandlerTest {
 	private PrincipalManager principalManager;
 
 	@Mock
+	private AuthTokenCookies authTokenCookies;
+
+	@Mock
 	private HttpServletRequest request;
 
 	@Mock
@@ -95,7 +99,7 @@ class SamlLoginSuccessHandlerTest {
 				new SamlCustomConfiguration.RedirectUrl(SUCCESS_URL),
 				new SamlCustomConfiguration.RedirectUrl(FAILURE_URL));
 		handler = new SamlLoginSuccessHandler(userService, samlAuthService, samlAuthStateCache,
-				principalManager, samlConfiguration);
+				principalManager, authTokenCookies, samlConfiguration);
 		// Custom-success redirects route through the RedirectStrategy; the failure path writes the
 		// redirect directly to the response. Mocking the strategy keeps the success-path assertions
 		// independent of the default strategy's encodeRedirectURL handling.
@@ -161,7 +165,9 @@ class SamlLoginSuccessHandlerTest {
 
 		handler.onAuthenticationSuccess(request, response, saml2Authentication("jane"));
 
-		verify(redirectStrategy).sendRedirect(request, response, CUSTOM_SUCCESS_URL);
+		var inOrder = inOrder(authTokenCookies, redirectStrategy);
+		inOrder.verify(authTokenCookies).expireStale(request, response);
+		inOrder.verify(redirectStrategy).sendRedirect(request, response, CUSTOM_SUCCESS_URL);
 	}
 
 	@Test
