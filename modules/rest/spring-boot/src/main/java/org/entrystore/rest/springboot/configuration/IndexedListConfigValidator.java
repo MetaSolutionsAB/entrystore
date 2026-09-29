@@ -61,16 +61,13 @@ import java.util.TreeSet;
  * Spring-native, always zero-based and carries no changed meaning, so it is accepted silently; only its
  * non-numeric variant is a finding.
  *
- * <p>An {@link EnvironmentPostProcessor} rather than a bean, for the same reason as
- * {@link LegacyPropertyKeyDetector}: it runs before any bean is created, so the diagnostic is the first
- * failure rather than being buried under an unrelated bean or bind error. It orders itself just ahead of
- * that detector, whose own fail-fast throw would otherwise suppress these findings on the same boot.
+ * <p>An {@link EnvironmentPostProcessor} rather than a bean: it runs before any bean is created, so the
+ * diagnostic is the first failure rather than being buried under an unrelated bean or bind error.
  *
  * <p>Deliberately aborts rather than logging or dropping entries: honouring a changed list would widen an
  * access-control decision silently on upgrade, and re-implementing the legacy contiguous-from-one
- * semantics per record would keep two readers alive forever. The same policy as
- * {@link LegacyPropertyKeyDetector} applies — a config whose meaning changed must be fixed before the
- * application serves requests — and the exception carries the per-key remedy.
+ * semantics per record would keep two readers alive forever. A config whose meaning changed must be fixed
+ * before the application serves requests, and the exception carries the per-key remedy.
  * {@code entrystore.traversal.*} is out of scope: its profile names are operator-chosen, so a key there
  * would have to be discovered rather than looked up, and its list divergence is documented in the
  * CHANGELOG instead.
@@ -101,8 +98,7 @@ public final class IndexedListConfigValidator implements EnvironmentPostProcesso
 	}
 
 	// Must run after ConfigDataEnvironmentPostProcessor so entrystore.properties (imported via
-	// spring.config.import) is part of the Environment when we scan, and just ahead of
-	// LegacyPropertyKeyDetector, whose own fail-fast throw would otherwise suppress these findings.
+	// spring.config.import) is part of the Environment when we scan.
 	@Override
 	public int getOrder() {
 		return Ordered.LOWEST_PRECEDENCE - 1;

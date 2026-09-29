@@ -29,10 +29,13 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
+import org.springframework.security.saml2.provider.service.web.OpenSaml5AuthenticationTokenConverter;
 
 import java.io.File;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.KeyPairGenerator;
 import java.security.cert.X509Certificate;
@@ -53,6 +56,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RefreshableRelyingPartyRegistrationRepositoryTest {
+
+	private static final String IDP_ENTITY_ID = "https://idp.entrystore.example/test";
 
 	@TempDir
 	File tempDir;
@@ -146,6 +151,70 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	}
 
 	@Test
+	void initialize_noRegistrations_namesTheIdpIdsEntryStoreSettingsReferTo() {
+		var samlConfig = new SamlCustomConfiguration(true, "keycloak", List.of(),
+				Map.of("google", new SamlCustomConfiguration.Idp(null, false, null)), null, null);
+		var repo = new RefreshableRelyingPartyRegistrationRepository(new Saml2RelyingPartyProperties(), samlConfig);
+
+		var ex = assertThrows(IllegalStateException.class, repo::initialize);
+		assertTrue(ex.getMessage().contains("[google, keycloak]"), ex.getMessage());
+		assertTrue(ex.getMessage().contains(
+				"spring.security.saml2.relyingparty.registration.<id>.assertingparty.metadata-uri"), ex.getMessage());
+	}
+
+	@Test
+	void findUniqueByAssertingPartyEntityId_returnsTheRegistrationOfThatIdp() throws Exception {
+		repository = repositoryFor("keycloak", writeIdpMetadata("idp-v1.xml", List.of(selfSignedCertBase64("idp"))));
+
+		RelyingPartyRegistration registration = repository.findUniqueByAssertingPartyEntityId(IDP_ENTITY_ID);
+
+		assertNotNull(registration);
+		assertEquals("keycloak", registration.getRegistrationId());
+	}
+
+	@Test
+	void findUniqueByAssertingPartyEntityId_unknownEntityId_returnsNull() throws Exception {
+		repository = repositoryFor("keycloak", writeIdpMetadata("idp-v1.xml", List.of(selfSignedCertBase64("idp"))));
+
+		assertNull(repository.findUniqueByAssertingPartyEntityId("https://other.idp.example/test"));
+	}
+
+	@Test
+	void findUniqueByAssertingPartyEntityId_twoRegistrationsForTheSameIdp_returnsNull() throws Exception {
+		String metadataUri = writeIdpMetadata("idp-v1.xml", List.of(selfSignedCertBase64("idp"))).toURI().toString();
+		var properties = new Saml2RelyingPartyProperties();
+		for (String id : List.of("keycloak", "keycloak-2")) {
+			var registration = new Saml2RelyingPartyProperties.Registration();
+			registration.getAssertingparty().setMetadataUri(metadataUri);
+			properties.getRegistration().put(id, registration);
+		}
+		repository = new RefreshableRelyingPartyRegistrationRepository(properties, enabledSamlConfig());
+		repository.initialize();
+
+		assertNull(repository.findUniqueByAssertingPartyEntityId(IDP_ENTITY_ID), "an ambiguous Issuer must not pick one");
+	}
+
+	@Test
+	void tokenConverter_unsolicitedResponseToTheFiveXAcsUrl_resolvesTheRegistrationByIssuer() throws Exception {
+		// An IdP-initiated response to the 5.x single-IdP ACS URL: no ?idp and no RelayState of a saved request.
+		repository = repositoryFor("default", writeIdpMetadata("idp-v1.xml", List.of(selfSignedCertBase64("idp"))));
+		var converter = new OpenSaml5AuthenticationTokenConverter(repository);
+		converter.setRequestMatcher(new SamlAcsRequestMatcher());
+		var request = new MockHttpServletRequest("POST", "/auth/saml");
+		request.setParameter("SAMLResponse", Base64.getEncoder().encodeToString("""
+				<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
+				                xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"
+				                ID="_unsolicited" Version="2.0" IssueInstant="2026-01-01T00:00:00Z">
+				  <saml:Issuer>%s</saml:Issuer>
+				</samlp:Response>""".formatted(IDP_ENTITY_ID).getBytes(StandardCharsets.UTF_8)));
+
+		var token = converter.convert(request);
+
+		assertNotNull(token);
+		assertEquals("default", token.getRelyingPartyRegistration().getRegistrationId());
+	}
+
+	@Test
 	void initialize_failsFast_whenMetadataUriMissing() {
 		var properties = new Saml2RelyingPartyProperties();
 		properties.getRegistration().put("keycloak", new Saml2RelyingPartyProperties.Registration());
@@ -232,14 +301,14 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 		String xml = """
 				<?xml version="1.0" encoding="UTF-8"?>
 				<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
-				                     entityID="https://idp.entrystore.example/test" validUntil="2099-01-01T00:00:00Z">
+				                     entityID="%s" validUntil="2099-01-01T00:00:00Z">
 				  <md:IDPSSODescriptor WantAuthnRequestsSigned="false"
 				                       protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
 				%s
 				    <md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
 				                            Location="https://idp.entrystore.example/test/sso"/>
 				  </md:IDPSSODescriptor>
-				</md:EntityDescriptor>""".formatted(keyDescriptors);
+				</md:EntityDescriptor>""".formatted(IDP_ENTITY_ID, keyDescriptors);
 		File file = new File(tempDir, fileName);
 		Files.writeString(file.toPath(), xml);
 		return file;
