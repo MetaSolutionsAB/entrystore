@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -164,7 +165,9 @@ class SamlLoginSuccessHandlerTest {
 
 		handler.onAuthenticationSuccess(request, response, saml2Authentication("jane"));
 
-		verify(redirectStrategy).sendRedirect(request, response, CUSTOM_SUCCESS_URL);
+		var inOrder = inOrder(authTokenCookies, redirectStrategy);
+		inOrder.verify(authTokenCookies).expireStale(request, response);
+		inOrder.verify(redirectStrategy).sendRedirect(request, response, CUSTOM_SUCCESS_URL);
 	}
 
 	@Test

@@ -38,14 +38,14 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Owns the path and attributes of the session cookie (auth_token) and expires it when it is unknown,
- * expired or logged out.
+ * Owns the path of the session cookie (auth_token) and expires the cookie when it is unknown, expired or logged out.
  *
  * <p>The cookie is issued on {@code entrystore.auth.cookie.path}; its default {@code auto} is the path of the
- * repository base URL (e.g. {@code /store/}), as in 5.x. Browsers identify a cookie by name and path, and may hold
- * one on the base-URL path (5.x) and one on the servlet context path (earlier 6.0 builds). The client often cannot
- * remove either (HttpOnly, cross-site), so both are expired with the configured SameSite, Secure and HttpOnly
- * attributes; without SameSite=None a browser drops a cross-site expiry.
+ * repository base URL (e.g. {@code /store/}), as in 5.x. Browsers identify a cookie by name, domain and path, and may
+ * hold one on the base-URL path (5.x) and one on the servlet context path (earlier 6.0 builds), each host-only (5.x)
+ * or on the configured domain. The client often cannot remove them (HttpOnly, cross-site), so each is expired with
+ * the SameSite, Secure and HttpOnly the container uses ({@code server.servlet.session.cookie.*}); without
+ * SameSite=None a browser drops a cross-site expiry.
  */
 @Component
 public class AuthTokenCookies implements LogoutHandler {
@@ -109,7 +109,7 @@ public class AuthTokenCookies implements LogoutHandler {
 		if (WebUtils.getCookie(request, cookieName) == null) {
 			return;
 		}
-		// An expired session passes both ConcurrentSessionFilter's logout and the invalid-session handling
+		// With invalid-token-error off, ConcurrentSessionFilter's logout and InvalidSessionCookieFilter both expire it
 		@SuppressWarnings("unchecked")
 		var expired = (Set<Target>) request.getAttribute(EXPIRED_ATTRIBUTE);
 		if (expired == null) {
