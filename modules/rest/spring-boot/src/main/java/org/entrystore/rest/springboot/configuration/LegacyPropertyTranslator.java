@@ -20,6 +20,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.security.SamlAcsRequestMatcher;
+import org.opensaml.saml.saml2.core.NameIDType;
 import org.springframework.boot.EnvironmentPostProcessor;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -83,8 +84,6 @@ public final class LegacyPropertyTranslator implements EnvironmentPostProcessor,
 	private static final Map<String, String> REGISTRATION_KEYS = Map.of(
 			"metadata.url", "assertingparty.metadata-uri",
 			"relying-party-id", "entity-id");
-	// 5.x redirect-method -> 6.x single sign-on binding.
-	private static final Map<String, String> BINDINGS = Map.of("get", "redirect", "post", "post");
 
 	private static final String IDP_KEY_TEMPLATE = "entrystore.auth.saml.idp.%s.%s";
 	private static final String REGISTRATION = "spring.security.saml2.relyingparty.registration.%s";
@@ -182,8 +181,13 @@ public final class LegacyPropertyTranslator implements EnvironmentPostProcessor,
 			REGISTRATION_KEYS.forEach((suffix, key) -> rename(legacyKey.apply(suffix), registration + "." + key));
 			transform(Settings.AUTH_SAML_LEGACY_ASSERTION_CONSUMER_SERVICE_URL, registration + ".acs.location",
 					acsLocation);
-			transform(legacyKey.apply("redirect-method"), registration + ".assertingparty.singlesignon.binding",
-					value -> BINDINGS.get(value.toLowerCase(Locale.ROOT)));
+			String bindingKey = registration + ".assertingparty.singlesignon.binding";
+			// 5.x sent the authentication request with GET unless redirect-method was post.
+			transform(legacyKey.apply("redirect-method"), bindingKey,
+					value -> "post".equalsIgnoreCase(value) ? "post" : "redirect");
+			imply(bindingKey, "redirect");
+			// 5.x always asked for this format; without one, an IdP may return a NameID that names another user.
+			imply(registration + ".name-id-format", NameIDType.UNSPECIFIED);
 			// 5.x never signed authentication requests, and some IdPs' metadata asks for signed ones.
 			imply(registration + ".assertingparty.singlesignon.sign-request", "false");
 			return true;

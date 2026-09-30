@@ -59,7 +59,7 @@ class ZzzSamlLegacyConfigIT extends KeycloakBaseSpec {
 		])
 	}
 
-	def '1. GET /auth/saml should send an AuthnRequest naming the 5.x assertion consumer service URL'() {
+	def '1. GET /auth/saml should send an AuthnRequest with the 5.x ACS URL and NameID format'() {
 		when:
 		def connection = EntryStoreClient.getRequest('/auth/saml' +
 			convertMapToQueryParams([idp: 'keycloak', successurl: successLoginUrl]), null, null)
@@ -73,8 +73,10 @@ class ZzzSamlLegacyConfigIT extends KeycloakBaseSpec {
 		response.contains('action="' + getKeycloakSamlRealmUrl() + '"')
 		def samlRequest = hiddenInputValue(response, 'SAMLRequest')
 		samlRequest != null
-		new String(Base64.decoder.decode(samlRequest), 'UTF-8')
-			.contains('AssertionConsumerServiceURL="' + legacyAcsUrl + '?idp=keycloak"')
+		def authnRequest = new String(Base64.decoder.decode(samlRequest), 'UTF-8')
+		authnRequest.contains('AssertionConsumerServiceURL="' + legacyAcsUrl + '?idp=keycloak"')
+		// 5.x always asked for this NameID format.
+		authnRequest.contains('NameIDPolicy Format="urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"')
 
 		cleanup: 'store the request for the next step'
 		this.samlRequestSaved = samlRequest

@@ -25,19 +25,24 @@ import org.entrystore.rest.springboot.configuration.ConditionalOnBooleanConfig;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.util.LogThrottle;
 import org.opensaml.core.xml.config.XMLObjectProviderRegistrySupport;
+import org.opensaml.saml.common.xml.SAMLConstants;
 import org.opensaml.saml.metadata.resolver.impl.AbstractReloadingMetadataResolver;
 import org.opensaml.saml.metadata.resolver.impl.ResourceBackedMetadataResolver;
 import org.opensaml.saml.metadata.resolver.index.impl.RoleMetadataIndex;
+import org.opensaml.saml.saml2.metadata.SingleSignOnService;
 import org.springframework.boot.context.properties.PropertyMapper;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties.AssertingParty;
+import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties.AssertingParty.Singlesignon;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties.Registration;
 import org.springframework.security.saml2.core.OpenSamlInitializationService;
 import org.springframework.security.saml2.provider.service.registration.AssertingPartyMetadata;
 import org.springframework.security.saml2.provider.service.registration.AssertingPartyMetadataRepository;
 import org.springframework.security.saml2.provider.service.registration.IterableRelyingPartyRegistrationRepository;
 import org.springframework.security.saml2.provider.service.registration.OpenSaml5AssertingPartyMetadataRepository;
+import org.springframework.security.saml2.provider.service.registration.OpenSamlAssertingPartyDetails;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
+import org.springframework.security.saml2.provider.service.registration.Saml2MessageBinding;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -75,9 +80,10 @@ import java.util.function.Consumer;
  * live (background-refreshed) metadata on each call; Spring Security resolves the registration per
  * request, so refreshes are picked up by subsequent logins with no re-wiring of the security filter
  * chain. The relying-party (SP) side of each registration is mapped as Spring Boot's
- * {@code Saml2RelyingPartyRegistrationConfiguration} does, except that statically configured SP
- * signing/decryption and verification credentials are not applied (EntryStore configures none — see
- * {@link #asRegistration} and {@link #warnOnUnsupportedStaticCredentials}).
+ * {@code Saml2RelyingPartyRegistrationConfiguration} does, except that a configured single sign-on binding
+ * is sent to the metadata's endpoint for that binding ({@link #mapSingleSignOn}), and that statically
+ * configured SP signing/decryption and verification credentials are not applied (EntryStore configures
+ * none — see {@link #asRegistration} and {@link #warnOnUnsupportedStaticCredentials}).
  */
 @Slf4j
 @Component
@@ -317,8 +323,9 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 
 	/**
 	 * Maps the relying-party (SP) side onto the freshly resolved asserting-party metadata. Kept aligned
-	 * with Spring Boot's {@code Saml2RelyingPartyRegistrationConfiguration#asRegistration} so behaviour is
-	 * identical to the auto-configuration this bean replaces. Static SP signing/decryption credentials and
+	 * with Spring Boot's {@code Saml2RelyingPartyRegistrationConfiguration#asRegistration} so behaviour
+	 * matches the auto-configuration this bean replaces, except for the single sign-on endpoint of a
+	 * configured binding ({@link #mapSingleSignOn}). Static SP signing/decryption credentials and
 	 * statically configured verification credentials are intentionally not applied here — EntryStore's SAML
 	 * SP carries none (verification credentials come from the IdP metadata); see
 	 * {@link #warnOnUnsupportedStaticCredentials}.
@@ -329,7 +336,7 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 				.entityId(properties.getEntityId())
 				.assertionConsumerServiceLocation(properties.getAcs().getLocation())
 				.assertionConsumerServiceBinding(properties.getAcs().getBinding())
-				.assertingPartyMetadata(mapAssertingParty(properties.getAssertingparty()))
+				.assertingPartyMetadata(mapAssertingParty(id, properties.getAssertingparty(), metadata))
 				.singleLogoutServiceLocation(properties.getSinglelogout().getUrl())
 				.singleLogoutServiceResponseLocation(properties.getSinglelogout().getResponseUrl())
 				.singleLogoutServiceBinding(properties.getSinglelogout().getBinding())
@@ -337,21 +344,59 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 				.build();
 	}
 
-	// Copied from Spring Boot's Saml2RelyingPartyRegistrationConfiguration#mapAssertingParty: overrides the
-	// metadata-derived asserting-party fields with any explicitly configured property (non-null only).
-	private Consumer<AssertingPartyMetadata.Builder<?>> mapAssertingParty(AssertingParty assertingParty) {
+	// Copied from Spring Boot's Saml2RelyingPartyRegistrationConfiguration#mapAssertingParty, except for the
+	// single sign-on endpoint: overrides the metadata-derived asserting-party fields with any explicitly
+	// configured property (non-null only).
+	private Consumer<AssertingPartyMetadata.Builder<?>> mapAssertingParty(String id, AssertingParty assertingParty,
+																		  AssertingPartyMetadata metadata) {
 		return (details) -> {
 			// Boot 4's PropertyMapper filters null source values by default, so the former
 			// alwaysApplyingWhenNonNull() is no longer needed (and was removed).
 			PropertyMapper map = PropertyMapper.get();
 			map.from(assertingParty::getEntityId).to(details::entityId);
-			map.from(assertingParty.getSinglesignon()::getBinding).to(details::singleSignOnServiceBinding);
-			map.from(assertingParty.getSinglesignon()::getUrl).to(details::singleSignOnServiceLocation);
+			mapSingleSignOn(id, assertingParty.getSinglesignon(), metadata, details);
 			map.from(assertingParty.getSinglesignon()::getSignRequest).to(details::wantAuthnRequestsSigned);
 			map.from(assertingParty.getSinglelogout()::getUrl).to(details::singleLogoutServiceLocation);
 			map.from(assertingParty.getSinglelogout()::getResponseUrl).to(details::singleLogoutServiceResponseLocation);
 			map.from(assertingParty.getSinglelogout()::getBinding).to(details::singleLogoutServiceBinding);
 		};
+	}
+
+	/**
+	 * Applies the configured single sign-on binding together with the metadata's endpoint for it, unless a URL
+	 * is configured too. Spring Boot overrides only the binding and keeps the URL of the metadata's first POST
+	 * or Redirect endpoint, so with an IdP that publishes one URL per binding the request would reach the wrong
+	 * endpoint. Without an endpoint for the configured binding, that first endpoint is kept with its own binding.
+	 */
+	private void mapSingleSignOn(String id, Singlesignon singleSignOn, AssertingPartyMetadata metadata,
+								 AssertingPartyMetadata.Builder<?> details) {
+		Saml2MessageBinding binding = singleSignOn.getBinding();
+		String url = singleSignOn.getUrl();
+		if (binding != null && url == null) {
+			url = singleSignOnLocation(metadata, binding);
+			if (url == null) {
+				log.warn("IdP metadata for SAML registration '{}' has no single sign-on endpoint with the configured "
+								+ "{} binding; using its {} endpoint {}.", id, binding,
+						metadata.getSingleSignOnServiceBinding(), metadata.getSingleSignOnServiceLocation());
+				return;
+			}
+		}
+		PropertyMapper map = PropertyMapper.get();
+		map.from(binding).to(details::singleSignOnServiceBinding);
+		map.from(url).to(details::singleSignOnServiceLocation);
+	}
+
+	private static String singleSignOnLocation(AssertingPartyMetadata metadata, Saml2MessageBinding binding) {
+		if (!(metadata instanceof OpenSamlAssertingPartyDetails openSamlMetadata)) {
+			return null;
+		}
+		return openSamlMetadata.getEntityDescriptor().getIDPSSODescriptor(SAMLConstants.SAML20P_NS)
+				.getSingleSignOnServices().stream()
+				.filter(service -> binding.getUrn().equals(service.getBinding()))
+				.map(SingleSignOnService::getLocation)
+				.filter(StringUtils::hasText)
+				.findFirst()
+				.orElse(null);
 	}
 
 	/**

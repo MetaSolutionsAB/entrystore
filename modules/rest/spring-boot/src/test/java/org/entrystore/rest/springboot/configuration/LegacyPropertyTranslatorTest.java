@@ -45,6 +45,8 @@ class LegacyPropertyTranslatorTest {
 	private static final String ACS_URL = "https://store.example.org/store/auth/saml";
 	private static final String METADATA_URL = "https://idp.example.org/metadata";
 	private static final String SPRING_DEFAULT_ACS_LOCATION = "{baseUrl}/login/saml2/sso/{registrationId}";
+	private static final String UNSPECIFIED_NAME_ID_FORMAT = "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified";
+	private static final String EMAIL_NAME_ID_FORMAT = "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress";
 
 	private final List<String> warnings = new ArrayList<>();
 
@@ -93,6 +95,7 @@ class LegacyPropertyTranslatorTest {
 		assertEquals(Saml2MessageBinding.POST, registration.getAssertingparty().getSinglesignon().getBinding());
 		// 5.x never signed authentication requests.
 		assertEquals(Boolean.FALSE, registration.getAssertingparty().getSinglesignon().getSignRequest());
+		assertEquals(UNSPECIFIED_NAME_ID_FORMAT, registration.getNameIdFormat(), "5.x always asked for this format");
 		assertTrue(saml(env).enabled());
 	}
 
@@ -104,14 +107,35 @@ class LegacyPropertyTranslatorTest {
 		assertEquals(ACS_URL + "?tenant=a&idp=google", registration(env, "google").getAcs().getLocation());
 	}
 
-	// No binding (an unknown value) leaves it to the IdP metadata.
+	// 5.x sent the request with GET unless redirect-method was post, so an unknown value means redirect.
 	@ParameterizedTest(name = "redirect-method={0} -> binding {1}")
-	@CsvSource({"get, REDIRECT", "GET, REDIRECT", "post, POST", "Post, POST", "artifact, "})
+	@CsvSource({"get, REDIRECT", "GET, REDIRECT", "post, POST", "Post, POST", "artifact, REDIRECT"})
 	void multiIdp_redirectMethod_becomesTheSingleSignOnBinding(String redirectMethod, Saml2MessageBinding binding) {
 		var env = translate(multiIdpConfig("google")
 				.withProperty("entrystore.auth.saml.idp.google.redirect-method", redirectMethod));
 
 		assertEquals(binding, registration(env, "google").getAssertingparty().getSinglesignon().getBinding());
+	}
+
+	@Test
+	void multiIdp_withoutRedirectMethod_defaultsToTheRedirectBinding() {
+		var env = translate(multiIdpConfig("google"));
+
+		assertEquals(Saml2MessageBinding.REDIRECT,
+				registration(env, "google").getAssertingparty().getSinglesignon().getBinding(),
+				"5.x defaulted redirect-method to get");
+	}
+
+	@Test
+	void multiIdp_explicitNameIdFormat_skipsTheTranslation() {
+		var env = translate(multiIdpConfig("google")
+				.withProperty("spring.security.saml2.relyingparty.registration.google.assertingparty.metadata-uri",
+						METADATA_URL)
+				.withProperty("spring.security.saml2.relyingparty.registration.google.name-id-format",
+						EMAIL_NAME_ID_FORMAT));
+
+		assertEquals(EMAIL_NAME_ID_FORMAT, registration(env, "google").getNameIdFormat());
+		assertWarned("settings for IdP 'google' are ignored");
 	}
 
 	@Test
@@ -189,6 +213,9 @@ class LegacyPropertyTranslatorTest {
 		assertEquals("urn:example:sp", registration.getEntityId());
 		assertEquals(METADATA_URL, registration.getAssertingparty().getMetadataUri());
 		assertEquals(ACS_URL, registration.getAcs().getLocation(), "5.x used the single-IdP ACS URL verbatim");
+		assertEquals(Saml2MessageBinding.REDIRECT, registration.getAssertingparty().getSinglesignon().getBinding(),
+				"5.x defaulted redirect-method to get");
+		assertEquals(UNSPECIFIED_NAME_ID_FORMAT, registration.getNameIdFormat());
 		var saml = saml(env);
 		assertEquals("default", saml.defaultIdp());
 		assertEquals(List.of("*"), saml.idp().get("default").domains(), "every login routes to the one IdP");

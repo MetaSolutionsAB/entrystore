@@ -30,12 +30,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
+import org.springframework.security.saml2.provider.service.registration.Saml2MessageBinding;
 import org.springframework.security.saml2.provider.service.web.OpenSaml5AuthenticationTokenConverter;
 
 import java.io.File;
@@ -53,12 +56,14 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -73,6 +78,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RefreshableRelyingPartyRegistrationRepositoryTest {
 
 	private static final String IDP_ENTITY_ID = "https://idp.entrystore.example/test";
+	private static final String IDP_URL = "https://idp.entrystore.example";
 
 	@TempDir
 	File tempDir;
@@ -274,7 +280,7 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	@Test
 	void isConfiguredButUnavailable_whenTheMetadataLacksTheConfiguredEntityId() throws Exception {
 		repository = repositoryFor("keycloak", writeIdpMetadata("idp-v1.xml", List.of(selfSignedCertBase64("idp"))),
-				"https://other.idp.example/test");
+				registration -> registration.getAssertingparty().setEntityId("https://other.idp.example/test"));
 
 		assertTrue(repository.isConfiguredButUnavailable("keycloak"));
 		assertFalse(repository.isConfiguredButUnavailable("not-configured"));
@@ -286,7 +292,7 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 		String metadataUri = "http://127.0.0.1:" + closedPort() + "/metadata";
 
 		try (var appender = CapturingAppender.attachTo(RefreshableRelyingPartyRegistrationRepository.class)) {
-			repository = repositoryFor("keycloak", metadataUri, null);
+			repository = repositoryFor("keycloak", metadataUri, _ -> { });
 
 			assertEquals(1, appender.messagesAt(Level.WARN)
 					.filter(message -> message.contains("'keycloak' could not be loaded from " + metadataUri))
@@ -299,7 +305,7 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	@Test
 	void findByRegistrationId_loadsTheMetadataOnLogin_onceTheIdpRecovers() throws Exception {
 		String metadataUri = startMetadataServer();
-		repository = repositoryFor("keycloak", metadataUri, null);
+		repository = repositoryFor("keycloak", metadataUri, _ -> { });
 		String signingCert = selfSignedCertBase64("idp-signing");
 		// The IdP sends no Last-Modified header: the fetch must not be skipped as "unchanged since the failed attempt".
 		servedMetadata.set(idpMetadataXml(List.of(signingCert)));
@@ -315,7 +321,7 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	void findByRegistrationId_fetchesUnavailableMetadataAtMostOncePerInterval() throws Exception {
 		String metadataUri = startMetadataServer();
 		try (var appender = CapturingAppender.attachTo(RefreshableRelyingPartyRegistrationRepository.class)) {
-			repository = repositoryFor("keycloak", metadataUri, null);
+			repository = repositoryFor("keycloak", metadataUri, _ -> { });
 			assertNull(repository.findByRegistrationId("keycloak"));
 			int requestsAfterFirstLogin = metadataRequests.get();
 			servedMetadata.set(idpMetadataXml(List.of(selfSignedCertBase64("idp-signing"))));
@@ -337,7 +343,7 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	@Timeout(30)
 	void findByRegistrationId_doesNotWaitForAFetchStillRunning() throws Exception {
 		String metadataUri = startMetadataServer();
-		repository = repositoryFor("keycloak", metadataUri, null);
+		repository = repositoryFor("keycloak", metadataUri, _ -> { });
 		var idpAnswers = new CountDownLatch(1);
 		metadataGate = idpAnswers;
 		servedMetadata.set(idpMetadataXml(List.of(selfSignedCertBase64("idp-signing"))));
@@ -362,7 +368,7 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	@Test
 	void findByRegistrationId_afterShutdown_returnsNullWithoutFetching() throws Exception {
 		String metadataUri = startMetadataServer();
-		repository = repositoryFor("keycloak", metadataUri, null);
+		repository = repositoryFor("keycloak", metadataUri, _ -> { });
 		repository.shutdown();
 		int requestsBeforeLookup = metadataRequests.get();
 		servedMetadata.set(idpMetadataXml(List.of(selfSignedCertBase64("idp-signing"))));
@@ -378,7 +384,8 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 		var entities = new LinkedHashMap<String, String>();
 		entities.put("https://idp.one/test", firstCert);
 		entities.put("https://idp.two/test", secondCert);
-		repository = repositoryFor("keycloak", writeAggregateMetadata("idps.xml", entities), "https://idp.two/test");
+		repository = repositoryFor("keycloak", writeAggregateMetadata("idps.xml", entities),
+				registration -> registration.getAssertingparty().setEntityId("https://idp.two/test"));
 
 		RelyingPartyRegistration registration = repository.findByRegistrationId("keycloak");
 
@@ -400,24 +407,52 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 				"with no configured entity-id a single asserting party is selected (and a warning is logged)");
 	}
 
+	// The metadata lists one endpoint per binding, in the given order, at IDP_URL/sso/<binding>, as Shibboleth does.
+	@ParameterizedTest(name = "{0}")
+	@CsvSource(delimiter = '|', textBlock = """
+			redirect, listed second        | POST REDIRECT | REDIRECT |      | REDIRECT | /sso/redirect
+			post, listed second            | REDIRECT POST | POST     |      | POST     | /sso/post
+			no binding: the first endpoint | POST REDIRECT |          |      | POST     | /sso/post
+			redirect, no Redirect endpoint | POST          | REDIRECT |      | POST     | /sso/post
+			redirect with a configured URL | POST REDIRECT | REDIRECT | /own | REDIRECT | /own
+			""")
+	void findByRegistrationId_configuredBinding_usesTheMetadataEndpointForIt(String description,
+			String metadataBindings, Saml2MessageBinding binding, String urlPath, Saml2MessageBinding expectedBinding,
+			String expectedPath) throws Exception {
+		var endpoints = new LinkedHashMap<String, String>();
+		for (String name : metadataBindings.split(" ")) {
+			endpoints.put(Saml2MessageBinding.valueOf(name).getUrn(),
+					IDP_URL + "/sso/" + name.toLowerCase(Locale.ROOT));
+		}
+		String url = urlPath == null ? null : IDP_URL + urlPath;
+		repository = repositoryFor("shibboleth",
+				writeIdpMetadata("idp.xml", List.of(selfSignedCertBase64("idp")), endpoints), registration -> {
+					registration.getAssertingparty().getSinglesignon().setBinding(binding);
+					registration.getAssertingparty().getSinglesignon().setUrl(url);
+				});
+
+		var metadata = repository.findByRegistrationId("shibboleth").getAssertingPartyMetadata();
+
+		assertEquals(expectedBinding, metadata.getSingleSignOnServiceBinding());
+		assertEquals(IDP_URL + expectedPath, metadata.getSingleSignOnServiceLocation());
+	}
+
 	private RefreshableRelyingPartyRegistrationRepository repositoryFor(String registrationId, File metadataFile) {
-		return repositoryFor(registrationId, metadataFile, null);
+		return repositoryFor(registrationId, metadataFile, _ -> { });
 	}
 
 	private RefreshableRelyingPartyRegistrationRepository repositoryFor(String registrationId, File metadataFile,
-																		String assertingPartyEntityId) {
-		return repositoryFor(registrationId, metadataFile.toURI().toString(), assertingPartyEntityId);
+			Consumer<Saml2RelyingPartyProperties.Registration> customizer) {
+		return repositoryFor(registrationId, metadataFile.toURI().toString(), customizer);
 	}
 
 	private RefreshableRelyingPartyRegistrationRepository repositoryFor(String registrationId, String metadataUri,
-																		String assertingPartyEntityId) {
+			Consumer<Saml2RelyingPartyProperties.Registration> customizer) {
 		var properties = new Saml2RelyingPartyProperties();
 		var registration = new Saml2RelyingPartyProperties.Registration();
 		registration.setEntityId("https://sp.entrystore.example/" + registrationId);
 		registration.getAssertingparty().setMetadataUri(metadataUri);
-		if (assertingPartyEntityId != null) {
-			registration.getAssertingparty().setEntityId(assertingPartyEntityId);
-		}
+		customizer.accept(registration);
 		properties.getRegistration().put(registrationId, registration);
 
 		var repo = new RefreshableRelyingPartyRegistrationRepository(properties, enabledSamlConfig(), nanos::get);
@@ -468,7 +503,20 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 		return file;
 	}
 
+	// singleSignOnServices: binding URN -> location, in the order the metadata lists them.
+	private File writeIdpMetadata(String fileName, List<String> signingCertsBase64,
+								  Map<String, String> singleSignOnServices) throws Exception {
+		File file = new File(tempDir, fileName);
+		Files.writeString(file.toPath(), idpMetadataXml(signingCertsBase64, singleSignOnServices));
+		return file;
+	}
+
 	private static String idpMetadataXml(List<String> signingCertsBase64) {
+		return idpMetadataXml(signingCertsBase64,
+				Map.of(Saml2MessageBinding.POST.getUrn(), "https://idp.entrystore.example/test/sso"));
+	}
+
+	private static String idpMetadataXml(List<String> signingCertsBase64, Map<String, String> singleSignOnServices) {
 		String keyDescriptors = signingCertsBase64.stream()
 				.map("""
 						<md:KeyDescriptor use="signing">
@@ -477,6 +525,10 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 						  </ds:KeyInfo>
 						</md:KeyDescriptor>"""::formatted)
 				.collect(Collectors.joining("\n"));
+		String endpoints = singleSignOnServices.entrySet().stream()
+				.map(entry -> "<md:SingleSignOnService Binding=\"%s\" Location=\"%s\"/>"
+						.formatted(entry.getKey(), entry.getValue()))
+				.collect(Collectors.joining("\n"));
 		return """
 				<?xml version="1.0" encoding="UTF-8"?>
 				<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
@@ -484,10 +536,9 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 				  <md:IDPSSODescriptor WantAuthnRequestsSigned="false"
 				                       protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
 				%s
-				    <md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-				                            Location="https://idp.entrystore.example/test/sso"/>
+				%s
 				  </md:IDPSSODescriptor>
-				</md:EntityDescriptor>""".formatted(IDP_ENTITY_ID, keyDescriptors);
+				</md:EntityDescriptor>""".formatted(IDP_ENTITY_ID, keyDescriptors, endpoints);
 	}
 
 	// An aggregate EntitiesDescriptor with one IDPSSODescriptor (single signing cert) per entity id.

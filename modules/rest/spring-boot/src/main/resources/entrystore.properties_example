@@ -303,16 +303,21 @@ entrystore.auth.temp.lockout.duration=0ms
 ## /auth/saml?idp={id}, the 5.x URL, is also accepted, so an IdP set up for 5.x needs no change.
 ## Responses of up to 512 KB are accepted there; server.jetty.max-http-form-post-size (32KB) applies to other forms.
 ## Binding of the authentication request: post or redirect (default: the IdP metadata's first endpoint).
+## The request goes to the metadata's endpoint for that binding, unless ...singlesignon.url is set.
 # spring.security.saml2.relyingparty.registration.myIdp.assertingparty.singlesignon.binding=post
 ## 5.x SAML settings are still accepted: at startup they are translated to the keys above, and a
 ## WARN names each 6.x key to set instead. An explicitly set 6.x key wins over a translation.
 ##   entrystore.auth.saml=on|new                           -> entrystore.auth.saml.enabled
 ##   (idp.{id}.)relying-party-id                           -> ...registration.{id}.entity-id
 ##   (idp.{id}.)metadata.url / idp-metadata.url            -> ...registration.{id}.assertingparty.metadata-uri
-##   (idp.{id}.)redirect-method=get|post                   -> ...registration.{id}.assertingparty.singlesignon.binding=redirect|post
+##   (idp.{id}.)redirect-method=get|post (unset: get)      -> ...registration.{id}.assertingparty.singlesignon.binding=redirect|post
 ##   assertion-consumer-service.url (+ ?idp={id})          -> ...registration.{id}.acs.location
 ##   idp-metadata.max-age / user-auto-provisioning         -> entrystore.auth.saml.idp.{id}.metadata.max-age / .user-auto-provisioning
 ##   redirect-domain-whitelist.1, .2, ... (same for idp.{id}.domains) -> a comma-separated value
+## No WARN names these, which a translated IdP also gets; set them when moving to the 6.x keys:
+##   ...registration.{id}.name-id-format=urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified
+##   ...registration.{id}.assertingparty.singlesignon.binding=redirect (when redirect-method is unset)
+##   ...registration.{id}.assertingparty.singlesignon.sign-request=false
 ## The 5.x single-IdP settings (entrystore.auth.saml=on) become the IdP id of default-idp, else "default".
 ## Default IdP id used when the request carries no idp/username hint.
 # entrystore.auth.saml.default-idp=myIdp
