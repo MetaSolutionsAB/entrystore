@@ -31,7 +31,10 @@ import org.entrystore.GraphType;
 import org.entrystore.List;
 import org.entrystore.QuotaException;
 import org.entrystore.ResourceType;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryException;
+import org.entrystore.repository.RepositoryListener;
 import org.entrystore.repository.config.Settings;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -41,6 +44,8 @@ import org.junit.jupiter.params.provider.EnumSource;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -576,8 +581,8 @@ public class ListImplTest extends AbstractCoreTest {
 	/**
 	 * A move names two members, and the removal happens before the insertion, so an unknown anchor must be
 	 * refused rather than acted on: {@code moveChildBefore} would otherwise drop the child from the in-memory
-	 * list behind an {@code ArrayIndexOutOfBoundsException}, and {@code moveChildAfter} would silently move it
-	 * to the front, in both cases leaving the store holding the old order.
+	 * list behind an {@code ArrayIndexOutOfBoundsException}, and {@code moveChildAfter} would move it to the
+	 * front and save that order.
 	 */
 	@Test
 	public void movingRelativeToANonMemberIsRefusedAndLeavesTheListUnchanged() {
@@ -624,8 +629,8 @@ public class ListImplTest extends AbstractCoreTest {
 
 		assertTrue(spied.getChildren().isEmpty(),
 			"an Error inside the transaction must leave the membership as the store still holds it");
-		assertTrue(((EntryImpl) member).getReferringListsInSameContext().isEmpty(),
-			"and must not leave the member claiming a parent it never got");
+		spied.invalidateChildren();
+		assertTrue(spied.getChildren().isEmpty(), "and the store must not hold the membership either");
 	}
 
 	/**
@@ -650,6 +655,222 @@ public class ListImplTest extends AbstractCoreTest {
 
 		assertEquals(java.util.List.of(first.getEntryURI(), second.getEntryURI()), list.getChildren(),
 			"a self-move must keep every member and the order");
+	}
+
+	/**
+	 * A removal reaches the shared field only after the commit. Removing from the live vector before the
+	 * transaction leaves the member gone from memory while the store still holds it — on a group, isMember
+	 * answers false until restart.
+	 */
+	@Test
+	public void aFailedRemovalKeepsTheMemberTheStoreStillHolds() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry member = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+		((List) listEntry.getResource()).addChild(member.getEntryURI());
+		ListImpl spied = spy((ListImpl) listEntry.getResource());
+		doThrow(new IllegalStateException("simulated write failure"))
+			.when(spied).saveChildren(any(), any(RepositoryConnection.class));
+
+		assertFalse(spied.removeChild(member.getEntryURI()));
+
+		assertEquals(java.util.List.of(member.getEntryURI()), spied.getChildren(),
+			"a failed removal must leave the member the store still holds");
+	}
+
+	/** Same as the removal above for an {@code Error}, which skips the {@code catch (Exception)} recovery. */
+	@Test
+	public void anErrorDuringARemovalKeepsTheMemberTheStoreStillHolds() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry member = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+		((List) listEntry.getResource()).addChild(member.getEntryURI());
+		ListImpl spied = spy((ListImpl) listEntry.getResource());
+		doThrow(new StackOverflowError("simulated failure inside the transaction"))
+			.when(spied).saveChildren(any(), any(RepositoryConnection.class));
+
+		assertThrows(StackOverflowError.class, () -> spied.removeChild(member.getEntryURI()));
+
+		assertEquals(java.util.List.of(member.getEntryURI()), spied.getChildren(),
+			"an Error inside the removal must leave the member the store still holds");
+	}
+
+	@Test
+	public void aFailedSetChildrenLeavesTheMembershipAndReportsTheCause() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry member = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+		ListImpl spied = spy((ListImpl) listEntry.getResource());
+		IllegalStateException writeFailure = new IllegalStateException("simulated write failure");
+		doThrow(writeFailure).when(spied).saveChildren(any(), any(RepositoryConnection.class));
+
+		RepositoryException thrown = assertThrows(RepositoryException.class,
+			() -> spied.setChildren(java.util.List.of(member.getEntryURI())));
+
+		assertSame(writeFailure, thrown.getCause(), "the write failure must be reported as the cause");
+		assertTrue(spied.getChildren().isEmpty(), "a failed write must leave the published membership untouched");
+		spied.invalidateChildren();
+		assertTrue(spied.getChildren().isEmpty(), "and the store must not hold the membership either");
+	}
+
+	/**
+	 * A listener that throws after the commit must not turn a committed write into a reported failure: removeTree
+	 * would otherwise abandon the children of a list the store already holds empty.
+	 */
+	@Test
+	public void setChildrenReturnsWhenAListenerFailsAfterTheCommit() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry member = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+		List list = (List) listEntry.getResource();
+		RepositoryListener failing = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				throw new IllegalStateException("simulated listener failure");
+			}
+		};
+		rm.registerListener(failing, RepositoryEvent.ResourceUpdated);
+
+		try {
+			assertTrue(list.setChildren(java.util.List.of(member.getEntryURI())));
+		} finally {
+			rm.unregisterListener(failing, RepositoryEvent.ResourceUpdated);
+		}
+
+		assertEquals(java.util.List.of(member.getEntryURI()), reload(duck, listEntry).getChildren(),
+			"the committed membership must stand");
+	}
+
+	@Test
+	public void setChildrenStandsWhenClosingFailsAfterTheCommit() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry member = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+		ListImpl spied = closeFailingSpy(listEntry);
+
+		assertTrue(spied.setChildren(java.util.List.of(member.getEntryURI())));
+
+		assertEquals(java.util.List.of(member.getEntryURI()), spied.getChildren());
+		assertEquals(java.util.List.of(member.getEntryURI()), reload(duck, listEntry).getChildren(),
+			"a close failure after the commit must not undo the write");
+	}
+
+	@Test
+	public void moveChildStandsWhenClosingFailsAfterTheCommit() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		URI a = duck.createLink(null, URI.create("https://a.example/"), null).getEntryURI();
+		URI b = duck.createLink(null, URI.create("https://b.example/"), null).getEntryURI();
+		((List) listEntry.getResource()).setChildren(java.util.List.of(a, b));
+		ListImpl spied = closeFailingSpy(listEntry);
+
+		spied.moveChildAfter(a, b);
+
+		assertEquals(java.util.List.of(b, a), spied.getChildren(), "the published order must be the committed one");
+		assertEquals(java.util.List.of(b, a), reload(duck, listEntry).getChildren(),
+			"a close failure after the commit must not undo the reorder");
+	}
+
+	@Test
+	public void removeChildStandsWhenClosingFailsAfterTheCommit() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry member = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+		((List) listEntry.getResource()).addChild(member.getEntryURI());
+		ListImpl spied = closeFailingSpy(listEntry);
+
+		assertTrue(spied.removeChild(member.getEntryURI()));
+
+		assertTrue(spied.getChildren().isEmpty());
+		assertTrue(reload(duck, listEntry).getChildren().isEmpty(), "a close failure after the commit must not undo the removal");
+	}
+
+	@Test
+	public void addChildStandsWhenClosingFailsAfterTheCommit() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry member = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+		ListImpl spied = closeFailingSpy(listEntry);
+
+		spied.addChild(member.getEntryURI());
+
+		assertEquals(java.util.List.of(member.getEntryURI()), spied.getChildren());
+		assertEquals(java.util.List.of(member.getEntryURI()), reload(duck, listEntry).getChildren(),
+			"a close failure after the commit must not undo the addition");
+	}
+
+	@Test
+	public void setChildrenRefusesAChildWhoseEntryIsGone() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		URI gone = duck.createLink(null, URI.create("https://slashdot.org/"), null).getEntryURI();
+		duck.remove(gone);
+		List list = (List) listEntry.getResource();
+
+		RepositoryException thrown = assertThrows(RepositoryException.class,
+			() -> list.setChildren(java.util.List.of(gone)));
+
+		assertTrue(thrown.getMessage().contains("does not exist"), thrown.getMessage());
+		assertTrue(list.getChildren().isEmpty());
+	}
+
+	/**
+	 * The moved member must itself be a member: otherwise the move would persist a non-member past the existence,
+	 * single-parent and referring-list steps an addition goes through — on a group, adding a member.
+	 */
+	@Test
+	public void movingANonMemberIsRefusedAndAddsNothing() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry first = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+		Entry stranger = duck.createLink(null, URI.create("https://example.com/"), null);
+		List list = (List) listEntry.getResource();
+		list.setChildren(java.util.List.of(first.getEntryURI()));
+
+		assertThrows(RepositoryException.class, () -> list.moveChildAfter(stranger.getEntryURI(), first.getEntryURI()));
+
+		assertEquals(java.util.List.of(first.getEntryURI()), reload(duck, listEntry).getChildren(),
+			"a refused move must not persist the non-member");
+		assertTrue(((EntryImpl) stranger).getReferringListsInSameContext().isEmpty());
+	}
+
+	/** Reads the list back from the store, bypassing the cached instance. */
+	private static List reload(Context context, Entry listEntry) {
+		((ContextImpl) context).softCache.remove(listEntry);
+		return (List) context.getByEntryURI(listEntry.getEntryURI()).getResource();
+	}
+
+	/** A spy whose member-list writes use a connection that closes and then reports a close failure. */
+	private static ListImpl closeFailingSpy(Entry listEntry) {
+		ListImpl spied = spy((ListImpl) listEntry.getResource());
+		doAnswer(invocation -> failingOnClose(((EntryImpl) listEntry).repository.getConnection()))
+			.when(spied).openConnection();
+		return spied;
+	}
+
+	private static RepositoryConnection failingOnClose(RepositoryConnection real) {
+		return (RepositoryConnection) Proxy.newProxyInstance(RepositoryConnection.class.getClassLoader(),
+			new Class<?>[]{RepositoryConnection.class}, (proxy, method, args) -> {
+				if (method.getName().equals("close") && method.getParameterCount() == 0) {
+					real.close();
+					throw new org.eclipse.rdf4j.repository.RepositoryException("simulated close failure");
+				}
+				try {
+					return method.invoke(real, args);
+				} catch (InvocationTargetException e) {
+					throw e.getCause();
+				}
+			});
 	}
 
 	/** Waits until {@code thread} settles on a monitor or finishes, so a test can tell those two apart. */
