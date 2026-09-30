@@ -331,6 +331,15 @@ class EntryStoreClient {
 		]
 	}
 
+	/**
+	 * Converts Set-Cookie response-header lines into a Cookie request-header value, stripping the
+	 * cookie attributes (Path, HttpOnly, ...) each line carries.
+	 */
+	static String toCookieHeader(List<String> setCookieLines) {
+		assert setCookieLines: 'response carries no Set-Cookie header'
+		return setCookieLines.collect { it.split(';')[0] }.join('; ')
+	}
+
 	/** Builds a multipart body of the given form fields, plus a file part when a file is given. */
 	def static buildMultipartContent(File file, Map<String, String> formData, String boundary,
 									 String partContentType = 'application/octet-stream',

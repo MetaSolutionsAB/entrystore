@@ -47,6 +47,7 @@ import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.cas.authentication.CasAuthenticationProvider;
 import org.springframework.security.cas.web.CasAuthenticationFilter;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -56,8 +57,10 @@ import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
 import org.springframework.security.saml2.provider.service.web.DefaultRelyingPartyRegistrationResolver;
+import org.springframework.security.saml2.provider.service.web.OpenSaml5AuthenticationTokenConverter;
 import org.springframework.security.saml2.provider.service.web.authentication.OpenSaml5AuthenticationRequestResolver;
 import org.springframework.security.saml2.provider.service.web.authentication.Saml2AuthenticationRequestResolver;
+import org.springframework.security.saml2.provider.service.web.authentication.Saml2WebSsoAuthenticationFilter;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
@@ -104,6 +107,7 @@ public class SecurityConfig {
 	private final Optional<SamlLoginSuccessHandler> samlLoginSuccessHandler;
 	private final Optional<RelyingPartyRegistrationRepository> repo; // optional as it will be injected only when Spring's SAML properties are configured
 	private final SamlRelayStateResolver samlRelayStateResolver;
+	private final CacheSaml2AuthenticationRequestRepository saml2AuthenticationRequestRepository;
 
 	// CAS-auth related beans (optional — only present when entrystore.auth.cas.enabled=true)
 	private final CasCustomConfiguration casConfiguration;
@@ -270,11 +274,23 @@ public class SecurityConfig {
 			// cannot run after a committed response, so the redirect strategy closes that gap.
 			samlHandler.setRedirectStrategy(cacheAwareRedirectStrategy);
 
+			// Also processes SAML responses posted to the 5.x assertion consumer service (POST /auth/saml?idp=<id>).
+			var acsMatcher = new SamlAcsRequestMatcher();
 			http.saml2Login(samlLogin -> samlLogin
 					.loginPage("/auth/saml")
 					.failureUrl(samlConfiguration.redirectFailure().url())
 					.authenticationRequestResolver(createCustomResolver())
-					.successHandler(samlHandler));
+					.authenticationConverter(createAcsTokenConverter(acsMatcher))
+					.successHandler(samlHandler)
+					// An anonymous class, not a lambda: the configurer applies a post-processor whose type
+					// argument it cannot resolve to every object it builds.
+					.withObjectPostProcessor(new ObjectPostProcessor<Saml2WebSsoAuthenticationFilter>() {
+						@Override
+						public <O extends Saml2WebSsoAuthenticationFilter> O postProcess(O filter) {
+							filter.setRequiresAuthenticationRequestMatcher(acsMatcher);
+							return filter;
+						}
+					}));
 		} else {
 			log.info("SAML Auth Disabled");
 		}
@@ -404,17 +420,28 @@ public class SecurityConfig {
 	}
 
 	private Saml2AuthenticationRequestResolver createCustomResolver() {
-
-		if (repo.isEmpty()) {
-			throw new RuntimeException("RelyingPartyRegistrationRepository was not injected - missing SAML2 autoconfiguration?");
-		}
-
-		var registrationResolver = new DefaultRelyingPartyRegistrationResolver(repo.get());
+		var registrationResolver = new DefaultRelyingPartyRegistrationResolver(registrationRepository());
 		var resolver = new OpenSaml5AuthenticationRequestResolver(registrationResolver);
 
 		resolver.setRelayStateResolver(samlRelayStateResolver);
 
 		return resolver;
+	}
+
+	/**
+	 * The converter Spring would build by default, but matching {@code acsMatcher}. A converter passed to
+	 * the configurer is used as is, so the request repository has to be set here as well.
+	 */
+	private OpenSaml5AuthenticationTokenConverter createAcsTokenConverter(SamlAcsRequestMatcher acsMatcher) {
+		var converter = new OpenSaml5AuthenticationTokenConverter(registrationRepository());
+		converter.setRequestMatcher(acsMatcher);
+		converter.setAuthenticationRequestRepository(saml2AuthenticationRequestRepository);
+		return converter;
+	}
+
+	private RelyingPartyRegistrationRepository registrationRepository() {
+		return repo.orElseThrow(() -> new IllegalStateException(
+				"RelyingPartyRegistrationRepository was not injected - missing SAML2 autoconfiguration?"));
 	}
 
 	@Bean

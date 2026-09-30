@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -100,8 +101,7 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 		OpenSamlInitializationService.initialize();
 		Map<String, Registration> registrations = relyingPartyProperties.getRegistration();
 		if (registrations.isEmpty()) {
-			throw new IllegalStateException("SAML is enabled but no relying-party registrations are configured "
-					+ "(spring.security.saml2.relyingparty.registration.*)");
+			throw new IllegalStateException(noRegistrationsMessage());
 		}
 		registrations.forEach((id, registration) -> {
 			String metadataUri = registration.getAssertingparty().getMetadataUri();
@@ -151,9 +151,46 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 				.iterator();
 	}
 
+	/**
+	 * The registration whose asserting party has {@code entityId}, or {@code null} when none or more than one
+	 * has. The SAML response converter falls back to this for an IdP-initiated response posted to a URL that
+	 * names no registration, such as the 5.x single-IdP assertion consumer service URL; the inherited default
+	 * would look the entity id up as a registration id.
+	 */
+	@Override
+	public RelyingPartyRegistration findUniqueByAssertingPartyEntityId(String entityId) {
+		// The indexed metadata lookup first, so only registrations whose IdP metadata has that entity are built.
+		List<RelyingPartyRegistration> matches = metadataByRegistrationId.entrySet().stream()
+				.filter(entry -> entry.getValue().findByEntityId(entityId) != null)
+				.map(entry -> findByRegistrationId(entry.getKey()))
+				.filter(registration -> registration != null
+						&& entityId.equals(registration.getAssertingPartyMetadata().getEntityId()))
+				.limit(2)
+				.toList();
+		return matches.size() == 1 ? matches.getFirst() : null;
+	}
+
 	private long maxAgeSeconds(String registrationId) {
 		SamlCustomConfiguration.Idp idp = samlConfiguration.idp().get(registrationId);
 		return idp != null ? idp.metadata().maxAge() : SamlCustomConfiguration.Idp.Metadata.DEFAULT_MAX_AGE_SECONDS;
+	}
+
+	/**
+	 * Names the IdP ids that EntryStore settings refer to, so an operator whose {@code entrystore.auth.saml.*}
+	 * settings survived an upgrade sees which registrations are missing rather than only the Spring key prefix.
+	 */
+	private String noRegistrationsMessage() {
+		Set<String> idpIds = new TreeSet<>(samlConfiguration.idp().keySet());
+		if (StringUtils.hasText(samlConfiguration.defaultIdp())) {
+			idpIds.add(samlConfiguration.defaultIdp());
+		}
+		String message = "SAML is enabled but no relying-party registrations are configured "
+				+ "(spring.security.saml2.relyingparty.registration.*).";
+		if (idpIds.isEmpty()) {
+			return message;
+		}
+		return message + " entrystore.auth.saml.* refers to the IdP ids " + idpIds + "; set "
+				+ "spring.security.saml2.relyingparty.registration.<id>.assertingparty.metadata-uri for each of them.";
 	}
 
 	/**

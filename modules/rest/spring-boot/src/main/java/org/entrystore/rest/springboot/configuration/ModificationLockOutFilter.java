@@ -24,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
+import org.entrystore.rest.springboot.security.SamlAcsRequestMatcher;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -42,7 +43,9 @@ import java.util.Set;
 public class ModificationLockOutFilter extends OncePerRequestFilter {
 
 	private static final Set<String> READ_ONLY_METHODS = Set.of("GET", "HEAD", "OPTIONS");
-	private static final Set<String> ALLOWED_AUTH_PATHS = Set.of("/auth/login", "/auth/cookie", "/auth/logout");
+	// The 5.x SAML assertion-consumer path is included because IdPs configured for 5.x still POST to it.
+	private static final Set<String> ALLOWED_AUTH_PATHS = Set.of("/auth/login", "/auth/cookie", "/auth/logout",
+			SamlAcsRequestMatcher.LEGACY_ACS_PATH);
 	// Spring Security's default SAML2 assertion-consumer path; the IdP POSTs the assertion here.
 	// Must be allowed so in-flight SSO logins can complete during a maintenance window.
 	private static final String SAML2_SSO_CALLBACK_PREFIX = "/login/saml2/sso/";
