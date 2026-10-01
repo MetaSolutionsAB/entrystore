@@ -397,6 +397,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			registerPublicRepositoryListeners();
 		}
 
+		if (solrIndex != null) {
+			// Initialization is complete, so the Solr submitter may start building documents.
+			// Building loads entries from a background thread, which races initialization state
+			// (e.g., PublicRepository's rebuild iterating ContextImpl.getEntries) if allowed earlier.
+			solrIndex.markRepositoryInitialized();
+		}
+
 		// after initSolr: a removal resumed without the index would skip purging the context's documents
 		contextManager.contextRemover.resumePending();
 		// after the context removals, which a tree removal in a removed context is left to
@@ -1001,6 +1008,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					if (!solrIndex.clearSolrIndex(solrServer)) {
 						log.error("Initial Solr full-wipe failed; skipping reindex to avoid serving a dirty index. Next restart will retry.");
 					} else {
+						// The synchronous startup reindex drains the submission queue inside this
+						// constructor, so the submitter's gate must open here; system contexts are
+						// already initialized at this point, making background entry loads safe.
+						solrIndex.markRepositoryInitialized();
 						long rejectedBefore = solrIndex.getRejectedDocumentCount();
 						reindexResult = solrIndex.reindexSync();
 						reindexComplete = isReindexComplete(reindexResult, solrIndex::waitForQueueDrain);

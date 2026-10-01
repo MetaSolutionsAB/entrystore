@@ -166,7 +166,8 @@ public class StatusService {
 			"deleteQueueSize", searchIndex.getDeleteQueueSize(),
 			"indexingContexts", searchIndex.getIndexingContexts(),
 			"rejectedDocuments", searchIndex.getRejectedDocumentCount(),
-			"readFilterMismatches", searchIndex.getReadFilterMismatchCount()
+			"readFilterMismatches", searchIndex.getReadFilterMismatchCount(),
+			"droppedEntries", searchIndex.getDroppedEntryCount()
 		);
 	}
 
