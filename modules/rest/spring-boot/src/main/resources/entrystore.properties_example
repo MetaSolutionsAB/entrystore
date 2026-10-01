@@ -388,6 +388,11 @@ entrystore.auth.temp.lockout.duration=0ms
 ## RDF/JSON and search JSON responses are pretty-printed. The compact form (false) trims 10-30% off
 ## the payload and the CPU to produce it; clients that parse the JSON see no difference.
 # entrystore.rest.json.pretty-print=true
+## How soon, in ms, Solr commits indexed changes, i.e. when a write becomes searchable. The max applies
+## while a large backlog is being indexed. Raising both cuts segment churn under steady write load at the
+## cost of a longer write-then-search delay.
+# entrystore.solr.commit-within=1000
+# entrystore.solr.commit-within-max=10000
 entrystore.solr=on
 entrystore.solr.reindex-on-startup=off
 entrystore.solr.url=http://localhost:8080/solr/entrystore-core1
