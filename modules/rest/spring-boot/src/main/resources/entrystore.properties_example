@@ -48,6 +48,12 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.backup.maintenance.lower-limit=minimum amount of stored backups
 # entrystore.backup.maintenance.expires-after-days=maximum days a backup is kept
 
+# Virtual threads for request handling (default: false, deliberately). Load-tested at 60
+# concurrent clients (findings doc 28): no latency or throughput win, and uploads currently
+# buffer fully in memory, so the platform-thread pool doubles as backpressure that caps
+# concurrent upload buffers. Reconsider only for deployments with very high connection counts.
+# spring.threads.virtual.enabled=false
+
 ## Cross-origin resource sharing (CORS)
 # entrystore.cors=on|off (default: off)
 # entrystore.cors.origins=*.domain1.com,domain2.*
@@ -212,6 +218,12 @@ entrystore.data.folder=/srv/entrystore/files/
 # Whether an unknown or expired auth_token is answered with 401; with off the request is served
 # as guest. The cookie is expired in both cases. (default: on)
 # entrystore.auth.cookie.invalid-token-error=on|off
+
+# TTL in seconds for the per-request UserDetails cache (default: 5, 0 = off).
+# Evicted immediately on password change, user disable/modify, user delete, logout
+# and group-membership changes (the admin role derives from admin-group membership)
+# — the TTL is only a safety net, not the staleness bound.
+# entrystore.auth.userdetails-cache.ttl-seconds=5
 
 ## User-initiated sign-up (default: off)
 # entrystore.auth.signup=off
