@@ -16,8 +16,6 @@
 
 package org.entrystore.repository.util;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.solr.client.solrj.RemoteSolrException;
 import org.apache.solr.client.solrj.SolrClient;
@@ -105,9 +103,21 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static final int BATCH_SIZE_DELETE = 100;
 
-	private static final int SOLR_COMMIT_WITHIN = 1000;
+	// A12: configurable via entrystore.solr.commit-within[-max]; the defaults keep the write-then-search
+	// visibility clients rely on, and an operator under steady write load can raise them to cut segment churn.
+	private static final int SOLR_COMMIT_WITHIN_DEFAULT = 1000;
 
-	private static final int SOLR_COMMIT_WITHIN_MAX = 10000;
+	private static final int SOLR_COMMIT_WITHIN_MAX_DEFAULT = 10000;
+
+	// A13: heartbeat / spurious-wakeup guard for the submitter's wait(); in steady state the
+	// submitter is woken by signalSubmitter() within microseconds of an enqueue.
+	private static final long IDLE_TIMEOUT_MS = 10_000;
+
+	/** Builds the submitter attempts for one entry before dropping it; a failure may be transient contention. */
+	private static final int MAX_BUILD_ATTEMPTS = 3;
+
+	/** How long the startup gate may stay closed over queued work before that is reported. */
+	private static final long GATE_CLOSED_WARN_NANOS = TimeUnit.SECONDS.toNanos(60);
 
 	private static final long EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS = 10;
 
@@ -150,7 +160,22 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private final Thread delayedContextIndexer;
 
-	private final Cache<URI, SolrInputDocument> postQueue = Caffeine.newBuilder().build();
+	/**
+	 * Entries to (re)index, in queueing order, each mapped to its already-built document or to null. A null value
+	 * means the submitter builds the document when it drains the entry (see {@code drainAndBuildPostBatch}):
+	 * {@link #postEntry(Entry)} queues that way because it runs under {@code synchronized(repository) ->
+	 * synchronized(repositoryListeners)} via {@code fireRepositoryEvent}, and building - a metadata-graph read
+	 * plus ACL evaluation - must not happen under those monitors (A1). The reindex path, which holds neither,
+	 * still builds before queueing, so that it can count the entries it could not index. Guarded by its own
+	 * monitor; queue and remove through {@link #queueEntry} and {@link #removeEntryDocument}.
+	 */
+	private final Map<URI, SolrInputDocument> postQueue = new LinkedHashMap<>();
+
+	/** Consecutive build failures per entry on the submitter; guarded by {@link #postQueue}. */
+	private final Map<URI, Integer> buildAttempts = new HashMap<>();
+
+	/** Entries the submitter dropped after {@link #MAX_BUILD_ATTEMPTS} failed builds; see {@link #getDroppedEntryCount()}. */
+	private final AtomicLong droppedEntries = new AtomicLong();
 
 	/**
 	 * Entries whose documents are to be removed from the index, in the order in which they were queued. A set, so
@@ -158,6 +183,26 @@ public class SolrSearchIndex implements SearchIndex {
 	 * deletions.
 	 */
 	private final Set<URI> deleteQueue = Collections.synchronizedSet(new LinkedHashSet<>());
+
+	// A13: wakes the submitter when work is enqueued so it does not have to wait out its idle
+	// timeout. Lost-notify is prevented by the recheck-under-lock in the submitter run loop.
+	private final Object queueSignal = new Object();
+
+	// A12: effective commit-within windows, read from config in the constructor.
+	private final int commitWithin;
+
+	private final int commitWithinMax;
+
+	// A1 startup gate: building documents loads entries via the ContextManager, and doing that
+	// while RepositoryManagerImpl is still initializing races against init state that is not
+	// thread-safe yet (observed as a ConcurrentModificationException in ContextImpl.getEntries
+	// during PublicRepository's startup rebuild). The submitter processes nothing until
+	// markRepositoryInitialized() opens the gate; work enqueued before that simply waits.
+	private volatile boolean repositoryInitialized = false;
+
+	private final long constructedAtNanos = System.nanoTime();
+
+	private boolean gateClosedWarned;
 
 	private final Map<URI, Future> reindexing = Collections.synchronizedMap(new HashMap<>());
 
@@ -192,16 +237,15 @@ public class SolrSearchIndex implements SearchIndex {
 		public void run() {
 			while (!interrupted()) {
 				try {
-					postQueue.cleanUp();
 					boolean batchFailed = false;
 
-					if (postQueue.estimatedSize() > 0 || !deleteQueue.isEmpty()) {
+					if (repositoryInitialized && (!isPostQueueEmpty() || !deleteQueue.isEmpty())) {
 
 						if (!deleteQueue.isEmpty()) {
 							batchFailed = processDeleteBatch();
 						}
 
-						if (postQueue.estimatedSize() > 0 && !Thread.currentThread().isInterrupted()) {
+						if (!isPostQueueEmpty() && !Thread.currentThread().isInterrupted()) {
 							batchFailed = processAddBatch() || batchFailed;
 						}
 
@@ -210,7 +254,22 @@ public class SolrSearchIndex implements SearchIndex {
 						}
 
 					} else {
-						sleepOrShutdown(500, "idle wait");
+						// A13: block until signalSubmitter() wakes us or the idle timeout fires
+						// (heartbeat + spurious-wakeup guard). The recheck under the lock closes the
+						// lost-notify race: a signal arriving between the outer emptiness check and
+						// entering this block is observed here via a now-non-empty queue instead of
+						// being delivered to a wait that has not started.
+						synchronized (queueSignal) {
+							if (!repositoryInitialized || (isPostQueueEmpty() && deleteQueue.isEmpty())) {
+								try {
+									queueSignal.wait(IDLE_TIMEOUT_MS);
+								} catch (InterruptedException ie) {
+									log.info("Solr document submitter got interrupted during idle wait, shutting down");
+									throw new ShutdownRequestedException();
+								}
+							}
+						}
+						warnIfGateStaysClosed();
 					}
 				} catch (ShutdownRequestedException e) {
 					return;
@@ -222,6 +281,22 @@ public class SolrSearchIndex implements SearchIndex {
 						return;
 					}
 				}
+			}
+		}
+
+		/**
+		 * Reports, once, queued work the submitter cannot process because repository initialization never opened
+		 * its gate, e.g. because the RepositoryManagerImpl constructor threw first. Nothing else would show it.
+		 */
+		private void warnIfGateStaysClosed() {
+			if (repositoryInitialized || gateClosedWarned || System.nanoTime() - constructedAtNanos < GATE_CLOSED_WARN_NANOS) {
+				return;
+			}
+			if (!isPostQueueEmpty() || !deleteQueue.isEmpty()) {
+				gateClosedWarned = true;
+				log.warn("Repository initialization has not opened the Solr submitter after {} s; {} entries to index and {} "
+						+ "to delete are waiting", TimeUnit.NANOSECONDS.toSeconds(GATE_CLOSED_WARN_NANOS), getPostQueueSize(),
+						deleteQueue.size());
 			}
 		}
 
@@ -253,7 +328,7 @@ public class SolrSearchIndex implements SearchIndex {
 				// buckets instead of a deleteByQuery, which blocks concurrent adds and merges.
 				UpdateRequest delReq = new UpdateRequest();
 				delReq.deleteById(deleteBatch.stream().map(URI::toString).toList());
-				delReq.setCommitWithin(SOLR_COMMIT_WITHIN);
+				delReq.setCommitWithin(commitWithin);
 
 				for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
 					try {
@@ -293,7 +368,7 @@ public class SolrSearchIndex implements SearchIndex {
 		private boolean processAddBatch() {
 			submitterInFlight.set(true);
 			try {
-				Map<URI, SolrInputDocument> addBatch = drainPostQueue();
+				Map<URI, SolrInputDocument> addBatch = drainAndBuildPostBatch();
 				if (addBatch.isEmpty()) {
 					return false;
 				}
@@ -301,17 +376,16 @@ public class SolrSearchIndex implements SearchIndex {
 				UpdateRequest addReq = new UpdateRequest();
 				addBatch.values().forEach(addReq::add);
 
-				postQueue.cleanUp();
-				if (postQueue.estimatedSize() > BATCH_SIZE_ADD * 5) {
-					addReq.setCommitWithin(SOLR_COMMIT_WITHIN_MAX);
+				if (getPostQueueSize() > BATCH_SIZE_ADD * 5L) {
+					addReq.setCommitWithin(commitWithinMax);
 				} else {
-					addReq.setCommitWithin(SOLR_COMMIT_WITHIN);
+					addReq.setCommitWithin(commitWithin);
 				}
 
 				for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
 					try {
 						log.info("Sending {} entries to Solr (attempt {}/{}), {} entries remaining in post queue",
-								addBatch.size(), attempt, MAX_RETRIES, postQueue.estimatedSize());
+								addBatch.size(), attempt, MAX_RETRIES, getPostQueueSize());
 						addReq.process(solrServer);
 						return false;
 					} catch (RemoteSolrException e) {
@@ -320,7 +394,7 @@ public class SolrSearchIndex implements SearchIndex {
 						rejectedDocuments.addAndGet(addBatch.size());
 						return false;
 					} catch (RuntimeException e) {
-						requeueAdds(addBatch);
+						requeueAdds(addBatch.keySet());
 						if (e.getCause() instanceof InterruptedException) {
 							log.info("Solr document submitter got interrupted during send, re-queuing and shutting down");
 							Thread.currentThread().interrupt();
@@ -331,14 +405,14 @@ public class SolrSearchIndex implements SearchIndex {
 						log.warn("Failed to send {} entries to Solr (attempt {}/{}): {}",
 								addBatch.size(), attempt, MAX_RETRIES, e.getMessage());
 						if (attempt < MAX_RETRIES && sleepForRetry(attempt)) {
-							requeueAdds(addBatch);
+							requeueAdds(addBatch.keySet());
 							return true;
 						}
 					}
 				}
 
 				log.error("Permanently failed to send {} entries to Solr after {} attempts, re-queuing", addBatch.size(), MAX_RETRIES);
-				requeueAdds(addBatch);
+				requeueAdds(addBatch.keySet());
 				return true;
 			} finally {
 				submitterInFlight.set(false);
@@ -361,25 +435,91 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		/**
-		 * Drains up to {@link SolrSearchIndex#BATCH_SIZE_ADD} entries from the post queue.
+		 * A1: drains up to {@link SolrSearchIndex#BATCH_SIZE_ADD} entries from the post queue and builds the
+		 * documents not built yet here, on the submitter thread, outside the repository and listener monitors
+		 * {@link #postEntry(Entry)} runs under. An entry deleted since it was queued is skipped: its deletion is in
+		 * the delete queue. A failed build is requeued up to {@link #MAX_BUILD_ATTEMPTS} times, since on this
+		 * thread it can be transient contention with a writer; past that the entry is dropped, logged and counted.
 		 */
-		private Map<URI, SolrInputDocument> drainPostQueue() {
-			Map<URI, SolrInputDocument> batch = new HashMap<>();
+		private Map<URI, SolrInputDocument> drainAndBuildPostBatch() {
+			Map<URI, SolrInputDocument> drained = new LinkedHashMap<>();
 			synchronized (postQueue) {
-				ConcurrentMap<URI, SolrInputDocument> postQueueMap = postQueue.asMap();
-				Iterator<URI> it = postQueueMap.keySet().iterator();
-				while (batch.size() < BATCH_SIZE_ADD && it.hasNext()) {
-					URI key = it.next();
-					SolrInputDocument doc = postQueueMap.get(key);
-					postQueueMap.remove(key, doc);
-					if (doc == null) {
-						log.warn("Value for key {} is null in Solr submit queue", key);
-						continue;
-					}
-					batch.put(key, doc);
+				Iterator<Map.Entry<URI, SolrInputDocument>> it = postQueue.entrySet().iterator();
+				while (drained.size() < BATCH_SIZE_ADD && it.hasNext()) {
+					Map.Entry<URI, SolrInputDocument> queued = it.next();
+					drained.put(queued.getKey(), queued.getValue());
+					it.remove();
 				}
 			}
+			if (drained.isEmpty()) {
+				return Map.of();
+			}
+
+			Map<URI, SolrInputDocument> batch = new LinkedHashMap<>();
+			List<URI> toBuild = new ArrayList<>();
+			drained.forEach((entryURI, document) -> {
+				if (document != null) {
+					batch.put(entryURI, document);
+				} else {
+					toBuild.add(entryURI);
+				}
+			});
+			if (toBuild.isEmpty()) {
+				return batch;
+			}
+
+			List<URI> retry = new ArrayList<>();
+			PrincipalManager pm = rm.getPrincipalManager();
+			URI currentUser = pm.getAuthenticatedUserURI();
+			try {
+				pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+				for (URI entryURI : toBuild) {
+					try {
+						Entry entry = rm.getContextManager().getEntry(entryURI);
+						if (entry == null || entry.isDeleted() || entry.getContext().isDeleted()) {
+							log.debug("Skipping {} during Solr batch build (missing or deleted)", entryURI);
+							forgetBuildAttempts(entryURI);
+							continue;
+						}
+						batch.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+						forgetBuildAttempts(entryURI);
+					} catch (Exception | StackOverflowError e) {
+						if (recordBuildFailure(entryURI) < MAX_BUILD_ATTEMPTS) {
+							log.info("Building the Solr document of {} failed, retrying: {}", entryURI, e.toString());
+							retry.add(entryURI);
+						} else {
+							droppedEntries.incrementAndGet();
+							log.warn("Not indexing {}: building its Solr document failed {} times", entryURI,
+									MAX_BUILD_ATTEMPTS, e);
+						}
+					}
+				}
+			} finally {
+				pm.setAuthenticatedUserURI(currentUser);
+			}
+			if (!retry.isEmpty()) {
+				requeueAdds(retry);
+			}
 			return batch;
+		}
+
+		private void forgetBuildAttempts(URI entryURI) {
+			synchronized (postQueue) {
+				buildAttempts.remove(entryURI);
+			}
+		}
+
+		/** @return the number of consecutive failed builds of {@code entryURI}, this one included */
+		private int recordBuildFailure(URI entryURI) {
+			synchronized (postQueue) {
+				int attempts = buildAttempts.getOrDefault(entryURI, 0) + 1;
+				if (attempts >= MAX_BUILD_ATTEMPTS) {
+					buildAttempts.remove(entryURI);
+				} else {
+					buildAttempts.put(entryURI, attempts);
+				}
+				return attempts;
+			}
 		}
 
 		/**
@@ -391,16 +531,31 @@ public class SolrSearchIndex implements SearchIndex {
 			synchronized (postQueue) {
 				synchronized (deleteQueue) {
 					for (URI entryURI : batch) {
-						if (postQueue.getIfPresent(entryURI) == null) {
+						if (!postQueue.containsKey(entryURI)) {
 							deleteQueue.add(entryURI);
 						}
 					}
 				}
 			}
+			signalSubmitter();
 		}
 
-		private void requeueAdds(Map<URI, SolrInputDocument> batch) {
-			batch.forEach((k, v) -> postQueue.asMap().putIfAbsent(k, v));
+		/**
+		 * Requeues entries for a fresh build rather than resending documents built earlier, so the retry indexes
+		 * the entry's current state. An entry queued again meanwhile keeps that newer queueing; one deleted
+		 * meanwhile is not resurrected, since its removal is what the delete queue now holds.
+		 */
+		private void requeueAdds(Collection<URI> uris) {
+			synchronized (postQueue) {
+				synchronized (deleteQueue) {
+					for (URI entryURI : uris) {
+						if (!deleteQueue.contains(entryURI)) {
+							postQueue.putIfAbsent(entryURI, null);
+						}
+					}
+				}
+			}
+			signalSubmitter();
 		}
 
 		/**
@@ -488,6 +643,8 @@ public class SolrSearchIndex implements SearchIndex {
 		extractFulltext = rm.getConfiguration().getBoolean(Settings.SOLR_EXTRACT_FULLTEXT, false);
 		related = rm.getConfiguration().getBoolean(Settings.SOLR_RELATED, false);
 		defaultSortLang = rm.getConfiguration().getString(Settings.SOLR_DEFAULT_SORTING_LANG);
+		commitWithin = rm.getConfiguration().getInt(Settings.SOLR_COMMIT_WITHIN, SOLR_COMMIT_WITHIN_DEFAULT);
+		commitWithinMax = rm.getConfiguration().getInt(Settings.SOLR_COMMIT_WITHIN_MAX, SOLR_COMMIT_WITHIN_MAX_DEFAULT);
 		if (related) {
 			List<String> relPropsSetting = rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<>());
 			if (relPropsSetting.isEmpty()) {
@@ -598,7 +755,7 @@ public class SolrSearchIndex implements SearchIndex {
 	public boolean clearSolrIndex(SolrClient solrServer) {
 		UpdateRequest req = new UpdateRequest();
 		req.deleteByQuery("*:*");
-		req.setCommitWithin(SOLR_COMMIT_WITHIN);
+		req.setCommitWithin(commitWithin);
 		try {
 			req.process(solrServer);
 			return true;
@@ -625,7 +782,7 @@ public class SolrSearchIndex implements SearchIndex {
 			deleteQuery += "context:" + ClientUtils.escapeQueryChars(contextEntry.getResourceURI().toString());
 		}
 		req.deleteByQuery(deleteQuery);
-		req.setCommitWithin(SOLR_COMMIT_WITHIN);
+		req.setCommitWithin(commitWithin);
 		try {
 			req.process(solrServer);
 			return true;
@@ -866,7 +1023,6 @@ public class SolrSearchIndex implements SearchIndex {
 						&& !Thread.currentThread().isInterrupted()) {
 					log.debug("Entries of context {} are still in submission queue, sleeping 5 seconds before attempting new purge of expired entries", contextURI);
 					Thread.sleep(5000);
-					postQueue.cleanUp();
 				}
 				if (Thread.currentThread().isInterrupted()) {
 					log.warn("Delayed purge of context {} interrupted (shutdown); expired entries were NOT removed",
@@ -901,7 +1057,12 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	private boolean isQueued(URI entryURI) {
-		return entryURI != null && postQueue.asMap().containsKey(entryURI);
+		if (entryURI == null) {
+			return false;
+		}
+		synchronized (postQueue) {
+			return postQueue.containsKey(entryURI);
+		}
 	}
 
 	public boolean isIndexing() {
@@ -922,8 +1083,42 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public long getPostQueueSize() {
-		postQueue.cleanUp();
-		return postQueue.estimatedSize();
+		synchronized (postQueue) {
+			return postQueue.size();
+		}
+	}
+
+	private boolean isPostQueueEmpty() {
+		synchronized (postQueue) {
+			return postQueue.isEmpty();
+		}
+	}
+
+	/**
+	 * A13: wakes the submitter when work is enqueued. Must be called after releasing the
+	 * postQueue/deleteQueue monitor to keep the queueSignal -> postQueue lock order the submitter's
+	 * recheck-under-lock relies on.
+	 */
+	private void signalSubmitter() {
+		synchronized (queueSignal) {
+			queueSignal.notifyAll();
+		}
+	}
+
+	/**
+	 * Opens the submitter's work gate. Must be called by {@link org.entrystore.impl.RepositoryManagerImpl}
+	 * once repository initialization has progressed far enough that entries may be loaded from a
+	 * background thread: document building runs on the submitter and loads entries via the
+	 * ContextManager, which must not happen concurrently with initialization. Idempotent.
+	 */
+	public void markRepositoryInitialized() {
+		repositoryInitialized = true;
+		signalSubmitter();
+	}
+
+	/** Entries the submitter dropped from indexing because building their documents kept failing. */
+	public long getDroppedEntryCount() {
+		return droppedEntries.get();
 	}
 
 	/** Documents Solr has rejected since startup; a growing value means documents are silently missing from the index. */
@@ -1152,6 +1347,7 @@ public class SolrSearchIndex implements SearchIndex {
 					logEntryFailure("Not indexing entry", entryURI, e, tracedFailureCauses);
 				}
 			}
+			signalSubmitter();
 		}
 		ContextPostResult posted = new ContextPostResult(ContextPostOutcome.COMPLETED, lastQueuedEntryURI,
 				loadedEntries, corruptEntries, unresolvedEntries, unloadableEntries, unindexableEntries);
@@ -1173,7 +1369,7 @@ public class SolrSearchIndex implements SearchIndex {
 	 */
 	private void removeCorruptEntryDocument(URI entryURI) {
 		synchronized (postQueue) {
-			if (postQueue.getIfPresent(entryURI) != null) {
+			if (postQueue.containsKey(entryURI)) {
 				log.info("Not removing the document of corrupt entry {} because a document of it is queued", entryURI);
 				return;
 			}
@@ -1445,21 +1641,15 @@ public class SolrSearchIndex implements SearchIndex {
 			doc.addField("email", email);
 		}
 
-		// publicly viewable metadata?
-		boolean guestReadable = false;
+		// publicly viewable metadata? A10: a non-throwing check with the same semantics as
+		// checkAuthenticatedUserAuthorized (context-ACL inheritance included), avoiding an
+		// AuthorizationException as control flow for every non-public entry during indexing.
 		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
-		URI currentUser = pm.getAuthenticatedUserURI();
+		boolean guestReadable = false;
 		try {
-			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
-			try {
-				pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
-				guestReadable = true;
-			} catch (AuthorizationException ignored) {
-			} catch (IllegalArgumentException iae) {
-				log.warn(iae.getMessage());
-			}
-		} finally {
-			pm.setAuthenticatedUserURI(currentUser);
+			guestReadable = pm.isUserAuthorized(pm.getGuestUser().getURI(), entry, AccessProperty.ReadMetadata);
+		} catch (IllegalArgumentException iae) {
+			log.warn(iae.getMessage());
 		}
 		doc.setField("public", guestReadable);
 
@@ -1630,39 +1820,34 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public void postEntry(Entry entry) {
-		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
-		URI currentUser = pm.getAuthenticatedUserURI();
-		try {
-			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			URI entryURI = entry.getEntryURI();
-			synchronized (postQueue) {
-				if (postQueue.getIfPresent(entryURI) != null) {
-					log.debug("Entry {} already exists in post queue, attempting replacement", entryURI);
-				}
-				if (!entry.isDeleted() && !entry.getContext().isDeleted()) {
-					log.info("Adding document to Solr post queue: {}", entryURI);
-					try {
-						queueDocument(entryURI, constructSolrInputDocument(entry, extractFulltext));
-					} catch (Exception e) {
-						log.error("Not indexing {}", entryURI, e);
-					}
-				} else {
-					log.debug("Not adding deleted entry to post queue: {}", entryURI);
-				}
+		// A1: queue the entry only. Building its document - a metadata-graph read plus ACL evaluation - is deferred to
+		// the submitter (drainAndBuildPostBatch), because postEntry runs under synchronized(repository) ->
+		// synchronized(repositoryListeners) via fireRepositoryEvent.
+		URI entryURI = entry.getEntryURI();
+		synchronized (postQueue) {
+			// Checked under the monitor removeEntryDocument takes: queueing drops a pending deletion, so queueing a
+			// concurrently deleted entry would cancel its deletion and then skip it at build time
+			if (entry.isDeleted() || entry.getContext().isDeleted()) {
+				log.debug("Not adding deleted entry to post queue: {}", entryURI);
+				return;
 			}
-		} finally {
-			pm.setAuthenticatedUserURI(currentUser);
+			log.info("Adding entry to Solr post queue: {}", entryURI);
+			queueDocument(entryURI, null);
 		}
+		signalSubmitter();
 	}
 
 	public void removeEntry(Entry entry) {
 		removeEntryDocument(entry.getEntryURI());
 
-		// if entry is a context, also remove all entries inside
+		// if entry is a context, also remove all entries inside. A15: run the (potentially slow)
+		// context-wide purge on the background purge executor instead of the caller's request thread.
 		if (GraphType.Context.equals(entry.getGraphType())) {
-			if (!clearSolrIndex(solrServer, null, entry)) {
-				log.warn("Context-removal purge for context {} failed; expired Solr documents may remain", entry.getEntryURI());
-			}
+			purgeExecutor.submit(() -> {
+				if (!clearSolrIndex(solrServer, null, entry)) {
+					log.warn("Context-removal purge for context {} failed; expired Solr documents may remain", entry.getEntryURI());
+				}
+			});
 		}
 	}
 
@@ -1676,7 +1861,9 @@ public class SolrSearchIndex implements SearchIndex {
 		synchronized (deleteQueue) {
 			deleteQueue.remove(entryURI);
 		}
+		// A null document is built by the submitter when it drains the entry, see postQueue
 		postQueue.put(entryURI, document);
+		buildAttempts.remove(entryURI);
 	}
 
 	/**
@@ -1687,12 +1874,14 @@ public class SolrSearchIndex implements SearchIndex {
 	 */
 	private void removeEntryDocument(URI entryURI) {
 		synchronized (postQueue) {
-			postQueue.invalidate(entryURI);
+			postQueue.remove(entryURI);
+			buildAttempts.remove(entryURI);
 			synchronized (deleteQueue) {
 				log.info("Adding entry to Solr delete queue: {}", entryURI);
 				deleteQueue.add(entryURI);
 			}
 		}
+		signalSubmitter();
 	}
 
 	/**

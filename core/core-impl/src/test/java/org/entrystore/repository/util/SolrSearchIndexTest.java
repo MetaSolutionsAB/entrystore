@@ -16,7 +16,6 @@
 
 package org.entrystore.repository.util;
 
-import com.github.benmanes.caffeine.cache.Cache;
 import org.apache.solr.client.solrj.RemoteSolrException;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrRequest;
@@ -514,7 +513,9 @@ public class SolrSearchIndexTest {
 	@Test
 	public void failedDeletionIsNotRequeuedWhenADocumentOfTheEntryWasQueuedMeanwhile() throws Exception {
 		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
-		postQueue().put(ENTRY_1_1, new SolrInputDocument()); // queued while the deletion batch was being sent
+		synchronized (postQueue()) {
+			postQueue().put(ENTRY_1_1, new SolrInputDocument()); // queued while the deletion batch was being sent
+		}
 		Method requeueDeletes = SolrSearchIndex.SolrInputDocumentSubmitter.class
 				.getDeclaredMethod("requeueDeletes", List.class);
 		requeueDeletes.setAccessible(true);
@@ -643,7 +644,9 @@ public class SolrSearchIndexTest {
 		assertEquals(1, index.getPostQueueSize());
 		assertEquals(List.of(ENTRY_1_3), List.copyOf(deleteQueue()));
 		verify(solrServer, after(1000).never()).request(any(), any());
-		postQueue().invalidate(ENTRY_1_1); // as the document submitter does when it takes the document
+		synchronized (postQueue()) {
+			postQueue().remove(ENTRY_1_1); // as the document submitter does when it takes the document
+		}
 		// The purge checks the queue every 5 seconds
 		verify(solrServer, timeout(10_000)).request(any(), any());
 	}
@@ -826,10 +829,10 @@ public class SolrSearchIndexTest {
 	}
 
 	@SuppressWarnings("unchecked")
-	private Cache<URI, SolrInputDocument> postQueue() throws Exception {
+	private Map<URI, SolrInputDocument> postQueue() throws Exception {
 		Field f = SolrSearchIndex.class.getDeclaredField("postQueue");
 		f.setAccessible(true);
-		return (Cache<URI, SolrInputDocument>) f.get(index);
+		return (Map<URI, SolrInputDocument>) f.get(index);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -1033,15 +1036,38 @@ public class SolrSearchIndexTest {
 				.thenThrow(new RemoteSolrException("localhost", 400, "unknown field metadata.predicate.literal_l.x", null));
 		Field f = SolrSearchIndex.class.getDeclaredField("postQueue");
 		f.setAccessible(true);
-		Cache<URI, SolrInputDocument> postQueue = (Cache<URI, SolrInputDocument>) f.get(index);
+		Map<URI, SolrInputDocument> postQueue = (Map<URI, SolrInputDocument>) f.get(index);
 		SolrInputDocument doc = new SolrInputDocument();
 		doc.addField("uri", "http://example.org/e1");
 		assertEquals(0, index.getRejectedDocumentCount());
 
-		postQueue.put(URI.create("http://example.org/e1"), doc);
+		index.markRepositoryInitialized();
+		synchronized (postQueue) {
+			postQueue.put(URI.create("http://example.org/e1"), doc);
+		}
 
 		assertTrue(index.waitForQueueDrain(), "a discarded batch leaves the queue empty");
 		assertEquals(1, index.getRejectedDocumentCount());
+	}
+
+	/**
+	 * The submitter builds documents concurrently with writers, so a build can fail transiently; it is retried a
+	 * bounded number of times instead of silently dropping the entry from the index, and a final drop is counted.
+	 */
+	@Test
+	public void entryWhoseBuildKeepsFailingIsRetriedThenDroppedAndCounted() throws Exception {
+		ContextManager cm = contextManagerListing();
+		when(cm.getEntry(ENTRY_1_1)).thenThrow(new IllegalStateException("simulated contention"));
+		synchronized (postQueue()) {
+			postQueue().put(ENTRY_1_1, null); // queued for building on the submitter, as postEntry does
+		}
+
+		index.markRepositoryInitialized();
+
+		verify(cm, timeout(10_000).times(3)).getEntry(ENTRY_1_1);
+		assertTrue(index.waitForQueueDrain());
+		assertEquals(1, index.getDroppedEntryCount());
+		verify(solrServer, never()).request(any(), any());
 	}
 
 	@Disabled("To be implemented")
