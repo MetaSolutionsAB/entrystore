@@ -106,9 +106,15 @@ public class Syndication {
 		feed.setDescription(format("Syndication feed containing max %d items", limit));
 
 		List<SyndEntry> syndEntries = new ArrayList<>();
-		int limitedCount = 0;
 
 		for (Entry entry : entries) {
+			// Apply the feed-size cut before extracting any metadata for this entry, so titles,
+			// descriptions and creator names are never loaded for entries beyond the feed size.
+			// Counting emitted entries (rather than iterations) also keeps entries the caller may
+			// not read from consuming feed budget.
+			if (syndEntries.size() >= limit) {
+				break;
+			}
 			try {
 				String title = EntryUtil.getTitle(entry, language);
 				String description = EntryUtil.getDescription(entry, language);
@@ -147,11 +153,6 @@ public class Syndication {
 				syndEntries.add(syndEntry);
 			} catch (AuthorizationException e) {
 				log.debug(e.getMessage());
-				continue;
-			}
-
-			if (limitedCount++ >= limit) {
-				break;
 			}
 		}
 
