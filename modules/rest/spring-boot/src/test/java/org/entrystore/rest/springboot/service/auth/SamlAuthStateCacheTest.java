@@ -17,9 +17,15 @@
 package org.entrystore.rest.springboot.service.auth;
 
 import org.apache.logging.log4j.Level;
+import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -27,14 +33,41 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SamlAuthStateCacheTest {
 
+	private final AtomicLong nanos = new AtomicLong();
+
 	@Test
 	void storedStateIsRetrievableByIdAndUnknownIdReturnsNull() {
-		var cache = new SamlAuthStateCache();
+		var cache = cacheWithLifetime(null);
 		var authState = new AuthState("http://app.example.com/ok", "http://app.example.com/fail");
 		cache.storeAuthState("relay-state", authState);
 
 		assertEquals(authState, cache.getAuthState("relay-state"));
 		assertNull(cache.getAuthState("other-relay-state"));
+	}
+
+	// The custom success/failure URLs must survive as long as the authentication request saved under the same
+	// relay state, or a slow login lands on the default URL instead.
+	@Test
+	void storedStateSurvivesFiveMinutesAndExpiresAfterTheDefaultLifetime() {
+		var cache = cacheWithLifetime(null);
+		var authState = new AuthState("http://app.example.com/ok", null);
+		cache.storeAuthState("relay-state", authState);
+
+		nanos.addAndGet(Duration.ofMinutes(5).toNanos());
+		assertEquals(authState, cache.getAuthState("relay-state"));
+
+		nanos.addAndGet(Duration.ofMinutes(10).toNanos());
+		assertNull(cache.getAuthState("relay-state"));
+	}
+
+	@Test
+	void storedStateHonoursAConfiguredLifetime() {
+		var cache = cacheWithLifetime(Duration.ofMinutes(2));
+		cache.storeAuthState("relay-state", new AuthState("http://app.example.com/ok", null));
+
+		nanos.addAndGet(Duration.ofMinutes(2).toNanos());
+
+		assertNull(cache.getAuthState("relay-state"));
 	}
 
 	// The maximumSize bound and its throttled SIZE-eviction warn are the DoS defences on this
@@ -44,7 +77,7 @@ class SamlAuthStateCacheTest {
 	@Test
 	void capacityEvictionIsBoundedAndWarnsOnce() {
 		try (var appender = CapturingAppender.attachTo(SamlAuthStateCache.class)) {
-			var cache = new SamlAuthStateCache();
+			var cache = cacheWithLifetime(null);
 			var authState = new AuthState("http://app.example.com/ok", null);
 			for (int i = 0; i < SamlAuthStateCache.MAX_ENTRIES + 100; i++) {
 				cache.storeAuthState("relay-" + i, authState);
@@ -53,12 +86,17 @@ class SamlAuthStateCacheTest {
 			caffeine.cleanUp();
 
 			assertTrue(caffeine.estimatedSize() <= SamlAuthStateCache.MAX_ENTRIES);
-			assertTrue(SamlAuthStateCache.MAX_ENTRIES >= 10_000,
+			assertTrue(SamlAuthStateCache.MAX_ENTRIES >= 50_000,
 					"declared cap shrunk below legitimate login concurrency");
-			assertTrue(caffeine.estimatedSize() >= 9_900,
+			assertTrue(caffeine.estimatedSize() >= 49_000,
 					"effective cache cap shrunk below legitimate login concurrency");
 			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
 		}
+	}
+
+	private SamlAuthStateCache cacheWithLifetime(Duration requestLifetime) {
+		var samlConfiguration = new SamlCustomConfiguration(true, null, List.of(), Map.of(), null, null, requestLifetime);
+		return new SamlAuthStateCache(samlConfiguration, nanos::get);
 	}
 }

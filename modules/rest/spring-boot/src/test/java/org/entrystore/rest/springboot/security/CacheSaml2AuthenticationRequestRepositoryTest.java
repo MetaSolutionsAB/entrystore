@@ -18,6 +18,7 @@ package org.entrystore.rest.springboot.security;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import org.apache.logging.log4j.Level;
+import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,10 +28,14 @@ import org.springframework.security.saml2.provider.service.authentication.Abstra
 import org.springframework.security.saml2.provider.service.authentication.Saml2PostAuthenticationRequest;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
 
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -54,11 +59,17 @@ class CacheSaml2AuthenticationRequestRepositoryTest {
 					.singleSignOnServiceLocation("https://idp.example.com/realms/test/protocol/saml"))
 			.build();
 
+	private final AtomicLong nanos = new AtomicLong();
 	private CacheSaml2AuthenticationRequestRepository repository;
 
 	@BeforeEach
 	void setUp() {
-		repository = new CacheSaml2AuthenticationRequestRepository();
+		repository = repositoryWithLifetime(null);
+	}
+
+	private CacheSaml2AuthenticationRequestRepository repositoryWithLifetime(Duration requestLifetime) {
+		var samlConfiguration = new SamlCustomConfiguration(true, null, List.of(), Map.of(), null, null, requestLifetime);
+		return new CacheSaml2AuthenticationRequestRepository(samlConfiguration, nanos::get);
 	}
 
 	private static AbstractSaml2AuthenticationRequest authnRequest(String relayState) {
@@ -85,6 +96,39 @@ class CacheSaml2AuthenticationRequestRepositoryTest {
 		repository.saveAuthenticationRequest(authnRequest, acsRequest(null), new MockHttpServletResponse());
 
 		assertSame(authnRequest, repository.loadAuthenticationRequest(acsRequest(RELAY_STATE)));
+	}
+
+	// A user may spend minutes at the IdP (MFA, consent, password change); 5.x accepted such responses.
+	@Test
+	void requestIsStillLoadedFiveMinutesAfterItWasSaved() {
+		var authnRequest = authnRequest(RELAY_STATE);
+		repository.saveAuthenticationRequest(authnRequest, acsRequest(null), new MockHttpServletResponse());
+
+		nanos.addAndGet(Duration.ofMinutes(5).toNanos());
+
+		assertSame(authnRequest, repository.loadAuthenticationRequest(acsRequest(RELAY_STATE)));
+	}
+
+	@Test
+	void requestExpiresAfterTheDefaultLifetimeOfFifteenMinutes() {
+		repository.saveAuthenticationRequest(authnRequest(RELAY_STATE), acsRequest(null), new MockHttpServletResponse());
+
+		nanos.addAndGet(Duration.ofMinutes(15).toNanos());
+
+		assertNull(repository.loadAuthenticationRequest(acsRequest(RELAY_STATE)));
+	}
+
+	@Test
+	void requestHonoursAConfiguredLifetime() {
+		repository = repositoryWithLifetime(Duration.ofMinutes(30));
+		var authnRequest = authnRequest(RELAY_STATE);
+		repository.saveAuthenticationRequest(authnRequest, acsRequest(null), new MockHttpServletResponse());
+
+		nanos.addAndGet(Duration.ofMinutes(20).toNanos());
+		assertSame(authnRequest, repository.loadAuthenticationRequest(acsRequest(RELAY_STATE)));
+
+		nanos.addAndGet(Duration.ofMinutes(10).toNanos());
+		assertNull(repository.loadAuthenticationRequest(acsRequest(RELAY_STATE)));
 	}
 
 	@Test
@@ -176,9 +220,9 @@ class CacheSaml2AuthenticationRequestRepositoryTest {
 			assertTrue(cache.estimatedSize() <= CacheSaml2AuthenticationRequestRepository.MAX_ENTRIES);
 			// Both bounds pinned against literals — see CacheOAuth2AuthorizationRequestRepositoryTest
 			// for why the constant and the effective cap are asserted separately.
-			assertTrue(CacheSaml2AuthenticationRequestRepository.MAX_ENTRIES >= 10_000,
+			assertTrue(CacheSaml2AuthenticationRequestRepository.MAX_ENTRIES >= 50_000,
 					"declared cap shrunk below legitimate login concurrency");
-			assertTrue(cache.estimatedSize() >= 9_900,
+			assertTrue(cache.estimatedSize() >= 49_000,
 					"effective cache cap shrunk below legitimate login concurrency");
 			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));

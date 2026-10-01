@@ -16,7 +16,11 @@
 
 package org.entrystore.rest.springboot.security;
 
+import com.github.benmanes.caffeine.cache.Ticker;
+import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.saml2.provider.service.registration.InMemoryRelyingPartyRegistrationRepository;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
@@ -24,6 +28,7 @@ import org.springframework.security.saml2.provider.service.web.OpenSaml5Authenti
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -94,12 +99,30 @@ class SamlAcsRequestMatcherTest {
 				.build();
 		var converter = new OpenSaml5AuthenticationTokenConverter(new InMemoryRelyingPartyRegistrationRepository(registration));
 		converter.setRequestMatcher(matcher);
-		converter.setAuthenticationRequestRepository(new CacheSaml2AuthenticationRequestRepository());
+		converter.setAuthenticationRequestRepository(new CacheSaml2AuthenticationRequestRepository(
+				new SamlCustomConfiguration(true, null, List.of(), Map.of(), null, null, null), Ticker.systemTicker()));
 
 		var token = converter.convert(samlResponsePost("/auth/saml", "keycloak"));
 
 		assertNotNull(token);
 		assertEquals("keycloak", token.getRelyingPartyRegistration().getRegistrationId());
+	}
+
+	@ParameterizedTest(name = "{0} /store{1} -> {2}")
+	@CsvSource({
+			"POST, /login/saml2/sso/keycloak, true",
+			"POST, /login/saml2/sso, true",
+			"POST, /auth/saml, true",
+			"GET, /auth/saml, false",
+			"GET, /login/saml2/sso/keycloak, false",
+			"POST, /auth/cookie, false",
+			"POST, /sparql, false"
+	})
+	void postToAnyAcsPath_matchesPostsToTheAcsPathsUnderTheContextPath(String method, String path, boolean expected) {
+		var request = new MockHttpServletRequest(method, "/store" + path);
+		request.setContextPath("/store");
+
+		assertEquals(expected, SamlAcsRequestMatcher.postToAnyAcsPath().matches(request));
 	}
 
 	private static MockHttpServletRequest samlResponsePost(String path, String idp) {
