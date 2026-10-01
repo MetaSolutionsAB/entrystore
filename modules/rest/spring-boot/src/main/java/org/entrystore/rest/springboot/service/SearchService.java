@@ -41,6 +41,7 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.util.HttpQueryRedactor;
+import org.entrystore.rest.springboot.util.RDFJSON;
 import org.entrystore.rest.springboot.util.Syndication;
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONArray;
@@ -60,6 +61,9 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class SearchService {
+
+	@Value("${entrystore.rest.json.pretty-print:true}")
+	private boolean jsonPrettyPrint;
 
 	/** Page size applied when the caller omits {@code limit} or passes a negative value. */
 	public static final int DEFAULT_LIMIT = 50;
@@ -272,7 +276,8 @@ public class SearchService {
 
 		log.debug("Graph fetching and serialization took {} ms ", Duration.between(startTime, Instant.now()).toMillis());
 
-		return result.toString(2);
+		// D3: compact output; pretty-printing inflates the search payload and costs CPU per request.
+		return result.toString(RDFJSON.jsonIndent(jsonPrettyPrint));
 	}
 
 	/**
