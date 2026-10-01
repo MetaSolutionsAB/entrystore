@@ -178,6 +178,9 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		userJson['user'] == testUserEmail
 		(userJson['uri'] as String).startsWith(EntryStoreClient.baseUrl + '/_principals/entry/')
 
+		and: 'the session idles as long as the auth_token cookie lives (IT max-age 3700 s), not 30 minutes'
+		hoursUntilAuthTokenExpires(userJson) == 1
+
 		and: 'the OIDC session carries ROLE_USER (parity with SAML/CAS) — /auth/tokens must not be denied'
 		// SecurityConfig gates /auth/tokens on hasAnyRole(USER, ADMIN); Spring's OIDC login only
 		// grants OIDC_USER/SCOPE_* by itself, so this locks the ROLE_USER remapping in

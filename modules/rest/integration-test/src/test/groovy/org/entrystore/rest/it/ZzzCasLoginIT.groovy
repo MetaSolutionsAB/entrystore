@@ -151,6 +151,9 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		userJson['id'] != null
 		userJson['user'] == testUsername
 		(userJson['uri'] as String).startsWith(EntryStoreClient.baseUrl + '/_principals/entry/')
+
+		and: 'the session idles as long as the auth_token cookie lives (IT max-age 3700 s), not 30 minutes'
+		hoursUntilAuthTokenExpires(userJson) == 1
 	}
 
 	def '4. Reserved admin username is blocked and does not leak authenticated session'() {

@@ -23,6 +23,9 @@ import org.testcontainers.containers.output.Slf4jLogConsumer
 import org.testcontainers.utility.MountableFile
 import spock.lang.Shared
 
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
+
 import static java.net.HttpURLConnection.HTTP_OK
 
 // Child Spec classes of this base must have a Zzz* prefix so Failsafe's alphabetical runOrder
@@ -116,6 +119,12 @@ abstract class KeycloakBaseSpec extends BaseSpec {
 	protected static String formActionUrl(String html) {
 		def matcher = html =~ /action=['"]([^'"]+)['"]/
 		return matcher ? StringEscapeUtils.unescapeHtml4(matcher[0][1]) : null
+	}
+
+	/** Whole hours from now until the session expires, per the authTokenExpires of an /auth/user response. */
+	protected static long hoursUntilAuthTokenExpires(userJson) {
+		def expires = LocalDateTime.parse(userJson['authTokenExpires'] as String)
+		return ChronoUnit.HOURS.between(LocalDateTime.now(), expires)
 	}
 
 }
