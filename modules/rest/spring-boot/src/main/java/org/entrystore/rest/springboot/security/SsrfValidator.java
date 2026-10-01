@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.springboot.security;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -63,6 +65,13 @@ public class SsrfValidator {
 	private static final Set<String> ALLOWED_SCHEMES = Set.of("http", "https");
 
 	private static final String ALLOW_RESTRICTED_HEADERS = "sun.net.http.allowRestrictedHeaders";
+
+	// One factory instance per upstream host: the JDK keys pooled HTTPS connections on
+	// (destination, SSLSocketFactory instance), so a factory created per connection would
+	// prevent HTTPS proxy connections from ever being reused (ENTRYSTORE-1090 D6).
+	// Bounded because host names are caller-controlled.
+	private final Cache<String, SSLSocketFactory> sniFactoryPerHost =
+			Caffeine.newBuilder().maximumSize(1024).build();
 
 	private static final List<Pattern> BLACKLIST_REGEX = List.of(
 			Pattern.compile("^localhost$"),                                   // localhost
@@ -402,7 +411,8 @@ public class SsrfValidator {
 	 * it leaves verification to the handshake, so a lost endpoint identification still fails closed.
 	 */
 	private void configureSsl(HttpsURLConnection httpsConn, String originalHost) {
-		httpsConn.setSSLSocketFactory(new SniSSLSocketFactory(httpsConn.getSSLSocketFactory(), originalHost));
+		httpsConn.setSSLSocketFactory(sniFactoryPerHost.get(originalHost,
+				host -> new SniSSLSocketFactory(httpsConn.getSSLSocketFactory(), host)));
 	}
 
 	void setProxyHostWhitelist(Set<String> proxyHostWhitelist) {
