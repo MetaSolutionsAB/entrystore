@@ -1477,7 +1477,10 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			rc = entry.getRepository().getConnection();
 			TupleQuery mdQuery = rc.prepareTupleQuery(QueryLanguage.SPARQL, mdQueryString);
 
-			List<String> mdURIs = new ArrayList<>();
+			// D14: Set-based dedup. The previous code deduped with List.contains (O(n^2)) and, worse,
+			// tested a List<Entry> against a URI (entryURIs.contains(entryURI)), which never matched
+			// so the URI-level dedup was dead and duplicates leaked.
+			Set<String> mdURIs = new LinkedHashSet<>();
 			TupleQueryResult result = mdQuery.evaluate();
 
 			while (result.hasNext()) {
@@ -1486,25 +1489,23 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				while(itr.hasNext())  {
 					Binding obj = itr.next();
 					if(obj.getValue() instanceof IRI) {
-						String mdURI = obj.getValue().toString();
-						if(!mdURIs.contains(mdURI)) {
-							mdURIs.add(mdURI);
-						}
+						mdURIs.add(obj.getValue().toString());
 					}
 				}
 			}
 
+			Set<URI> seenEntryURIs = new HashSet<>();
 			for (String mdStr : mdURIs) {
 				URISplit split = new URISplit(URI.create(mdStr), entry.repositoryManager.getRepositoryURL());
 				URI entryURI = split.getMetaMetadataURI();
-				if (!entryURIs.contains(entryURI) && entryURI != null) {
+				if (entryURI != null && seenEntryURIs.add(entryURI)) {
 					Entry ent;
 					try {
 						ent = this.getEntry(entryURI);
 					} catch (NullPointerException | AuthorizationException ex) {
 						continue;
 					}
-					if (ent != null && !entryURIs.contains(ent)) {
+					if (ent != null) {
 						entryURIs.add(ent);
 					}
 				}
@@ -1563,6 +1564,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		}
 
 		List<Entry> entries = new ArrayList<>();
+		Set<URI> seenEntryURIs = new HashSet<>();
 		RepositoryConnection rc = null;
 		try {
 			rc = entry.getRepository().getConnection();
@@ -1575,14 +1577,17 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				while(itr.hasNext())  {
 					Binding obj = itr.next();
 					if(obj.getValue() instanceof IRI) {
-						Entry entry;
+						// D14: dedup by entry URI in O(1); the previous List.contains dedup was O(n^2)
+						// and let null entries through.
+						Entry resolved;
 						try {
-							entry = this.getEntry(new URI(obj.getValue().toString()));
+							resolved = this.getEntry(new URI(obj.getValue().toString()));
 						} catch (AuthorizationException ae) {
 							continue;
 						}
-						if (!entries.contains(entry))
-							entries.add(entry);
+						if (resolved != null && seenEntryURIs.add(resolved.getEntryURI())) {
+							entries.add(resolved);
+						}
 					}
 				}
 			}
