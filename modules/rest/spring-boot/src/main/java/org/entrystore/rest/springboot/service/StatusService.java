@@ -154,7 +154,8 @@ public class StatusService {
 			"postQueueSize", searchIndex.getPostQueueSize(),
 			"deleteQueueSize", searchIndex.getDeleteQueueSize(),
 			"indexingContexts", searchIndex.getIndexingContexts(),
-			"rejectedDocuments", searchIndex.getRejectedDocumentCount()
+			"rejectedDocuments", searchIndex.getRejectedDocumentCount(),
+			"droppedEntries", searchIndex.getDroppedEntryCount()
 		);
 	}
 
