@@ -816,6 +816,35 @@ class LocalMetadataResourceIT extends BaseSpec {
 		(entryMetaRespJson as Map).keySet().size() == 4
 	}
 
+	def "GET /{context-id}/metadata/{entryId}?recursive=#profile&depth=#depth should traverse #expectedDepth levels"() {
+		given:
+		def resourceUri = { String id -> EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + id }
+		def ids = [:]
+		for (level in 12..0) {
+			def metadata = [(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: 'Depth' + level]]]
+			if (ids[level + 1]) {
+				metadata[NameSpaceConst.DC_TERM_CREATOR] = [[type: 'uri', value: resourceUri(ids[level + 1])]]
+			}
+			ids[level] = createEntry(contextId, [entrytype: 'link', resource: resourceUrl + '/' + level],
+				[metadata: [(resourceUri('_newId')): metadata]])
+		}
+		def query = '?recursive=' + profile + (depth != null ? '&depth=' + depth : '')
+
+		when:
+		def conn = EntryStoreClient.getRequest(EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + ids[0] + query)
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		(JSON_PARSER.parseText(conn.inputStream.text) as Map).keySet() == (0..expectedDepth).collect { resourceUri(ids[it]) } as Set
+
+		where:
+		profile       | depth | expectedDepth
+		'creator'     | 50    | 10
+		'creator'     | 0     | 10
+		'creatordeep' | 50    | 11
+		'creatordeep' | null  | 10
+	}
+
 	def "GET /{context-id}/metadata/{entryId} should include Last-Modified and ETag headers"() {
 		given:
 		def beforeRequest = new Date()

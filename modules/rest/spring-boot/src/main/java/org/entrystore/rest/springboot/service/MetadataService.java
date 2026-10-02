@@ -68,6 +68,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class MetadataService {
 
+	private static final int DEFAULT_TRAVERSAL_DEPTH = 10;
+
 	private final RepositoryManagerImpl repositoryManager;
 	private final Config esConfig;
 
@@ -173,13 +175,9 @@ public class MetadataService {
 
 		int depthMax = firstDetectedProfile != null ? esConfig.getInt(
 				traversalSetting(Settings.TRAVERSAL_PROFILE_MAX_DEPTH, firstDetectedProfile),
-				depth
-		) : depth;
-		if (depth > depthMax) {
-			depth = depthMax;
-		} else if (depth < 0) {
-			depth = 10;
-		}
+				DEFAULT_TRAVERSAL_DEPTH
+		) : DEFAULT_TRAVERSAL_DEPTH;
+		depth = Math.min(depth > 0 ? depth : DEFAULT_TRAVERSAL_DEPTH, depthMax);
 
 		int limit = 1000; // default
 		limit = firstDetectedProfile != null ? esConfig.getInt(traversalSetting(Settings.TRAVERSAL_PROFILE_LIMIT, firstDetectedProfile), limit) : limit;
