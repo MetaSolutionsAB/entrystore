@@ -247,7 +247,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		EntryStoreClient.findSetCookie(spCallbackConn, 'auth_token') != null
 	}
 
-	def '7. A SAMLResponse that fails validation redirects to the failureurl given at login start'() {
+	def '6. A SAMLResponse that fails validation redirects to the failureurl given at login start'() {
 		given: 'a new login started with a whitelisted failureurl'
 		def initiation = EntryStoreClient.getRequest('/auth/saml' + convertMapToQueryParams([failureurl: failureLoginUrl]),
 			null, null)
@@ -275,7 +275,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		EntryStoreClient.findSetCookie(spCallbackConn, 'auth_token') == null
 	}
 
-	def '8. Other form POSTs keep the 32 KB form limit'() {
+	def '7. Other form POSTs keep the 32 KB form limit'() {
 		given: 'a login form over 32 KB, small enough that CheckUsernamePasswordFilter would answer 413 if Jetty parsed it'
 		def body = createFormBody([auth_username: testUsername, auth_password: testUserPassword,
 								   padding      : 'x' * (40 * 1024)])

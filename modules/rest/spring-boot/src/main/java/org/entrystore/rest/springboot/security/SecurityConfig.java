@@ -290,7 +290,6 @@ public class SecurityConfig {
 			var samlFailureHandler = samlLoginFailureHandler.orElseThrow(() -> new IllegalStateException(
 					"SAML is enabled but SamlLoginFailureHandler bean is missing — check the " +
 							"entrystore.auth.saml.enabled binding."));
-			samlFailureHandler.setRedirectStrategy(cacheAwareRedirectStrategy);
 
 			// Also processes SAML responses posted to the 5.x assertion consumer service (POST /auth/saml?idp=<id>).
 			var acsMatcher = new SamlAcsRequestMatcher();

@@ -34,7 +34,8 @@ import java.io.IOException;
  * is read from the relay-state entry that {@link SamlRelayStateResolver} stored after validating it, never from a
  * request parameter (open redirect, ENTRYSTORE-996), and is validated again here as
  * {@link SamlLoginSuccessHandler#resolveFailureUrl} does. A login that outlives
- * {@link SamlCustomConfiguration#requestLifetime()} has no entry left and lands on the default.
+ * {@link SamlCustomConfiguration#requestLifetime()} has no entry left and lands on the default. The redirect goes
+ * through {@link CacheAwareRedirectStrategy}: the 302 commits the response before {@code CacheControlFilter} runs.
  */
 @Component
 @ConditionalOnBooleanConfig("entrystore.auth.saml.enabled")
@@ -48,6 +49,7 @@ public class SamlLoginFailureHandler extends SsoLoginFailureHandler {
 		super("SAML", samlConfiguration.redirectFailure().url());
 		this.samlAuthService = samlAuthService;
 		this.samlAuthStateCache = samlAuthStateCache;
+		setRedirectStrategy(new CacheAwareRedirectStrategy());
 	}
 
 	@Override

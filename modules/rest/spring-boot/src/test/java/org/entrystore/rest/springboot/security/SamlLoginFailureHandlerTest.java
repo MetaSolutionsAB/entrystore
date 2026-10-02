@@ -55,7 +55,6 @@ class SamlLoginFailureHandlerTest {
 	@Test
 	void rejectedResponse_redirectsToTheCallersFailureUrl_andLogsAtWarn() throws Exception {
 		authStateCache.storeAuthState(RELAY_STATE, new AuthState(null, WHITELISTED_FAILURE_URL));
-		handler.setRedirectStrategy(new CacheAwareRedirectStrategy());
 		var response = new MockHttpServletResponse();
 
 		try (var appender = CapturingAppender.attachTo(SsoLoginFailureHandler.class)) {
@@ -77,19 +76,26 @@ class SamlLoginFailureHandlerTest {
 		handler.onAuthenticationFailure(acsPost(RELAY_STATE), response, invalidSignature());
 
 		assertEquals("/store/auth/failed", response.getRedirectedUrl());
+		assertEquals(CacheControlFilter.CACHE_CONTROL_AUTHENTICATED, response.getHeader(HttpHeaders.CACHE_CONTROL));
 	}
 
-	// An expired login (request-lifetime passed) has no entry, like a response that carries no RelayState.
+	// An expired login (request-lifetime passed) has no entry left.
 	@Test
-	void unknownOrMissingRelayState_redirectsToTheDefault() throws Exception {
-		var unknown = new MockHttpServletResponse();
-		var missing = new MockHttpServletResponse();
+	void unknownRelayState_redirectsToTheDefault() throws Exception {
+		var response = new MockHttpServletResponse();
 
-		handler.onAuthenticationFailure(acsPost("expired-token"), unknown, invalidSignature());
-		handler.onAuthenticationFailure(acsPost(null), missing, invalidSignature());
+		handler.onAuthenticationFailure(acsPost("expired-token"), response, invalidSignature());
 
-		assertEquals("/store/auth/failed", unknown.getRedirectedUrl());
-		assertEquals("/store/auth/failed", missing.getRedirectedUrl());
+		assertEquals("/store/auth/failed", response.getRedirectedUrl());
+	}
+
+	@Test
+	void missingRelayState_redirectsToTheDefault() throws Exception {
+		var response = new MockHttpServletResponse();
+
+		handler.onAuthenticationFailure(acsPost(null), response, invalidSignature());
+
+		assertEquals("/store/auth/failed", response.getRedirectedUrl());
 	}
 
 	private static MockHttpServletRequest acsPost(String relayState) {

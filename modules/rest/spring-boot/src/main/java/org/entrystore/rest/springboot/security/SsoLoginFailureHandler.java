@@ -26,9 +26,10 @@ import org.springframework.security.web.authentication.SimpleUrlAuthenticationFa
 import java.io.IOException;
 
 /**
- * Redirects a failed CAS, OIDC or SAML login to the default failure URL and logs the failure at WARN with its stack
- * trace. The superclass logs at DEBUG only, which hides an IdP or CAS server that is down, a bad client secret, clock
- * skew, an expired SAML authentication request and similar faults in production.
+ * Redirects a failed CAS or OIDC login to the default failure URL and logs the failure at WARN with its stack trace;
+ * {@link SamlLoginFailureHandler} reuses the logging and redirects SAML failures to the caller's failure URL instead.
+ * The superclass logs at DEBUG only, which hides an IdP or CAS server that is down, a bad client secret, clock skew,
+ * an expired SAML authentication request and similar faults in production.
  */
 @Slf4j
 class SsoLoginFailureHandler extends SimpleUrlAuthenticationFailureHandler {

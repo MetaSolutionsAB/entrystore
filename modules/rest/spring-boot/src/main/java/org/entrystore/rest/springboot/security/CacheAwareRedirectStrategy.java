@@ -28,8 +28,8 @@ import java.io.IOException;
  * Redirect strategy that stamps {@code Cache-Control: private, no-store} on the
  * response before delegating to {@link DefaultRedirectStrategy#sendRedirect}.
  * <p>
- * Used by the SAML, CAS and OIDC login-success handlers, where the 302 carrying the
- * session {@code Set-Cookie} header would otherwise commit the response before
+ * Used by the SAML, CAS and OIDC login-success handlers and the SAML login-failure
+ * handler, where the 302 carrying the session {@code Set-Cookie} header would otherwise commit the response before
  * {@code CacheControlFilter}'s post-chain check can run, leaving the response
  * with no {@code Cache-Control} and exposing the session cookie to caching by
  * a misconfigured intermediary (CWE-525). Yields to any {@code Cache-Control}
