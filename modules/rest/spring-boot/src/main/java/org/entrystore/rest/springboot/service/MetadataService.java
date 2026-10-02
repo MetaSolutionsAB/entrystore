@@ -65,6 +65,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class MetadataService {
 
+	private static final int DEFAULT_TRAVERSAL_DEPTH = 10;
+
 	private final RepositoryManagerImpl repositoryManager;
 	private final TraversalProperties traversalProperties;
 
@@ -164,7 +166,7 @@ public class MetadataService {
 
 		Map<String, String> blacklist = loadBlacklist(recursive);
 
-		int depthMax = depth;
+		int depthMax = DEFAULT_TRAVERSAL_DEPTH;
 		int limit = 1000;
 		boolean repositoryScope = true;
 		if (firstDetectedProfile != null) {
@@ -173,11 +175,7 @@ public class MetadataService {
 			repositoryScope = traversalProperties.repositoryScope(firstDetectedProfile).orElse(repositoryScope);
 		}
 
-		if (depth > depthMax) {
-			depth = depthMax;
-		} else if (depth < 0) {
-			depth = 10;
-		}
+		depth = Math.min(depth > 0 ? depth : DEFAULT_TRAVERSAL_DEPTH, depthMax);
 
 		if (StringUtils.isNotEmpty(scope)) {
 			// we allow an override by parameter
