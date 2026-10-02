@@ -307,6 +307,7 @@ entrystore.auth.temp.lockout.duration=0ms
 # spring.security.saml2.relyingparty.registration.myIdp.assertingparty.singlesignon.binding=post
 ## 5.x SAML settings are still accepted: at startup they are translated to the keys above, and a
 ## WARN names each 6.x key to set instead. An explicitly set 6.x key wins over a translation.
+## Any ...registration.{id}.* key stops the translation of IdP {id}: set all its 6.x keys, metadata-uri included.
 ##   entrystore.auth.saml=on|new                           -> entrystore.auth.saml.enabled
 ##   (idp.{id}.)relying-party-id                           -> ...registration.{id}.entity-id
 ##   (idp.{id}.)metadata.url / idp-metadata.url            -> ...registration.{id}.assertingparty.metadata-uri

@@ -413,7 +413,7 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 			redirect, listed second        | POST REDIRECT | REDIRECT |      | REDIRECT | /sso/redirect
 			post, listed second            | REDIRECT POST | POST     |      | POST     | /sso/post
 			no binding: the first endpoint | POST REDIRECT |          |      | POST     | /sso/post
-			redirect, no Redirect endpoint | POST          | REDIRECT |      | POST     | /sso/post
+			redirect, no Redirect endpoint | POST          | REDIRECT |      | REDIRECT | /sso/post
 			redirect with a configured URL | POST REDIRECT | REDIRECT | /own | REDIRECT | /own
 			""")
 	void findByRegistrationId_configuredBinding_usesTheMetadataEndpointForIt(String description,
@@ -435,6 +435,26 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 
 		assertEquals(expectedBinding, metadata.getSingleSignOnServiceBinding());
 		assertEquals(IDP_URL + expectedPath, metadata.getSingleSignOnServiceLocation());
+	}
+
+	// Every login rebuilds the registration; a static mismatch must not log a WARN per request.
+	@Test
+	void findByRegistrationId_bindingWithoutMetadataEndpoint_warnsOnceThenLogsDebug() throws Exception {
+		File metadata = writeIdpMetadata("idp.xml", List.of(selfSignedCertBase64("idp")),
+				Map.of(Saml2MessageBinding.POST.getUrn(), IDP_URL + "/sso/post"));
+		repository = repositoryFor("shibboleth", metadata, registration ->
+				registration.getAssertingparty().getSinglesignon().setBinding(Saml2MessageBinding.REDIRECT));
+
+		try (var appender = CapturingAppender.attachTo(RefreshableRelyingPartyRegistrationRepository.class)) {
+			for (int i = 0; i < 3; i++) {
+				assertNotNull(repository.findByRegistrationId("shibboleth"));
+			}
+
+			assertEquals(1, appender.messagesAt(Level.WARN)
+					.filter(message -> message.contains("no single sign-on endpoint")).count(), appender::toString);
+			assertEquals(2, appender.messagesAt(Level.DEBUG)
+					.filter(message -> message.contains("no single sign-on endpoint")).count(), appender::toString);
+		}
 	}
 
 	private RefreshableRelyingPartyRegistrationRepository repositoryFor(String registrationId, File metadataFile) {

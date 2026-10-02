@@ -30,6 +30,7 @@ import org.opensaml.saml.metadata.resolver.impl.AbstractReloadingMetadataResolve
 import org.opensaml.saml.metadata.resolver.impl.ResourceBackedMetadataResolver;
 import org.opensaml.saml.metadata.resolver.index.impl.RoleMetadataIndex;
 import org.opensaml.saml.saml2.metadata.SingleSignOnService;
+import org.slf4j.event.Level;
 import org.springframework.boot.context.properties.PropertyMapper;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties.AssertingParty;
@@ -106,6 +107,8 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 	// One self-refreshing metadata source per registration id; the resolvers are kept so their background reload
 	// threads can be stopped on shutdown.
 	private final Map<String, IdpMetadata> idps = new ConcurrentHashMap<>();
+	// Every login rebuilds its registration, so a missing single sign-on endpoint is warned about once per id.
+	private final Set<String> missingSsoEndpointWarned = ConcurrentHashMap.newKeySet();
 
 	public RefreshableRelyingPartyRegistrationRepository(Saml2RelyingPartyProperties relyingPartyProperties,
 														 SamlCustomConfiguration samlConfiguration, Ticker ticker) {
@@ -366,7 +369,8 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 	 * Applies the configured single sign-on binding together with the metadata's endpoint for it, unless a URL
 	 * is configured too. Spring Boot overrides only the binding and keeps the URL of the metadata's first POST
 	 * or Redirect endpoint, so with an IdP that publishes one URL per binding the request would reach the wrong
-	 * endpoint. Without an endpoint for the configured binding, that first endpoint is kept with its own binding.
+	 * endpoint. Without an endpoint for the configured binding, it is sent to that first endpoint's URL, and a WARN,
+	 * logged once per registration, says so.
 	 */
 	private void mapSingleSignOn(String id, Singlesignon singleSignOn, AssertingPartyMetadata metadata,
 								 AssertingPartyMetadata.Builder<?> details) {
@@ -375,10 +379,10 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 		if (binding != null && url == null) {
 			url = singleSignOnLocation(metadata, binding);
 			if (url == null) {
-				log.warn("IdP metadata for SAML registration '{}' has no single sign-on endpoint with the configured "
-								+ "{} binding; using its {} endpoint {}.", id, binding,
-						metadata.getSingleSignOnServiceBinding(), metadata.getSingleSignOnServiceLocation());
-				return;
+				log.atLevel(missingSsoEndpointWarned.add(id) ? Level.WARN : Level.DEBUG).log("IdP metadata for SAML "
+								+ "registration '{}' has no single sign-on endpoint with the configured {} binding; "
+								+ "sending it to {}. Set ...singlesignon.url to choose the endpoint.",
+						id, binding, metadata.getSingleSignOnServiceLocation());
 			}
 		}
 		PropertyMapper map = PropertyMapper.get();

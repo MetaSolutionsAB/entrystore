@@ -129,12 +129,12 @@ class LegacyPropertyTranslatorTest {
 	@Test
 	void multiIdp_explicitNameIdFormat_skipsTheTranslation() {
 		var env = translate(multiIdpConfig("google")
-				.withProperty("spring.security.saml2.relyingparty.registration.google.assertingparty.metadata-uri",
-						METADATA_URL)
 				.withProperty("spring.security.saml2.relyingparty.registration.google.name-id-format",
 						EMAIL_NAME_ID_FORMAT));
 
-		assertEquals(EMAIL_NAME_ID_FORMAT, registration(env, "google").getNameIdFormat());
+		var registration = registration(env, "google");
+		assertEquals(EMAIL_NAME_ID_FORMAT, registration.getNameIdFormat());
+		assertNull(registration.getAssertingparty().getMetadataUri(), "the 5.x metadata.url is not translated either");
 		assertWarned("settings for IdP 'google' are ignored");
 	}
 

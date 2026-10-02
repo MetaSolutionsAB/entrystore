@@ -20,7 +20,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.security.SamlAcsRequestMatcher;
-import org.opensaml.saml.saml2.core.NameIDType;
 import org.springframework.boot.EnvironmentPostProcessor;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -187,7 +186,7 @@ public final class LegacyPropertyTranslator implements EnvironmentPostProcessor,
 					value -> "post".equalsIgnoreCase(value) ? "post" : "redirect");
 			imply(bindingKey, "redirect");
 			// 5.x always asked for this format; without one, an IdP may return a NameID that names another user.
-			imply(registration + ".name-id-format", NameIDType.UNSPECIFIED);
+			imply(registration + ".name-id-format", "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified");
 			// 5.x never signed authentication requests, and some IdPs' metadata asks for signed ones.
 			imply(registration + ".assertingparty.singlesignon.sign-request", "false");
 			return true;
