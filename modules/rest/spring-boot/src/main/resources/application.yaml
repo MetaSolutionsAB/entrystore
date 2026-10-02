@@ -13,7 +13,8 @@ server:
     # HttpUtil.checkRequestSize, which is the path that produces the 413 the IT exercises;
     # that path runs when the in-method cap is tighter or equal to this Jetty limit (the IT
     # configuration does not set this Jetty property, so the in-method cap is sole enforcer
-    # there).
+    # there). SamlAcsFormSizeFilter raises it to 512 KB for SAML responses posted to the
+    # assertion consumer service only.
     max-http-form-post-size: 32KB
   servlet:
     context-path: /store

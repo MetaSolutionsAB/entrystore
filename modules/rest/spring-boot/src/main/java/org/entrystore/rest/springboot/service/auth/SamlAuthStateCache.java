@@ -18,26 +18,32 @@ package org.entrystore.rest.springboot.service.auth;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Ticker;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
+import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
- * A cache service for storing and retrieving SAML authentication relay state. This service
- * is designed to handle temporary storage of authentication states associated with
- * unique identifiers, expiring entries after a fixed duration.
- *
+ * Stores SAML authentication state keyed by the relay state token — the whitelist-validated
+ * success/failure redirect URLs that must survive the IdP round-trip. Entries expire after
+ * {@link SamlCustomConfiguration#requestLifetime()}, the lifetime of the authentication request saved
+ * under the same token.
  */
 @Service
 public class SamlAuthStateCache implements CaffeineCacheSource {
 
-	private final Cache<String, AuthState> requestCache = Caffeine.newBuilder()
-			.expireAfterWrite(2, TimeUnit.MINUTES)
-			.recordStats()
-			.build();
+	private final Cache<String, AuthState> requestCache;
+
+	public SamlAuthStateCache(SamlCustomConfiguration samlConfiguration, Ticker ticker) {
+		this.requestCache = Caffeine.newBuilder()
+				.ticker(ticker)
+				.expireAfterWrite(samlConfiguration.requestLifetime())
+				.recordStats()
+				.build();
+	}
 
 	@Override
 	public Map<String, Cache<?, ?>> caffeineCaches() {

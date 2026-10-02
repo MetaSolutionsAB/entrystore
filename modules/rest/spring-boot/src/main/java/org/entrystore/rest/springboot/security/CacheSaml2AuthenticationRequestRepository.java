@@ -18,31 +18,39 @@ package org.entrystore.rest.springboot.security;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Ticker;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
-import org.springframework.security.saml2.provider.service.web.Saml2AuthenticationRequestRepository;
+import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.springframework.security.saml2.provider.service.authentication.AbstractSaml2AuthenticationRequest;
+import org.springframework.security.saml2.provider.service.web.Saml2AuthenticationRequestRepository;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Stores SAML authentication requests in a Caffeine cache keyed by the relay state token,
  * instead of in the HTTP session. This avoids the SameSite=Strict cookie problem where
  * the browser withholds the session cookie on the cross-site POST from the IdP back to
  * the ACS endpoint.
+ *
+ * <p>Entries expire after {@link SamlCustomConfiguration#requestLifetime()}: Spring validates the response's
+ * {@code InResponseTo} against the request loaded here, so a login that outlives its entry fails.
  */
 @Component
 public class CacheSaml2AuthenticationRequestRepository
 		implements Saml2AuthenticationRequestRepository<AbstractSaml2AuthenticationRequest>, CaffeineCacheSource {
 
-	private final Cache<String, AbstractSaml2AuthenticationRequest> cache =
-			Caffeine.newBuilder()
-					.expireAfterWrite(2, TimeUnit.MINUTES)
-					.recordStats()
-					.build();
+	private final Cache<String, AbstractSaml2AuthenticationRequest> cache;
+
+	public CacheSaml2AuthenticationRequestRepository(SamlCustomConfiguration samlConfiguration, Ticker ticker) {
+		this.cache = Caffeine.newBuilder()
+				.ticker(ticker)
+				.expireAfterWrite(samlConfiguration.requestLifetime())
+				.recordStats()
+				.build();
+	}
 
 	@Override
 	public Map<String, Cache<?, ?>> caffeineCaches() {

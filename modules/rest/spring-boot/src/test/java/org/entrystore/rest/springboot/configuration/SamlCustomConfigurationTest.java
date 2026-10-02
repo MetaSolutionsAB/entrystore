@@ -21,6 +21,7 @@ import org.springframework.boot.context.properties.bind.BindException;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 
+import java.time.Duration;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -50,18 +51,42 @@ class SamlCustomConfigurationTest {
 	@Test
 	void metadataMaxAge_belowMinimum_isRejected() {
 		// zero, negative, and a positive-but-too-small value all violate the 60s floor.
-		assertRejected("0");
-		assertRejected("-1");
-		assertRejected("30");
+		assertRejected("idp.acme.metadata.max-age", "0", "at least");
+		assertRejected("idp.acme.metadata.max-age", "-1", "at least");
+		assertRejected("idp.acme.metadata.max-age", "30", "at least");
 	}
 
-	private static void assertRejected(String maxAge) {
+	@Test
+	void requestLifetime_defaultsToFifteenMinutes_whenNotConfigured() {
+		var config = bind(Map.of("entrystore.auth.saml.enabled", "true"));
+
+		assertEquals(Duration.ofMinutes(15), config.requestLifetime());
+	}
+
+	@Test
+	void requestLifetime_bindsConfiguredValue() {
+		var config = bind(Map.of(
+				"entrystore.auth.saml.enabled", "true",
+				"entrystore.auth.saml.request-lifetime", "30m"));
+
+		assertEquals(Duration.ofMinutes(30), config.requestLifetime());
+	}
+
+	@Test
+	void requestLifetime_outsideOneMinuteToOneHour_isRejected() {
+		// Below 1m recreates the failure for users who take their time at the IdP; above 1h lets a slower
+		// flood fill the anonymously writable request caches.
+		assertRejected("request-lifetime", "59s", "must be between 1m and 60m");
+		assertRejected("request-lifetime", "61m", "must be between 1m and 60m");
+	}
+
+	private static void assertRejected(String key, String value, String expectedMessage) {
 		var ex = assertThrows(BindException.class, () -> bind(Map.of(
 				"entrystore.auth.saml.enabled", "true",
-				"entrystore.auth.saml.idp.acme.metadata.max-age", maxAge)));
+				"entrystore.auth.saml." + key, value)));
 
-		assertTrue(rootCauseMessage(ex).contains("at least"),
-				"max-age=" + maxAge + " should be rejected with the floor message, got: " + rootCauseMessage(ex));
+		assertTrue(rootCauseMessage(ex).contains(expectedMessage),
+				key + "=" + value + " should be rejected with '" + expectedMessage + "', got: " + rootCauseMessage(ex));
 	}
 
 	private static SamlCustomConfiguration bind(Map<String, String> properties) {

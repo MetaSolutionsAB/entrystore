@@ -16,14 +16,19 @@
 
 package org.entrystore.rest.springboot.security;
 
+import com.github.benmanes.caffeine.cache.Ticker;
+import com.sun.net.httpserver.HttpServer;
+import org.apache.logging.log4j.Level;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
+import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties;
@@ -34,11 +39,15 @@ import org.springframework.security.saml2.provider.service.registration.RelyingP
 import org.springframework.security.saml2.provider.service.web.OpenSaml5AuthenticationTokenConverter;
 
 import java.io.File;
+import java.io.IOException;
 import java.math.BigInteger;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.KeyPairGenerator;
 import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
@@ -46,13 +55,19 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RefreshableRelyingPartyRegistrationRepositoryTest {
@@ -63,6 +78,16 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	File tempDir;
 
 	private RefreshableRelyingPartyRegistrationRepository repository;
+
+	private final AtomicLong nanos = new AtomicLong();
+
+	// An IdP metadata endpoint that answers 503 while servedMetadata is null and, like Keycloak's descriptor
+	// endpoint, never sends a Last-Modified header.
+	private HttpServer metadataServer;
+	private final AtomicReference<String> servedMetadata = new AtomicReference<>();
+	private final AtomicInteger metadataRequests = new AtomicInteger();
+	// When set, the endpoint holds each answer until the latch opens.
+	private volatile CountDownLatch metadataGate;
 
 	@Test
 	void relaxedEnabledSettingCreatesTheMetadataRepository() throws Exception {
@@ -76,6 +101,7 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 		new ApplicationContextRunner()
 				.withUserConfiguration(SamlBinding.class, RefreshableRelyingPartyRegistrationRepository.class)
 				.withBean(Saml2RelyingPartyProperties.class, () -> properties)
+				.withBean(Ticker.class, Ticker::systemTicker)
 				.withPropertyValues("entrystore.auth.saml.enabled=on")
 				.run(context -> {
 					assertNull(context.getStartupFailure());
@@ -93,6 +119,9 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	void tearDown() {
 		if (repository != null) {
 			repository.shutdown();
+		}
+		if (metadataServer != null) {
+			metadataServer.stop(0);
 		}
 	}
 
@@ -144,7 +173,7 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	@Test
 	void initialize_failsFast_whenSamlEnabledButNoRegistrations() {
 		var repo = new RefreshableRelyingPartyRegistrationRepository(
-				new Saml2RelyingPartyProperties(), enabledSamlConfig());
+				new Saml2RelyingPartyProperties(), enabledSamlConfig(), nanos::get);
 
 		var ex = assertThrows(IllegalStateException.class, repo::initialize);
 		assertTrue(ex.getMessage().contains("no relying-party registrations"));
@@ -153,8 +182,8 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	@Test
 	void initialize_noRegistrations_namesTheIdpIdsEntryStoreSettingsReferTo() {
 		var samlConfig = new SamlCustomConfiguration(true, "keycloak", List.of(),
-				Map.of("google", new SamlCustomConfiguration.Idp(null, false, null)), null, null);
-		var repo = new RefreshableRelyingPartyRegistrationRepository(new Saml2RelyingPartyProperties(), samlConfig);
+				Map.of("google", new SamlCustomConfiguration.Idp(null, false, null)), null, null, null);
+		var repo = new RefreshableRelyingPartyRegistrationRepository(new Saml2RelyingPartyProperties(), samlConfig, nanos::get);
 
 		var ex = assertThrows(IllegalStateException.class, repo::initialize);
 		assertTrue(ex.getMessage().contains("[google, keycloak]"), ex.getMessage());
@@ -188,7 +217,7 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 			registration.getAssertingparty().setMetadataUri(metadataUri);
 			properties.getRegistration().put(id, registration);
 		}
-		repository = new RefreshableRelyingPartyRegistrationRepository(properties, enabledSamlConfig());
+		repository = new RefreshableRelyingPartyRegistrationRepository(properties, enabledSamlConfig(), nanos::get);
 		repository.initialize();
 
 		assertNull(repository.findUniqueByAssertingPartyEntityId(IDP_ENTITY_ID), "an ambiguous Issuer must not pick one");
@@ -218,22 +247,128 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 	void initialize_failsFast_whenMetadataUriMissing() {
 		var properties = new Saml2RelyingPartyProperties();
 		properties.getRegistration().put("keycloak", new Saml2RelyingPartyProperties.Registration());
-		var repo = new RefreshableRelyingPartyRegistrationRepository(properties, enabledSamlConfig());
+		var repo = new RefreshableRelyingPartyRegistrationRepository(properties, enabledSamlConfig(), nanos::get);
 
 		var ex = assertThrows(IllegalStateException.class, repo::initialize);
 		assertTrue(ex.getMessage().contains("metadata-uri"));
 	}
 
+	// A local metadata file is configuration, not a remote IdP that may be down: a missing one fails startup.
 	@Test
-	void initialize_failsFast_whenMetadataUnreadable() {
-		var properties = new Saml2RelyingPartyProperties();
-		var registration = new Saml2RelyingPartyProperties.Registration();
-		registration.getAssertingparty().setMetadataUri(new File(tempDir, "absent.xml").toURI().toString());
-		properties.getRegistration().put("keycloak", registration);
-		var repo = new RefreshableRelyingPartyRegistrationRepository(properties, enabledSamlConfig());
+	void initialize_failsFast_whenLocalMetadataMissing() {
+		File metadata = new File(tempDir, "absent.xml");
 
-		var ex = assertThrows(IllegalStateException.class, repo::initialize);
+		var ex = assertThrows(IllegalStateException.class, () -> repositoryFor("keycloak", metadata));
 		assertTrue(ex.getMessage().contains("keycloak"));
+	}
+
+	@Test
+	void initialize_failsFast_whenLocalMetadataInvalid() throws Exception {
+		File metadata = new File(tempDir, "invalid.xml");
+		Files.writeString(metadata.toPath(), "not SAML metadata");
+
+		var ex = assertThrows(IllegalStateException.class, () -> repositoryFor("keycloak", metadata));
+		assertTrue(ex.getMessage().contains("keycloak"));
+	}
+
+	@Test
+	void isConfiguredButUnavailable_whenTheMetadataLacksTheConfiguredEntityId() throws Exception {
+		repository = repositoryFor("keycloak", writeIdpMetadata("idp-v1.xml", List.of(selfSignedCertBase64("idp"))),
+				"https://other.idp.example/test");
+
+		assertTrue(repository.isConfiguredButUnavailable("keycloak"));
+		assertFalse(repository.isConfiguredButUnavailable("not-configured"));
+	}
+
+	// 5.x started without an IdP that was down and only failed SAML login with it.
+	@Test
+	void initialize_startsWithoutMetadataAndWarns_whenRemoteIdpUnreachable() throws Exception {
+		String metadataUri = "http://127.0.0.1:" + closedPort() + "/metadata";
+
+		try (var appender = CapturingAppender.attachTo(RefreshableRelyingPartyRegistrationRepository.class)) {
+			repository = repositoryFor("keycloak", metadataUri, null);
+
+			assertEquals(1, appender.messagesAt(Level.WARN)
+					.filter(message -> message.contains("'keycloak' could not be loaded from " + metadataUri))
+					.count(), appender::toString);
+		}
+		assertTrue(repository.isConfiguredButUnavailable("keycloak"));
+		assertNull(repository.findByRegistrationId("keycloak"));
+	}
+
+	@Test
+	void findByRegistrationId_loadsTheMetadataOnLogin_onceTheIdpRecovers() throws Exception {
+		String metadataUri = startMetadataServer();
+		repository = repositoryFor("keycloak", metadataUri, null);
+		String signingCert = selfSignedCertBase64("idp-signing");
+		// The IdP sends no Last-Modified header: the fetch must not be skipped as "unchanged since the failed attempt".
+		servedMetadata.set(idpMetadataXml(List.of(signingCert)));
+
+		RelyingPartyRegistration registration = repository.findByRegistrationId("keycloak");
+
+		assertNotNull(registration);
+		assertEquals(Set.of(signingCert), verificationCerts(registration));
+		assertFalse(repository.isConfiguredButUnavailable("keycloak"));
+	}
+
+	@Test
+	void findByRegistrationId_fetchesUnavailableMetadataAtMostOncePerInterval() throws Exception {
+		String metadataUri = startMetadataServer();
+		try (var appender = CapturingAppender.attachTo(RefreshableRelyingPartyRegistrationRepository.class)) {
+			repository = repositoryFor("keycloak", metadataUri, null);
+			assertNull(repository.findByRegistrationId("keycloak"));
+			int requestsAfterFirstLogin = metadataRequests.get();
+			servedMetadata.set(idpMetadataXml(List.of(selfSignedCertBase64("idp-signing"))));
+
+			assertNull(repository.findByRegistrationId("keycloak"), "a login within the interval must not fetch");
+			assertEquals(requestsAfterFirstLogin, metadataRequests.get());
+			assertEquals(1, appender.messagesAt(Level.WARN).filter(message -> message.contains("still unavailable"))
+					.count(), appender::toString);
+
+			nanos.addAndGet(RefreshableRelyingPartyRegistrationRepository.ON_DEMAND_REFRESH_INTERVAL.toNanos());
+
+			assertNotNull(repository.findByRegistrationId("keycloak"));
+			assertEquals(requestsAfterFirstLogin + 1, metadataRequests.get());
+		}
+	}
+
+	// A fetch can outlast the throttle interval; a login meanwhile must not park its request thread on the resolver.
+	@Test
+	@Timeout(30)
+	void findByRegistrationId_doesNotWaitForAFetchStillRunning() throws Exception {
+		String metadataUri = startMetadataServer();
+		repository = repositoryFor("keycloak", metadataUri, null);
+		var idpAnswers = new CountDownLatch(1);
+		metadataGate = idpAnswers;
+		servedMetadata.set(idpMetadataXml(List.of(selfSignedCertBase64("idp-signing"))));
+		int requestsBeforeLogins = metadataRequests.get();
+		Thread slowLogin = Thread.ofVirtual().start(() -> repository.findByRegistrationId("keycloak"));
+		while (metadataRequests.get() == requestsBeforeLogins) {
+			Thread.onSpinWait();
+		}
+		nanos.addAndGet(RefreshableRelyingPartyRegistrationRepository.ON_DEMAND_REFRESH_INTERVAL.toNanos());
+
+		try {
+			assertTimeoutPreemptively(Duration.ofSeconds(5),
+					() -> assertNull(repository.findByRegistrationId("keycloak")));
+		} finally {
+			idpAnswers.countDown();
+		}
+		slowLogin.join();
+		assertNotNull(repository.findByRegistrationId("keycloak"), "the slow login's fetch loads the metadata");
+		assertEquals(requestsBeforeLogins + 1, metadataRequests.get());
+	}
+
+	@Test
+	void findByRegistrationId_afterShutdown_returnsNullWithoutFetching() throws Exception {
+		String metadataUri = startMetadataServer();
+		repository = repositoryFor("keycloak", metadataUri, null);
+		repository.shutdown();
+		int requestsBeforeLookup = metadataRequests.get();
+		servedMetadata.set(idpMetadataXml(List.of(selfSignedCertBase64("idp-signing"))));
+
+		assertNull(repository.findByRegistrationId("keycloak"));
+		assertEquals(requestsBeforeLookup, metadataRequests.get());
 	}
 
 	@Test
@@ -271,25 +406,69 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 
 	private RefreshableRelyingPartyRegistrationRepository repositoryFor(String registrationId, File metadataFile,
 																		String assertingPartyEntityId) {
+		return repositoryFor(registrationId, metadataFile.toURI().toString(), assertingPartyEntityId);
+	}
+
+	private RefreshableRelyingPartyRegistrationRepository repositoryFor(String registrationId, String metadataUri,
+																		String assertingPartyEntityId) {
 		var properties = new Saml2RelyingPartyProperties();
 		var registration = new Saml2RelyingPartyProperties.Registration();
 		registration.setEntityId("https://sp.entrystore.example/" + registrationId);
-		registration.getAssertingparty().setMetadataUri(metadataFile.toURI().toString());
+		registration.getAssertingparty().setMetadataUri(metadataUri);
 		if (assertingPartyEntityId != null) {
 			registration.getAssertingparty().setEntityId(assertingPartyEntityId);
 		}
 		properties.getRegistration().put(registrationId, registration);
 
-		var repo = new RefreshableRelyingPartyRegistrationRepository(properties, enabledSamlConfig());
+		var repo = new RefreshableRelyingPartyRegistrationRepository(properties, enabledSamlConfig(), nanos::get);
 		repo.initialize();
 		return repo;
 	}
 
 	private static SamlCustomConfiguration enabledSamlConfig() {
-		return new SamlCustomConfiguration(true, null, List.of(), Map.of(), null, null);
+		return new SamlCustomConfiguration(true, null, List.of(), Map.of(), null, null, null);
+	}
+
+	private String startMetadataServer() throws IOException {
+		metadataServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		metadataServer.createContext("/metadata", exchange -> {
+			metadataRequests.incrementAndGet();
+			if (metadataGate != null) {
+				try {
+					metadataGate.await();
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			}
+			String xml = servedMetadata.get();
+			if (xml == null) {
+				exchange.sendResponseHeaders(503, -1);
+				exchange.close();
+				return;
+			}
+			byte[] body = xml.getBytes(StandardCharsets.UTF_8);
+			exchange.sendResponseHeaders(200, body.length);
+			try (var out = exchange.getResponseBody()) {
+				out.write(body);
+			}
+		});
+		metadataServer.start();
+		return "http://127.0.0.1:" + metadataServer.getAddress().getPort() + "/metadata";
+	}
+
+	private static int closedPort() throws IOException {
+		try (var socket = new ServerSocket(0)) {
+			return socket.getLocalPort();
+		}
 	}
 
 	private File writeIdpMetadata(String fileName, List<String> signingCertsBase64) throws Exception {
+		File file = new File(tempDir, fileName);
+		Files.writeString(file.toPath(), idpMetadataXml(signingCertsBase64));
+		return file;
+	}
+
+	private static String idpMetadataXml(List<String> signingCertsBase64) {
 		String keyDescriptors = signingCertsBase64.stream()
 				.map("""
 						<md:KeyDescriptor use="signing">
@@ -298,7 +477,7 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 						  </ds:KeyInfo>
 						</md:KeyDescriptor>"""::formatted)
 				.collect(Collectors.joining("\n"));
-		String xml = """
+		return """
 				<?xml version="1.0" encoding="UTF-8"?>
 				<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
 				                     entityID="%s" validUntil="2099-01-01T00:00:00Z">
@@ -309,9 +488,6 @@ class RefreshableRelyingPartyRegistrationRepositoryTest {
 				                            Location="https://idp.entrystore.example/test/sso"/>
 				  </md:IDPSSODescriptor>
 				</md:EntityDescriptor>""".formatted(IDP_ENTITY_ID, keyDescriptors);
-		File file = new File(tempDir, fileName);
-		Files.writeString(file.toPath(), xml);
-		return file;
 	}
 
 	// An aggregate EntitiesDescriptor with one IDPSSODescriptor (single signing cert) per entity id.

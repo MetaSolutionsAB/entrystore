@@ -19,9 +19,15 @@ package org.entrystore.rest.springboot.configuration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * EntryStore-specific SAML login settings. {@code requestLifetime} is how long a started login may stay at the IdP:
+ * the saved authentication request and the relay-state redirect URLs expire after it, and Spring rejects a response
+ * whose {@code InResponseTo} names an expired request. It must cover MFA, consent and password changes at the IdP.
+ */
 @ConfigurationProperties(prefix = "entrystore.auth.saml")
 public record SamlCustomConfiguration(
 		@DefaultValue("false") boolean enabled,
@@ -29,14 +35,26 @@ public record SamlCustomConfiguration(
 		List<String> redirectDomainWhitelist,
 		Map<String, Idp> idp,
 		RedirectUrl redirectSuccess,
-		RedirectUrl redirectFailure
+		RedirectUrl redirectFailure,
+		Duration requestLifetime
 ) {
+	private static final Duration DEFAULT_REQUEST_LIFETIME = Duration.ofMinutes(15);
+	private static final Duration MIN_REQUEST_LIFETIME = Duration.ofMinutes(1);
+	// Both request caches are anonymously writable; a longer lifetime lowers the request rate that fills them.
+	private static final Duration MAX_REQUEST_LIFETIME = Duration.ofHours(1);
+
 	public SamlCustomConfiguration {
 		if (redirectSuccess == null) redirectSuccess = new RedirectUrl("/auth/user");
 		if (redirectFailure == null) redirectFailure = new RedirectUrl("/auth/user");
 		// Copy the bound collections so a consumer cannot mutate the redirect whitelist or IdP routing.
 		redirectDomainWhitelist = redirectDomainWhitelist == null ? List.of() : List.copyOf(redirectDomainWhitelist);
 		idp = idp == null ? Map.of() : Map.copyOf(idp);
+		if (requestLifetime == null) requestLifetime = DEFAULT_REQUEST_LIFETIME;
+		if (requestLifetime.compareTo(MIN_REQUEST_LIFETIME) < 0 || requestLifetime.compareTo(MAX_REQUEST_LIFETIME) > 0) {
+			throw new IllegalArgumentException("entrystore.auth.saml.request-lifetime must be between "
+					+ MIN_REQUEST_LIFETIME.toMinutes() + "m and " + MAX_REQUEST_LIFETIME.toMinutes() + "m, got "
+					+ requestLifetime.toSeconds() + "s");
+		}
 	}
 
 	// Per-IdP configuration, keyed in the map by the IdP id (entrystore.auth.saml.idp.{id}.*).

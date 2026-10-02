@@ -45,7 +45,7 @@ class SamlAuthServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		var config = new SamlCustomConfiguration(true, "keycloak", List.of("localhost"), Map.of(), null, null);
+		var config = new SamlCustomConfiguration(true, "keycloak", List.of("localhost"), Map.of(), null, null, null);
 		service = new SamlAuthService(config, new MockEnvironment());
 	}
 
@@ -73,7 +73,7 @@ class SamlAuthServiceTest {
 	}
 
 	private static SamlAuthService serviceWithIdps(String defaultIdp, Map<String, Idp> idps) {
-		return new SamlAuthService(new SamlCustomConfiguration(true, defaultIdp, List.of(), idps, null, null),
+		return new SamlAuthService(new SamlCustomConfiguration(true, defaultIdp, List.of(), idps, null, null, null),
 				new MockEnvironment());
 	}
 
