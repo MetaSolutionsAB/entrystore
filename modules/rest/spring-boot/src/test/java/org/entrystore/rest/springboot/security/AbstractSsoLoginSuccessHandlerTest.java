@@ -185,6 +185,26 @@ class AbstractSsoLoginSuccessHandlerTest {
 	}
 
 	@Test
+	void successfulLoginAppliesSessionLifetimeBeforeRedirecting() throws Exception {
+		when(userService.loadUser("existinguser")).thenReturn(esUser);
+		givenUserIsEnabled();
+
+		handler.onAuthenticationSuccess(request, response, token("existinguser"));
+
+		var inOrder = inOrder(authTokenCookies, redirectStrategy);
+		inOrder.verify(authTokenCookies).applySessionLifetime(request);
+		inOrder.verify(redirectStrategy).sendRedirect(request, response, SUCCESS_URL);
+	}
+
+	@Test
+	void rejectedLoginDoesNotApplySessionLifetime() throws Exception {
+		handler.onAuthenticationSuccess(request, response, token("admin"));
+
+		verify(response).sendRedirect(FAILURE_URL);
+		verify(authTokenCookies, never()).applySessionLifetime(any());
+	}
+
+	@Test
 	void autoProvisioningFailureRedirectsToFailure() throws Exception {
 		when(userService.loadUser("collidinguser")).thenReturn(null);
 		when(userService.createUser("collidinguser"))

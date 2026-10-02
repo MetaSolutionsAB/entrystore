@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockServletContext;
 
 import java.net.MalformedURLException;
 import java.net.URI;
@@ -159,6 +160,41 @@ class AuthTokenCookiesTest {
 				"auth_token=; Path=/store; Max-Age=0; " + EPOCH + "; Secure; SameSite=None",
 				"auth_token=; Path=/store/; Max-Age=0; " + EPOCH + "; Secure; SameSite=None"),
 				response.getHeaders("Set-Cookie"));
+	}
+
+	@Test
+	void applySessionLifetime_setsSessionIdleTimeoutToCookieMaxAge() {
+		var servletContext = new MockServletContext();
+		servletContext.getSessionCookieConfig().setMaxAge(3700);
+		var request = new MockHttpServletRequest(servletContext);
+
+		authTokenCookies("strict", true, "").applySessionLifetime(request);
+
+		assertEquals(3700, request.getSession().getMaxInactiveInterval());
+	}
+
+	@Test
+	void applySessionLifetime_negativeCookieMaxAge_keepsContainerIdleTimeout() {
+		var servletContext = new MockServletContext();
+		servletContext.getSessionCookieConfig().setMaxAge(-1);
+		var request = new MockHttpServletRequest(servletContext);
+		request.getSession().setMaxInactiveInterval(1800);
+
+		authTokenCookies("strict", true, "").applySessionLifetime(request);
+
+		assertEquals(1800, request.getSession().getMaxInactiveInterval());
+	}
+
+	@Test
+	void applySessionLifetime_zeroCookieMaxAge_keepsContainerIdleTimeout() {
+		var servletContext = new MockServletContext();
+		servletContext.getSessionCookieConfig().setMaxAge(0);
+		var request = new MockHttpServletRequest(servletContext);
+		request.getSession().setMaxInactiveInterval(1800);
+
+		authTokenCookies("strict", true, "").applySessionLifetime(request);
+
+		assertEquals(1800, request.getSession().getMaxInactiveInterval());
 	}
 
 	static AuthTokenCookies authTokenCookies(String sameSite, boolean httpOnly, String domain) {

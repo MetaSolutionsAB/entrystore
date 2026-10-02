@@ -97,19 +97,12 @@ public class SamlAuthService {
 		return wildcardIdp;
 	}
 
+	/**
+	 * The IdP whose registration accepted the SAML response, or {@code null}; not {@code default-idp}, whose
+	 * policy (e.g. user auto-provisioning) must not apply to another IdP's response.
+	 */
 	public Idp findIdpForSamlResponse(String idpName) {
-
-		if (StringUtils.isNotBlank(idpName)) {
-			return samlConfiguration.idp().get(idpName);
-		}
-
-		String defaultIdp = samlConfiguration.defaultIdp();
-		if (StringUtils.isEmpty(defaultIdp)) {
-			log.warn("IdP parameter missing and no default IdP configured, unable to properly initialize IDP configuration. " +
-					"IDP from SAML response: {}", idpName);
-			return null;
-		}
-		return samlConfiguration.idp().get(defaultIdp);
+		return StringUtils.isNotBlank(idpName) ? samlConfiguration.idp().get(idpName) : null;
 	}
 
 }
