@@ -43,8 +43,12 @@ class SsoLoginFailureHandler extends SimpleUrlAuthenticationFailureHandler {
 	@Override
 	public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
 										AuthenticationException exception) throws IOException, ServletException {
+		logFailure(request, exception);
+		super.onAuthenticationFailure(request, response, exception);
+	}
+
+	protected void logFailure(HttpServletRequest request, AuthenticationException exception) {
 		log.warn("{} authentication failed at '{}': {}", authTypeLabel, request.getRequestURI(), exception.getMessage(),
 				exception);
-		super.onAuthenticationFailure(request, response, exception);
 	}
 }

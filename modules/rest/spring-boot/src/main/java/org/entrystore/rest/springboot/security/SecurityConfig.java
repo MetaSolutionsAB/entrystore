@@ -106,9 +106,10 @@ public class SecurityConfig {
 
 	private final AuthTokenCookies authTokenCookies;
 
-	// SAML-auth related beans (success handler optional — only present when entrystore.auth.saml.enabled=true)
+	// SAML-auth related beans (handlers optional — only present when entrystore.auth.saml.enabled=true)
 	private final SamlCustomConfiguration samlConfiguration;
 	private final Optional<SamlLoginSuccessHandler> samlLoginSuccessHandler;
+	private final Optional<SamlLoginFailureHandler> samlLoginFailureHandler;
 	private final Optional<RelyingPartyRegistrationRepository> repo; // optional as it will be injected only when Spring's SAML properties are configured
 	private final SamlRelayStateResolver samlRelayStateResolver;
 	private final CacheSaml2AuthenticationRequestRepository saml2AuthenticationRequestRepository;
@@ -286,12 +287,16 @@ public class SecurityConfig {
 			// before sendRedirect commits the response — CacheControlFilter's post-chain check
 			// cannot run after a committed response, so the redirect strategy closes that gap.
 			samlHandler.setRedirectStrategy(cacheAwareRedirectStrategy);
+			var samlFailureHandler = samlLoginFailureHandler.orElseThrow(() -> new IllegalStateException(
+					"SAML is enabled but SamlLoginFailureHandler bean is missing — check the " +
+							"entrystore.auth.saml.enabled binding."));
+			samlFailureHandler.setRedirectStrategy(cacheAwareRedirectStrategy);
 
 			// Also processes SAML responses posted to the 5.x assertion consumer service (POST /auth/saml?idp=<id>).
 			var acsMatcher = new SamlAcsRequestMatcher();
 			http.saml2Login(samlLogin -> samlLogin
 					.loginPage("/auth/saml")
-					.failureHandler(new SsoLoginFailureHandler("SAML", samlConfiguration.redirectFailure().url()))
+					.failureHandler(samlFailureHandler)
 					.authenticationRequestResolver(createCustomResolver())
 					.authenticationConverter(createAcsTokenConverter(acsMatcher))
 					.successHandler(samlHandler)

@@ -33,6 +33,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 	static def testUsername = 'testuserrr'
 	static def testUserPassword = 'passworded'
 	static def successLoginUrl = EntryStoreClient.origin + '/GREAT-SUCCESS/'
+	static def failureLoginUrl = EntryStoreClient.origin + '/GREAT-FAILURE/'
 
 	// A SAMLResponse with many group claims (Entra ID, ADFS) exceeds the shipped 32 KB form limit; the ACS POSTs
 	// below are padded to this size so they fail unless the ACS endpoints accept larger forms.
@@ -246,7 +247,35 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		EntryStoreClient.findSetCookie(spCallbackConn, 'auth_token') != null
 	}
 
-	def '6. Other form POSTs keep the 32 KB form limit'() {
+	def '7. A SAMLResponse that fails validation redirects to the failureurl given at login start'() {
+		given: 'a new login started with a whitelisted failureurl'
+		def initiation = EntryStoreClient.getRequest('/auth/saml' + convertMapToQueryParams([failureurl: failureLoginUrl]),
+			null, null)
+		initiation.setInstanceFollowRedirects(true)
+		assert initiation.getResponseCode() == HTTP_OK
+		def initiationPage = initiation.inputStream.text
+		def samlResponsePage = samlResponsePageFromKeycloak(hiddenInputValue(initiationPage, 'SAMLRequest'),
+			hiddenInputValue(initiationPage, 'RelayState'), testUsername, testUserPassword)
+
+		and: 'the signed assertion tampered with: the NameID no longer matches the signature'
+		def responseXml = new String(Base64.decoder.decode(hiddenInputValue(samlResponsePage, 'SAMLResponse')), 'UTF-8')
+		assert responseXml.contains(testUsername): 'the username NameID must be in the assertion for the tampering to bite'
+		def tamperedXml = responseXml.replace(testUsername, testUsername.reverse())
+		def spPostData = [SAMLResponse: Base64.encoder.encodeToString(tamperedXml.getBytes('UTF-8')),
+						  RelayState  : hiddenInputValue(samlResponsePage, 'RelayState')]
+
+		when:
+		def spCallbackConn = EntryStoreClient.postRequest(formActionUrl(samlResponsePage), createFormBody(spPostData),
+			null, 'application/x-www-form-urlencoded')
+
+		then: 'the rejected login is sent to the caller\'s failureurl, not to the default, and no session is issued'
+		spCallbackConn.getResponseCode() in [302, 303, 307]
+		spCallbackConn.getHeaderField('Location') == failureLoginUrl
+		spCallbackConn.getHeaderField('Cache-Control') == CACHE_CONTROL_AUTHENTICATED
+		EntryStoreClient.findSetCookie(spCallbackConn, 'auth_token') == null
+	}
+
+	def '8. Other form POSTs keep the 32 KB form limit'() {
 		given: 'a login form over 32 KB, small enough that CheckUsernamePasswordFilter would answer 413 if Jetty parsed it'
 		def body = createFormBody([auth_username: testUsername, auth_password: testUserPassword,
 								   padding      : 'x' * (40 * 1024)])
