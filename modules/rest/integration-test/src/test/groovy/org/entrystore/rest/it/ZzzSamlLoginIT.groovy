@@ -223,7 +223,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		userJson['user'] == testUsername
 		(userJson['uri'] as String).startsWith(EntryStoreClient.baseUrl + '/_principals/entry/')
 
-		and: 'the session idles as long as the auth_token cookie lives (IT max-age 3700 s), not 30 minutes'
+		and: 'the session idle timeout is the auth_token cookie max-age (IT 3700 s), not 30 minutes'
 		hoursUntilAuthTokenExpires(userJson) == 1
 	}
 

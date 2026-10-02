@@ -173,6 +173,30 @@ class AuthTokenCookiesTest {
 		assertEquals(3700, request.getSession().getMaxInactiveInterval());
 	}
 
+	@Test
+	void applySessionLifetime_negativeCookieMaxAge_keepsContainerIdleTimeout() {
+		var servletContext = new MockServletContext();
+		servletContext.getSessionCookieConfig().setMaxAge(-1);
+		var request = new MockHttpServletRequest(servletContext);
+		request.getSession().setMaxInactiveInterval(1800);
+
+		authTokenCookies("strict", true, "").applySessionLifetime(request);
+
+		assertEquals(1800, request.getSession().getMaxInactiveInterval());
+	}
+
+	@Test
+	void applySessionLifetime_zeroCookieMaxAge_keepsContainerIdleTimeout() {
+		var servletContext = new MockServletContext();
+		servletContext.getSessionCookieConfig().setMaxAge(0);
+		var request = new MockHttpServletRequest(servletContext);
+		request.getSession().setMaxInactiveInterval(1800);
+
+		authTokenCookies("strict", true, "").applySessionLifetime(request);
+
+		assertEquals(1800, request.getSession().getMaxInactiveInterval());
+	}
+
 	static AuthTokenCookies authTokenCookies(String sameSite, boolean httpOnly, String domain) {
 		var repositoryManager = mock(RepositoryManager.class);
 		when(repositoryManager.getRepositoryURL()).thenReturn(url("https://example.org/store/"));

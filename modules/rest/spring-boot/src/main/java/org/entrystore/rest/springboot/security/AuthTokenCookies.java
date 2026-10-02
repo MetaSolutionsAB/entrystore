@@ -38,8 +38,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Owns the path of the session cookie (auth_token), matches the session's idle timeout to the cookie's lifetime,
- * and expires the cookie when it is unknown, expired or logged out.
+ * Owns the path of the session cookie (auth_token), sets the session's idle timeout to the cookie max-age, and
+ * expires the cookie when it is unknown, expired or logged out.
  *
  * <p>The cookie is issued on {@code entrystore.auth.cookie.path}; its default {@code auto} is the path of the
  * repository base URL (e.g. {@code /store/}), as in 5.x. Browsers identify a cookie by name, domain and path, and may
@@ -89,11 +89,14 @@ public class AuthTokenCookies implements LogoutHandler {
 	}
 
 	/**
-	 * Lets the session idle as long as the cookie lives ({@code server.servlet.session.cookie.max-age}) instead of
-	 * the container's 30-minute default.
+	 * Sets the session's idle timeout to the cookie max-age ({@code server.servlet.session.cookie.max-age}) instead of
+	 * Boot's 30-minute default. A max-age of 0 or below keeps that default, since such an idle timeout never expires.
 	 */
 	public void applySessionLifetime(HttpServletRequest request) {
-		request.getSession().setMaxInactiveInterval(request.getServletContext().getSessionCookieConfig().getMaxAge());
+		int cookieMaxAge = request.getServletContext().getSessionCookieConfig().getMaxAge();
+		if (cookieMaxAge > 0) {
+			request.getSession().setMaxInactiveInterval(cookieMaxAge);
+		}
 	}
 
 	/** Expires the cookie on all paths it may have been issued on, if the request carries it. */

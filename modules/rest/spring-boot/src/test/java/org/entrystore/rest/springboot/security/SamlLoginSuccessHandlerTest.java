@@ -124,12 +124,12 @@ class SamlLoginSuccessHandlerTest {
 	}
 
 	@Test
-	void saml2AuthenticationWithoutRegistrationIdIsRejectedWithoutLoadingUser() throws Exception {
-		// The base type carries no registration id, so the IdP whose policy applies would be unknown.
+	void baseSaml2AuthenticationIsRejectedWithoutLoadingUser() throws Exception {
+		// The token-type guard accepts only Saml2AssertionAuthentication, the subtype that carries the registration id.
 		var principal = new DefaultSaml2AuthenticatedPrincipal("jane", Map.of());
-		var tokenWithoutRegistrationId = new Saml2Authentication(principal, "saml-response", List.of());
+		var baseToken = new Saml2Authentication(principal, "saml-response", List.of());
 
-		handler.onAuthenticationSuccess(request, response, tokenWithoutRegistrationId);
+		handler.onAuthenticationSuccess(request, response, baseToken);
 
 		verify(response).sendRedirect(FAILURE_URL);
 		verify(userService, never()).loadUser(any());

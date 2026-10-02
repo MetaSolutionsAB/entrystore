@@ -178,7 +178,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		userJson['user'] == testUserEmail
 		(userJson['uri'] as String).startsWith(EntryStoreClient.baseUrl + '/_principals/entry/')
 
-		and: 'the session idles as long as the auth_token cookie lives (IT max-age 3700 s), not 30 minutes'
+		and: 'the session idle timeout is the auth_token cookie max-age (IT 3700 s), not 30 minutes'
 		hoursUntilAuthTokenExpires(userJson) == 1
 
 		and: 'the OIDC session carries ROLE_USER (parity with SAML/CAS) — /auth/tokens must not be denied'
