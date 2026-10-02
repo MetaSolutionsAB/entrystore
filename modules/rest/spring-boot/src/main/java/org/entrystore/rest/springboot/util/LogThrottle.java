@@ -21,12 +21,13 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
 
 /**
- * Admits at most one log line per interval for a diagnostic that can fire once per request on an
- * attacker-reachable path — without the throttle, such a line turns the condition it reports into a
- * log/disk amplifier. Lock-free and safe to call from latency-sensitive callbacks (e.g. Caffeine
- * eviction listeners, which run inside the cache's eviction maintenance). The {@code AtomicLong}
- * provides the visibility the current call sites need (the thread invoking the callback varies over
- * time); the CAS additionally makes concurrent callers admit exactly one, as befits a shared util.
+ * Admits at most one occurrence per interval of an action that can fire once per request on an
+ * attacker-reachable path — a log line, which would otherwise turn the condition it reports into a
+ * log/disk amplifier, or an outbound retry. Lock-free and safe to call from latency-sensitive callbacks
+ * (e.g. Caffeine eviction listeners, which run inside the cache's eviction maintenance). The
+ * {@code AtomicLong} provides the visibility the current call sites need (the thread invoking the
+ * callback varies over time); the CAS additionally makes concurrent callers admit exactly one, as befits
+ * a shared util.
  */
 public final class LogThrottle {
 
@@ -38,7 +39,10 @@ public final class LogThrottle {
 		this(interval, System::nanoTime);
 	}
 
-	LogThrottle(Duration interval, LongSupplier nanoTime) {
+	/**
+	 * @param nanoTime monotonic nanosecond clock, e.g. a Caffeine {@code Ticker::read} so tests can advance it
+	 */
+	public LogThrottle(Duration interval, LongSupplier nanoTime) {
 		if (interval.isZero() || interval.isNegative()) {
 			throw new IllegalArgumentException("LogThrottle interval must be positive, got: " + interval);
 		}
@@ -50,9 +54,9 @@ public final class LogThrottle {
 	}
 
 	/**
-	 * True at most once per interval; the caller logs only on true. This call CONSUMES the
+	 * True at most once per interval; the caller acts only on true. This call CONSUMES the
 	 * interval's single token when it returns true — evaluate it last in any condition, after every
-	 * cheaper filter, or an admitted token is burned on an occurrence that is then not logged.
+	 * cheaper filter, or an admitted token is burned on an occurrence that is then not acted on.
 	 * A rejected call does not extend the interval.
 	 */
 	public boolean tryAcquire() {

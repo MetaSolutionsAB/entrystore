@@ -29,6 +29,7 @@ import org.entrystore.rest.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.springboot.model.auth.ConfirmationResult;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
+import org.entrystore.rest.springboot.security.RefreshableRelyingPartyRegistrationRepository;
 import org.entrystore.rest.springboot.service.AuthService;
 import org.entrystore.rest.springboot.service.OidcAuthService;
 import org.entrystore.rest.springboot.service.SamlAuthService;
@@ -105,6 +106,8 @@ public class AuthController {
 	private final Optional<ServiceProperties> casServiceProperties;
 	// Optional: the bean exists only when spring.security.oauth2.client registrations are configured.
 	private final Optional<ClientRegistrationRepository> clientRegistrationRepository;
+	// Optional: the bean exists only when SAML is enabled.
+	private final Optional<RefreshableRelyingPartyRegistrationRepository> samlRegistrationRepository;
 	private final RequestBodyValidator requestBodyValidator;
 
 	@Operation(summary = "Starts a CAS login by redirecting to the CAS server's login page. Answers 404 when CAS " +
@@ -124,8 +127,13 @@ public class AuthController {
 		response.sendRedirect(CommonUtils.constructRedirectUrl(loginUrl, "service", serviceUrl, false, false));
 	}
 
+	/**
+	 * A configured IdP without a usable registration (e.g. its metadata was unreachable) goes to the failure URL, as
+	 * a failed SAML login does; Spring's initiation endpoint would answer 404.
+	 */
 	@Operation(summary = "Starts a SAML login by redirecting to the identity provider chosen from the 'username' " +
-			"domain, else 'idp', else the configured default IdP. Answers 404 when SAML is disabled.")
+			"domain, else 'idp', else the configured default IdP. Redirects to the failure URL when that IdP is " +
+			"unavailable, e.g. its metadata could not be fetched. Answers 404 when SAML is disabled.")
 	@GetMapping("/auth/saml")
 	public String startSamlLogin(@RequestParam(required = false) String username,
 								 @RequestParam(required = false) String idp,
@@ -137,6 +145,12 @@ public class AuthController {
 			throw new EntityNotFoundException("Not Found");
 		}
 
+		String idpId = samlAuthService.findIdpIdForRequest(username, idp);
+		if (samlRegistrationRepository.map(repository -> repository.isConfiguredButUnavailable(idpId)).orElse(false)) {
+			log.debug("SAML login with IdP '{}' cannot start: no usable registration", idpId);
+			return "redirect:" + samlAuthService.failureRedirectUrl(failureUrl);
+		}
+
 		if (successUrl != null && samlAuthService.isValidRedirectUrl(successUrl)) {
 			redirectAttributes.addAttribute("successurl", successUrl);
 		}
@@ -145,7 +159,6 @@ public class AuthController {
 			redirectAttributes.addAttribute("failureurl", failureUrl);
 		}
 
-		String idpId = samlAuthService.findIdpIdForRequest(username, idp);
 		redirectAttributes.addAttribute("idpId", idpId);
 
 		return "redirect:/saml2/authenticate/{idpId}";

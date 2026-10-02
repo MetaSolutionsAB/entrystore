@@ -16,11 +16,14 @@
 
 package org.entrystore.rest.springboot.security;
 
+import com.github.benmanes.caffeine.cache.Ticker;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
+import net.shibboleth.shared.resolver.ResolverException;
 import org.entrystore.rest.springboot.configuration.ConditionalOnBooleanConfig;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
+import org.entrystore.rest.springboot.util.LogThrottle;
 import org.opensaml.core.xml.config.XMLObjectProviderRegistrySupport;
 import org.opensaml.saml.metadata.resolver.impl.AbstractReloadingMetadataResolver;
 import org.opensaml.saml.metadata.resolver.impl.ResourceBackedMetadataResolver;
@@ -29,7 +32,6 @@ import org.springframework.boot.context.properties.PropertyMapper;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties.AssertingParty;
 import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties.Registration;
-import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.security.saml2.core.OpenSamlInitializationService;
 import org.springframework.security.saml2.provider.service.registration.AssertingPartyMetadata;
 import org.springframework.security.saml2.provider.service.registration.AssertingPartyMetadataRepository;
@@ -40,7 +42,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +49,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
@@ -63,6 +65,11 @@ import java.util.function.Consumer;
  * failed refresh the resolver keeps the previously loaded metadata, so a transient fetch error never
  * causes an auth outage. Every {@code use="signing"} certificate in the refreshed metadata becomes a
  * verification credential automatically.
+ *
+ * <p>An IdP whose {@code http(s)} metadata cannot be fetched at startup does not stop EntryStore from starting: a
+ * WARN names it, and {@link #findByRegistrationId} returns {@code null} for it until a background retry or a login
+ * (see {@link #ensureLoaded}) loads the metadata. Unreadable {@code file:} or {@code classpath:} metadata is a
+ * configuration error and still fails startup.
  *
  * <p>{@link #findByRegistrationId(String)} builds the {@link RelyingPartyRegistration} fresh from the
  * live (background-refreshed) metadata on each call; Spring Security resolves the registration per
@@ -82,18 +89,23 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 	// max-age (which can be as low as 60s) so the resolver never gets minRefreshDelay > maxRefreshDelay.
 	private static final long MIN_REFRESH_DELAY_SECONDS = 300L;
 
+	// How often a login may trigger a fetch of metadata that has never loaded: often enough that a recovered IdP is
+	// usable on the next login, rarely enough that anonymous logins cannot turn an outage into a fetch storm.
+	static final Duration ON_DEMAND_REFRESH_INTERVAL = Duration.ofSeconds(30);
+
 	private final Saml2RelyingPartyProperties relyingPartyProperties;
 	private final SamlCustomConfiguration samlConfiguration;
+	private final Ticker ticker;
 
-	// One self-refreshing metadata repository per registration id; the wrapped resolvers are kept so
-	// their background reload threads can be stopped on shutdown.
-	private final Map<String, AssertingPartyMetadataRepository> metadataByRegistrationId = new ConcurrentHashMap<>();
-	private final List<AbstractReloadingMetadataResolver> resolvers = new ArrayList<>();
+	// One self-refreshing metadata source per registration id; the resolvers are kept so their background reload
+	// threads can be stopped on shutdown.
+	private final Map<String, IdpMetadata> idps = new ConcurrentHashMap<>();
 
 	public RefreshableRelyingPartyRegistrationRepository(Saml2RelyingPartyProperties relyingPartyProperties,
-														 SamlCustomConfiguration samlConfiguration) {
+														 SamlCustomConfiguration samlConfiguration, Ticker ticker) {
 		this.relyingPartyProperties = relyingPartyProperties;
 		this.samlConfiguration = samlConfiguration;
+		this.ticker = ticker;
 	}
 
 	@PostConstruct
@@ -111,31 +123,42 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 			warnOnUnsupportedStaticCredentials(id, registration);
 			long maxAge = maxAgeSeconds(id);
 			AbstractReloadingMetadataResolver resolver = buildRefreshingResolver(id, metadataUri, maxAge);
-			resolvers.add(resolver);
-			metadataByRegistrationId.put(id, new OpenSaml5AssertingPartyMetadataRepository(resolver));
-			log.info("SAML IdP metadata for registration '{}' auto-refreshes (max-age {}s) from {}", id, maxAge, metadataUri);
+			var idp = new IdpMetadata(resolver, new OpenSaml5AssertingPartyMetadataRepository(resolver),
+					new LogThrottle(ON_DEMAND_REFRESH_INTERVAL, ticker::read), new AtomicBoolean());
+			idps.put(id, idp);
+			if (idp.isLoaded()) {
+				log.info("SAML IdP metadata for registration '{}' auto-refreshes (max-age {}s) from {}", id, maxAge, metadataUri);
+			} else {
+				log.warn("SAML IdP metadata for registration '{}' could not be loaded from {}; SAML login with it fails "
+								+ "until the metadata is reachable. Retrying every {}s, and on login at most every {}s.",
+						id, metadataUri, minRefreshDelaySeconds(maxAge), ON_DEMAND_REFRESH_INTERVAL.toSeconds());
+			}
 		});
 	}
 
 	@PreDestroy
 	void shutdown() {
-		resolvers.forEach(resolver -> {
+		idps.values().forEach(idp -> {
 			try {
-				resolver.destroy();
+				idp.resolver().destroy();
 			} catch (RuntimeException e) {
-				log.warn("Failed to stop SAML metadata resolver '{}' during shutdown", resolver.getId(), e);
+				log.warn("Failed to stop SAML metadata resolver '{}' during shutdown", idp.resolver().getId(), e);
 			}
 		});
 	}
 
 	@Override
 	public RelyingPartyRegistration findByRegistrationId(String registrationId) {
-		AssertingPartyMetadataRepository metadataRepository = metadataByRegistrationId.get(registrationId);
-		if (metadataRepository == null) {
+		IdpMetadata idp = idps.get(registrationId);
+		if (idp == null) {
+			return null;
+		}
+		if (!ensureLoaded(registrationId, idp)) {
+			log.debug("No IdP metadata loaded for SAML registration '{}'", registrationId);
 			return null;
 		}
 		Registration registration = relyingPartyProperties.getRegistration().get(registrationId);
-		AssertingPartyMetadata metadata = resolveAssertingPartyMetadata(registrationId, metadataRepository,
+		AssertingPartyMetadata metadata = resolveAssertingPartyMetadata(registrationId, idp.assertingParties(),
 				registration.getAssertingparty().getEntityId());
 		if (metadata == null) {
 			return null;
@@ -143,9 +166,17 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 		return asRegistration(registrationId, registration, metadata);
 	}
 
+	/**
+	 * Whether {@code registrationId} is configured but no registration can be built for it, because its IdP metadata
+	 * has not loaded or lacks the configured asserting party: a login with it cannot start.
+	 */
+	public boolean isConfiguredButUnavailable(String registrationId) {
+		return registrationId != null && idps.containsKey(registrationId) && findByRegistrationId(registrationId) == null;
+	}
+
 	@Override
 	public Iterator<RelyingPartyRegistration> iterator() {
-		return metadataByRegistrationId.keySet().stream()
+		return idps.keySet().stream()
 				.map(this::findByRegistrationId)
 				.filter(Objects::nonNull)
 				.iterator();
@@ -159,15 +190,48 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 	 */
 	@Override
 	public RelyingPartyRegistration findUniqueByAssertingPartyEntityId(String entityId) {
-		// The indexed metadata lookup first, so only registrations whose IdP metadata has that entity are built.
-		List<RelyingPartyRegistration> matches = metadataByRegistrationId.entrySet().stream()
-				.filter(entry -> entry.getValue().findByEntityId(entityId) != null)
+		// The indexed metadata lookup first, so only registrations whose IdP metadata has that entity are built. No
+		// fetch: any anonymous ACS POST gets here, and would fetch every unloaded IdP in turn.
+		List<RelyingPartyRegistration> matches = idps.entrySet().stream()
+				.filter(entry -> entry.getValue().isLoaded())
+				.filter(entry -> entry.getValue().assertingParties().findByEntityId(entityId) != null)
 				.map(entry -> findByRegistrationId(entry.getKey()))
 				.filter(registration -> registration != null
 						&& entityId.equals(registration.getAssertingPartyMetadata().getEntityId()))
 				.limit(2)
 				.toList();
 		return matches.size() == 1 ? matches.getFirst() : null;
+	}
+
+	/**
+	 * Whether the IdP's metadata has loaded, fetching it first if it never has and the registration's
+	 * {@link #ON_DEMAND_REFRESH_INTERVAL} has passed. Only the caller that wins the throttle fetches; the others,
+	 * and any caller while that fetch is still running, return at once instead of waiting for it.
+	 */
+	private boolean ensureLoaded(String registrationId, IdpMetadata idp) {
+		// Unlocked read: refresh() holds the resolver's lock for the whole fetch, which logins must not wait on.
+		if (idp.isLoaded() || !idp.onDemandRefresh().tryAcquire() || !idp.fetching().compareAndSet(false, true)) {
+			return idp.isLoaded();
+		}
+		AbstractReloadingMetadataResolver resolver = idp.resolver();
+		try {
+			// refresh() and destroy() lock the resolver; refresh() after destroy() throws, so re-check under the lock.
+			synchronized (resolver) {
+				if (!resolver.isDestroyed() && !idp.isLoaded()) {
+					resolver.refresh();
+				}
+			}
+		} catch (ResolverException e) {
+			log.warn("SAML IdP metadata for registration '{}' is still unavailable; retrying on login at most every "
+					+ "{}s: {}", registrationId, ON_DEMAND_REFRESH_INTERVAL.toSeconds(), e.getMessage());
+		} finally {
+			idp.fetching().set(false);
+		}
+		return idp.isLoaded();
+	}
+
+	private static long minRefreshDelaySeconds(long maxAgeSeconds) {
+		return Math.min(maxAgeSeconds, MIN_REFRESH_DELAY_SECONDS);
 	}
 
 	private long maxAgeSeconds(String registrationId) {
@@ -204,18 +268,18 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 	 */
 	private AbstractReloadingMetadataResolver buildRefreshingResolver(String id, String metadataUri, long maxAgeSeconds) {
 		try {
-			ResourceBackedMetadataResolver resolver = new ResourceBackedMetadataResolver(
-					new SpringMetadataResource(new DefaultResourceLoader().getResource(metadataUri)));
+			SpringMetadataResource resource = SpringMetadataResource.forLocation(metadataUri);
+			ResourceBackedMetadataResolver resolver = new ResourceBackedMetadataResolver(resource);
 			resolver.setId("entrystore-saml-idp-" + id);
 			resolver.setParserPool(XMLObjectProviderRegistrySupport.getParserPool());
 			// Required so the asserting-party repository can resolve/iterate IDPSSODescriptor entities.
 			resolver.setIndexes(Set.of(new RoleMetadataIndex()));
 			resolver.setMaxRefreshDelay(Duration.ofSeconds(maxAgeSeconds));
-			resolver.setMinRefreshDelay(Duration.ofSeconds(Math.min(maxAgeSeconds, MIN_REFRESH_DELAY_SECONDS)));
+			resolver.setMinRefreshDelay(Duration.ofSeconds(minRefreshDelaySeconds(maxAgeSeconds)));
 			resolver.setRequireValidMetadata(true);
-			// initialize() performs the initial fetch and fails fast (context startup) if it is unreachable,
-			// matching the previous fetch-once-at-startup behaviour; later refresh failures keep the last
-			// good metadata.
+			// initialize() performs the initial fetch. An unreachable IdP must not stop EntryStore from starting, so a
+			// remote resolver then starts empty and retries; unreadable local metadata is a configuration error.
+			resolver.setFailFastInitialization(!resource.isRemote());
 			resolver.initialize();
 			return resolver;
 		} catch (Exception e) {
@@ -288,6 +352,21 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 			map.from(assertingParty.getSinglelogout()::getResponseUrl).to(details::singleLogoutServiceResponseLocation);
 			map.from(assertingParty.getSinglelogout()::getBinding).to(details::singleLogoutServiceBinding);
 		};
+	}
+
+	/**
+	 * The metadata source of one registration and the gates on the fetches its logins trigger: a fetch can outlast
+	 * the throttle interval, and a second one would only wait on the resolver's lock.
+	 */
+	private record IdpMetadata(AbstractReloadingMetadataResolver resolver,
+							   AssertingPartyMetadataRepository assertingParties,
+							   LogThrottle onDemandRefresh,
+							   AtomicBoolean fetching) {
+
+		// lastUpdate is set only when metadata is actually loaded, unlike the refresh-success flags.
+		boolean isLoaded() {
+			return resolver.getLastUpdate() != null;
+		}
 	}
 
 	private void warnOnUnsupportedStaticCredentials(String id, Registration registration) {

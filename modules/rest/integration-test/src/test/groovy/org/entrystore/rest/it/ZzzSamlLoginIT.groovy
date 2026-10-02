@@ -21,6 +21,7 @@ import org.entrystore.rest.it.util.EntryStoreClient
 import spock.lang.Shared
 import spock.lang.Stepwise
 
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_OK
 import static org.entrystore.rest.springboot.filter.CacheControlFilter.CACHE_CONTROL_AUTHENTICATED
 
@@ -32,6 +33,11 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 	static def testUsername = 'testuserrr'
 	static def testUserPassword = 'passworded'
 	static def successLoginUrl = EntryStoreClient.origin + '/GREAT-SUCCESS/'
+	static def failureLoginUrl = EntryStoreClient.origin + '/GREAT-FAILURE/'
+
+	// A SAMLResponse with many group claims (Entra ID, ADFS) exceeds the shipped 32 KB form limit; the ACS POSTs
+	// below are padded to this size so they fail unless the ACS endpoints accept larger forms.
+	static final String LARGE_FORM_PADDING = 'x' * (100 * 1024)
 
 	static def keycloakTestRealmUrl = ''
 
@@ -55,7 +61,9 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		startOwnedApp([
 			'--entrystore.auth.saml.enabled=true',
 			'--spring.profiles.active=saml',
-			'--spring.security.saml2.relyingparty.registration.keycloak.assertingparty.metadata-uri=' + keycloakTestRealmUrl + '/descriptor'
+			'--spring.security.saml2.relyingparty.registration.keycloak.assertingparty.metadata-uri=' + keycloakTestRealmUrl + '/descriptor',
+			// The limit the shipped application.yaml sets, which the IT application.yaml replaces.
+			'--server.jetty.max-http-form-post-size=32KB'
 		])
 	}
 
@@ -157,7 +165,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		this.samlResponsePageSaved = samlResponsePage
 	}
 
-	def '4. POST SAMLResponse back to Service Provider and complete authentication'() {
+	def '4. POST SAMLResponse in a ~100 KB form back to Service Provider and complete authentication'() {
 		given: 'SAMLResponse page from previous test'
 		assert this.samlResponsePageSaved: 'SAMLResponse page not available, did the previous test step execute correctly?'
 
@@ -180,7 +188,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		String samlRelayState = samlRelayStateMatcher ? StringEscapeUtils.unescapeHtml4(samlRelayStateMatcher[0][1]) : ''
 
 		when: 'POST SAMLResponse back to Service Provider'
-		def spPostData = [SAMLResponse: samlResponseValue]
+		def spPostData = [SAMLResponse: samlResponseValue, padding: LARGE_FORM_PADDING]
 		if (samlRelayState) {
 			spPostData['RelayState'] = samlRelayState
 		}
@@ -214,5 +222,68 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		userJson['id'] != null
 		userJson['user'] == testUsername
 		(userJson['uri'] as String).startsWith(EntryStoreClient.baseUrl + '/_principals/entry/')
+	}
+
+	def '5. A SAMLResponse in a ~100 KB form is also accepted on the 5.x assertion consumer service URL'() {
+		given: 'a new login, since the previous POST consumed its authentication request'
+		def initiation = EntryStoreClient.getRequest('/auth/saml' + convertMapToQueryParams([successurl: successLoginUrl]),
+			null, null)
+		initiation.setInstanceFollowRedirects(true)
+		assert initiation.getResponseCode() == HTTP_OK
+		def initiationPage = initiation.inputStream.text
+		def samlResponsePage = samlResponsePageFromKeycloak(hiddenInputValue(initiationPage, 'SAMLRequest'),
+			hiddenInputValue(initiationPage, 'RelayState'), testUsername, testUserPassword)
+		def spPostData = [SAMLResponse: hiddenInputValue(samlResponsePage, 'SAMLResponse'),
+						  RelayState  : hiddenInputValue(samlResponsePage, 'RelayState'),
+						  padding     : LARGE_FORM_PADDING]
+
+		when:
+		def spCallbackConn = EntryStoreClient.postRequest('/auth/saml?idp=keycloak', createFormBody(spPostData),
+			null, 'application/x-www-form-urlencoded')
+
+		then: 'Service Provider should authenticate the user, redirecting to success URL'
+		spCallbackConn.getResponseCode() in [302, 303, 307]
+		spCallbackConn.getHeaderField('Location') == successLoginUrl
+		EntryStoreClient.findSetCookie(spCallbackConn, 'auth_token') != null
+	}
+
+	def '6. A SAMLResponse that fails validation redirects to the failureurl given at login start'() {
+		given: 'a new login started with a whitelisted failureurl'
+		def initiation = EntryStoreClient.getRequest('/auth/saml' + convertMapToQueryParams([failureurl: failureLoginUrl]),
+			null, null)
+		initiation.setInstanceFollowRedirects(true)
+		assert initiation.getResponseCode() == HTTP_OK
+		def initiationPage = initiation.inputStream.text
+		def samlResponsePage = samlResponsePageFromKeycloak(hiddenInputValue(initiationPage, 'SAMLRequest'),
+			hiddenInputValue(initiationPage, 'RelayState'), testUsername, testUserPassword)
+
+		and: 'the signed assertion tampered with: the NameID no longer matches the signature'
+		def responseXml = new String(Base64.decoder.decode(hiddenInputValue(samlResponsePage, 'SAMLResponse')), 'UTF-8')
+		assert responseXml.contains(testUsername): 'the username NameID must be in the assertion for the tampering to bite'
+		def tamperedXml = responseXml.replace(testUsername, testUsername.reverse())
+		def spPostData = [SAMLResponse: Base64.encoder.encodeToString(tamperedXml.getBytes('UTF-8')),
+						  RelayState  : hiddenInputValue(samlResponsePage, 'RelayState')]
+
+		when:
+		def spCallbackConn = EntryStoreClient.postRequest(formActionUrl(samlResponsePage), createFormBody(spPostData),
+			null, 'application/x-www-form-urlencoded')
+
+		then: 'the rejected login is sent to the caller\'s failureurl, not to the default, and no session is issued'
+		spCallbackConn.getResponseCode() in [302, 303, 307]
+		spCallbackConn.getHeaderField('Location') == failureLoginUrl
+		spCallbackConn.getHeaderField('Cache-Control') == CACHE_CONTROL_AUTHENTICATED
+		EntryStoreClient.findSetCookie(spCallbackConn, 'auth_token') == null
+	}
+
+	def '7. Other form POSTs keep the 32 KB form limit'() {
+		given: 'a login form over 32 KB, small enough that CheckUsernamePasswordFilter would answer 413 if Jetty parsed it'
+		def body = createFormBody([auth_username: testUsername, auth_password: testUserPassword,
+								   padding      : 'x' * (40 * 1024)])
+
+		when:
+		def connection = EntryStoreClient.postRequest('/auth/cookie', body, '', 'application/x-www-form-urlencoded')
+
+		then: "Jetty's form limit rejects it while parsing"
+		connection.getResponseCode() == HTTP_BAD_REQUEST
 	}
 }

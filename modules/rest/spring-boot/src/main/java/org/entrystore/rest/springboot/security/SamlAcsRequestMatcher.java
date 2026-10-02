@@ -46,14 +46,29 @@ public final class SamlAcsRequestMatcher implements RequestMatcher {
 	/** The query parameter of the 5.x assertion consumer service URL that names the IdP. */
 	public static final String LEGACY_IDP_PARAMETER = "idp";
 
+	private static final String ACS_PATH = Saml2WebSsoAuthenticationFilter.DEFAULT_FILTER_PROCESSES_URI;
+	private static final String ACS_PATH_WITHOUT_REGISTRATION_ID = "/login/saml2/sso";
+
 	private final RequestMatcher delegate;
 
 	public SamlAcsRequestMatcher() {
 		var paths = PathPatternRequestMatcher.withDefaults();
 		this.delegate = new OrRequestMatcher(
-				paths.matcher(Saml2WebSsoAuthenticationFilter.DEFAULT_FILTER_PROCESSES_URI),
-				paths.matcher("/login/saml2/sso"),
+				paths.matcher(ACS_PATH),
+				paths.matcher(ACS_PATH_WITHOUT_REGISTRATION_ID),
 				new LegacyAcsRequestMatcher(paths.matcher(HttpMethod.POST, LEGACY_ACS_PATH)));
+	}
+
+	/**
+	 * Matches a POST to any path a SAML response is delivered to, by method and path alone. Unlike this matcher it
+	 * never reads a request parameter, so it can run before the form body may be parsed.
+	 */
+	public static RequestMatcher postToAnyAcsPath() {
+		var paths = PathPatternRequestMatcher.withDefaults();
+		return new OrRequestMatcher(
+				paths.matcher(HttpMethod.POST, ACS_PATH),
+				paths.matcher(HttpMethod.POST, ACS_PATH_WITHOUT_REGISTRATION_ID),
+				paths.matcher(HttpMethod.POST, LEGACY_ACS_PATH));
 	}
 
 	@Override

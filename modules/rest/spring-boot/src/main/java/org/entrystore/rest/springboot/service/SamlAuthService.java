@@ -53,6 +53,14 @@ public class SamlAuthService {
 		}
 	}
 
+	/**
+	 * Where a failed SAML login goes: {@code requestedUrl} if the redirect whitelist admits it, else the configured
+	 * default failure URL.
+	 */
+	public String failureRedirectUrl(String requestedUrl) {
+		return isValidRedirectUrl(requestedUrl) ? requestedUrl : samlConfiguration.redirectFailure().url();
+	}
+
 	public String findIdpIdForRequest(String username, String idp) {
 
 		if (StringUtils.isNotBlank(username)) {
