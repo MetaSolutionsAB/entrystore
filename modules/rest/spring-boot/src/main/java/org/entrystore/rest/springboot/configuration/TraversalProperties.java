@@ -47,7 +47,7 @@ import java.util.stream.Stream;
  * <p>Map keys are matched verbatim by the lookup methods below, and are <em>not</em> subject to the
  * relaxed binding a typed component gets. {@link #maxDepth(String)} looks up {@code "<profile>.max-depth"},
  * so write the hyphenated spelling — {@code entrystore.traversal.foaf.maxDepth=5} is not found and the
- * request-supplied depth silently applies instead. A key containing anything beyond lowercase letters,
+ * default depth cap silently applies instead. A key containing anything beyond lowercase letters,
  * digits and {@code -} may not survive the binder's key canonicalisation as written; bracket it in full
  * to keep it verbatim, {@code entrystore.traversal[my_profile.1]=...}, since the whole remaining path is
  * the map key. {@code TraversalPropertiesTest} pins what the binder actually does with each form.
