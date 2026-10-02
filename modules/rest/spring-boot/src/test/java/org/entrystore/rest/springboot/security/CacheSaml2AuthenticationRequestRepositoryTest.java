@@ -17,7 +17,9 @@
 package org.entrystore.rest.springboot.security;
 
 import com.github.benmanes.caffeine.cache.Cache;
+import org.apache.logging.log4j.Level;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
+import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -34,6 +36,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The repository must key strictly on the {@code RelayState} request parameter — never the HTTP
@@ -167,6 +170,32 @@ class CacheSaml2AuthenticationRequestRepositoryTest {
 		repository.saveAuthenticationRequest(authnRequest(RELAY_STATE), acsRequest(null), new MockHttpServletResponse());
 
 		assertNull(repository.removeAuthenticationRequest(acsRequest(null), new MockHttpServletResponse()));
+	}
+
+	// The maximumSize bound and its throttled SIZE-eviction warn are the DoS defences on this
+	// anonymously writable cache (every GET /auth/saml mints an entry) — this pins both: the cache
+	// never grows past its cap, and sustained capacity eviction emits one throttled WARN rather than
+	// one line per eviction.
+	@Test
+	void capacityEvictionIsBoundedAndWarnsOnce() {
+		try (var appender = CapturingAppender.attachTo(CacheSaml2AuthenticationRequestRepository.class)) {
+			var request = acsRequest(null);
+			var response = new MockHttpServletResponse();
+			for (int i = 0; i < CacheSaml2AuthenticationRequestRepository.MAX_ENTRIES + 100; i++) {
+				repository.saveAuthenticationRequest(authnRequest("relay-" + i), request, response);
+			}
+			var cache = nativeCache();
+			cache.cleanUp();
+
+			assertTrue(cache.estimatedSize() <= CacheSaml2AuthenticationRequestRepository.MAX_ENTRIES);
+			// Both bounds pinned: the declared constant and the effective cap are asserted separately.
+			assertTrue(CacheSaml2AuthenticationRequestRepository.MAX_ENTRIES >= 50_000,
+					"declared cap shrunk below legitimate login concurrency");
+			assertTrue(cache.estimatedSize() >= 49_000,
+					"effective cache cap shrunk below legitimate login concurrency");
+			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
+			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
+		}
 	}
 
 	private Cache<?, ?> nativeCache() {
