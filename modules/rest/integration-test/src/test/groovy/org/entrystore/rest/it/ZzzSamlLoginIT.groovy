@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.it
 
+import groovy.json.JsonOutput
 import org.apache.commons.text.StringEscapeUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
@@ -27,7 +28,9 @@ import java.time.Duration
 import java.time.LocalDateTime
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static org.entrystore.rest.springboot.configuration.CacheControlFilter.CACHE_CONTROL_AUTHENTICATED
 
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
@@ -45,6 +48,8 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 	static final String LARGE_FORM_PADDING = 'x' * (100 * 1024)
 
 	static def keycloakTestRealmUrl = ''
+	static String ssoCookie
+	static String ssoUserResourceUri
 
 	@Shared
 	def samlRequestSaved = ''
@@ -233,6 +238,8 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		userJson['id'] != null
 		userJson['user'] == testUsername
 		(userJson['uri'] as String).startsWith(EntryStoreClient.baseUrl + '/_principals/entry/')
+		(ssoCookie = spCookies.collect { it.split(';')[0] }.join('; ')) != null
+		(ssoUserResourceUri = (userJson['uri'] as String).replace('/_principals/entry/', '/_principals/resource/')) != null
 
 		and: 'the login lasts max-age (3700 s) like a form login, not the 30-minute Spring Boot session timeout'
 		def expiresIn = Duration.between(LocalDateTime.now(), LocalDateTime.parse(userJson['authTokenExpires'] as String))
@@ -300,5 +307,23 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 
 		then: "Jetty's form limit rejects it while parsing"
 		connection.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
+	def '8. Disabling the SAML-authenticated user should end the session, even if re-enabled before the next request'() {
+		given: 'an admin disables the user and enables them again'
+		def adminLogin = EntryStoreClient.postRequest('/auth/cookie', 'auth_username=admin&auth_password=adminpass', '',
+			'application/x-www-form-urlencoded')
+		assert adminLogin.getResponseCode() == HTTP_OK
+		def adminCookie = 'auth_token=' + EntryStoreClient.findCookieValue(adminLogin, 'auth_token')
+		[true, false].each { disabled ->
+			assert EntryStoreClient.putRequest(ssoUserResourceUri, JsonOutput.toJson([disabled: disabled]), '',
+				'application/json', [Cookie: adminCookie]).getResponseCode() == HTTP_NO_CONTENT
+		}
+
+		when: 'the user makes the next request with the session cookie from the login'
+		def userConn = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: ssoCookie])
+
+		then: 'the session has ended, as 5.x removed a disabled user\'s tokens'
+		userConn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 }

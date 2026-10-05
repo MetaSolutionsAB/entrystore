@@ -29,7 +29,6 @@ import java.time.LocalDateTime
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
-import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
@@ -489,30 +488,26 @@ class CookieLoginResourceIT extends BaseSpec {
 
 	def "A logged-in user who is then disabled should lose the session and the cookie on the next request"() {
 		given:
-		def username = 'userForDisabledWhileLoggedIn@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
-		assert loginConnection.getResponseCode() == HTTP_OK
-		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
-		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
-		assert EntryStoreClient.putRequest(resourceUri, JsonOutput.toJson([disabled: true])).getResponseCode() == HTTP_NO_CONTENT
+		def cookie = loginAndDisable('userForDisabledWhileLoggedIn@test.com', false)
 
 		when:
-		def firstRequest = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
+		def request = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
+
+		then: 'as in 5.x, which removed a disabled user\'s tokens'
+		request.getResponseCode() == HTTP_UNAUTHORIZED
+		!EntryStoreClient.findSetCookies(request, 'auth_token').isEmpty()
+		EntryStoreClient.findSetCookies(request, 'auth_token').every { it.contains('Max-Age=0') }
+	}
+
+	def "A logged-in user who is disabled and enabled again before the next request should still have lost the session"() {
+		given:
+		def cookie = loginAndDisable('userForDisabledAndEnabledAgain@test.com', true)
+
+		when:
+		def request = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
 
 		then:
-		firstRequest.getResponseCode() == HTTP_FORBIDDEN
-		EntryStoreClient.findSetCookies(firstRequest, 'auth_token').every { it.contains('Max-Age=0') }
-		!EntryStoreClient.findSetCookies(firstRequest, 'auth_token').isEmpty()
-
-		when: 'the client sends the cookie again anyway'
-		def secondRequest = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
-
-		then: 'the session has ended'
-		secondRequest.getResponseCode() == HTTP_UNAUTHORIZED
+		request.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	def "GET /auth/user with HTTP Basic should not issue an auth_token cookie"() {
@@ -719,4 +714,25 @@ class CookieLoginResourceIT extends BaseSpec {
 		return JSON_PARSER.parseText(body) as Map
 	}
 
+
+	/**
+	 * Logs the user in, then disables them as admin, and enables them again if asked.
+	 *
+	 * @return the user's session cookie from the login
+	 */
+	private static String loginAndDisable(String username, boolean enableAgain) {
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie',
+			'auth_username=' + username + '&auth_password=' + password, '', 'application/x-www-form-urlencoded')
+		assert loginConnection.getResponseCode() == HTTP_OK
+		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
+		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.putRequest(resourceUri, JsonOutput.toJson([disabled: true])).getResponseCode() == HTTP_NO_CONTENT
+		if (enableAgain) {
+			assert EntryStoreClient.putRequest(resourceUri, JsonOutput.toJson([disabled: false])).getResponseCode() == HTTP_NO_CONTENT
+		}
+		return cookie
+	}
 }

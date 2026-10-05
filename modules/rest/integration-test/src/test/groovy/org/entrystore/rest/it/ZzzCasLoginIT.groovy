@@ -229,4 +229,5 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		responseCode == HTTP_UNAUTHORIZED ||
 			(responseCode == HTTP_OK && responseUser != null && !responseUser.toString().equalsIgnoreCase('admin'))
 	}
+
 }

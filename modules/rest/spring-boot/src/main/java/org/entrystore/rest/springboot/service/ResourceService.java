@@ -54,6 +54,8 @@ import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
+import org.entrystore.rest.springboot.security.ESUserDetailsService;
+import org.entrystore.rest.springboot.security.ESUserSessionDetails;
 import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.entrystore.rest.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.springboot.util.Email;
@@ -67,6 +69,7 @@ import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.AuthenticatedPrincipal;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -115,6 +118,8 @@ public class ResourceService {
 	private final SsrfValidator ssrfValidator;
 
 	private final SessionRegistry sessionRegistry;
+
+	private final ESUserDetailsService userDetailsService;
 
 	@Value("${entrystore.import.tmpdir:${java.io.tmpdir}}")
 	@Setter(AccessLevel.PACKAGE)
@@ -446,6 +451,9 @@ public class ResourceService {
 					}
 					boolean disabled = entityJSON.optBoolean("disabled", false);
 					resourceUser.setDisabled(disabled);
+					if (disabled) {
+						expireSessions(resourceUser);
+					}
 				}
 				if (entityJSON.has("customProperties")) {
 					Map<String, String> customPropMap = new HashMap<>();
@@ -789,4 +797,28 @@ public class ResourceService {
 		throw new NotImplementedException("RDF resource import is not yet implemented");
 	}
 
+
+	/**
+	 * Expires every session of the user, whichever way they logged in, as 5.x removed a disabled user's tokens. Form
+	 * and HTTP Basic principals carry the user's resource URI as username, SAML and CAS principals the SSO username.
+	 */
+	void expireSessions(User user) {
+		URI userUri = user.getURI();
+		for (Object principal : sessionRegistry.getAllPrincipals()) {
+			boolean ofUser = switch (principal) {
+				case ESUserSessionDetails form -> userUri.toString().equals(form.getUsername());
+				case UserDetails cas -> isSsoUser(cas.getUsername(), userUri);
+				case AuthenticatedPrincipal saml -> isSsoUser(saml.getName(), userUri);
+				default -> false;
+			};
+			if (ofUser) {
+				sessionRegistry.getAllSessions(principal, false).forEach(SessionInformation::expireNow);
+			}
+		}
+	}
+
+	private boolean isSsoUser(String ssoUsername, URI userUri) {
+		User ssoUser = userDetailsService.loadUser(ssoUsername);
+		return ssoUser != null && userUri.equals(ssoUser.getURI());
+	}
 }

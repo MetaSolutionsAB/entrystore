@@ -178,8 +178,8 @@ public class SecurityConfig {
 				// needs (private,no-store for authenticated; no header for anonymous so static and
 				// controller-set values can pass through unchanged).
 				.headers(headers -> headers.cacheControl(HeadersConfigurer.CacheControlConfig::disable))
-				// Spring's default repositories, set explicitly so SessionManagementFilter also sees a request-scoped
-				// (HTTP Basic) context and does not start a session for it
+				// Spring's default repositories, set explicitly so SessionManagementFilter also sees the request-scoped
+				// HTTP Basic context and does not start a session (and auth_token cookie) for it, as in 5.x
 				.securityContext(context -> context.securityContextRepository(sessionAndRequestContextRepository()))
 				.sessionManagement(session -> {
 					// ConcurrentSessionFilter runs the logout handlers, and thereby expires the cookie, before this strategy
@@ -255,10 +255,7 @@ public class SecurityConfig {
 		if (httpBasicConfig.enabled()) {
 			log.info("Basic Auth Enabled (credential cache TTL={}, max entries={})",
 					httpBasicConfig.cache().ttl(), httpBasicConfig.cache().maxSize());
-			// Request-scoped context: a Basic request must not start a session (and get an auth_token cookie), as in 5.x
-			http.httpBasic(basic -> basic
-					.authenticationEntryPoint(entryPoint)
-					.securityContextRepository(new RequestAttributeSecurityContextRepository()));
+			http.httpBasic(basic -> basic.authenticationEntryPoint(entryPoint));
 		} else {
 			log.info("Basic Auth Disabled");
 		}

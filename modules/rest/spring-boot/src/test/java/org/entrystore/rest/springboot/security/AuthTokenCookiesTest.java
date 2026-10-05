@@ -225,16 +225,25 @@ class AuthTokenCookiesTest {
 	}
 
 	@Test
-	void expiry_fixedExpiration_staysAtLoginPlusLifetime() throws InterruptedException {
-		var cookies = authTokenCookies("1", false);
+	void expiry_fixedExpiration_isLoginPlusLifetime() {
+		var cookies = authTokenCookies("3600", false);
 		var request = new MockHttpServletRequest();
 		cookies.applySessionLifetime(request, null);
-		Instant expiryAtLogin = cookies.expiry(request.getSession());
+
+		Instant expiry = cookies.expiry(request.getSession());
+
+		assertTrue(Duration.between(Instant.now().plusSeconds(3600), expiry).abs().toSeconds() <= 1);
+		assertEquals(expiry, request.getSession().getAttribute(AuthTokenCookies.LOGIN_EXPIRY_ATTRIBUTE));
 		assertFalse(cookies.isLoginExpired(request.getSession()));
+	}
 
-		Thread.sleep(1100);
+	@Test
+	void isLoginExpired_fixedExpiration_pastLoginExpiry_isTrue() {
+		var cookies = authTokenCookies("3600", false);
+		var request = new MockHttpServletRequest();
+		cookies.applySessionLifetime(request, null);
+		request.getSession().setAttribute(AuthTokenCookies.LOGIN_EXPIRY_ATTRIBUTE, Instant.now().minusSeconds(1));
 
-		assertEquals(expiryAtLogin, cookies.expiry(request.getSession()));
 		assertTrue(cookies.isLoginExpired(request.getSession()));
 	}
 

@@ -22,6 +22,8 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
 
+import java.time.Instant;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -31,11 +33,11 @@ class SessionLifetimeFilterTest {
 
 	@Test
 	void fixedExpiration_loginPastItsLifetime_endsTheSessionAndContinues() throws Exception {
-		var cookies = AuthTokenCookiesTest.authTokenCookies("1", false);
+		var cookies = AuthTokenCookiesTest.authTokenCookies("3600", false);
 		var request = new MockHttpServletRequest();
 		cookies.applySessionLifetime(request, null);
 		var session = (MockHttpSession) request.getSession();
-		Thread.sleep(1100);
+		session.setAttribute(AuthTokenCookies.LOGIN_EXPIRY_ATTRIBUTE, Instant.now().minusSeconds(1));
 		var chain = new MockFilterChain();
 
 		new SessionLifetimeFilter(cookies).doFilter(request, new MockHttpServletResponse(), chain);
@@ -60,11 +62,11 @@ class SessionLifetimeFilterTest {
 
 	@Test
 	void refreshExpirationOnAccess_neverEndsTheSession() throws Exception {
-		var cookies = AuthTokenCookiesTest.authTokenCookies("1", true);
+		var cookies = AuthTokenCookiesTest.authTokenCookies("3600", true);
 		var request = new MockHttpServletRequest();
 		cookies.applySessionLifetime(request, null);
 		var session = (MockHttpSession) request.getSession();
-		Thread.sleep(1100);
+		session.setAttribute(AuthTokenCookies.LOGIN_EXPIRY_ATTRIBUTE, Instant.now().minusSeconds(1));
 
 		new SessionLifetimeFilter(cookies).doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
 

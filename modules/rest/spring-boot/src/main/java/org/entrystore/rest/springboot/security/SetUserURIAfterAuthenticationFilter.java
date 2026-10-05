@@ -105,6 +105,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 					log.warn("Authenticated {} user '{}' not found in EntryStore, denying access",
 							externalAuthType, HttpUtil.sanitizeForLog(username));
 					HttpUtil.clearAuthenticatedSession(request);
+					authTokenCookies.expireAll(request, response);
 					setForbiddenResponse(request, response,
 							"Authenticated " + externalAuthType + " user not found in EntryStore");
 					return;
@@ -114,6 +115,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 					log.warn("Authenticated {} user '{}' has no URI in EntryStore, denying access",
 							externalAuthType, HttpUtil.sanitizeForLog(username));
 					HttpUtil.clearAuthenticatedSession(request);
+					authTokenCookies.expireAll(request, response);
 					setForbiddenResponse(request, response,
 							"Authenticated " + externalAuthType + " user has no URI in EntryStore");
 					return;
@@ -135,6 +137,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 					log.warn("Cookie-authenticated session for '{}' has no usable EntryStore user, denying access",
 							HttpUtil.sanitizeForLog(esUser.getUsername()));
 					HttpUtil.clearAuthenticatedSession(request);
+					authTokenCookies.expireAll(request, response);
 					setForbiddenResponse(request, response,
 							"Cookie-authenticated user no longer exists in EntryStore");
 					return;

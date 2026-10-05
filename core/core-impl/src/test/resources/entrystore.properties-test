@@ -41,9 +41,8 @@ entrystore.cors.max-age=7200
 # entrystore.auth.recaptcha=on (default: off)
 # entrystore.auth.recaptcha.public-key=your-public-recaptcha-key
 # entrystore.auth.recaptcha.private-key=your-private-recaptcha-key
-# Every time a logged in user performs an operation, the expiry date
-# is renewed based on the current time/date. (default: off)
-# entrystore.auth.cookie.update.expiry=on|off
+# Every request extends the login by max-age (default: on)
+# entrystore.auth.cookie.refresh-expiration-on-access=on|off
 entrystore.auth.cookie.samesite=strict
 entrystore.auth.cookie.secure=off
 ## User-initiated sign-up (default: off)

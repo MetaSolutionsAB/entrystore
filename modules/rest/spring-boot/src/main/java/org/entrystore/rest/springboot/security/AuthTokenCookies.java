@@ -63,7 +63,7 @@ public class AuthTokenCookies implements LogoutHandler {
 
 	private static final String EXPIRED_ATTRIBUTE = AuthTokenCookies.class.getName() + ".EXPIRED";
 
-	private static final String LOGIN_EXPIRY_ATTRIBUTE = AuthTokenCookies.class.getName() + ".LOGIN_EXPIRY";
+	static final String LOGIN_EXPIRY_ATTRIBUTE = AuthTokenCookies.class.getName() + ".LOGIN_EXPIRY";
 
 	private static final int REFRESHED_COOKIE_MAX_AGE = (int) Duration.ofDays(365).toSeconds();
 
