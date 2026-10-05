@@ -21,11 +21,13 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.validation.Validation;
 import jakarta.validation.ValidatorFactory;
 import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.configuration.SignupWhitelistProperties;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.springboot.model.auth.SignupInfo;
 import org.entrystore.rest.springboot.model.exception.BadRequestHtmlException;
+import org.entrystore.rest.springboot.security.ESUserSessionDetails;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -41,9 +43,11 @@ import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.saml2.provider.service.authentication.DefaultSaml2AuthenticatedPrincipal;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.URI;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,6 +56,7 @@ import java.util.concurrent.RejectedExecutionException;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doThrow;
@@ -200,6 +205,44 @@ class AuthServiceTest {
 		var whitelist = (Set<String>) ReflectionTestUtils.getField(service, "domainWhitelist");
 
 		assertEquals(Set.of("example.com", "other.example.org"), whitelist);
+	}
+
+	@Test
+	void expireAllSessions_expiresTheSessionsOfEveryLoginOfTheUserOnly() {
+		SessionRegistry sessionRegistry = mock(SessionRegistry.class);
+		PrincipalManager principalManager = mock(PrincipalManager.class);
+		AuthService service = new AuthService(null, principalManager, null, null, null, null, null, emailValidator,
+				null, sessionRegistry, null, null, meterRegistry, new SignupWhitelistProperties(Map.of()), executor);
+		URI userUri = URI.create("https://example.org/store/_principals/resource/7");
+		User user = mock(User.class);
+		when(user.getURI()).thenReturn(userUri);
+		when(principalManager.getPrincipalName(userUri)).thenReturn("alice");
+		var formLogin = new ESUserSessionDetails(springUser(userUri.toString()), user, null);
+		var casLogin = springUser("ALICE");
+		var ssoLogin = new DefaultSaml2AuthenticatedPrincipal("alice", Map.of());
+		var otherFormLogin = new ESUserSessionDetails(
+				springUser("https://example.org/store/_principals/resource/8"), mock(User.class), null);
+		var otherSsoLogin = new DefaultSaml2AuthenticatedPrincipal("bob", Map.of());
+		var formSession = new SessionInformation(formLogin, "form", new Date());
+		var casSession = new SessionInformation(casLogin, "cas", new Date());
+		var ssoSession = new SessionInformation(ssoLogin, "sso", new Date());
+		when(sessionRegistry.getAllPrincipals())
+				.thenReturn(List.of(formLogin, otherFormLogin, casLogin, otherSsoLogin, ssoLogin));
+		when(sessionRegistry.getAllSessions(formLogin, false)).thenReturn(List.of(formSession));
+		when(sessionRegistry.getAllSessions(casLogin, false)).thenReturn(List.of(casSession));
+		when(sessionRegistry.getAllSessions(ssoLogin, false)).thenReturn(List.of(ssoSession));
+
+		service.expireAllSessions(user);
+
+		assertTrue(formSession.isExpired());
+		assertTrue(casSession.isExpired());
+		assertTrue(ssoSession.isExpired());
+		verify(sessionRegistry, never()).getAllSessions(otherFormLogin, false);
+		verify(sessionRegistry, never()).getAllSessions(otherSsoLogin, false);
+	}
+
+	private static UserDetails springUser(String username) {
+		return org.springframework.security.core.userdetails.User.withUsername(username).password("N/A").build();
 	}
 
 	private AuthService authServiceWithSessionRegistry(SessionRegistry sessionRegistry) {

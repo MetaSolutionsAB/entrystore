@@ -66,7 +66,10 @@ public class UserService {
 				principalManager.getAdminGroup().isMember(user);
 	}
 
-	public GetAuthUserResponse getUserInfo(String locales, int maxAge) {
+	/**
+	 * @param authTokenExpires when the caller's login ends, or null without a session; ignored for the guest
+	 */
+	public GetAuthUserResponse getUserInfo(String locales, Instant authTokenExpires) {
 
 		User authenticatedUser = principalManager.getUser(principalManager.getAuthenticatedUserURI());
 
@@ -77,15 +80,11 @@ public class UserService {
 		Map<String, Double> clientAcceptedLanguages = parseLocalesHeader(locales);
 
 		String homeContext = null;
-		Instant authTokenExpires = null;
-		if (!authenticatedUser.getURI().equals(principalManager.getGuestUser().getURI())) {
+		boolean guest = authenticatedUser.getURI().equals(principalManager.getGuestUser().getURI());
+		if (!guest) {
 			Context context = authenticatedUser.getHomeContext();
 			if (context != null) {
 				homeContext = context.getEntry().getId();
-			}
-
-			if (maxAge > 0) {
-				authTokenExpires = Instant.now().plusSeconds(maxAge);
 			}
 		}
 
@@ -98,7 +97,7 @@ public class UserService {
 				.clientAcceptLanguage(clientAcceptedLanguages)
 				.externalId(authenticatedUser.getExternalID());
 
-		if (authTokenExpires != null) {
+		if (!guest && authTokenExpires != null) {
 			response.authTokenExpires(LocalDateTime.ofInstant(authTokenExpires, ZoneId.systemDefault()));
 		}
 
@@ -196,6 +195,9 @@ public class UserService {
 				throw new BadRequestException("Users cannot set their own disabled status.");
 			}
 			resourceUser.setDisabled(settings.disabledValue());
+			if (settings.disabledValue()) {
+				authService.expireAllSessions(resourceUser);
+			}
 		}
 		if (settings.hasCustomProperties()) {
 			resourceUser.setCustomProperties(settings.customPropertiesValue());

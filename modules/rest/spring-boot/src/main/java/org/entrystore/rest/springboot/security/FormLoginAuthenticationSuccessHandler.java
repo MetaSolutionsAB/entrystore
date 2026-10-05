@@ -51,22 +51,7 @@ public class FormLoginAuthenticationSuccessHandler extends SimpleUrlAuthenticati
 			loginAttemptService.recordSuccess(username.toLowerCase());
 		}
 
-		int effectiveMaxAge = request.getServletContext().getSessionCookieConfig().getMaxAge();
-		// If auth_maxage parameter is set use it as the session max-age, instead of the default cookie config from properties
-		String maxAgeParam = request.getParameter("auth_maxage");
-		if (StringUtils.isNotEmpty(maxAgeParam)) {
-			try {
-				int customMaxAge = Integer.parseInt(maxAgeParam);
-				if (customMaxAge > 0 && customMaxAge < effectiveMaxAge) {
-					// set the user input max-age only if it's lower than the default configured cookie max-age
-					effectiveMaxAge = customMaxAge;
-				}
-			} catch (NumberFormatException e) {
-				log.info("Unable to parse as Integer the 'auth_maxage' parameter value of: '{}'", maxAgeParam);
-			}
-		}
-
-		request.getSession().setMaxInactiveInterval(effectiveMaxAge);
+		authTokenCookies.applySessionLifetime(request, parseRequestedMaxAge(request.getParameter("auth_maxage")));
 
 		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
@@ -76,7 +61,7 @@ public class FormLoginAuthenticationSuccessHandler extends SimpleUrlAuthenticati
 				SessionInfo.SessionInfoBuilder sessionInfo = SessionInfo.builder()
 						.userName(username != null ? username.toLowerCase() : null)
 						.loginTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
-						.loginExpiration(LocalDateTime.ofInstant(now.plusSeconds(request.getSession().getMaxInactiveInterval()), ZoneId.systemDefault()))
+						.loginExpiration(LocalDateTime.ofInstant(authTokenCookies.expiry(request.getSession()), ZoneId.systemDefault()))
 						.lastAccessTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
 						.lastUsedIpAddress(request.getRemoteAddr())
 						.lastUsedUserAgent(request.getHeader("User-Agent"))
@@ -95,5 +80,20 @@ public class FormLoginAuthenticationSuccessHandler extends SimpleUrlAuthenticati
 		response.setStatus(HttpStatus.OK.value());
 		response.setContentType("text/html");
 		response.getWriter().write("Login successful.");
+	}
+
+	/**
+	 * @return the client's {@code auth_maxage} in seconds, or null if absent or not a number
+	 */
+	private static Integer parseRequestedMaxAge(String maxAgeParam) {
+		if (StringUtils.isEmpty(maxAgeParam)) {
+			return null;
+		}
+		try {
+			return Integer.parseInt(maxAgeParam);
+		} catch (NumberFormatException e) {
+			log.info("Unable to parse as Integer the 'auth_maxage' parameter value of: '{}'", maxAgeParam);
+			return null;
+		}
 	}
 }
