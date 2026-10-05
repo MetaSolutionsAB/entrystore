@@ -251,6 +251,14 @@ entrystore.data.folder=/srv/entrystore/files/
 ## is invalidated after entrystore.auth.confirmation.max-attempts failed attempts.
 # entrystore.auth.confirmation.legacy=true
 # entrystore.auth.confirmation.max-attempts=3
+## Where the link in the confirmation email points, per flow, e.g. at the EntryScape views.
+## __CONFIRMATION_TOKEN__ is replaced by the token. Unset: the backend's own pages
+## (<base>/auth/pwreset?confirm=..., <base>/auth/signup?confirm=...).
+## A value may be absolute, or relative to the base URL: /resetpassword?... resolves against its host,
+## resetpassword?... (no leading slash) is appended to its path. A value without the placeholder, or that does not
+## resolve to an http(s) URL, fails startup. Applies in both modes; the EntryScape views exist for legacy=false only.
+# entrystore.auth.confirmation.url.pwreset=/resetpassword?confirm=__CONFIRMATION_TOKEN__
+# entrystore.auth.confirmation.url.signup=https://example.com/confirmsignup?confirm=__CONFIRMATION_TOKEN__
 
 ## Temporary user lockout
 entrystore.auth.temp.lockout.max.attempts=0

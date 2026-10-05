@@ -107,6 +107,8 @@ class PasswordResetResourceIT extends BaseSpec {
 		message.getAllRecipients().contains(new InternetAddress(username))
 		def token = extractConfirmationToken(greenMail)
 		token ==~ /[a-zA-Z0-9]{16}/
+		// No entrystore.auth.confirmation.url.pwreset in the IT config: the link stays on the backend page.
+		message.getContent().toString().contains(EntryStoreClient.baseUrl + '/auth/pwreset?confirm=' + token)
 	}
 
 	def "POST /auth/pwreset should send an email with generated token to an existing user when posted as an html form"() {

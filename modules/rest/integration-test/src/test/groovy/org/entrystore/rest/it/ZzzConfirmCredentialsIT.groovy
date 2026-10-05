@@ -39,6 +39,9 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 	static def grecaptcharesponse = 'anything'
 	static def formUrlEncoded = 'application/x-www-form-urlencoded'
 
+	// Relative, so it resolves against the base URL's host, the usual EntryScape-at-the-root layout.
+	static final String FRONTEND_RESET_URL = '/resetpassword?confirm=__CONFIRMATION_TOKEN__'
+
 	static GreenMail greenMail = new GreenMail(SMTP)
 
 	def setupSpec() {
@@ -49,6 +52,8 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 			'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
 			'--entrystore.auth.confirmation.legacy=false',
 			'--entrystore.auth.confirmation.max-attempts=3',
+			// The EntryScape views exist for this mode only; sign-up keeps the backend page.
+			'--entrystore.auth.confirmation.url.pwreset=' + FRONTEND_RESET_URL,
 			// Keep rate limits well above this class's request volume so confirmation behaviour, not
 			// throttling, is what the assertions observe.
 			'--entrystore.auth.signup.rate.limit.max=100',
@@ -327,6 +332,9 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		conn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase())
 		greenMail.waitForIncomingEmail(5000, 1)
 		greenMail.getReceivedMessages().size() == 1
+		def token = extractConfirmationToken(greenMail)
+		greenMail.getReceivedMessages()[0].getContent().toString()
+			.contains(EntryStoreClient.origin + FRONTEND_RESET_URL.replace('__CONFIRMATION_TOKEN__', token))
 	}
 
 	def "GET /auth/pwreset with a valid token renders the confirmation form"() {

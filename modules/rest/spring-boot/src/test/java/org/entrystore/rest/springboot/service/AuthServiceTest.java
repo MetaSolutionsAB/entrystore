@@ -199,7 +199,7 @@ class AuthServiceTest {
 		// alice@example.com sign-up if this normalisation were dropped. Asserted on the field because
 		// the comparison itself sits deep inside signup(), behind collaborators this test has no use for.
 		AuthService service = new AuthService(null, null, null, null, null, null, null, emailValidator,
-				null, null, null, null, meterRegistry,
+				null, null, null, null, null, meterRegistry,
 				new MockEnvironment()
 						.withProperty("entrystore.auth.signup.whitelist.1", "Example.COM")
 						.withProperty("entrystore.auth.signup.whitelist.2", "OTHER.example.org"), executor);
@@ -214,7 +214,7 @@ class AuthServiceTest {
 		SessionRegistry sessionRegistry = mock(SessionRegistry.class);
 		PrincipalManager principalManager = mock(PrincipalManager.class);
 		AuthService service = new AuthService(null, principalManager, null, null, null, null, null, emailValidator,
-				null, sessionRegistry, null, null, meterRegistry, new MockEnvironment(), executor);
+				null, sessionRegistry, null, null, null, meterRegistry, new MockEnvironment(), executor);
 		URI userUri = URI.create("https://example.org/store/_principals/resource/7");
 		User user = mock(User.class);
 		when(user.getURI()).thenReturn(userUri);
@@ -250,7 +250,7 @@ class AuthServiceTest {
 	private AuthService authServiceWithSessionRegistry(SessionRegistry sessionRegistry) {
 		// Only the collaborators reached before pwReset's email check and by submitPasswordResetDispatch are real.
 		return new AuthService(null, null, null, null, null, null, null, emailValidator,
-				null, sessionRegistry, null, null, meterRegistry,
+				null, sessionRegistry, null, null, null, meterRegistry,
 				new MockEnvironment(), executor);
 	}
 

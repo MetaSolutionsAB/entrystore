@@ -52,6 +52,7 @@ import org.entrystore.rest.springboot.model.exception.PwResetEntityNotFoundHtmlE
 import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException;
 import org.entrystore.rest.springboot.model.validation.AuthValidationMessages;
 import org.entrystore.rest.springboot.security.ESUserSessionDetails;
+import org.entrystore.rest.springboot.service.auth.ConfirmationLinkBuilder;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
 import org.entrystore.rest.springboot.service.auth.RecaptchaSettings;
 import org.entrystore.rest.springboot.service.auth.RecaptchaVerifier;
@@ -138,6 +139,7 @@ public class AuthService {
 	private final SessionRegistry sessionRegistry;
 	private final SignupRateLimiter signupRateLimiter;
 	private final PasswordResetRateLimiter passwordResetRateLimiter;
+	private final ConfirmationLinkBuilder confirmationLinkBuilder;
 
 	@Value("${entrystore.auth.confirmation.legacy:true}")
 	private boolean confirmationLegacy;
@@ -174,6 +176,7 @@ public class AuthService {
 					   SessionRegistry sessionRegistry,
 					   SignupRateLimiter signupRateLimiter,
 					   PasswordResetRateLimiter passwordResetRateLimiter,
+					   ConfirmationLinkBuilder confirmationLinkBuilder,
 					   MeterRegistry meterRegistry,
 					   Environment environment,
 					   @Qualifier("passwordResetTaskExecutor") AsyncTaskExecutor passwordResetExecutor) {
@@ -189,6 +192,7 @@ public class AuthService {
 		this.sessionRegistry = sessionRegistry;
 		this.signupRateLimiter = signupRateLimiter;
 		this.passwordResetRateLimiter = passwordResetRateLimiter;
+		this.confirmationLinkBuilder = confirmationLinkBuilder;
 		this.passwordResetExecutor = passwordResetExecutor;
 
 		// Lower-cased so the domain check matches regardless of how the config spelled it. No null
@@ -474,7 +478,7 @@ public class AuthService {
 	private void dispatchPasswordResetEmail(SignupInfo ci, String password) {
 		String emailLog = HttpUtil.sanitizeForLog(ci.getEmail());
 		String token = RandomStringUtils.random(16, 0, 0, true, true, null, SECURE_RANDOM);
-		String confirmationLink = repositoryManager.getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
+		String confirmationLink = confirmationLinkBuilder.passwordResetLink(token);
 		log.info("Generated password reset token for {}", emailLog);
 
 		// Bcrypt and putToken run outside the try block — a Throwable here propagates to the worker's
@@ -759,7 +763,7 @@ public class AuthService {
 		verifyRecaptcha(request, requestBody.rcResponseV2(), ci.getEmail(), title);
 
 		String token = RandomStringUtils.random(16, 0, 0, true, true, null, SECURE_RANDOM);
-		String confirmationLink = repositoryManager.getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
+		String confirmationLink = confirmationLinkBuilder.signupLink(token);
 		log.info("Generated sign-up token for {}", ci.getEmail());
 
 		boolean sendSuccessful = emailSender.sendSignupConfirmation(ci.getFirstName() + " " + ci.getLastName(), ci.getEmail(), confirmationLink);

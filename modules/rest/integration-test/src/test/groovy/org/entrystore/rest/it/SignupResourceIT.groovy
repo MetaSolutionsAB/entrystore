@@ -116,6 +116,8 @@ class SignupResourceIT extends BaseSpec {
 		message.getAllRecipients().contains(new InternetAddress(username.toLowerCase()))
 		def token = extractConfirmationToken(greenMail)
 		token ==~ /[a-zA-Z0-9]{16}/
+		// No entrystore.auth.confirmation.url.signup in the IT config: the link stays on the backend page.
+		message.getContent().toString().contains(EntryStoreClient.baseUrl + '/auth/signup?confirm=' + token)
 	}
 
 	def "POST /auth/signup should send an email with generated token to a new user when posted as an html form"() {
