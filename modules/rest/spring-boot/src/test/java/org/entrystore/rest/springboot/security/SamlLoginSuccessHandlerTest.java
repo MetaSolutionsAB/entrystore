@@ -97,7 +97,7 @@ class SamlLoginSuccessHandlerTest {
 		var samlConfiguration = new SamlCustomConfiguration(
 				true, null, List.of(), Map.of(),
 				new SamlCustomConfiguration.RedirectUrl(SUCCESS_URL),
-				new SamlCustomConfiguration.RedirectUrl(FAILURE_URL));
+				new SamlCustomConfiguration.RedirectUrl(FAILURE_URL), null);
 		handler = new SamlLoginSuccessHandler(userService, samlAuthService, samlAuthStateCache,
 				principalManager, authTokenCookies, samlConfiguration);
 		// Custom-success redirects route through the RedirectStrategy; the failure path writes the

@@ -18,31 +18,53 @@ package org.entrystore.rest.springboot.security;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Ticker;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
-import org.springframework.security.saml2.provider.service.web.Saml2AuthenticationRequestRepository;
+import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
+import org.entrystore.rest.springboot.util.CapacityEvictionWarning;
 import org.springframework.security.saml2.provider.service.authentication.AbstractSaml2AuthenticationRequest;
+import org.springframework.security.saml2.provider.service.web.Saml2AuthenticationRequestRepository;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Stores SAML authentication requests in a Caffeine cache keyed by the relay state token,
  * instead of in the HTTP session. This avoids the SameSite=Strict cookie problem where
  * the browser withholds the session cookie on the cross-site POST from the IdP back to
  * the ACS endpoint.
+ *
+ * <p>Entries expire after {@link SamlCustomConfiguration#requestLifetime()}: Spring validates the response's
+ * {@code InResponseTo} against the request loaded here, so a login that outlives its entry fails.
+ *
+ * <p>The cache is written on the anonymous, un-rate-limited login-initiation path, so
+ * {@code maximumSize} bounds the heap and {@link CapacityEvictionWarning} reports when the bound bites.
  */
+@Slf4j
 @Component
 public class CacheSaml2AuthenticationRequestRepository
 		implements Saml2AuthenticationRequestRepository<AbstractSaml2AuthenticationRequest>, CaffeineCacheSource {
 
-	private final Cache<String, AbstractSaml2AuthenticationRequest> cache =
-			Caffeine.newBuilder()
-					.expireAfterWrite(2, TimeUnit.MINUTES)
-					.recordStats()
-					.build();
+	// expireAfterWrite bounds lifetime only, so request-rate × lifetime of anonymous entries needs a cap. At about
+	// 2 KB per request, 50k entries ≈ 100 MB at worst; a flood needs ~55 req/s for 15 minutes to fill it. Once full,
+	// Caffeine admits by frequency, so in-flight logins lose their request within seconds (ENTRYSTORE-1205).
+	static final long MAX_ENTRIES = 50_000;
+
+	private final Cache<String, AbstractSaml2AuthenticationRequest> cache;
+
+	public CacheSaml2AuthenticationRequestRepository(SamlCustomConfiguration samlConfiguration, Ticker ticker) {
+		var capacityWarning = new CapacityEvictionWarning(log, "SAML authentication-request", MAX_ENTRIES);
+		this.cache = Caffeine.newBuilder()
+				.ticker(ticker)
+				.expireAfterWrite(samlConfiguration.requestLifetime())
+				.maximumSize(MAX_ENTRIES)
+				.evictionListener(capacityWarning.listener())
+				.recordStats()
+				.build();
+	}
 
 	@Override
 	public Map<String, Cache<?, ?>> caffeineCaches() {

@@ -18,9 +18,6 @@ package org.entrystore.rest.springboot.security;
 
 import com.github.benmanes.caffeine.cache.Ticker;
 import jakarta.annotation.PostConstruct;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.repository.security.Password;
@@ -52,7 +49,6 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
-import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
@@ -65,7 +61,6 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
-import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
@@ -76,7 +71,6 @@ import org.springframework.security.web.util.matcher.AndRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
@@ -102,9 +96,10 @@ public class SecurityConfig {
 
 	private final AuthTokenCookies authTokenCookies;
 
-	// SAML-auth related beans (success handler optional — only present when entrystore.auth.saml.enabled=true)
+	// SAML-auth related beans (handlers optional — only present when entrystore.auth.saml.enabled=true)
 	private final SamlCustomConfiguration samlConfiguration;
 	private final Optional<SamlLoginSuccessHandler> samlLoginSuccessHandler;
+	private final Optional<SamlLoginFailureHandler> samlLoginFailureHandler;
 	private final Optional<RelyingPartyRegistrationRepository> repo; // optional as it will be injected only when Spring's SAML properties are configured
 	private final SamlRelayStateResolver samlRelayStateResolver;
 	private final CacheSaml2AuthenticationRequestRepository saml2AuthenticationRequestRepository;
@@ -273,12 +268,15 @@ public class SecurityConfig {
 			// before sendRedirect commits the response — CacheControlFilter's post-chain check
 			// cannot run after a committed response, so the redirect strategy closes that gap.
 			samlHandler.setRedirectStrategy(cacheAwareRedirectStrategy);
+			var samlFailureHandler = samlLoginFailureHandler.orElseThrow(() -> new IllegalStateException(
+					"SAML is enabled but SamlLoginFailureHandler bean is missing — check the " +
+							"entrystore.auth.saml.enabled binding."));
 
 			// Also processes SAML responses posted to the 5.x assertion consumer service (POST /auth/saml?idp=<id>).
 			var acsMatcher = new SamlAcsRequestMatcher();
 			http.saml2Login(samlLogin -> samlLogin
 					.loginPage("/auth/saml")
-					.failureUrl(samlConfiguration.redirectFailure().url())
+					.failureHandler(samlFailureHandler)
 					.authenticationRequestResolver(createCustomResolver())
 					.authenticationConverter(createAcsTokenConverter(acsMatcher))
 					.successHandler(samlHandler)
@@ -315,20 +313,8 @@ public class SecurityConfig {
 			// See the SAML branch above for the rationale.
 			handler.setRedirectStrategy(cacheAwareRedirectStrategy);
 			casFilter.setAuthenticationSuccessHandler(handler);
-			// Surface ticket-validation failures at WARN with the full stack trace.
-			// SimpleUrlAuthenticationFailureHandler's default logging is at DEBUG level, which
-			// makes bad-ticket, CAS-server-down, SSL, and clock-skew errors invisible in production.
-			casFilter.setAuthenticationFailureHandler(new SimpleUrlAuthenticationFailureHandler(
-					casConfiguration.redirectFailure().url()) {
-				@Override
-				public void onAuthenticationFailure(HttpServletRequest request,
-													HttpServletResponse response,
-													AuthenticationException exception) throws IOException, ServletException {
-					log.warn("CAS authentication failed at '{}': {}",
-							request.getRequestURI(), exception.getMessage(), exception);
-					super.onAuthenticationFailure(request, response, exception);
-				}
-			});
+			casFilter.setAuthenticationFailureHandler(
+					new SsoLoginFailureHandler("CAS", casConfiguration.redirectFailure().url()));
 
 			http.addFilterBefore(casFilter, UsernamePasswordAuthenticationFilter.class);
 		} else {

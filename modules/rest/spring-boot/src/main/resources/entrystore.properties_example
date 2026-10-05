@@ -185,9 +185,14 @@ entrystore.auth.temp.lockout.duration=0ms
 # spring.security.saml2.relyingparty.registration.myIdp.assertingparty.metadata-uri=https://idp.example.com/metadata
 ## SP entity id (default: {baseUrl}/saml2/service-provider-metadata/{id}); set it to keep the id the IdP knows.
 # spring.security.saml2.relyingparty.registration.myIdp.entity-id=https://store.example.com/sp
+## An IdP whose http(s) metadata cannot be fetched at startup (10 s connect / 30 s read timeout) does not stop
+## EntryStore from starting: a WARN names it, and its metadata is retried in the background (every 5 min, or
+## max-age if shorter) and on login (at most every 30 s); SAML login with it fails until then. A missing or
+## invalid file: metadata still fails startup.
 ## The IdP posts its response to the assertion consumer service, set by
 ## spring.security.saml2.relyingparty.registration.{id}.acs.location (default: {baseUrl}/login/saml2/sso/{id}).
 ## /auth/saml?idp={id}, the 5.x URL, is also accepted, so an IdP set up for 5.x needs no change.
+## Responses of up to 512 KB are accepted there; server.jetty.max-http-form-post-size (32KB) applies to other forms.
 ## Binding of the authentication request: post or redirect (default: the IdP metadata's first endpoint).
 # spring.security.saml2.relyingparty.registration.myIdp.assertingparty.singlesignon.binding=post
 ## 5.x SAML settings are still accepted: at startup they are translated to the keys above, and a
@@ -215,6 +220,9 @@ entrystore.auth.temp.lockout.duration=0ms
 # entrystore.auth.saml.redirect-domain-whitelist=app.example.com,portal.example.com
 # entrystore.auth.saml.redirect-domain-whitelist.1=app.example.com
 # entrystore.auth.saml.redirect-domain-whitelist.2=portal.example.com
+## How long a started login may stay at the IdP (MFA, consent, password change) before its response is rejected
+## and its successurl/failureurl are forgotten (default: 15m, 1m to 60m).
+# entrystore.auth.saml.request-lifetime=15m
 
 ## CAS authentication (default: false)
 ## Renamed in 6.0 — previously `entrystore.auth.cas`. The legacy key is still accepted:
