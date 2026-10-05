@@ -238,12 +238,14 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		userJson['id'] != null
 		userJson['user'] == testUsername
 		(userJson['uri'] as String).startsWith(EntryStoreClient.baseUrl + '/_principals/entry/')
-		(ssoCookie = spCookies.collect { it.split(';')[0] }.join('; ')) != null
-		(ssoUserResourceUri = (userJson['uri'] as String).replace('/_principals/entry/', '/_principals/resource/')) != null
 
 		and: 'the login lasts max-age (3700 s) like a form login, not the 30-minute Spring Boot session timeout'
 		def expiresIn = Duration.between(LocalDateTime.now(), LocalDateTime.parse(userJson['authTokenExpires'] as String))
 		expiresIn.toSeconds() > 3600 && expiresIn.toSeconds() <= 3700
+
+		cleanup: 'store the session for the last step'
+		ssoCookie = spCookies.collect { it.split(';')[0] }.join('; ')
+		ssoUserResourceUri = (userJson['uri'] as String).replace('/_principals/entry/', '/_principals/resource/')
 	}
 
 	def '5. A SAMLResponse in a ~100 KB form is also accepted on the 5.x assertion consumer service URL'() {
@@ -310,7 +312,10 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 	}
 
 	def '8. Disabling the SAML-authenticated user should end the session, even if re-enabled before the next request'() {
-		given: 'an admin disables the user and enables them again'
+		given: 'the session from the login is still valid'
+		assert EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: ssoCookie]).getResponseCode() == HTTP_OK
+
+		and: 'an admin disables the user and enables them again'
 		def adminLogin = EntryStoreClient.postRequest('/auth/cookie', 'auth_username=admin&auth_password=adminpass', '',
 			'application/x-www-form-urlencoded')
 		assert adminLogin.getResponseCode() == HTTP_OK

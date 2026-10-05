@@ -714,7 +714,6 @@ class CookieLoginResourceIT extends BaseSpec {
 		return JSON_PARSER.parseText(body) as Map
 	}
 
-
 	/**
 	 * Logs the user in, then disables them as admin, and enables them again if asked.
 	 *

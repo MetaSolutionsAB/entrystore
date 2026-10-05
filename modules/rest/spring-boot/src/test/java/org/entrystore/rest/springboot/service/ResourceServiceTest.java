@@ -28,7 +28,6 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
-import org.entrystore.rest.springboot.security.ESUserDetailsService;
 import org.entrystore.rest.springboot.security.ESUserSessionDetails;
 import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
@@ -92,17 +91,13 @@ class ResourceServiceTest {
 	private SessionRegistry sessionRegistry;
 
 	@Mock
-	private ESUserDetailsService userDetailsService;
-
-	@Mock
 	private Entry entry;
 
 	private ResourceService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, ssrfValidator, sessionRegistry,
-				userDetailsService);
+		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, ssrfValidator, sessionRegistry);
 		// Point importTmpDir at the JUnit-managed isolated directory so the
 		// temp-file cleanup assertions are scoped to this test and cannot be
 		// polluted by other processes or orphan files in the shared system temp.
@@ -239,17 +234,18 @@ class ResourceServiceTest {
 		URI userUri = URI.create("https://example.org/store/_principals/resource/7");
 		User user = mock(User.class);
 		when(user.getURI()).thenReturn(userUri);
+		when(principalManager.getPrincipalName(userUri)).thenReturn("alice");
 		var formLogin = new ESUserSessionDetails(springUser(userUri.toString()), user, null);
+		var casLogin = springUser("ALICE");
+		var samlLogin = new DefaultSaml2AuthenticatedPrincipal("alice", Map.of());
 		var otherFormLogin = new ESUserSessionDetails(
 				springUser("https://example.org/store/_principals/resource/8"), mock(User.class), null);
-		var casLogin = springUser("cas-name");
-		var samlLogin = new DefaultSaml2AuthenticatedPrincipal("saml-name", Map.of());
-		when(userDetailsService.loadUser("cas-name")).thenReturn(user);
-		when(userDetailsService.loadUser("saml-name")).thenReturn(user);
+		var otherSamlLogin = new DefaultSaml2AuthenticatedPrincipal("bob", Map.of());
 		var formSession = new SessionInformation(formLogin, "form", new Date());
 		var casSession = new SessionInformation(casLogin, "cas", new Date());
 		var samlSession = new SessionInformation(samlLogin, "saml", new Date());
-		when(sessionRegistry.getAllPrincipals()).thenReturn(List.of(formLogin, otherFormLogin, casLogin, samlLogin));
+		when(sessionRegistry.getAllPrincipals())
+				.thenReturn(List.of(formLogin, otherFormLogin, casLogin, otherSamlLogin, samlLogin));
 		when(sessionRegistry.getAllSessions(formLogin, false)).thenReturn(List.of(formSession));
 		when(sessionRegistry.getAllSessions(casLogin, false)).thenReturn(List.of(casSession));
 		when(sessionRegistry.getAllSessions(samlLogin, false)).thenReturn(List.of(samlSession));
@@ -260,6 +256,7 @@ class ResourceServiceTest {
 		assertTrue(casSession.isExpired());
 		assertTrue(samlSession.isExpired());
 		verify(sessionRegistry, never()).getAllSessions(otherFormLogin, false);
+		verify(sessionRegistry, never()).getAllSessions(otherSamlLogin, false);
 	}
 
 	private static UserDetails springUser(String username) {
