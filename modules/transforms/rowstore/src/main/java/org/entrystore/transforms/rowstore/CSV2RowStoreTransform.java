@@ -52,6 +52,8 @@ import java.util.Set;
  *     <li>{@code setalias} sets the argument {@code alias} on the dataset at {@code datasetURL}, or removes the
  *     aliases if {@code alias} is empty. It needs no source entry.</li>
  * </ul>
+ * {@code datasetURL} comes from the pipeline, which any context writer can edit, so it must have the origin of
+ * {@code entrystore.rowstore.url}; this keeps the server from sending requests to arbitrary hosts.
  * {@code replace}, {@code append} and {@code setalias} return the existing PipelineResult entry of the dataset.
  * If RowStore rejects a request the transform returns null.
  *
@@ -87,11 +89,7 @@ public class CSV2RowStoreTransform extends Transform {
 	}
 
 	private Entry createDataset(Pipeline pipeline, Entry sourceEntry) {
-		String rowstoreUrl = pipeline.getEntry().getRepositoryManager().getConfiguration()
-				.getString(Settings.ROWSTORE_URL);
-		if (rowstoreUrl == null || rowstoreUrl.isBlank()) {
-			throw new IllegalStateException("CSV2RowStoreTransform requires " + Settings.ROWSTORE_URL);
-		}
+		String rowstoreUrl = rowStoreUrl(pipeline);
 		URI datasetsUri = URI.create(rowstoreUrl + (rowstoreUrl.endsWith("/") ? "" : "/") + "datasets");
 
 		RowStoreClient.Response response = client.send("POST", datasetsUri, csvBody(sourceEntry), TEXT_CSV);
@@ -121,7 +119,18 @@ public class CSV2RowStoreTransform extends Transform {
 		if (datasetURL == null) {
 			throw new IllegalStateException("CSV2RowStoreTransform action " + action + " requires a datasetURL parameter");
 		}
-		Set<Entry> datasetEntries = pipeline.getEntry().getContext().getByResourceURI(URI.create(datasetURL));
+		URI datasetUri;
+		try {
+			datasetUri = URI.create(datasetURL);
+		} catch (IllegalArgumentException e) {
+			throw new IllegalStateException("Invalid datasetURL " + datasetURL, e);
+		}
+		if (!isSameOrigin(datasetUri, URI.create(rowStoreUrl(pipeline)))) {
+			log.warn("Rejected rowstore pipeline {}: datasetURL {} is not on the origin of {}",
+					pipeline.getEntry().getEntryURI(), datasetURL, Settings.ROWSTORE_URL);
+			throw new IllegalStateException("datasetURL " + datasetURL + " is not on the RowStore origin");
+		}
+		Set<Entry> datasetEntries = pipeline.getEntry().getContext().getByResourceURI(datasetUri);
 		if (datasetEntries.size() != 1) {
 			throw new IllegalStateException("Expected one result entry for dataset " + datasetURL + ", found "
 					+ datasetEntries.size() + "; aborting update");
@@ -129,8 +138,8 @@ public class CSV2RowStoreTransform extends Transform {
 		Entry datasetEntry = datasetEntries.iterator().next();
 
 		RowStoreClient.Response response = switch (action) {
-			case "replace" -> client.send("PUT", URI.create(datasetURL), csvBody(sourceEntry), TEXT_CSV);
-			case "append" -> client.send("POST", URI.create(datasetURL), csvBody(sourceEntry), TEXT_CSV);
+			case "replace" -> client.send("PUT", datasetUri, csvBody(sourceEntry), TEXT_CSV);
+			case "append" -> client.send("POST", datasetUri, csvBody(sourceEntry), TEXT_CSV);
 			default -> setAlias(datasetURL, getArguments().get("alias"));
 		};
 		if (!response.isSuccess()) {
@@ -157,6 +166,35 @@ public class CSV2RowStoreTransform extends Transform {
 			return client.send("DELETE", aliasesUri, null, null);
 		}
 		return client.send("PUT", aliasesUri, BodyPublishers.ofString(toJsonArray(alias)), APPLICATION_JSON);
+	}
+
+	private static String rowStoreUrl(Pipeline pipeline) {
+		String rowstoreUrl = pipeline.getEntry().getRepositoryManager().getConfiguration()
+				.getString(Settings.ROWSTORE_URL);
+		if (rowstoreUrl == null || rowstoreUrl.isBlank()) {
+			throw new IllegalStateException("CSV2RowStoreTransform requires " + Settings.ROWSTORE_URL);
+		}
+		return rowstoreUrl;
+	}
+
+	/**
+	 * Compares scheme and host case-insensitively and treats an omitted port as the scheme's default port.
+	 */
+	static boolean isSameOrigin(URI uri, URI other) {
+		return uri.getScheme() != null && uri.getScheme().equalsIgnoreCase(other.getScheme())
+				&& uri.getHost() != null && uri.getHost().equalsIgnoreCase(other.getHost())
+				&& effectivePort(uri) == effectivePort(other);
+	}
+
+	private static int effectivePort(URI uri) {
+		if (uri.getPort() != -1) {
+			return uri.getPort();
+		}
+		return switch (uri.getScheme().toLowerCase(Locale.ROOT)) {
+			case "http" -> 80;
+			case "https" -> 443;
+			default -> -1;
+		};
 	}
 
 	/**

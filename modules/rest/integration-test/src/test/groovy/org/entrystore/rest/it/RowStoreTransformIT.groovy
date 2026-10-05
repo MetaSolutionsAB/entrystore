@@ -272,6 +272,36 @@ class RowStoreTransformIT extends BaseSpec {
 		wireMockServer.verify(0, anyRequestedFor(anyUrl()))
 	}
 
+	def "replace for a dataset on another origin than the RowStore URL should return 400 and send no request"() {
+		given:
+		// same WireMock server, but 127.0.0.1 is a different origin than localhost in entrystore.rowstore.url
+		def foreignUrl = 'http://127.0.0.1:' + wireMockServer.port() + DATASETS_PATH + '/' + uniqueId()
+		createEntry(CONTEXT_ID, [entrytype: 'link', resource: foreignUrl])
+		def pipelineUri = createRowStorePipeline([action: 'replace', datasetURL: foreignUrl])
+		def sourceUri = createCsvSource('a,b\n1,2\n')
+
+		when:
+		def connection = execute(pipelineUri, sourceUri)
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		wireMockServer.verify(0, anyRequestedFor(anyUrl()))
+	}
+
+	def "setalias for a dataset on another origin than the RowStore URL should return 400 and send no request"() {
+		given:
+		def foreignUrl = 'http://127.0.0.1:' + wireMockServer.port() + DATASETS_PATH + '/' + uniqueId()
+		createEntry(CONTEXT_ID, [entrytype: 'link', resource: foreignUrl])
+		def pipelineUri = createRowStorePipeline([action: 'setalias', datasetURL: foreignUrl, alias: ''])
+
+		when:
+		def connection = execute(pipelineUri, null)
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		wireMockServer.verify(0, anyRequestedFor(anyUrl()))
+	}
+
 	def "setalias without source entry should PUT the alias as JSON array to the dataset's aliases"() {
 		given:
 		def dataset = createDataset()
