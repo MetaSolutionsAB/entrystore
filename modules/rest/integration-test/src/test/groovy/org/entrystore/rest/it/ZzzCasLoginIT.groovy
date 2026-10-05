@@ -23,6 +23,9 @@ import org.springframework.boot.SpringApplication
 import spock.lang.Shared
 import spock.lang.Stepwise
 
+import java.time.Duration
+import java.time.LocalDateTime
+
 import static java.net.HttpURLConnection.HTTP_MOVED_TEMP
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
@@ -140,7 +143,7 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		successRedirectUrl == successLoginUrl
 		def spCookies = casCallbackConn.getHeaderFields()['Set-Cookie']
 		spCookies != null
-		spCookies.any { it.contains('auth_token=') && it.contains('HttpOnly') }
+		spCookies.any { it.contains('auth_token=') && it.contains('HttpOnly') && it.contains('Max-Age=31536000') }
 
 		and: 'The 302 carrying the session Set-Cookie must ship with Cache-Control: private, no-store'
 		// Regression sentinel for ENTRYSTORE-945 PR #283 round-1 review: a shared cache keying
@@ -160,6 +163,10 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		userJson['id'] != null
 		userJson['user'] == testUsername
 		(userJson['uri'] as String).startsWith(EntryStoreClient.baseUrl + '/_principals/entry/')
+
+		and: 'the login lasts max-age (3700 s) like a form login, not the 30-minute Spring Boot session timeout'
+		def expiresIn = Duration.between(LocalDateTime.now(), LocalDateTime.parse(userJson['authTokenExpires'] as String))
+		expiresIn.toSeconds() > 3600 && expiresIn.toSeconds() <= 3700
 	}
 
 	def '4. Reserved admin username is blocked and does not leak authenticated session'() {

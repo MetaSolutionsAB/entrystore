@@ -49,6 +49,7 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
+import org.springframework.security.config.annotation.web.configurers.RequestCacheConfigurer;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
@@ -62,6 +63,11 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.context.DelegatingSecurityContextRepository;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
@@ -173,6 +179,12 @@ public class SecurityConfig {
 				// needs (private,no-store for authenticated; no header for anonymous so static and
 				// controller-set values can pass through unchanged).
 				.headers(headers -> headers.cacheControl(HeadersConfigurer.CacheControlConfig::disable))
+				// Spring's default repositories, set explicitly so SessionManagementFilter also sees the request-scoped
+				// HTTP Basic context and does not start a session (and auth_token cookie) for it, as in 5.x
+				.securityContext(context -> context.securityContextRepository(sessionAndRequestContextRepository()))
+				// Nothing resumes a request after login (the entry point answers 401), and saving one would start a
+				// session, and thus an auth_token cookie, for a guest's browser request to a protected page
+				.requestCache(RequestCacheConfigurer::disable)
 				.sessionManagement(session -> {
 					// ConcurrentSessionFilter runs the logout handlers, and thereby expires the cookie, before this strategy
 					session.sessionConcurrency(concurrency -> concurrency
@@ -239,6 +251,9 @@ public class SecurityConfig {
 		if (!invalidTokenError) {
 			// Without an invalid-session strategy, SessionManagementFilter lets the request continue as guest
 			http.addFilterBefore(new InvalidSessionCookieFilter(authTokenCookies), SessionManagementFilter.class);
+		}
+		if (!authTokenCookies.isRefreshExpirationOnAccess()) {
+			http.addFilterBefore(new SessionLifetimeFilter(authTokenCookies), SecurityContextHolderFilter.class);
 		}
 
 		if (httpBasicConfig.enabled()) {
@@ -506,10 +521,17 @@ public class SecurityConfig {
 		}
 	}
 
+	private static SecurityContextRepository sessionAndRequestContextRepository() {
+		var sessionRepository = new HttpSessionSecurityContextRepository();
+		sessionRepository.setDisableUrlRewriting(true);
+		return new DelegatingSecurityContextRepository(sessionRepository, new RequestAttributeSecurityContextRepository());
+	}
+
 	@Bean
 	public ServletContextInitializer servletContextInitializer() {
 		return servletContext -> {
 			servletContext.getSessionCookieConfig().setPath(authTokenCookies.getIssuingPath());
+			servletContext.getSessionCookieConfig().setMaxAge(authTokenCookies.cookieMaxAgeSeconds());
 			if (sessionCookieSameSite == Cookie.SameSite.NONE) {
 				servletContext.getSessionCookieConfig().setSecure(true);
 			}

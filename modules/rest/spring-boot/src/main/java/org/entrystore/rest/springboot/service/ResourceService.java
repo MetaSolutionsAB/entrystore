@@ -54,6 +54,7 @@ import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
+import org.entrystore.rest.springboot.security.ESUserSessionDetails;
 import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.entrystore.rest.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.springboot.util.Email;
@@ -67,6 +68,7 @@ import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.AuthenticatedPrincipal;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -446,6 +448,9 @@ public class ResourceService {
 					}
 					boolean disabled = entityJSON.optBoolean("disabled", false);
 					resourceUser.setDisabled(disabled);
+					if (disabled) {
+						expireSessions(resourceUser);
+					}
 				}
 				if (entityJSON.has("customProperties")) {
 					Map<String, String> customPropMap = new HashMap<>();
@@ -789,4 +794,24 @@ public class ResourceService {
 		throw new NotImplementedException("RDF resource import is not yet implemented");
 	}
 
+	/**
+	 * Expires every session of the user, whichever way they logged in, as 5.x removed a disabled user's tokens. Form
+	 * login principals carry the user's resource URI as username, SAML and CAS principals the user's name, which the
+	 * SSO login matches case-insensitively.
+	 */
+	void expireSessions(User user) {
+		String userUri = user.getURI().toString();
+		String name = principalManager.getPrincipalName(user.getURI());
+		for (Object principal : sessionRegistry.getAllPrincipals()) {
+			boolean ofUser = switch (principal) {
+				case ESUserSessionDetails form -> userUri.equals(form.getUsername());
+				case UserDetails cas -> cas.getUsername().equalsIgnoreCase(name);
+				case AuthenticatedPrincipal saml -> saml.getName().equalsIgnoreCase(name);
+				default -> false;
+			};
+			if (ofUser) {
+				sessionRegistry.getAllSessions(principal, false).forEach(SessionInformation::expireNow);
+			}
+		}
+	}
 }

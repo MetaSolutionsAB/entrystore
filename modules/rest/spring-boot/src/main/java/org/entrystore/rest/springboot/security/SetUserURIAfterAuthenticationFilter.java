@@ -25,6 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
+import org.entrystore.rest.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.http.HttpStatus;
@@ -49,6 +50,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 
 	private final PrincipalManager pm;
 	private final ESUserDetailsService userDetailsService;
+	private final AuthTokenCookies authTokenCookies;
 
 	@Override
 	protected void doFilterInternal(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response, @NotNull FilterChain filterChain)
@@ -103,6 +105,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 					log.warn("Authenticated {} user '{}' not found in EntryStore, denying access",
 							externalAuthType, HttpUtil.sanitizeForLog(username));
 					HttpUtil.clearAuthenticatedSession(request);
+					authTokenCookies.expireAll(request, response);
 					setForbiddenResponse(request, response,
 							"Authenticated " + externalAuthType + " user not found in EntryStore");
 					return;
@@ -112,8 +115,18 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 					log.warn("Authenticated {} user '{}' has no URI in EntryStore, denying access",
 							externalAuthType, HttpUtil.sanitizeForLog(username));
 					HttpUtil.clearAuthenticatedSession(request);
+					authTokenCookies.expireAll(request, response);
 					setForbiddenResponse(request, response,
 							"Authenticated " + externalAuthType + " user has no URI in EntryStore");
+					return;
+				}
+				if (BasicVerifier.isUserDisabled(pm, user)) {
+					// Ends the session, as 5.x removed a disabled user's tokens; form logins: ReloadUserPropertiesFilter
+					log.info("{} user '{}' is disabled, ending the session",
+							externalAuthType, HttpUtil.sanitizeForLog(username));
+					HttpUtil.clearAuthenticatedSession(request);
+					authTokenCookies.expireAll(request, response);
+					setForbiddenResponse(request, response, "User account is disabled.");
 					return;
 				}
 				pm.setAuthenticatedUserURI(userUri);
@@ -124,6 +137,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 					log.warn("Cookie-authenticated session for '{}' has no usable EntryStore user, denying access",
 							HttpUtil.sanitizeForLog(esUser.getUsername()));
 					HttpUtil.clearAuthenticatedSession(request);
+					authTokenCookies.expireAll(request, response);
 					setForbiddenResponse(request, response,
 							"Cookie-authenticated user no longer exists in EntryStore");
 					return;

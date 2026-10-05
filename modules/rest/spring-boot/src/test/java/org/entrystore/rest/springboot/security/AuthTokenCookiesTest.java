@@ -19,6 +19,9 @@ package org.entrystore.rest.springboot.security;
 import jakarta.servlet.http.Cookie;
 import org.entrystore.repository.RepositoryManager;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -26,9 +29,14 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -161,12 +169,99 @@ class AuthTokenCookiesTest {
 				response.getHeaders("Set-Cookie"));
 	}
 
+	@Test
+	void cookieMaxAge_refreshExpirationOnAccess_is365Days() {
+		assertEquals(365 * 24 * 3600, authTokenCookies("3600", true).cookieMaxAgeSeconds());
+	}
+
+	@Test
+	void cookieMaxAge_fixedExpiration_isMaxAge() {
+		assertEquals(3600, authTokenCookies("3600", false).cookieMaxAgeSeconds());
+	}
+
+	@ParameterizedTest(name = "max-age \"{0}\" -> {1} s")
+	@CsvSource(delimiter = '|', value = {
+			"3600   | 3600",
+			"86400s | 86400",
+			"1d     | 86400",
+			"' 60 ' | 60"
+	})
+	void parseMaxAgeSeconds_acceptsSecondsAndUnits(String maxAge, int expectedSeconds) {
+		assertEquals(expectedSeconds, AuthTokenCookies.parseMaxAgeSeconds(maxAge));
+	}
+
+	@ParameterizedTest(name = "max-age \"{0}\" is rejected")
+	@ValueSource(strings = {"0", "-5", "500ms", "abc", "3000000000"})
+	void parseMaxAgeSeconds_rejectsValuesThatAreNotAPositiveTimeout(String maxAge) {
+		assertThrows(IllegalStateException.class, () -> AuthTokenCookies.parseMaxAgeSeconds(maxAge));
+	}
+
+	@ParameterizedTest(name = "auth_maxage {0} -> idle timeout {1} s")
+	@CsvSource(nullValues = "null", value = {
+			"null, 3600",
+			"600,  600",
+			"7200, 3600",
+			"0,    3600",
+			"-1,   3600"
+	})
+	void applySessionLifetime_requestedMaxAgeCanOnlyShortenTheLifetime(Integer requestedMaxAge, int expectedSeconds) {
+		var request = new MockHttpServletRequest();
+
+		authTokenCookies("3600", true).applySessionLifetime(request, requestedMaxAge);
+
+		assertEquals(expectedSeconds, request.getSession().getMaxInactiveInterval());
+	}
+
+	@Test
+	void expiry_refreshExpirationOnAccess_isIdleTimeoutFromNow() {
+		var cookies = authTokenCookies("3600", true);
+		var request = new MockHttpServletRequest();
+		cookies.applySessionLifetime(request, null);
+
+		Instant expiry = cookies.expiry(request.getSession());
+
+		assertTrue(Duration.between(Instant.now().plusSeconds(3600), expiry).abs().toSeconds() <= 1);
+		assertFalse(cookies.isLoginExpired(request.getSession()));
+	}
+
+	@Test
+	void expiry_fixedExpiration_isLoginPlusLifetime() {
+		var cookies = authTokenCookies("3600", false);
+		var request = new MockHttpServletRequest();
+		cookies.applySessionLifetime(request, null);
+
+		Instant expiry = cookies.expiry(request.getSession());
+
+		assertTrue(Duration.between(Instant.now().plusSeconds(3600), expiry).abs().toSeconds() <= 1);
+		assertEquals(expiry, request.getSession().getAttribute(AuthTokenCookies.LOGIN_EXPIRY_ATTRIBUTE));
+		assertFalse(cookies.isLoginExpired(request.getSession()));
+	}
+
+	@Test
+	void isLoginExpired_fixedExpiration_pastLoginExpiry_isTrue() {
+		var cookies = authTokenCookies("3600", false);
+		var request = new MockHttpServletRequest();
+		cookies.applySessionLifetime(request, null);
+		request.getSession().setAttribute(AuthTokenCookies.LOGIN_EXPIRY_ATTRIBUTE, Instant.now().minusSeconds(1));
+
+		assertTrue(cookies.isLoginExpired(request.getSession()));
+	}
+
 	static AuthTokenCookies authTokenCookies(String sameSite, boolean httpOnly, String domain) {
+		return authTokenCookies(sameSite, httpOnly, domain, "86400", true);
+	}
+
+	static AuthTokenCookies authTokenCookies(String maxAge, boolean refreshExpirationOnAccess) {
+		return authTokenCookies("strict", true, "", maxAge, refreshExpirationOnAccess);
+	}
+
+	private static AuthTokenCookies authTokenCookies(String sameSite, boolean httpOnly, String domain, String maxAge,
+			boolean refreshExpirationOnAccess) {
 		var repositoryManager = mock(RepositoryManager.class);
 		when(repositoryManager.getRepositoryURL()).thenReturn(url("https://example.org/store/"));
 		var environment = new MockEnvironment().withProperty("server.servlet.session.cookie.same-site", sameSite);
 		return new AuthTokenCookies(repositoryManager, environment, "auth_token", domain, httpOnly, false,
-				"/store", "auto");
+				"/store", "auto", maxAge, refreshExpirationOnAccess);
 	}
 
 	static MockHttpServletRequest requestWithAuthToken() {

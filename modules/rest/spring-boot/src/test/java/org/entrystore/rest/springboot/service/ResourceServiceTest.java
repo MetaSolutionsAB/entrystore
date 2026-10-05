@@ -22,11 +22,13 @@ import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.User;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
+import org.entrystore.rest.springboot.security.ESUserSessionDetails;
 import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +37,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.saml2.provider.service.authentication.DefaultSaml2AuthenticatedPrincipal;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -43,6 +48,9 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
@@ -51,9 +59,11 @@ import java.util.zip.ZipOutputStream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -217,5 +227,39 @@ class ResourceServiceTest {
 			zos.closeEntry();
 		}
 		return baos.toByteArray();
+	}
+
+	@Test
+	void expireSessions_expiresTheSessionsOfEveryLoginOfTheUserOnly() {
+		URI userUri = URI.create("https://example.org/store/_principals/resource/7");
+		User user = mock(User.class);
+		when(user.getURI()).thenReturn(userUri);
+		when(principalManager.getPrincipalName(userUri)).thenReturn("alice");
+		var formLogin = new ESUserSessionDetails(springUser(userUri.toString()), user, null);
+		var casLogin = springUser("ALICE");
+		var samlLogin = new DefaultSaml2AuthenticatedPrincipal("alice", Map.of());
+		var otherFormLogin = new ESUserSessionDetails(
+				springUser("https://example.org/store/_principals/resource/8"), mock(User.class), null);
+		var otherSamlLogin = new DefaultSaml2AuthenticatedPrincipal("bob", Map.of());
+		var formSession = new SessionInformation(formLogin, "form", new Date());
+		var casSession = new SessionInformation(casLogin, "cas", new Date());
+		var samlSession = new SessionInformation(samlLogin, "saml", new Date());
+		when(sessionRegistry.getAllPrincipals())
+				.thenReturn(List.of(formLogin, otherFormLogin, casLogin, otherSamlLogin, samlLogin));
+		when(sessionRegistry.getAllSessions(formLogin, false)).thenReturn(List.of(formSession));
+		when(sessionRegistry.getAllSessions(casLogin, false)).thenReturn(List.of(casSession));
+		when(sessionRegistry.getAllSessions(samlLogin, false)).thenReturn(List.of(samlSession));
+
+		service.expireSessions(user);
+
+		assertTrue(formSession.isExpired());
+		assertTrue(casSession.isExpired());
+		assertTrue(samlSession.isExpired());
+		verify(sessionRegistry, never()).getAllSessions(otherFormLogin, false);
+		verify(sessionRegistry, never()).getAllSessions(otherSamlLogin, false);
+	}
+
+	private static UserDetails springUser(String username) {
+		return org.springframework.security.core.userdetails.User.withUsername(username).password("N/A").build();
 	}
 }
