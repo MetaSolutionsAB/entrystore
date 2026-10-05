@@ -51,6 +51,7 @@ import org.entrystore.rest.springboot.model.exception.InternalServerErrorExcepti
 import org.entrystore.rest.springboot.model.exception.PwResetEntityNotFoundHtmlException;
 import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException;
 import org.entrystore.rest.springboot.model.validation.AuthValidationMessages;
+import org.entrystore.rest.springboot.security.ESUserSessionDetails;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
 import org.entrystore.rest.springboot.service.auth.RecaptchaSettings;
 import org.entrystore.rest.springboot.service.auth.RecaptchaVerifier;
@@ -64,6 +65,7 @@ import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.AsyncTaskExecutor;
+import org.springframework.security.core.AuthenticatedPrincipal;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -252,6 +254,27 @@ public class AuthService {
 					}
 				}
 				break;
+			}
+		}
+	}
+
+	/**
+	 * Expires every session of the user, whichever way they logged in, as 5.x removed a disabled user's tokens. Form
+	 * login principals carry the user's resource URI as username; SAML, CAS and OIDC principals the user's name, which
+	 * the SSO login matches case-insensitively.
+	 */
+	public void expireAllSessions(User user) {
+		String userUri = user.getURI().toString();
+		String name = principalManager.getPrincipalName(user.getURI());
+		for (Object principal : sessionRegistry.getAllPrincipals()) {
+			boolean ofUser = switch (principal) {
+				case ESUserSessionDetails form -> userUri.equals(form.getUsername());
+				case UserDetails cas -> cas.getUsername().equalsIgnoreCase(name);
+				case AuthenticatedPrincipal sso -> sso.getName().equalsIgnoreCase(name);
+				default -> false;
+			};
+			if (ofUser) {
+				sessionRegistry.getAllSessions(principal, false).forEach(SessionInformation::expireNow);
 			}
 		}
 	}

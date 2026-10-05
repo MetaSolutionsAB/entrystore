@@ -159,7 +159,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		// Check if we got an auth cookie from EntryStore
 		def spCookies = callbackConn.getHeaderFields()['Set-Cookie']
 		spCookies != null
-		spCookies.any { it.contains('auth_token=') }
+		spCookies.any { it.contains('auth_token=') && it.contains('Max-Age=31536000') }
 
 		and: 'The 302 carrying the session Set-Cookie must ship with Cache-Control: private, no-store'
 		// Regression sentinel for ENTRYSTORE-945: a shared cache keying on URL alone must not cache

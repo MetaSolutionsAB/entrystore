@@ -22,7 +22,9 @@ import org.apache.commons.lang3.RandomStringUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
 
+import java.time.Duration
 import java.time.Instant
+import java.time.LocalDateTime
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -30,6 +32,7 @@ import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
+import static java.nio.charset.StandardCharsets.UTF_8
 
 class CookieLoginResourceIT extends BaseSpec {
 
@@ -201,7 +204,8 @@ class CookieLoginResourceIT extends BaseSpec {
 		if (maxAgePart.contains(';')) {
 			maxAgePart = maxAgePart.substring(0, maxAgePart.indexOf(';'))
 		}
-		assert maxAgePart == '3700'
+		// 365 days, as 5.x: the login itself lasts max-age (3700 s) after the last request
+		assert maxAgePart == '31536000'
 
 		when:
 		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
@@ -210,6 +214,8 @@ class CookieLoginResourceIT extends BaseSpec {
 		info.getResponseCode() == HTTP_OK
 		def infoRespJson = JSON_PARSER.parseText(info.inputStream.text)
 		infoRespJson['user'] == username.toLowerCase()
+		def expiresIn = Duration.between(LocalDateTime.now(), LocalDateTime.parse(infoRespJson['authTokenExpires'] as String))
+		expiresIn.toSeconds() > 3600 && expiresIn.toSeconds() <= 3700
 	}
 
 	def "POST /auth/cookie with maxAge set, should de-authenticate user after maxAge time"() {
@@ -475,6 +481,58 @@ class CookieLoginResourceIT extends BaseSpec {
 		loginConnection.getErrorStream().text.contains('Unauthorized')
 	}
 
+	def "A logged-in user who is then disabled should lose the session and the cookie on the next request"() {
+		given:
+		def cookie = loginAndDisable('userForDisabledWhileLoggedIn@test.com', false)
+
+		when:
+		def request = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
+
+		then: 'as in 5.x, which removed a disabled user\'s tokens'
+		request.getResponseCode() == HTTP_UNAUTHORIZED
+		!EntryStoreClient.findSetCookies(request, 'auth_token').isEmpty()
+		EntryStoreClient.findSetCookies(request, 'auth_token').every { it.contains('Max-Age=0') }
+	}
+
+	def "A logged-in user who is disabled and enabled again before the next request should still have lost the session"() {
+		given:
+		def cookie = loginAndDisable('userForDisabledAndEnabledAgain@test.com', true)
+
+		when:
+		def request = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
+
+		then:
+		request.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "GET /auth/user with HTTP Basic should not issue an auth_token cookie"() {
+		given:
+		def username = 'userForBasicWithoutCookie@test.com'
+		def user = UserUtil.createUser(username)
+		UserUtil.setUserPassword(user['resourceUri'].toString(), password)
+		def basic = 'Basic ' + Base64.getEncoder().encodeToString((username + ':' + password).getBytes(UTF_8))
+
+		when:
+		def connection = EntryStoreClient.getRequest('/auth/user', '', null, [Authorization: basic])
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(connection.inputStream.text)['user'] == username.toLowerCase()
+		EntryStoreClient.findSetCookies(connection, 'auth_token').isEmpty()
+	}
+
+	def "a guest browser request to a protected page should not issue an auth_token cookie"() {
+		when: 'Spring Security would save an HTML GET in a new session to resume it after login'
+		def connection = EntryStoreClient.getRequest(path, '', 'text/html')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		EntryStoreClient.findSetCookies(connection, 'auth_token').isEmpty()
+
+		where:
+		path << ['/auth/tokens', '/management/status/extended']
+	}
+
 	def "POST /auth/cookie should temporarily lockout user who entered wrong password too many times"() {
 		given:
 		def username = 'userForLoginTemporaryLockout@test.com'
@@ -675,4 +733,24 @@ class CookieLoginResourceIT extends BaseSpec {
 		return JSON_PARSER.parseText(body) as Map
 	}
 
+	/**
+	 * Logs the user in, then disables them as admin, and enables them again if asked.
+	 *
+	 * @return the user's session cookie from the login
+	 */
+	private static String loginAndDisable(String username, boolean enableAgain) {
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie',
+			'auth_username=' + username + '&auth_password=' + password, '', 'application/x-www-form-urlencoded')
+		assert loginConnection.getResponseCode() == HTTP_OK
+		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
+		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.putRequest(resourceUri, JsonOutput.toJson([disabled: true])).getResponseCode() == HTTP_NO_CONTENT
+		if (enableAgain) {
+			assert EntryStoreClient.putRequest(resourceUri, JsonOutput.toJson([disabled: false])).getResponseCode() == HTTP_NO_CONTENT
+		}
+		return cookie
+	}
 }

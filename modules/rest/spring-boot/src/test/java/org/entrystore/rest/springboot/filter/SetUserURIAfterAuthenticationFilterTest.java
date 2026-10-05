@@ -21,6 +21,7 @@ import org.apereo.cas.client.validation.Assertion;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
+import org.entrystore.rest.springboot.security.AuthTokenCookies;
 import org.entrystore.rest.springboot.security.ESUserDetailsService;
 import org.entrystore.rest.springboot.security.ESUserSessionDetails;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
@@ -35,6 +36,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.cas.authentication.CasAuthenticationToken;
@@ -70,6 +72,7 @@ class SetUserURIAfterAuthenticationFilterTest {
 	private static final URI GUEST_URI = URI.create("urn:test:_principals/resource/_guest");
 	private static final URI ALICE_URI = URI.create("urn:test:_principals/resource/alice");
 	private static final URI BOB_URI = URI.create("urn:test:_principals/resource/bob");
+	private static final URI ADMIN_URI = URI.create("urn:test:_principals/resource/_admin");
 
 	@Mock
 	private PrincipalManager pm;
@@ -86,16 +89,25 @@ class SetUserURIAfterAuthenticationFilterTest {
 	@Mock
 	private User bobUser;
 
+	@Mock
+	private User adminUser;
+
+	@Mock
+	private AuthTokenCookies authTokenCookies;
+
 	private SetUserURIAfterAuthenticationFilter filter;
 
 	@BeforeEach
 	void setUp() {
 		filter = new SetUserURIAfterAuthenticationFilter(pm, userDetailsService,
-				new ErrorResponseWriter(JsonMapper.builder().build()));
+				new ErrorResponseWriter(JsonMapper.builder().build()), authTokenCookies);
 		// Tests that need a missing-guest scenario override pm.getGuestUser() explicitly;
 		// keep these baseline stubs lenient so unused-stub failures don't mask the override.
 		lenient().when(pm.getGuestUser()).thenReturn(guestUser);
 		lenient().when(guestUser.getURI()).thenReturn(GUEST_URI);
+		// the disabled check reads the user as admin
+		lenient().when(pm.getAdminUser()).thenReturn(adminUser);
+		lenient().when(adminUser.getURI()).thenReturn(ADMIN_URI);
 	}
 
 	@AfterEach
@@ -192,6 +204,27 @@ class SetUserURIAfterAuthenticationFilterTest {
 		order.verify(pm).setAuthenticatedUserURI(GUEST_URI);
 		order.verify(pm).setAuthenticatedUserURI(ALICE_URI);
 		assertNotNull(chain.getRequest(), "Chain must be invoked after a successful SAML user lookup");
+	}
+
+	@Test
+	void samlAuthenticated_userDisabled_endsSessionExpiresCookieAndWrites403() throws Exception {
+		when(aliceUser.getURI()).thenReturn(ALICE_URI);
+		when(aliceUser.isDisabled()).thenReturn(true);
+		when(userDetailsService.loadUser("alice")).thenReturn(aliceUser);
+		SecurityContextHolder.getContext().setAuthentication(samlAuth("alice"));
+		var request = new MockHttpServletRequest("GET", "/some/resource");
+		var session = request.getSession(true);
+		var response = new MockHttpServletResponse();
+		var chain = new MockFilterChain();
+
+		filter.doFilter(request, response, chain);
+
+		assertEquals(HttpServletResponse.SC_FORBIDDEN, response.getStatus());
+		assertTrue(((MockHttpSession) session).isInvalid(),
+				"A disabled user's session must end, as 5.x removed their tokens");
+		verify(authTokenCookies).expireAll(request, response);
+		assertNull(SecurityContextHolder.getContext().getAuthentication());
+		assertNull(chain.getRequest(), "Chain must NOT be invoked for a disabled user");
 	}
 
 	@Test

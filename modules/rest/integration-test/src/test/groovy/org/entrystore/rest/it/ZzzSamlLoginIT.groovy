@@ -16,13 +16,16 @@
 
 package org.entrystore.rest.it
 
+import groovy.json.JsonOutput
 import org.apache.commons.text.StringEscapeUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import spock.lang.Shared
 import spock.lang.Stepwise
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static org.entrystore.rest.springboot.filter.CacheControlFilter.CACHE_CONTROL_AUTHENTICATED
 
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
@@ -40,6 +43,8 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 	static final String LARGE_FORM_PADDING = 'x' * (100 * 1024)
 
 	static def keycloakTestRealmUrl = ''
+	static String ssoCookie
+	static String ssoUserResourceUri
 
 	@Shared
 	def samlRequestSaved = ''
@@ -204,7 +209,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		// Check if we got an auth cookie from EntryStore
 		def spCookies = spCallbackConn.getHeaderFields()['Set-Cookie']
 		spCookies != null
-		spCookies.any { it.contains('auth_token=') }
+		spCookies.any { it.contains('auth_token=') && it.contains('Max-Age=31536000') }
 
 		and: 'The 302 carrying the session Set-Cookie must ship with Cache-Control: private, no-store'
 		// Regression sentinel for ENTRYSTORE-945 PR #283 round-1 review: a shared cache keying
@@ -225,6 +230,10 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 
 		and: 'the session idle timeout is the auth_token cookie max-age (IT 3700 s), not 30 minutes'
 		hoursUntilAuthTokenExpires(userJson) == 1
+
+		cleanup: 'store the session for the last step'
+		ssoCookie = spCookies.collect { it.split(';')[0] }.join('; ')
+		ssoUserResourceUri = (userJson['uri'] as String).replace('/_principals/entry/', '/_principals/resource/')
 	}
 
 	def '5. A SAMLResponse in a ~100 KB form is also accepted on the 5.x assertion consumer service URL'() {
@@ -288,5 +297,26 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 
 		then: "Jetty's form limit rejects it while parsing"
 		connection.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
+	def '8. Disabling the SAML-authenticated user should end the session, even if re-enabled before the next request'() {
+		given: 'the session from the login is still valid'
+		assert EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: ssoCookie]).getResponseCode() == HTTP_OK
+
+		and: 'an admin disables the user and enables them again'
+		def adminLogin = EntryStoreClient.postRequest('/auth/cookie', 'auth_username=admin&auth_password=adminpass', '',
+			'application/x-www-form-urlencoded')
+		assert adminLogin.getResponseCode() == HTTP_OK
+		def adminCookie = 'auth_token=' + EntryStoreClient.findCookieValue(adminLogin, 'auth_token')
+		[true, false].each { disabled ->
+			assert EntryStoreClient.putRequest(ssoUserResourceUri, JsonOutput.toJson([disabled: disabled]), '',
+				'application/json', [Cookie: adminCookie]).getResponseCode() == HTTP_NO_CONTENT
+		}
+
+		when: 'the user makes the next request with the session cookie from the login'
+		def userConn = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: ssoCookie])
+
+		then: 'the session has ended, as 5.x removed a disabled user\'s tokens'
+		userConn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 }

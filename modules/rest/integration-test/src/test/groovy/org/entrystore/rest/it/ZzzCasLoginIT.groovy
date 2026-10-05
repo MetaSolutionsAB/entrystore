@@ -131,7 +131,7 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		successRedirectUrl == successLoginUrl
 		def spCookies = casCallbackConn.getHeaderFields()['Set-Cookie']
 		spCookies != null
-		spCookies.any { it.contains('auth_token=') && it.contains('HttpOnly') }
+		spCookies.any { it.contains('auth_token=') && it.contains('HttpOnly') && it.contains('Max-Age=31536000') }
 
 		and: 'The 302 carrying the session Set-Cookie must ship with Cache-Control: private, no-store'
 		// Regression sentinel for ENTRYSTORE-945 PR #283 round-1 review: a shared cache keying

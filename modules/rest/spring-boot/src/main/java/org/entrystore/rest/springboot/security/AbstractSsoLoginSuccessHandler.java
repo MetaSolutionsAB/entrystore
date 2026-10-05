@@ -125,7 +125,7 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 			return;
 		}
 
-		authTokenCookies.applySessionLifetime(request);
+		authTokenCookies.applySessionLifetime(request, null);
 		authTokenCookies.expireStale(request, response);
 		if (tryCustomSuccessRedirect(request, response, context)) {
 			return;
