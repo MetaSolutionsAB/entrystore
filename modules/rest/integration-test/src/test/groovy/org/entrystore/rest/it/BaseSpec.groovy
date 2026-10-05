@@ -95,6 +95,10 @@ abstract class BaseSpec extends Specification {
 		return 'http://localhost:' + wireMockServer.port() + '/recaptcha/api/siteverify'
 	}
 
+	static String getRowStoreStubUrl() {
+		return 'http://localhost:' + wireMockServer.port() + '/rowstore'
+	}
+
 	static StubMapping registerRecaptchaFailStub(int status) {
 		return wireMockServer.stubFor(
 			post(urlPathEqualTo('/recaptcha/api/siteverify'))
@@ -135,6 +139,7 @@ abstract class BaseSpec extends Specification {
 			def args = [
 				'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
 				'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
+				'--entrystore.rowstore.url=' + getRowStoreStubUrl(),
 				// Inject the dynamic WireMock origin into the DELETE whitelist; the port is only known at runtime.
 				'--entrystore.proxy.remote-resource.delete.whitelist.1=http://localhost:' + wireMockServer.port(),
 				// CSRF protection defaults to off (ENTRYSTORE-1096) but the shared app runs with it ON so
