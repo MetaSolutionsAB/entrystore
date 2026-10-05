@@ -50,7 +50,8 @@ public class CacheSaml2AuthenticationRequestRepository
 		implements Saml2AuthenticationRequestRepository<AbstractSaml2AuthenticationRequest>, CaffeineCacheSource {
 
 	// expireAfterWrite bounds lifetime only, so request-rate × lifetime of anonymous entries needs a cap. At about
-	// 2 KB per request, 50k entries ≈ 100 MB at worst; a flood needs ~55 req/s for 15 minutes to fill it.
+	// 2 KB per request, 50k entries ≈ 100 MB at worst; a flood needs ~55 req/s for 15 minutes to fill it. Once full,
+	// Caffeine admits by frequency, so in-flight logins lose their request within seconds (ENTRYSTORE-1205).
 	static final long MAX_ENTRIES = 50_000;
 
 	private final Cache<String, AbstractSaml2AuthenticationRequest> cache;

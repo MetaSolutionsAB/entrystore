@@ -296,8 +296,9 @@ entrystore.auth.temp.lockout.duration=0ms
 ## SP entity id (default: {baseUrl}/saml2/service-provider-metadata/{id}); set it to keep the id the IdP knows.
 # spring.security.saml2.relyingparty.registration.myIdp.entity-id=https://store.example.com/sp
 ## An IdP whose http(s) metadata cannot be fetched at startup (10 s connect / 30 s read timeout) does not stop
-## EntryStore from starting: a WARN names it, and its metadata is retried in the background and on login (at
-## most every 30 s); SAML login with it fails until then. A missing or invalid file: metadata still fails startup.
+## EntryStore from starting: a WARN names it, and its metadata is retried in the background (every 5 min, or
+## max-age if shorter) and on login (at most every 30 s); SAML login with it fails until then. A missing or
+## invalid file: metadata still fails startup.
 ## The IdP posts its response to the assertion consumer service, set by
 ## spring.security.saml2.relyingparty.registration.{id}.acs.location (default: {baseUrl}/login/saml2/sso/{id}).
 ## /auth/saml?idp={id}, the 5.x URL, is also accepted, so an IdP set up for 5.x needs no change.

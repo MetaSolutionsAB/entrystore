@@ -49,4 +49,38 @@ class SsoLoginFailureHandlerTest {
 		}
 		assertEquals("/store/auth/user", response.getRedirectedUrl());
 	}
+
+	// Anonymous junk POSTs to the ACS endpoint must not write a stack trace at WARN each.
+	@Test
+	void failure_stackTraceIsLoggedAtDebugOnly() throws Exception {
+		var request = new MockHttpServletRequest("POST", "/login/saml2/sso/keycloak");
+		var exception = new Saml2AuthenticationException(
+				new Saml2Error(Saml2ErrorCodes.INVALID_SIGNATURE, "Invalid signature"));
+
+		try (var appender = CapturingAppender.attachTo(SsoLoginFailureHandler.class)) {
+			new SsoLoginFailureHandler("SAML", "/auth/user")
+					.onAuthenticationFailure(request, new MockHttpServletResponse(), exception);
+
+			assertEquals(List.of(), appender.thrownAt(Level.WARN).toList(), appender::toString);
+			assertEquals(List.of(exception), appender.thrownAt(Level.DEBUG).toList(), appender::toString);
+		}
+	}
+
+	// Spring quotes response values such as the issuer; an anonymous ACS POST must not forge a log line with them.
+	@Test
+	void failureMessage_withLineBreaks_isLoggedOnOneLine() throws Exception {
+		var request = new MockHttpServletRequest("POST", "/login/saml2/sso/keycloak");
+		var exception = new Saml2AuthenticationException(new Saml2Error(Saml2ErrorCodes.INVALID_ISSUER,
+				"Invalid issuer [x]\n2026-10-05 INFO Admin login succeeded"));
+
+		try (var appender = CapturingAppender.attachTo(SsoLoginFailureHandler.class)) {
+			new SsoLoginFailureHandler("SAML", "/auth/user")
+					.onAuthenticationFailure(request, new MockHttpServletResponse(), exception);
+
+			assertEquals(List.of(
+					"SAML authentication failed at '/login/saml2/sso/keycloak': "
+							+ "Invalid issuer [x]?2026-10-05 INFO Admin login succeeded"),
+					appender.messagesAt(Level.WARN).toList(), appender::toString);
+		}
+	}
 }

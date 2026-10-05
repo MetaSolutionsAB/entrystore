@@ -44,6 +44,8 @@ public class SamlAuthStateCache implements CaffeineCacheSource {
 
 	// Cardinality bound: anonymous logins with a whitelisted successurl/failureurl mint entries, and
 	// expireAfterWrite bounds only lifetime — cap the size so an initiation flood cannot exhaust the heap.
+	// Once full, Caffeine admits by frequency, so in-flight logins lose their redirect URLs within seconds
+	// (ENTRYSTORE-1205).
 	static final long MAX_ENTRIES = 50_000;
 
 	private final Cache<String, AuthState> requestCache;

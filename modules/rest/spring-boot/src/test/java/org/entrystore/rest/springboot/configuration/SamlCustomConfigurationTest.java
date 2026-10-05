@@ -94,6 +94,16 @@ class SamlCustomConfigurationTest {
 		assertRejected("request-lifetime", "61m", "must be between 1m and 60m");
 	}
 
+	@Test
+	void requestLifetime_atOneMinuteAndOneHour_isAccepted() {
+		assertEquals(Duration.ofMinutes(1), bind(Map.of(
+				"entrystore.auth.saml.enabled", "true",
+				"entrystore.auth.saml.request-lifetime", "1m")).requestLifetime());
+		assertEquals(Duration.ofMinutes(60), bind(Map.of(
+				"entrystore.auth.saml.enabled", "true",
+				"entrystore.auth.saml.request-lifetime", "60m")).requestLifetime());
+	}
+
 	private static void assertRejected(String key, String value, String expectedMessage) {
 		var ex = assertThrows(BindException.class, () -> bind(Map.of(
 				"entrystore.auth.saml.enabled", "true",
