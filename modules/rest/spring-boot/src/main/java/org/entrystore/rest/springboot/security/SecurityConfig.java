@@ -49,6 +49,7 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
+import org.springframework.security.config.annotation.web.configurers.RequestCacheConfigurer;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
@@ -181,6 +182,9 @@ public class SecurityConfig {
 				// Spring's default repositories, set explicitly so SessionManagementFilter also sees the request-scoped
 				// HTTP Basic context and does not start a session (and auth_token cookie) for it, as in 5.x
 				.securityContext(context -> context.securityContextRepository(sessionAndRequestContextRepository()))
+				// Nothing resumes a request after login (the entry point answers 401), and saving one would start a
+				// session, and thus an auth_token cookie, for a guest's browser request to a protected page
+				.requestCache(RequestCacheConfigurer::disable)
 				.sessionManagement(session -> {
 					// ConcurrentSessionFilter runs the logout handlers, and thereby expires the cookie, before this strategy
 					session.sessionConcurrency(concurrency -> concurrency

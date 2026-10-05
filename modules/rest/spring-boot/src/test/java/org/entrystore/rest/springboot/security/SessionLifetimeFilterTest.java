@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.security;
 
+import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -71,6 +72,25 @@ class SessionLifetimeFilterTest {
 		new SessionLifetimeFilter(cookies).doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
 
 		assertFalse(session.isInvalid());
+	}
+
+	@Test
+	void sessionEndedByAConcurrentRequest_continues() throws Exception {
+		var cookies = AuthTokenCookiesTest.authTokenCookies("3600", false);
+		var session = new MockHttpSession();
+		session.invalidate();
+		// the session was looked up before the concurrent request invalidated it
+		var request = new MockHttpServletRequest() {
+			@Override
+			public HttpSession getSession(boolean create) {
+				return session;
+			}
+		};
+		var chain = new MockFilterChain();
+
+		new SessionLifetimeFilter(cookies).doFilter(request, new MockHttpServletResponse(), chain);
+
+		assertNotNull(chain.getRequest());
 	}
 
 	@Test

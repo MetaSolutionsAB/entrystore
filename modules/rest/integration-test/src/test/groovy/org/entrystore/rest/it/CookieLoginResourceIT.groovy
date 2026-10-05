@@ -526,6 +526,18 @@ class CookieLoginResourceIT extends BaseSpec {
 		EntryStoreClient.findSetCookies(connection, 'auth_token').isEmpty()
 	}
 
+	def "a guest browser request to a protected page should not issue an auth_token cookie"() {
+		when: 'Spring Security would save an HTML GET in a new session to resume it after login'
+		def connection = EntryStoreClient.getRequest(path, '', 'text/html')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		EntryStoreClient.findSetCookies(connection, 'auth_token').isEmpty()
+
+		where:
+		path << ['/auth/tokens', '/management/status/extended']
+	}
+
 	def "POST /auth/cookie should temporarily lockout user who entered wrong password too many times"() {
 		given:
 		def username = 'userForLoginTemporaryLockout@test.com'

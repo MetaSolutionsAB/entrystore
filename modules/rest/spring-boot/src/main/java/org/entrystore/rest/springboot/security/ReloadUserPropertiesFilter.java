@@ -31,6 +31,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
@@ -94,7 +95,7 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 				UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(updatedUser, updatedUser.getPassword(), updatedUser.getAuthorities());
 				SecurityContextHolder.getContext().setAuthentication(newAuth);
 				if (session != null) {
-					sessionRegistry.registerNewSession(session.getId(), updatedUser);
+					updateRegisteredSession(session.getId(), updatedUser);
 				}
 			} catch (UsernameNotFoundException e) {
 				log.warn("User no longer found during session reload: {}", e.getMessage());
@@ -128,5 +129,22 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 		}
 
 		filterChain.doFilter(request, response);
+	}
+
+	/**
+	 * Updates the session info that /auth/tokens reports on the registered session. The registered entry is kept, not
+	 * registered anew, because registering replaces it with an unexpired one and would undo a revocation (user
+	 * disabled, password changed, token deleted) made by a concurrent request.
+	 */
+	private void updateRegisteredSession(String sessionId, ESUserSessionDetails updatedUser) {
+		SessionInformation registered = sessionRegistry.getSessionInformation(sessionId);
+		if (registered == null) {
+			sessionRegistry.registerNewSession(sessionId, updatedUser);
+			return;
+		}
+		if (registered.getPrincipal() instanceof ESUserSessionDetails registeredUser) {
+			registeredUser.setSessionInfo(updatedUser.getSessionInfo());
+		}
+		registered.refreshLastRequest();
 	}
 }

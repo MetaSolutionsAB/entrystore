@@ -11,7 +11,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 public class ESUserSessionDetails extends org.springframework.security.core.userdetails.User {
 
 	private final User esUser;
-	private SessionInfo sessionInfo;
+	// volatile: ReloadUserPropertiesFilter updates it on the registered principal, which /auth/tokens reads concurrently
+	private volatile SessionInfo sessionInfo;
 
 	public ESUserSessionDetails(UserDetails userDt, User esUser, SessionInfo sessionInfo) {
 

@@ -28,7 +28,8 @@ import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 /**
  * With {@code entrystore.auth.cookie.refresh-expiration-on-access} on (the default), a login lasts max-age after the
- * last request, as in 5.x: active users stay logged in, idle ones are logged out. Runs with a 5-second max-age.
+ * last request, as in 5.x: active users stay logged in, idle ones are logged out. Runs with a 10-second max-age; each
+ * probe keeps a margin of at least 2 seconds.
  */
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 class ZzzSessionLifetimeRefreshOnIT extends BaseSpec {
@@ -37,7 +38,7 @@ class ZzzSessionLifetimeRefreshOnIT extends BaseSpec {
 		stopPreexistingAppIfRunning()
 		def args = [
 			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
-			'--entrystore.auth.cookie.max-age=5'
+			'--entrystore.auth.cookie.max-age=10'
 		] as String[]
 		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
 		appStarted = true
@@ -52,7 +53,7 @@ class ZzzSessionLifetimeRefreshOnIT extends BaseSpec {
 		then:
 		login.getResponseCode() == HTTP_OK
 		EntryStoreClient.findSetCookie(login, 'auth_token').contains('Max-Age=31536000')
-		secondsUntil(authTokenExpires(cookieOf(login))) <= 5
+		secondsUntil(authTokenExpires(cookieOf(login))) in 7..10
 	}
 
 	def "an active login should outlive max-age and its expiry should move forward"() {
@@ -62,13 +63,13 @@ class ZzzSessionLifetimeRefreshOnIT extends BaseSpec {
 
 		when: 'the client keeps making requests for longer than max-age'
 		def statuses = (1..4).collect {
-			sleep(2000)
+			sleep(4000)
 			EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie]).getResponseCode()
 		}
 
 		then:
 		statuses.every { it == HTTP_OK }
-		authTokenExpires(cookie).isAfter(firstExpiry.plusSeconds(6))
+		authTokenExpires(cookie).isAfter(firstExpiry.plusSeconds(12))
 	}
 
 	def "an idle login should end after max-age"() {
@@ -76,7 +77,7 @@ class ZzzSessionLifetimeRefreshOnIT extends BaseSpec {
 		def cookie = cookieOf(login())
 
 		when:
-		sleep(6000)
+		sleep(12000)
 		def request = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie])
 
 		then:
@@ -98,7 +99,7 @@ class ZzzSessionLifetimeRefreshOnIT extends BaseSpec {
 		return LocalDateTime.parse(JSON_PARSER.parseText(connection.inputStream.text)['authTokenExpires'] as String)
 	}
 
-	private static long secondsUntil(LocalDateTime time) {
-		return Duration.between(LocalDateTime.now(), time).toSeconds()
+	private static int secondsUntil(LocalDateTime time) {
+		return Duration.between(LocalDateTime.now(), time).toSeconds() as int
 	}
 }

@@ -25,7 +25,7 @@ import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 /**
  * With {@code entrystore.auth.cookie.refresh-expiration-on-access} off, a login ends max-age after it was made,
- * whatever the activity, as in 5.x. Runs with a 5-second max-age.
+ * whatever the activity, as in 5.x. Runs with a 10-second max-age; each probe keeps a margin of at least 2 seconds.
  */
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 class ZzzSessionLifetimeRefreshOffIT extends BaseSpec {
@@ -34,7 +34,7 @@ class ZzzSessionLifetimeRefreshOffIT extends BaseSpec {
 		stopPreexistingAppIfRunning()
 		def args = [
 			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
-			'--entrystore.auth.cookie.max-age=5',
+			'--entrystore.auth.cookie.max-age=10',
 			'--entrystore.auth.cookie.refresh-expiration-on-access=off'
 		] as String[]
 		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
@@ -49,7 +49,7 @@ class ZzzSessionLifetimeRefreshOffIT extends BaseSpec {
 
 		then:
 		login.getResponseCode() == HTTP_OK
-		EntryStoreClient.findSetCookie(login, 'auth_token').contains('Max-Age=5')
+		EntryStoreClient.findSetCookie(login, 'auth_token').contains('Max-Age=10')
 	}
 
 	def "a login should end max-age after it was made, even while it is used"() {
@@ -57,29 +57,33 @@ class ZzzSessionLifetimeRefreshOffIT extends BaseSpec {
 		def cookie = cookieOf(login(''))
 
 		when: 'the client keeps making requests'
-		sleep(2000)
-		def afterTwoSeconds = userInfo(cookie)
-		sleep(2000)
-		def afterFourSeconds = userInfo(cookie)
-		sleep(2000)
-		def afterSixSeconds = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie])
+		sleep(3000)
+		def afterThreeSeconds = userInfo(cookie)
+		sleep(3000)
+		def afterSixSeconds = userInfo(cookie)
+		// 6 seconds after the last request: within the idle timeout, so only the fixed lifetime ends the login
+		sleep(6000)
+		def afterTwelveSeconds = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie])
 
 		then: 'the expiry stays fixed and the login ends anyway'
-		afterTwoSeconds['authTokenExpires'] == afterFourSeconds['authTokenExpires']
-		afterSixSeconds.getResponseCode() == HTTP_UNAUTHORIZED
+		afterThreeSeconds['authTokenExpires'] == afterSixSeconds['authTokenExpires']
+		afterTwelveSeconds.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	def "a shorter auth_maxage should shorten the fixed lifetime"() {
 		given:
-		def cookie = cookieOf(login('&auth_maxage=2'))
-		assert userInfo(cookie)['user'] == 'admin'
+		def cookie = cookieOf(login('&auth_maxage=6'))
 
 		when:
-		sleep(3000)
-		def request = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie])
+		sleep(4000)
+		def afterFourSeconds = userInfo(cookie)
+		// 4 seconds after the last request: within the idle timeout, so only the fixed lifetime ends the login
+		sleep(4000)
+		def afterEightSeconds = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie])
 
 		then:
-		request.getResponseCode() == HTTP_UNAUTHORIZED
+		afterFourSeconds['user'] == 'admin'
+		afterEightSeconds.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	private static HttpURLConnection login(String extraParams) {

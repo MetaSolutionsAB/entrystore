@@ -41,9 +41,11 @@ class SessionLifetimeFilter extends OncePerRequestFilter {
 	protected void doFilterInternal(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response,
 									@NotNull FilterChain filterChain) throws ServletException, IOException {
 		HttpSession session = request.getSession(false);
-		if (session != null && authTokenCookies.isLoginExpired(session)) {
+		if (session != null) {
 			try {
-				session.invalidate();
+				if (authTokenCookies.isLoginExpired(session)) {
+					session.invalidate();
+				}
 			} catch (IllegalStateException alreadyInvalidated) {
 				// a concurrent request ended it first
 			}
