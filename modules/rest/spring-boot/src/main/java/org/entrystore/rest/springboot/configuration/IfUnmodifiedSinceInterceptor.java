@@ -66,13 +66,13 @@ public class IfUnmodifiedSinceInterceptor implements HandlerInterceptor {
 		if (!WRITE_METHODS.contains(request.getMethod())) {
 			return true;
 		}
+		if (request.getHeader(HttpHeaders.IF_UNMODIFIED_SINCE) == null) {
+			return true;
+		}
 		long ifUnmodifiedSince;
 		try {
 			ifUnmodifiedSince = request.getDateHeader(HttpHeaders.IF_UNMODIFIED_SINCE);
 		} catch (IllegalArgumentException e) {
-			return true;
-		}
-		if (ifUnmodifiedSince < 0) {
 			return true;
 		}
 

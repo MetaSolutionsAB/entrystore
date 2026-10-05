@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.configuration;
 
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
@@ -37,8 +38,8 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -103,21 +104,34 @@ class IfUnmodifiedSinceInterceptorTest {
 	@Test
 	void resourceRouteChecksReadResourceBeforeThePrecondition() {
 		givenEntryModifiedAt("2026-10-05T13:00:00.000Z");
+		doThrow(new AuthorizationException(null, entry, AccessProperty.ReadResource))
+				.when(principalManager).checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
 		MockHttpServletRequest request = writeRequest("DELETE", "/{context-id}/resource/{entry-id}");
 
-		assertThrows(CustomResponseException.class,
+		assertThrows(AuthorizationException.class,
 				() -> interceptor.preHandle(request, new MockHttpServletResponse(), null));
-		verify(principalManager).checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
 	}
 
 	@Test
 	void metadataRouteChecksReadMetadataBeforeThePrecondition() {
 		givenEntryModifiedAt("2026-10-05T13:00:00.000Z");
+		doThrow(new AuthorizationException(null, entry, AccessProperty.ReadMetadata))
+				.when(principalManager).checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
 		MockHttpServletRequest request = writeRequest("PUT", "/{context-id}/entry/{entry-id}");
+
+		assertThrows(AuthorizationException.class,
+				() -> interceptor.preHandle(request, new MockHttpServletResponse(), null));
+	}
+
+	@Test
+	void headerBefore1970IsNotMistakenForAnAbsentHeader() {
+		givenEntryModifiedAt("2026-10-05T13:00:00.000Z");
+		MockHttpServletRequest request = writeRequest("PUT", "/{context-id}/metadata/{entry-id}");
+		request.removeHeader("If-Unmodified-Since");
+		request.addHeader("If-Unmodified-Since", "Wed, 31 Dec 1969 23:59:59 GMT");
 
 		assertThrows(CustomResponseException.class,
 				() -> interceptor.preHandle(request, new MockHttpServletResponse(), null));
-		verify(principalManager).checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
 	}
 
 	@Test
