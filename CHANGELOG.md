@@ -4,6 +4,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1207](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1207) Writes to an entry, its metadata or its resource answer 412 again when If-Unmodified-Since is older than the data being written, as in 5.x. 6.x ignored the header, so concurrent edits in EntryScape silently overwrote each other instead of showing the conflict dialog. A header within one second of the entry's modification date passes, since HTTP dates have no milliseconds. Callers without read access get 404 or 403 instead of 412.
+
 [ENTRYSTORE-1206](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1206) Restore the rowstore pipeline transform, which was disabled in 6.x, so activating the EntryScape Distribution API failed with 400 "Pipeline execution failed". **Behaviour note:** the replace, append and setalias actions only accept a datasetURL on the origin \(scheme, host and port\) of entrystore.rowstore.url, so RowStore's baseurl must use that origin. Any context writer can set datasetURL, which previously let them send requests to arbitrary hosts.
 
 [ENTRYSTORE-1204](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1204) GET and HEAD on /\{context-id\} return 404 for a non-existing context to every caller again, as in 5.x. Non-admins got 401/403, so EntryScape treated every context name as taken.
