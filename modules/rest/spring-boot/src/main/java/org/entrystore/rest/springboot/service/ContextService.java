@@ -32,6 +32,7 @@ import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.URISplit;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
+import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.HttpUtil;
@@ -86,9 +87,21 @@ public class ContextService {
 		return context;
 	}
 
+	/**
+	 * Lists the IDs of a context's entries; admin only.
+	 *
+	 * <p>The existence check runs before the admin check, so a missing context is 404 for every caller. Clients
+	 * rely on this to test whether a context ID or name is free (as in 5.x).
+	 *
+	 * @throws EntityNotFoundException if the context does not exist
+	 * @throws ForbiddenException if the context exists and the caller is not an admin
+	 */
 	public List<String> getContextEntries(String contextId, boolean deletedEntries, String entryName) {
 
 		Context context = getContextOrThrow(contextId);
+		if (!principalManager.currentUserIsAdminOrAdminGroup()) {
+			throw new ForbiddenException("Listing the entries of a context requires admin privileges");
+		}
 
 		if (deletedEntries) {
 

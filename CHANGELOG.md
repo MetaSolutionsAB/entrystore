@@ -4,6 +4,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1204](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1204) GET and HEAD on /\{context-id\} return 404 for a non-existing context to every caller again, as in 5.x. Non-admins got 401/403, so EntryScape treated every context name as taken.
+
 [ENTRYSTORE-1198](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1198) SAML auto-provisioning uses the policy of the IdP that authenticated the user. It used default-idp's, so with several IdPs and no default-idp no user was provisioned, and an IdP with user-auto-provisioning off could create users. SAML, CAS and OIDC sessions expire entrystore.auth.cookie.max-age after the last request, as form login sessions do, instead of after 30 minutes. The auth_token cookie still expires max-age after login, for every login type \(ENTRYSTORE-1202\). **Behaviour note:** an idle SSO session keeps its SAML response, CAS assertion or OIDC tokens in memory for up to max-age \(default 1 day\).
 
 [ENTRYSTORE-1200](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1200) Cap the depth of recursive metadata traversal \(GET /\{context-id\}/metadata/\{entry-id\}?recursive=\) at 10 unless the traversal profile sets max-depth, as in 5.8.0 and the traversal docs; without max-depth the requested depth was uncapped. A max-depth above 10 is now honoured, which 5.8.0 ignored, and depth=0 or a negative depth means 10 instead of 0.
