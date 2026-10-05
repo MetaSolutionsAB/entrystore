@@ -86,6 +86,10 @@ class EntryStoreClient {
 		return sendRequestAsStream(HttpMethod.GET, path, null, asUser, null, extraHeaders)
 	}
 
+	def static headRequest(String path, String asUser = 'admin') {
+		return sendRequestAsStream(HttpMethod.HEAD, path, null, asUser, null)
+	}
+
 	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin',
 						   String contentType = 'application/json', Map<String, String> extraHeaders = [:]) {
 		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes(UTF_8))
