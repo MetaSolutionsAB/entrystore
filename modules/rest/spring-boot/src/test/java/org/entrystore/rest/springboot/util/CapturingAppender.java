@@ -30,6 +30,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 /**
@@ -102,6 +103,14 @@ public final class CapturingAppender extends AbstractAppender implements AutoClo
 
 	public Stream<String> allMessages() {
 		return snapshot().stream().map(event -> event.getMessage().getFormattedMessage());
+	}
+
+	/** The throwables logged at {@code level}, for asserting at which level a stack trace is written. */
+	public Stream<Throwable> thrownAt(Level level) {
+		return snapshot().stream()
+				.filter(event -> event.getLevel() == level)
+				.map(LogEvent::getThrown)
+				.filter(Objects::nonNull);
 	}
 
 	public long countAt(Level level) {
