@@ -442,6 +442,8 @@ entrystore.solr.extract-fulltext=off
 # entrystore.repository.public.indexes=cspo,spoc,posc
 
 ## RowStore integration
+## Rowstore pipelines only replace, append to or alias datasets on the origin of this URL,
+## so RowStore's own baseurl must use the same scheme, host and port.
 # entrystore.rowstore.url=http://localhost:8282/
 
 ## SSRF whitelist for the resource-DELETE proxy path

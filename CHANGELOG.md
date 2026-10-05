@@ -4,6 +4,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1206](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1206) Restore the rowstore pipeline transform, which was disabled in 6.x, so activating the EntryScape Distribution API failed with 400 "Pipeline execution failed". **Behaviour note:** the replace, append and setalias actions only accept a datasetURL on the origin \(scheme, host and port\) of entrystore.rowstore.url, so RowStore's baseurl must use that origin. Any context writer can set datasetURL, which previously let them send requests to arbitrary hosts.
+
 [ENTRYSTORE-1204](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1204) GET and HEAD on /\{context-id\} return 404 for a non-existing context to every caller again, as in 5.x. Non-admins got 401/403, so EntryScape treated every context name as taken.
 
 [ENTRYSTORE-1198](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1198) SAML auto-provisioning uses the policy of the IdP that authenticated the user. It used default-idp's, so with several IdPs and no default-idp no user was provisioned, and an IdP with user-auto-provisioning off could create users. SAML, CAS and OIDC sessions expire entrystore.auth.cookie.max-age after the last request, as form login sessions do, instead of after 30 minutes. The auth_token cookie still expires max-age after login, for every login type \(ENTRYSTORE-1202\). **Behaviour note:** an idle SSO session keeps its SAML response, CAS assertion or OIDC tokens in memory for up to max-age \(default 1 day\).
