@@ -18,9 +18,11 @@ package org.entrystore.rest.springboot.security;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import lombok.Getter;
 import org.entrystore.repository.RepositoryManager;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.convert.DurationStyle;
 import org.springframework.boot.web.server.Cookie;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
@@ -31,6 +33,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.util.WebUtils;
 
 import java.net.URL;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -38,7 +43,13 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Owns the path of the session cookie (auth_token) and expires the cookie when it is unknown, expired or logged out.
+ * Owns the session cookie (auth_token): its path and lifetime, the login lifetime of the session behind it, and
+ * expiring the cookie when it is unknown, expired or logged out.
+ *
+ * <p>As in 5.x, a login lasts {@code entrystore.auth.cookie.max-age} (or a shorter {@code auth_maxage}). With
+ * {@code entrystore.auth.cookie.refresh-expiration-on-access} on (the default) that is the session's idle timeout,
+ * so an active user stays logged in, and the cookie lives 365 days because the container sends it only at login.
+ * With it off, the cookie lives max-age and the login ends max-age after it was made, whatever the activity.
  *
  * <p>The cookie is issued on {@code entrystore.auth.cookie.path}; its default {@code auto} is the path of the
  * repository base URL (e.g. {@code /store/}), as in 5.x. Browsers identify a cookie by name, domain and path, and may
@@ -52,6 +63,10 @@ public class AuthTokenCookies implements LogoutHandler {
 
 	private static final String EXPIRED_ATTRIBUTE = AuthTokenCookies.class.getName() + ".EXPIRED";
 
+	private static final String LOGIN_EXPIRY_ATTRIBUTE = AuthTokenCookies.class.getName() + ".LOGIN_EXPIRY";
+
+	private static final int REFRESHED_COOKIE_MAX_AGE = (int) Duration.ofDays(365).toSeconds();
+
 	private final String cookieName;
 	private final boolean httpOnly;
 	private final boolean secure;
@@ -60,6 +75,9 @@ public class AuthTokenCookies implements LogoutHandler {
 	private final String issuingPath;
 	private final List<Target> allTargets;
 	private final List<Target> staleTargets;
+	private final int maxAgeSeconds;
+	@Getter
+	private final boolean refreshExpirationOnAccess;
 
 	/** A cookie identity, which browsers compose of name, domain and path; a null domain is host-only. */
 	private record Target(String domain, String path) {}
@@ -70,7 +88,9 @@ public class AuthTokenCookies implements LogoutHandler {
 							@Value("${server.servlet.session.cookie.http-only:true}") boolean httpOnly,
 							@Value("${server.servlet.session.cookie.secure:true}") boolean configuredSecure,
 							@Value("${server.servlet.context-path:}") String contextPath,
-							@Value("${entrystore.auth.cookie.path:auto}") String configuredPath) {
+							@Value("${entrystore.auth.cookie.path:auto}") String configuredPath,
+							@Value("${entrystore.auth.cookie.max-age:86400}") String maxAge,
+							@Value("${entrystore.auth.cookie.refresh-expiration-on-access:true}") boolean refreshExpirationOnAccess) {
 		Cookie.SameSite resolvedSameSite = SecurityConfig.resolveSessionCookieSameSite(environment);
 		this.cookieName = cookieName;
 		this.httpOnly = httpOnly;
@@ -85,6 +105,52 @@ public class AuthTokenCookies implements LogoutHandler {
 				.toList();
 		var issued = new Target(issuingDomain, issuingPath);
 		this.staleTargets = allTargets.stream().filter(target -> !target.equals(issued)).toList();
+		this.maxAgeSeconds = parseMaxAgeSeconds(maxAge);
+		this.refreshExpirationOnAccess = refreshExpirationOnAccess;
+	}
+
+	/**
+	 * @return the cookie's Max-Age: 365 days with refresh-expiration-on-access, otherwise the login max-age
+	 */
+	public int cookieMaxAgeSeconds() {
+		return refreshExpirationOnAccess ? REFRESHED_COOKIE_MAX_AGE : maxAgeSeconds;
+	}
+
+	/**
+	 * Sets the login lifetime of the request's session: max-age, or {@code requestedMaxAge} if it is positive and
+	 * shorter. Call on every successful login, after the session id has changed.
+	 *
+	 * @param requestedMaxAge the client's {@code auth_maxage} in seconds, or null
+	 */
+	public void applySessionLifetime(HttpServletRequest request, Integer requestedMaxAge) {
+		int lifetime = requestedMaxAge != null && requestedMaxAge > 0
+				? Math.min(maxAgeSeconds, requestedMaxAge)
+				: maxAgeSeconds;
+		HttpSession session = request.getSession();
+		session.setMaxInactiveInterval(lifetime);
+		if (!refreshExpirationOnAccess) {
+			session.setAttribute(LOGIN_EXPIRY_ATTRIBUTE, Instant.now().plusSeconds(lifetime));
+		}
+	}
+
+	/**
+	 * @return when the session's login ends: after its idle timeout from now with refresh-expiration-on-access,
+	 * otherwise at the fixed time set at login
+	 */
+	public Instant expiry(HttpSession session) {
+		if (!refreshExpirationOnAccess && session.getAttribute(LOGIN_EXPIRY_ATTRIBUTE) instanceof Instant expiry) {
+			return expiry;
+		}
+		return Instant.now().plusSeconds(session.getMaxInactiveInterval());
+	}
+
+	/**
+	 * @return whether the session's login has passed its fixed end; always false with refresh-expiration-on-access
+	 */
+	boolean isLoginExpired(HttpSession session) {
+		return !refreshExpirationOnAccess
+				&& session.getAttribute(LOGIN_EXPIRY_ATTRIBUTE) instanceof Instant expiry
+				&& Instant.now().isAfter(expiry);
 	}
 
 	/** Expires the cookie on all paths it may have been issued on, if the request carries it. */
@@ -129,6 +195,26 @@ public class AuthTokenCookies implements LogoutHandler {
 					.sameSite(sameSite);
 			response.addHeader(HttpHeaders.SET_COOKIE, cookie.build().toString());
 		}
+	}
+
+	/**
+	 * Parses max-age as seconds unless it carries a unit (e.g. {@code 1d}), as Spring Boot does for durations.
+	 *
+	 * @throws IllegalStateException unless it is at least one second and fits a session timeout
+	 */
+	static int parseMaxAgeSeconds(String maxAge) {
+		Duration duration;
+		try {
+			duration = DurationStyle.detectAndParse(maxAge.trim(), ChronoUnit.SECONDS);
+		} catch (IllegalArgumentException e) {
+			throw new IllegalStateException("Invalid entrystore.auth.cookie.max-age '" + maxAge + "'", e);
+		}
+		long seconds = duration.toSeconds();
+		if (seconds < 1 || seconds > Integer.MAX_VALUE) {
+			throw new IllegalStateException("entrystore.auth.cookie.max-age must be between 1 and "
+					+ Integer.MAX_VALUE + " seconds, was '" + maxAge + "'");
+		}
+		return (int) seconds;
 	}
 
 	static String resolveIssuingPath(String configuredPath, URL repositoryUrl) {

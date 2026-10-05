@@ -62,6 +62,11 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.context.DelegatingSecurityContextRepository;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
@@ -173,6 +178,9 @@ public class SecurityConfig {
 				// needs (private,no-store for authenticated; no header for anonymous so static and
 				// controller-set values can pass through unchanged).
 				.headers(headers -> headers.cacheControl(HeadersConfigurer.CacheControlConfig::disable))
+				// Spring's default repositories, set explicitly so SessionManagementFilter also sees a request-scoped
+				// (HTTP Basic) context and does not start a session for it
+				.securityContext(context -> context.securityContextRepository(sessionAndRequestContextRepository()))
 				.sessionManagement(session -> {
 					// ConcurrentSessionFilter runs the logout handlers, and thereby expires the cookie, before this strategy
 					session.sessionConcurrency(concurrency -> concurrency
@@ -240,11 +248,17 @@ public class SecurityConfig {
 			// Without an invalid-session strategy, SessionManagementFilter lets the request continue as guest
 			http.addFilterBefore(new InvalidSessionCookieFilter(authTokenCookies), SessionManagementFilter.class);
 		}
+		if (!authTokenCookies.isRefreshExpirationOnAccess()) {
+			http.addFilterBefore(new SessionLifetimeFilter(authTokenCookies), SecurityContextHolderFilter.class);
+		}
 
 		if (httpBasicConfig.enabled()) {
 			log.info("Basic Auth Enabled (credential cache TTL={}, max entries={})",
 					httpBasicConfig.cache().ttl(), httpBasicConfig.cache().maxSize());
-			http.httpBasic(basic -> basic.authenticationEntryPoint(entryPoint));
+			// Request-scoped context: a Basic request must not start a session (and get an auth_token cookie), as in 5.x
+			http.httpBasic(basic -> basic
+					.authenticationEntryPoint(entryPoint)
+					.securityContextRepository(new RequestAttributeSecurityContextRepository()));
 		} else {
 			log.info("Basic Auth Disabled");
 		}
@@ -506,10 +520,17 @@ public class SecurityConfig {
 		}
 	}
 
+	private static SecurityContextRepository sessionAndRequestContextRepository() {
+		var sessionRepository = new HttpSessionSecurityContextRepository();
+		sessionRepository.setDisableUrlRewriting(true);
+		return new DelegatingSecurityContextRepository(sessionRepository, new RequestAttributeSecurityContextRepository());
+	}
+
 	@Bean
 	public ServletContextInitializer servletContextInitializer() {
 		return servletContext -> {
 			servletContext.getSessionCookieConfig().setPath(authTokenCookies.getIssuingPath());
+			servletContext.getSessionCookieConfig().setMaxAge(authTokenCookies.cookieMaxAgeSeconds());
 			if (sessionCookieSameSite == Cookie.SameSite.NONE) {
 				servletContext.getSessionCookieConfig().setSecure(true);
 			}

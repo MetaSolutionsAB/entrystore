@@ -10,7 +10,6 @@ server:
       http-only: ${entrystore.auth.cookie.httponly:true}
       secure: ${entrystore.auth.cookie.secure:true}
       same-site: ${entrystore.auth.cookie.samesite:strict}
-      max-age: ${entrystore.auth.cookie.max-age:86400s}
 
 
 info.app.version: @project.version@
