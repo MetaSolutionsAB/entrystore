@@ -132,12 +132,67 @@ class IfUnmodifiedSinceIT extends BaseSpec {
 		modified(entryId) == modifiedBefore
 
 		where:
-		method   | route                      | entryParams     | body                | contentType
-		'PUT'    | 'entry'                    | LINK_ENTRY      | '{}'                | 'application/json'
-		'DELETE' | 'entry'                    | LINK_ENTRY      | null                | null
-		'DELETE' | 'metadata'                 | LINK_ENTRY      | null                | null
-		'PUT'    | 'resource'                 | STRING_ENTRY    | 'new resource text' | 'text/plain'
-		'PUT'    | 'cached-external-metadata' | REFERENCE_ENTRY | '{}'                | 'application/json'
+		method   | route      | entryParams  | body                | contentType
+		'PUT'    | 'entry'    | LINK_ENTRY   | '{}'                | 'application/json'
+		'DELETE' | 'entry'    | LINK_ENTRY   | null                | null
+		'DELETE' | 'metadata' | LINK_ENTRY   | null                | null
+		'PUT'    | 'resource' | STRING_ENTRY | 'new resource text' | 'text/plain'
+	}
+
+	def "PUT cached-external-metadata with an If-Unmodified-Since older than the cached metadata should return 412"() {
+		given:
+		def entryId = createEntry(CONTEXT_ID, REFERENCE_ENTRY)
+		assert putCachedMetadata(entryId, 'cached title', null).getResponseCode() == HTTP_NO_CONTENT
+		def stale = httpDate(modified(entryId).minus(Duration.ofHours(1)))
+
+		when:
+		def connection = putCachedMetadata(entryId, 'overwritten title', stale)
+
+		then:
+		connection.getResponseCode() == HTTP_PRECONDITION_FAILED
+		cachedTitle(entryId) == 'cached title'
+	}
+
+	def "PUT cached-external-metadata with the entry's modification date should succeed, as entrystore.js sends it"() {
+		given:
+		def entryId = createEntry(CONTEXT_ID, REFERENCE_ENTRY)
+		assert putCachedMetadata(entryId, 'cached title', null).getResponseCode() == HTTP_NO_CONTENT
+		def current = httpDate(modified(entryId))
+
+		when:
+		def connection = putCachedMetadata(entryId, 'new title', current)
+
+		then:
+		connection.getResponseCode() == HTTP_NO_CONTENT
+		cachedTitle(entryId) == 'new title'
+	}
+
+	def "a user with only write access to the metadata should save with the entry's current modification date"() {
+		given:
+		def entryId = createLinkEntry('original title')
+		grantMetadataWrite(entryId, 'user')
+		def current = httpDate(modified(entryId))
+
+		when:
+		def connection = putMetadata(entryId, 'written by user', current, 'user')
+
+		then:
+		connection.getResponseCode() == HTTP_NO_CONTENT
+		title(entryId) == 'written by user'
+	}
+
+	def "a user with only write access to the metadata should get 412 for an old If-Unmodified-Since"() {
+		given:
+		def entryId = createLinkEntry('original title')
+		grantMetadataWrite(entryId, 'user')
+		def stale = httpDate(modified(entryId).minus(Duration.ofHours(1)))
+
+		when:
+		def connection = putMetadata(entryId, 'written by user', stale, 'user')
+
+		then:
+		connection.getResponseCode() == HTTP_PRECONDITION_FAILED
+		title(entryId) == 'original title'
 	}
 
 	def "a guest without read access sending an old If-Unmodified-Since should get 404, not 412"() {
@@ -161,10 +216,35 @@ class IfUnmodifiedSinceIT extends BaseSpec {
 		return entryId
 	}
 
-	private static HttpURLConnection putMetadata(String entryId, String title, String ifUnmodifiedSince) {
+	private static HttpURLConnection putMetadata(String entryId, String title, String ifUnmodifiedSince,
+			String asUser = 'admin') {
 		def headers = ifUnmodifiedSince == null ? [:] : ['If-Unmodified-Since': ifUnmodifiedSince]
 		return EntryStoreClient.putRequest('/' + CONTEXT_ID + '/metadata/' + entryId, metadataJson(entryId, title),
-			'admin', 'application/json', headers)
+			asUser, 'application/json', headers)
+	}
+
+	private static HttpURLConnection putCachedMetadata(String entryId, String title, String ifUnmodifiedSince) {
+		def headers = ifUnmodifiedSince == null ? [:] : ['If-Unmodified-Since': ifUnmodifiedSince]
+		return EntryStoreClient.putRequest('/' + CONTEXT_ID + '/cached-external-metadata/' + entryId,
+			metadataJson(entryId, title), 'admin', 'application/json', headers)
+	}
+
+	private static String cachedTitle(String entryId) {
+		def connection = EntryStoreClient.getRequest('/' + CONTEXT_ID + '/cached-external-metadata/' + entryId)
+		assert connection.getResponseCode() == HTTP_OK
+		def metadata = JSON_PARSER.parseText(connection.inputStream.text)
+		return metadata[resourceUri(entryId)][NameSpaceConst.DC_TERM_TITLE][0]['value']
+	}
+
+	/**
+	 * Grants the user es:write on the entry's metadata only, which implies reading it.
+	 */
+	private static void grantMetadataWrite(String entryId, String username) {
+		def metadataUri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/metadata/' + entryId
+		def userResourceUri = EntryStoreClient.createdEsUsers[username]['resourceUri']
+		def acl = [(metadataUri): [(NameSpaceConst.TERM_WRITE): [[type: 'uri', value: userResourceUri]]]]
+		def connection = EntryStoreClient.putRequest('/' + CONTEXT_ID + '/entry/' + entryId, JsonOutput.toJson(acl))
+		assert connection.getResponseCode() == HTTP_NO_CONTENT
 	}
 
 	private static String metadataJson(String entryId, String title) {

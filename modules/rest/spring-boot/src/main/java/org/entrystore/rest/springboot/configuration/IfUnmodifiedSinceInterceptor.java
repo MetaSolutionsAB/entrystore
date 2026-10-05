@@ -38,21 +38,22 @@ import java.util.Set;
 
 /**
  * Answers 412 Precondition Failed to a write on an entry, its metadata or its resource when
- * {@code If-Unmodified-Since} is older than the entry's modification date, as 5.x did. entrystore.js sends the
- * header on every save, and EntryScape shows its conflict dialog only on 412.
+ * {@code If-Unmodified-Since} is older than what is written, as 5.x did. entrystore.js sends the entry's
+ * modification date on every save, and EntryScape shows its conflict dialog only on 412.
  *
- * <p>The comparison is at second precision, since HTTP dates carry no milliseconds. The caller must first be
- * allowed to read what the route writes (the resource for {@code /resource/}, otherwise the metadata), so a 412
- * reveals nothing a GET would not. A missing entry, an absent or unparsable header, and safe methods are left to
- * the controller.
+ * <p>As in 5.x, a header within one second of the entry's modification date passes, since HTTP dates carry no
+ * milliseconds; otherwise it fails if it is older than the written representation's date at second precision,
+ * which is the cache date for cached external metadata and the entry's modification date elsewhere. The caller
+ * must first be allowed to read what the route writes (the resource for {@code /resource/}, otherwise the
+ * metadata), so a 412 reveals nothing a GET would not. A missing entry, an absent or unparsable header, and safe
+ * methods are left to the controller.
  */
 @Component
 @RequiredArgsConstructor
 public class IfUnmodifiedSinceInterceptor implements HandlerInterceptor {
 
 	static final List<String> PATH_PATTERNS = List.of(
-			"/*/entry/*", "/*/entry/*/name", "/*/resource/*",
-			"/*/metadata/*", "/*/cached-external-metadata/*", "/*/merged-metadata/*");
+			"/*/entry/*", "/*/resource/*", "/*/metadata/*", "/*/cached-external-metadata/*");
 
 	private static final Set<String> WRITE_METHODS = Set.of("PUT", "POST", "DELETE");
 
@@ -93,7 +94,13 @@ public class IfUnmodifiedSinceInterceptor implements HandlerInterceptor {
 		principalManager.checkAuthenticatedUserAuthorized(entry,
 				resourceRoute ? AccessProperty.ReadResource : AccessProperty.ReadMetadata);
 
-		if (ifUnmodifiedSince < modified.getTime() / 1000 * 1000) {
+		if (Math.abs(modified.getTime() - ifUnmodifiedSince) < 1000) {
+			return true;
+		}
+		Date representationDate = "cached-external-metadata".equals(pathVariables.get("type"))
+				? entry.getExternalMetadataCacheDate()
+				: modified;
+		if (representationDate != null && ifUnmodifiedSince < representationDate.getTime() / 1000 * 1000) {
 			throw new CustomResponseException("The entry has been modified since the If-Unmodified-Since date",
 					HttpStatus.PRECONDITION_FAILED);
 		}
