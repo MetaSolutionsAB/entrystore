@@ -32,7 +32,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.saml2.provider.service.authentication.DefaultSaml2AuthenticatedPrincipal;
+import org.springframework.security.saml2.provider.service.authentication.Saml2AssertionAuthentication;
 import org.springframework.security.saml2.provider.service.authentication.Saml2Authentication;
+import org.springframework.security.saml2.provider.service.authentication.Saml2ResponseAssertion;
 import org.springframework.security.web.RedirectStrategy;
 
 import java.net.URI;
@@ -113,6 +115,18 @@ class SamlLoginSuccessHandlerTest {
 		var wrongToken = new UsernamePasswordAuthenticationToken("someone", "pw");
 
 		handler.onAuthenticationSuccess(request, response, wrongToken);
+
+		verify(response).sendRedirect(FAILURE_URL);
+		verify(userService, never()).loadUser(any());
+	}
+
+	@Test
+	void baseSaml2AuthenticationIsRejectedWithoutLoadingUser() throws Exception {
+		// The token-type guard accepts only Saml2AssertionAuthentication, the subtype that carries the registration id.
+		var principal = new DefaultSaml2AuthenticatedPrincipal("jane", Map.of());
+		var baseToken = new Saml2Authentication(principal, "saml-response", List.of());
+
+		handler.onAuthenticationSuccess(request, response, baseToken);
 
 		verify(response).sendRedirect(FAILURE_URL);
 		verify(userService, never()).loadUser(any());
@@ -220,9 +234,10 @@ class SamlLoginSuccessHandlerTest {
 		when(adminUser.getURI()).thenReturn(URI.create("urn:test:admin"));
 	}
 
-	private static Saml2Authentication saml2Authentication(String username) {
-		var principal = new DefaultSaml2AuthenticatedPrincipal(username, Map.of());
-		principal.setRelyingPartyRegistrationId(IDP_ID);
-		return new Saml2Authentication(principal, "saml-response", List.of());
+	// Built as OpenSaml5AuthenticationProvider builds it: the registration id is on the token, not the principal.
+	private static Saml2AssertionAuthentication saml2Authentication(String username) {
+		var assertion = Saml2ResponseAssertion.withResponseValue("saml-response").nameId(username).build();
+		var principal = new DefaultSaml2AuthenticatedPrincipal(username, assertion);
+		return new Saml2AssertionAuthentication(principal, assertion, List.of(), IDP_ID);
 	}
 }

@@ -151,11 +151,10 @@ class SamlAuthServiceTest {
 	}
 
 	@Test
-	void findIdpForSamlResponse_blankNameResolvesToDefaultIdp() {
-		var keycloak = new Idp(List.of("*"), true, null);
-		var svc = serviceWithIdps("keycloak", Map.of("keycloak", keycloak));
+	void findIdpForSamlResponse_nullNameReturnsNullEvenWithDefaultIdp() {
+		var svc = serviceWithIdps("keycloak", Map.of("keycloak", new Idp(List.of("*"), true, null)));
 
-		assertEquals(keycloak, svc.findIdpForSamlResponse(null));
+		assertNull(svc.findIdpForSamlResponse(null));
 	}
 
 	@Test

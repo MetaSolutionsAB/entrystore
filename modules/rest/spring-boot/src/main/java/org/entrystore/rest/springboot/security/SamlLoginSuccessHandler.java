@@ -26,8 +26,7 @@ import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration.Idp;
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.service.SamlAuthService;
 import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
-import org.springframework.security.saml2.provider.service.authentication.DefaultSaml2AuthenticatedPrincipal;
-import org.springframework.security.saml2.provider.service.authentication.Saml2Authentication;
+import org.springframework.security.saml2.provider.service.authentication.Saml2AssertionAuthentication;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -36,7 +35,7 @@ import java.io.IOException;
 @Component
 @ConditionalOnBooleanConfig("entrystore.auth.saml.enabled")
 public class SamlLoginSuccessHandler
-		extends AbstractSsoLoginSuccessHandler<Saml2Authentication, SamlLoginSuccessHandler.SamlContext> {
+		extends AbstractSsoLoginSuccessHandler<Saml2AssertionAuthentication, SamlLoginSuccessHandler.SamlContext> {
 
 	private final SamlAuthService samlAuthService;
 	private final SamlAuthStateCache samlAuthStateCache;
@@ -57,23 +56,19 @@ public class SamlLoginSuccessHandler
 	}
 
 	@Override
-	protected Class<Saml2Authentication> tokenType() {
-		return Saml2Authentication.class;
+	protected Class<Saml2AssertionAuthentication> tokenType() {
+		return Saml2AssertionAuthentication.class;
 	}
 
+	/** The IdP id is the token's registration id; Spring Security leaves the principal's unset. */
 	@Override
-	protected SamlContext resolveContext(HttpServletRequest request, Saml2Authentication token) {
-		String idpId = null;
-		if (token.getPrincipal() instanceof DefaultSaml2AuthenticatedPrincipal principal) {
-			idpId = principal.getRelyingPartyRegistrationId();
-		}
-
+	protected SamlContext resolveContext(HttpServletRequest request, Saml2AssertionAuthentication token) {
 		AuthState cachedAuthState = null;
 		String relayStateId = request.getParameter("RelayState");
 		if (relayStateId != null) {
 			cachedAuthState = samlAuthStateCache.getAuthState(relayStateId);
 		}
-		return new SamlContext(idpId, cachedAuthState);
+		return new SamlContext(token.getRelyingPartyRegistrationId(), cachedAuthState);
 	}
 
 	@Override
