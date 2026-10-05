@@ -38,7 +38,8 @@ package org.entrystore.rest.springboot.model.exception;
  * {@code GET /{context-id}/entry/{entry-id}} — would answer 401 for a private entry while
  * {@code EntityNotFoundException} answers 404 for a missing one, reopening exactly that oracle. Let the
  * core ACL check raise {@code AuthorizationException} instead. Use this exception for denials whose
- * outcome does not depend on a specific entry existing.
+ * outcome does not depend on a specific entry existing. The one exception is
+ * {@code ContextService#getContextEntries}: clients probe free context names on its 404, as in 5.x.
  */
 public class ForbiddenException extends RuntimeException {
 

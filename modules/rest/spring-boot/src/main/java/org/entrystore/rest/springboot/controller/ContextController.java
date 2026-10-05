@@ -65,7 +65,6 @@ public class ContextController {
 	private final ContextService contextService;
 	private final EntryService entryService;
 
-	@PreAuthorize("hasRole('ADMIN')")
 	@Operation(summary = "Returns an array of IDs of a context's entries")
 	@GetMapping(path = "/{context-id:(?!favicon\\.ico$).+}", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
 	public List<String> getContextEntries(

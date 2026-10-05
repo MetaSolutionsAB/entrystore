@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
@@ -283,20 +299,48 @@ class ContextIT extends BaseSpec {
 		responseJson.collect().contains('_principals')
 	}
 
-	def "GET /{context-id} as guest for non-existing context should return UNAUTHORIZED 401"() {
+	def "GET /{context-id} as guest for non-existing context should return NOT_FOUND 404"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/222-random-name-222', '')
 
 		then:
-		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		connection.getResponseCode() == HTTP_NOT_FOUND
 	}
 
-	def "GET /{context-id} as non-admin user for non-existing context should return FORBIDDEN 403"() {
+	def "GET /{context-id} as non-admin user for non-existing context should return NOT_FOUND 404"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/222-random-name-222', 'user')
 
 		then:
+		connection.getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "HEAD /{context-id} as non-admin user for non-existing context should return NOT_FOUND 404"() {
+		when:
+		def connection = EntryStoreClient.headRequest('/222-random-name-222', 'user')
+
+		then:
+		connection.getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "HEAD /{context-name} as non-admin user for existing context should return FORBIDDEN 403"() {
+		given: 'a context with a name, as created by EntryScape'
+		def created = EntryStoreClient.postRequest('/_principals/groups?name=headProbeTaken', null)
+		assert created.getResponseCode() == HTTP_CREATED
+
+		when:
+		def connection = EntryStoreClient.headRequest('/headProbeTaken', 'user')
+
+		then:
 		connection.getResponseCode() == HTTP_FORBIDDEN
+	}
+
+	def "HEAD /{context-id} as guest for existing context should return UNAUTHORIZED 401"() {
+		when:
+		def connection = EntryStoreClient.headRequest('/_contexts', '')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	def "GET /{context-id} as admin for non-existing context should return NOT_FOUND 404"() {
