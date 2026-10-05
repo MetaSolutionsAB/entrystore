@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.configuration;
 
+import org.entrystore.rest.springboot.filter.IfUnmodifiedSinceInterceptor;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -36,6 +37,7 @@ class MvcConfigurationTest {
 
 	private final ApplicationContextRunner runner = new ApplicationContextRunner()
 			.withBean(MvcAsyncConfiguration.class, () -> new MvcAsyncConfiguration(8, 32, 16, 15000L))
+			.withBean(IfUnmodifiedSinceInterceptor.class, () -> mock(IfUnmodifiedSinceInterceptor.class))
 			.withUserConfiguration(MvcConfiguration.class);
 
 	@Test
@@ -59,7 +61,7 @@ class MvcConfigurationTest {
 		// (not the default unbounded SimpleAsyncTaskExecutor) and the configured timeout. The bean
 		// tests above only prove the executor is built, not that configureAsyncSupport actually uses it.
 		MvcConfiguration mvcConfiguration =
-				new MvcConfiguration(new MvcAsyncConfiguration(8, 32, 16, 15000L));
+				new MvcConfiguration(new MvcAsyncConfiguration(8, 32, 16, 15000L), mock(IfUnmodifiedSinceInterceptor.class));
 		AsyncSupportConfigurer configurer = mock(AsyncSupportConfigurer.class);
 
 		mvcConfiguration.configureAsyncSupport(configurer);

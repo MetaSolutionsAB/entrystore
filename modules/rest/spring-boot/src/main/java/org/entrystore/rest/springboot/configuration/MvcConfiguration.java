@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.configuration;
 
 import lombok.RequiredArgsConstructor;
+import org.entrystore.rest.springboot.filter.IfUnmodifiedSinceInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -25,6 +26,7 @@ import org.springframework.web.accept.ContentNegotiationStrategy;
 import org.springframework.web.accept.HeaderContentNegotiationStrategy;
 import org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer;
 import org.springframework.web.servlet.config.annotation.ContentNegotiationConfigurer;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.List;
@@ -35,6 +37,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 public class MvcConfiguration implements WebMvcConfigurer {
 
 	private final MvcAsyncConfiguration asyncConfig;
+
+	private final IfUnmodifiedSinceInterceptor ifUnmodifiedSinceInterceptor;
 
 	@Override
 	public void configureContentNegotiation(ContentNegotiationConfigurer configurer) {
@@ -48,6 +52,12 @@ public class MvcConfiguration implements WebMvcConfigurer {
 			.mediaType("xml", MediaType.APPLICATION_XML)
 			.mediaType("json", MediaType.APPLICATION_JSON)
 			.strategies(List.of(new EntryEndpointContentNegotiationStrategy(defaultStrategy)));
+	}
+
+	@Override
+	public void addInterceptors(InterceptorRegistry registry) {
+		registry.addInterceptor(ifUnmodifiedSinceInterceptor)
+				.addPathPatterns(IfUnmodifiedSinceInterceptor.PATH_PATTERNS);
 	}
 
 	@Override

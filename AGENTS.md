@@ -62,7 +62,7 @@ entrystore/
 springboot/
 ├── configuration/         # App config, MVC config, content negotiation, SAML, @ConfigurationProperties records
 ├── controller/            # REST controllers + AppExceptionHandler (@ControllerAdvice)
-├── filter/                # Servlet filters (cache control, JSONP, request logging, CSRF cookie, auth post-processing)
+├── filter/                # Servlet filters (cache control, JSONP, logging, CSRF cookie, auth) and MVC interceptors
 ├── model/
 │   ├── api/               # Request/response records (e.g., GetEntryResponse, ErrorResponse) + converter/ (MVC Converters)
 │   ├── auth/              # Auth-related models
@@ -138,7 +138,7 @@ From `.editorconfig`:
   - `EntityNotFoundException` — for missing resources (404)
   - `CustomResponseException` — for any other HTTP status (e.g., 504 Gateway Timeout)
 - `AuthorizationException` thrown by core code (e.g., from `PrincipalManager`, `ContextImpl`) is handled by `AppExceptionHandler` and does not need to be caught/re-thrown in the REST layer. Anonymous callers get **404 Not Found** (not 401) to prevent entry-existence enumeration (CWE-204); authenticated callers get 403.
-- **Never throw application exceptions from servlet filters.** `AppExceptionHandler` (`@ControllerAdvice`) only catches exceptions from controllers — filters run before the DispatcherServlet. Instead, write the error response directly: `response.setStatus(...)`, `response.setContentType(...)`, `response.getWriter().write(...)`, then `return` (do not call `filterChain.doFilter`).
+- **Never throw application exceptions from servlet filters.** `AppExceptionHandler` (`@ControllerAdvice`) only catches exceptions from controllers — filters run before the DispatcherServlet. Instead, write the error response directly: `response.setStatus(...)`, `response.setContentType(...)`, `response.getWriter().write(...)`, then `return` (do not call `filterChain.doFilter`). MVC interceptors (`HandlerInterceptor`) run inside the DispatcherServlet, so they may throw them.
 - **Don't leak internal details in exception messages.** `AppExceptionHandler` returns `ex.getMessage()` to the client for custom exceptions in `org.entrystore.rest.springboot.model.exception.*` (e.g. `BadRequestException`, `EntityNotFoundException`, `ForbiddenException`, `CustomResponseException`). Keep these messages user-facing. Never include `e.getMessage()` from third-party libraries (RDF4J, Jackson, Spring internals) in exceptions thrown to the client — use a generic message and preserve the original cause via the `(String, Throwable)` constructor for server-side debugging.
 - **Don't log before throwing exceptions handled by `AppExceptionHandler`.** The handler already logs everything it handles. Exception: add an explicit `log.error` / `log.warn` when the specific exception handler logs that exception at a lower level and the underlying event should be visible in the logs.
 - **Use `HttpUtil.setLastModifiedAndETag(HttpHeaders, Date)`** to set Last-Modified and ETag response headers. For `ResponseEntity.HeadersBuilder` contexts (e.g., 204 No Content), use `HttpUtil.updateResponseWithModificationDateAndETag()` which delegates to the same logic. Do not set these headers manually.
