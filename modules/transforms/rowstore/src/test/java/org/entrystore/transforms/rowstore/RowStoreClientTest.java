@@ -33,11 +33,16 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 class RowStoreClientTest {
 
@@ -45,6 +50,15 @@ class RowStoreClientTest {
 	}
 
 	private final AtomicReference<ReceivedRequest> received = new AtomicReference<>();
+
+	private final AtomicInteger requestCount = new AtomicInteger();
+
+	/**
+	 * Released at teardown; stalled handlers wait on it.
+	 */
+	private final CountDownLatch release = new CountDownLatch(1);
+
+	private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
 	private HttpServer server;
 
@@ -54,24 +68,33 @@ class RowStoreClientTest {
 
 	private volatile String responseLocation;
 
-	private volatile Duration responseDelay = Duration.ZERO;
+	private volatile boolean stallBeforeHeaders;
+
+	private volatile boolean stallBody;
 
 	@BeforeEach
 	void startServer() throws IOException {
 		server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+		server.setExecutor(executor);
 		server.createContext("/", exchange -> {
+			requestCount.incrementAndGet();
 			String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
 			received.set(new ReceivedRequest(exchange.getRequestMethod(), exchange.getRequestURI().getPath(),
 					exchange.getRequestHeaders(), body));
-			try {
-				Thread.sleep(responseDelay);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
+			if (stallBeforeHeaders) {
+				awaitRelease();
 			}
 			if (responseLocation != null) {
 				exchange.getResponseHeaders().add("Location", responseLocation);
 			}
-			exchange.sendResponseHeaders(responseStatus, -1);
+			if (stallBody) {
+				exchange.sendResponseHeaders(responseStatus, 0);
+				exchange.getResponseBody().write("partial".getBytes(StandardCharsets.UTF_8));
+				exchange.getResponseBody().flush();
+				awaitRelease();
+			} else {
+				exchange.sendResponseHeaders(responseStatus, -1);
+			}
 			exchange.close();
 		});
 		server.start();
@@ -80,7 +103,17 @@ class RowStoreClientTest {
 
 	@AfterEach
 	void stopServer() {
+		release.countDown();
 		server.stop(0);
+		executor.close();
+	}
+
+	private void awaitRelease() {
+		try {
+			release.await();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
 	}
 
 	@Test
@@ -173,13 +206,49 @@ class RowStoreClientTest {
 	}
 
 	@Test
+	void pathRelativeLocationIsResolvedAgainstRequestUri() {
+		responseStatus = 202;
+		responseLocation = "datasets/abc";
+
+		RowStoreClient.Response response = new RowStoreClient().send("POST", baseUri.resolve("/rowstore/datasets"),
+				BodyPublishers.ofString("a,b"), "text/csv");
+
+		assertEquals(baseUri.resolve("/rowstore/datasets/abc"), response.location());
+	}
+
+	@Test
+	void redirectIsNotFollowed() {
+		responseStatus = 302;
+		responseLocation = "/elsewhere";
+
+		RowStoreClient.Response response = new RowStoreClient().send("PUT", baseUri.resolve("/datasets/abc"),
+				BodyPublishers.ofString("a,b"), "text/csv");
+
+		assertEquals(302, response.status());
+		assertFalse(response.isSuccess());
+		assertEquals(1, requestCount.get());
+	}
+
+	@Test
 	void slowServerIsReportedAsTransportFailure() {
 		responseStatus = 202;
-		responseDelay = Duration.ofSeconds(2);
+		stallBeforeHeaders = true;
 
 		RowStoreClient.Response response = new RowStoreClient(Duration.ofMillis(200)).send("POST",
 				baseUri.resolve("/datasets"), BodyPublishers.ofString("a,b"), "text/csv");
 
 		assertEquals(RowStoreClient.Response.TRANSPORT_FAILURE, response.status());
+	}
+
+	@Test
+	void stalledResponseBodyDoesNotBlockTheCaller() {
+		responseStatus = 200;
+		stallBody = true;
+
+		RowStoreClient.Response response = assertTimeoutPreemptively(Duration.ofSeconds(5),
+				() -> new RowStoreClient(Duration.ofMillis(500)).send("PUT", baseUri.resolve("/datasets/abc"),
+						BodyPublishers.ofString("a,b"), "text/csv"));
+
+		assertEquals(200, response.status());
 	}
 }

@@ -150,12 +150,40 @@ class RowStoreTransformIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
+	def "create should return 400 when RowStore answers 201 instead of 202"() {
+		given:
+		def datasetUrl = 'http://localhost:' + wireMockServer.port() + DATASETS_PATH + '/' + uniqueId()
+		stub(post(urlPathEqualTo(DATASETS_PATH))
+			.willReturn(aResponse().withStatus(201).withHeader('Location', datasetUrl)))
+		def pipelineUri = createRowStorePipeline([action: 'create'])
+		def sourceUri = createCsvSource('a,b\n1,2\n')
+
+		when:
+		def connection = execute(pipelineUri, sourceUri)
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
 	def "create without source entry should return 400 and not contact RowStore"() {
 		given:
 		def pipelineUri = createRowStorePipeline([action: 'create'])
 
 		when:
 		def connection = execute(pipelineUri, null)
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		wireMockServer.verify(0, anyRequestedFor(anyUrl()))
+	}
+
+	def "unknown action should return 400 and not contact RowStore"() {
+		given:
+		def pipelineUri = createRowStorePipeline([action: 'truncate'])
+		def sourceUri = createCsvSource('a,b\n1,2\n')
+
+		when:
+		def connection = execute(pipelineUri, sourceUri)
 
 		then:
 		connection.getResponseCode() == HTTP_BAD_REQUEST
@@ -262,6 +290,21 @@ class RowStoreTransformIT extends BaseSpec {
 			.withRequestBody(equalToJson('["my-alias"]')))
 	}
 
+	def "setalias should send quotes and backslashes in the alias as valid JSON"() {
+		given:
+		def dataset = createDataset()
+		stub(put(urlPathEqualTo(dataset.path + '/aliases')).willReturn(aResponse().withStatus(200)))
+		def pipelineUri = createRowStorePipeline([action: 'setalias', datasetURL: dataset.url, alias: 'a"b\\c'])
+
+		when:
+		def connection = execute(pipelineUri, null)
+
+		then:
+		connection.getResponseCode() == HTTP_CREATED
+		wireMockServer.verify(1, putRequestedFor(urlPathEqualTo(dataset.path + '/aliases'))
+			.withRequestBody(equalToJson(JsonOutput.toJson(['a"b\\c']))))
+	}
+
 	def "setalias with empty alias should DELETE the dataset's aliases"() {
 		given:
 		def dataset = createDataset()
@@ -291,7 +334,7 @@ class RowStoreTransformIT extends BaseSpec {
 	private static String createRowStorePipeline(Map<String, String> arguments) {
 		def pipelineId = createEntry(CONTEXT_ID, [graphtype: 'pipeline'])
 		def argumentsTurtle = arguments.collect { key, value ->
-			"es:transformArgument [ es:transformArgumentKey \"${key}\" ; es:transformArgumentValue \"${value}\" ] ;"
+			"es:transformArgument [ es:transformArgumentKey \"${key}\" ; es:transformArgumentValue \"${turtleEscape(value)}\" ] ;"
 		}.join('\n\t')
 		def pipelineTurtle = """\
 			@prefix es: <http://entrystore.org/terms/> .
@@ -304,6 +347,10 @@ class RowStoreTransformIT extends BaseSpec {
 			pipelineTurtle, 'admin', 'text/turtle')
 		assert connection.getResponseCode() >= 200 && connection.getResponseCode() < 300
 		return entryUri(pipelineId)
+	}
+
+	private static String turtleEscape(String value) {
+		return value.replace('\\', '\\\\').replace('"', '\\"')
 	}
 
 	private static String createCsvSource(String csv) {

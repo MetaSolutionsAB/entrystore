@@ -65,6 +65,8 @@ public class CSV2RowStoreTransform extends Transform {
 
 	private static final String TEXT_CSV = "text/csv";
 
+	private static final String APPLICATION_JSON = "application/json";
+
 	private static final ValueFactory vf = SimpleValueFactory.getInstance();
 
 	@Override
@@ -154,23 +156,40 @@ public class CSV2RowStoreTransform extends Transform {
 		if (alias == null || alias.isEmpty()) {
 			return client.send("DELETE", aliasesUri, null, null);
 		}
-		String jsonArray = "[\"" + alias.replace("\\", "\\\\").replace("\"", "\\\"") + "\"]";
-		return client.send("PUT", aliasesUri, BodyPublishers.ofString(jsonArray), "application/json");
+		return client.send("PUT", aliasesUri, BodyPublishers.ofString(toJsonArray(alias)), APPLICATION_JSON);
 	}
 
 	/**
-	 * Streams the data file when there is one, so the request carries a Content-Length.
+	 * @return a JSON array with the value as its only string element
 	 */
+	static String toJsonArray(String value) {
+		StringBuilder json = new StringBuilder("[\"");
+		for (char c : value.toCharArray()) {
+			switch (c) {
+				case '"' -> json.append("\\\"");
+				case '\\' -> json.append("\\\\");
+				default -> {
+					if (c < 0x20) {
+						json.append("\\u%04x".formatted((int) c));
+					} else {
+						json.append(c);
+					}
+				}
+			}
+		}
+		return json.append("\"]").toString();
+	}
+
 	private static BodyPublisher csvBody(Entry sourceEntry) {
-		Data data = (Data) sourceEntry.getResource();
-		File file = data.getDataFile();
+		String message = "Source entry " + sourceEntry.getEntryURI() + " has no data";
+		File file = ((Data) sourceEntry.getResource()).getDataFile();
 		if (file == null) {
-			return BodyPublishers.ofInputStream(data::getData);
+			throw new IllegalStateException(message);
 		}
 		try {
 			return BodyPublishers.ofFile(file.toPath());
 		} catch (FileNotFoundException e) {
-			throw new IllegalStateException("Data file of source entry " + sourceEntry.getEntryURI() + " is missing", e);
+			throw new IllegalStateException(message, e);
 		}
 	}
 }

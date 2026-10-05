@@ -71,15 +71,17 @@ class RowStoreClient {
 		}
 
 		try {
-			var response = httpClient.send(request.build(), BodyHandlers.discarding());
+			var response = httpClient.send(request.build(), BodyHandlers.ofInputStream());
+			// The body is not needed; closing it right away means a stalled body cannot outlast the timeout
+			response.body().close();
 			URI location = response.headers().firstValue("Location").map(uri::resolve).orElse(null);
 			return new Response(response.statusCode(), location);
 		} catch (IOException | IllegalArgumentException e) {
-			log.error("RowStore request {} {} failed: {}", method, uri, e.toString());
+			log.warn("RowStore request {} {} failed: {}", method, uri, e.toString());
 			return new Response(Response.TRANSPORT_FAILURE, null);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
-			log.error("RowStore request {} {} was interrupted", method, uri);
+			log.warn("RowStore request {} {} was interrupted", method, uri);
 			return new Response(Response.TRANSPORT_FAILURE, null);
 		}
 	}
