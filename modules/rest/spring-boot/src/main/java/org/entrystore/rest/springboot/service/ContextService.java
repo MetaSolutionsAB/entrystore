@@ -99,9 +99,7 @@ public class ContextService {
 	public List<String> getContextEntries(String contextId, boolean deletedEntries, String entryName) {
 
 		Context context = getContextOrThrow(contextId);
-		if (!principalManager.currentUserIsAdminOrAdminGroup()) {
-			throw new ForbiddenException("Listing the entries of a context requires admin privileges");
-		}
+		checkMayListEntries();
 
 		if (deletedEntries) {
 
@@ -135,6 +133,18 @@ public class ContextService {
 				.toList();
 	}
 
+
+	/**
+	 * Lets only admins list a context's entry IDs: the listing skips every entry's ACL, so it would reveal
+	 * private entries. Callers check that the context exists first (see {@link #getContextEntries}).
+	 *
+	 * @throws ForbiddenException if the caller is not an admin
+	 */
+	public void checkMayListEntries() {
+		if (!principalManager.currentUserIsAdminOrAdminGroup()) {
+			throw new ForbiddenException("Listing the entries of a context requires admin privileges");
+		}
+	}
 
 	public Context getContext(String contextId) {
 

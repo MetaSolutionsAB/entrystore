@@ -67,6 +67,29 @@ class ResourceIT extends BaseSpec {
 		EntryStoreClient.restoreCreds()
 	}
 
+	/**
+	 * Ensures a context exists that is owned by the non-admin 'user' fixture and readable by guests if {@code public}.
+	 *
+	 * @return the context ID
+	 */
+	def ownedListingContext(boolean isPublic) {
+		def listedContextId = isPublic ? 'resListPublic' : 'resListPrivate'
+		getOrCreateContext([contextId: listedContextId])
+		def entryUri = EntryStoreClient.baseUrl + '/_contexts/entry/' + listedContextId
+		def resourceUri = EntryStoreClient.baseUrl + '/' + listedContextId
+		def ownerUri = EntryStoreClient.createdEsUsers['user']['resourceUri']
+		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
+		def acl = [(entryUri): [(NameSpaceConst.TERM_WRITE): [[type: 'uri', value: ownerUri]]]]
+		if (isPublic) {
+			acl[resourceUri] = [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]
+		}
+		def aclConn = EntryStoreClient.putRequest('/_contexts/entry/' + listedContextId, JsonOutput.toJson(acl),
+			'admin')
+		assert aclConn.getResponseCode() == HTTP_NO_CONTENT
+		assert EntryStoreClient.getRequest('/_contexts/entry/' + listedContextId, 'user').getResponseCode() == HTTP_OK
+		return listedContextId
+	}
+
 	def "GET /{context-id}/resource/{entry-id} as guest on String graph should respond with Unauthorized 401"() {
 		given:
 		// create local String entry
@@ -198,20 +221,67 @@ class ResourceIT extends BaseSpec {
 		resourceResp == [givenEntryId]
 	}
 
-	// TODO: Verify behaviour - Guest can access entries list for any context
-	def "GET /_contexts/resource/{entry-id} as guest on Context graph should return the entries list that are in the context"() {
-		given:
-		// create minimal entry in the context
-		def givenEntryId = createEntry(contextId, [:])
+	def "GET /_contexts/resource/{context-id} as #caller on a #visibility context it owns should respond with #status"() {
+		given: 'a context owned by the non-admin user, holding an entry'
+		def listedContextId = ownedListingContext(visibility == 'public')
+		createEntry(listedContextId, [:])
 
 		when:
-		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + contextId, '')
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + listedContextId, asUser)
+
+		then:
+		resourceConn.getResponseCode() == status
+		resourceConn.getContentType().contains('application/json')
+		JSON_PARSER.parseText(resourceConn.errorStream.text)['error'] != null
+
+		where:
+		caller  | asUser | visibility | status
+		'guest' | ''     | 'public'   | HTTP_UNAUTHORIZED
+		'guest' | ''     | 'private'  | HTTP_UNAUTHORIZED
+		'owner' | 'user' | 'public'   | HTTP_FORBIDDEN
+		'owner' | 'user' | 'private'  | HTTP_FORBIDDEN
+	}
+
+	def "GET /_contexts/resource/{context-id} as admin on a private context should return the entries list"() {
+		given:
+		def listedContextId = ownedListingContext(false)
+		def givenEntryId = createEntry(listedContextId, [:])
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + listedContextId)
 
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceResp = JSON_PARSER.parseText(resourceConn.inputStream.text)
-		resourceResp.collect().contains(givenEntryId)
+		JSON_PARSER.parseText(resourceConn.inputStream.text).collect().contains(givenEntryId)
+	}
+
+	def "GET /_contexts/resource/#systemContextId as #caller should respond with #status"() {
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + systemContextId, asUser)
+
+		then:
+		resourceConn.getResponseCode() == status
+		JSON_PARSER.parseText(resourceConn.errorStream.text)['error'] != null
+
+		where:
+		caller         | asUser | systemContextId | status
+		'guest'        | ''     | '_principals'   | HTTP_UNAUTHORIZED
+		'guest'        | ''     | '_contexts'     | HTTP_UNAUTHORIZED
+		'a non-admin'  | 'user' | '_principals'   | HTTP_FORBIDDEN
+		'a non-admin'  | 'user' | '_contexts'     | HTTP_FORBIDDEN
+	}
+
+	def "GET /_contexts/resource/_principals as admin should return the IDs of all principals"() {
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/_principals')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/json')
+		def resourceResp = JSON_PARSER.parseText(resourceConn.inputStream.text).collect()
+		resourceResp.contains('_guest')
+		resourceResp.contains(EntryStoreClient.createdEsUsers['user']['entryId'].toString())
 	}
 
 	def "GET /_contexts/resource/{entry-id} as admin on Context graph should return the entries list that are in the context"() {

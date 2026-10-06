@@ -63,10 +63,12 @@ public class ResourceService {
 	private final FileResourceService fileResourceService;
 	private final UserService userService;
 	private final ProxyService proxyService;
+	private final ContextService contextService;
 
 	/**
 	 * Chooses the representation a GET on the resource URI answers with. A syndication request is served before
 	 * the entry's own type is considered. May throw {@code RedirectSeeOtherException} for named resources.
+	 * A context's entry IDs are listed to admins only, as by {@code GET /{context-id}}.
 	 */
 	public ResourceRepresentation getResourceRepresentation(Entry entry, ResourceQuery query) {
 		if (query.syndication() != null) {
@@ -162,9 +164,14 @@ public class ResourceService {
 				return switch (graphType) {
 					case User -> resourceSerializationService.serializeResourceUser(resource).toString();
 					case Group -> resourceSerializationService.serializeResourceGroup(resource, mediaType).toString();
-					case Context -> resourceSerializationService.serializeResourceContext(resource).toString();
-					case SystemContext ->
-							resourceSerializationService.serializeResourceSystemContext(resource).toString();
+					case Context -> {
+						contextService.checkMayListEntries();
+						yield resourceSerializationService.serializeResourceContext(resource).toString();
+					}
+					case SystemContext -> {
+						contextService.checkMayListEntries();
+						yield resourceSerializationService.serializeResourceSystemContext(resource).toString();
+					}
 					case Pipeline -> {
 						if (resource instanceof RDFResource pipeline) {
 							if (pipeline.getGraph() == null) {
