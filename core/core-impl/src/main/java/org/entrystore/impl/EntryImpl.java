@@ -720,7 +720,7 @@ public class EntryImpl implements Entry {
 					List<Statement> originalStatements = Iterations.asList(
 							rc.getStatements(null, null, null, false, entryURI));
 					try {
-						Model newEntryGraph = ModelUtil.replaceIRI(new LinkedHashModel(originalStatements),
+						Model newEntryGraph = renameResourceInEntryGraph(new LinkedHashModel(originalStatements),
 								oldResourceURI, newResourceURI);
 						removeInverseRelations(rc);
 						rc.clear(entryURI);
@@ -783,6 +783,23 @@ public class EntryImpl implements Entry {
 			throw new IllegalArgumentException(
 					"The resource URI must differ from the entry's own entry, metadata and relation URIs");
 		}
+	}
+
+	/**
+	 * Moves the resource URI as subject, which carries the type and resource-level ACL triples, and as the object
+	 * of es:resource. Every other object is left alone, as in 5.x: an external metadata URI may equal the resource
+	 * URI, and only {@link #setExternalMetadataURI} changes it, together with its index.
+	 */
+	private static Model renameResourceInEntryGraph(Model entryGraph, IRI from, IRI to) {
+		Model renamed = new LinkedHashModel();
+		for (Statement statement : entryGraph) {
+			org.eclipse.rdf4j.model.Resource subject =
+					from.equals(statement.getSubject()) ? to : statement.getSubject();
+			Value object = RepositoryProperties.resource.equals(statement.getPredicate())
+					&& from.equals(statement.getObject()) ? to : statement.getObject();
+			renamed.add(subject, statement.getPredicate(), object, statement.getContext());
+		}
+		return renamed;
 	}
 
 	/**
@@ -1281,7 +1298,7 @@ public class EntryImpl implements Entry {
 		if (resourceURIStmnts.hasNext() && resourceURIStmnts.next().getObject() instanceof IRI newResourceIRI
 				&& !newResourceIRI.equals(oldResourceURI)) {
 			newResourceURI = toURI(newResourceIRI, "resource URI");
-			metametadata = ModelUtil.replaceIRI(submitted, oldResourceURI, newResourceIRI);
+			metametadata = renameResourceInEntryGraph(submitted, oldResourceURI, newResourceIRI);
 		}
 
 		URI newExternalMetadataURI = null;

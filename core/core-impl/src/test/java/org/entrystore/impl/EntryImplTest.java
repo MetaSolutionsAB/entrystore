@@ -873,6 +873,44 @@ public class EntryImplTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void setResourceURI_keepsAnExternalMetadataURIThatEqualsTheResourceURI() {
+		// what EntryScape's external SKOS import creates
+		URI conceptURI = URI.create("http://example.com/terminology/concept");
+		Entry linkRef = context.createLinkReference(null, conceptURI, conceptURI, null);
+		URI newResourceURI = URI.create("http://example.com/terminology/concept-renamed");
+
+		linkRef.setResourceURI(newResourceURI);
+
+		assertEquals(newResourceURI, linkRef.getResourceURI());
+		assertEquals(conceptURI, linkRef.getExternalMetadataURI());
+		assertTrue(context.getByExternalMdURI(conceptURI).contains(linkRef));
+		assertTrue(context.getByExternalMdURI(newResourceURI).isEmpty());
+	}
+
+	@Test
+	public void setGraph_renamingTheResourceKeepsAnExternalMetadataURIThatEqualsIt() {
+		URI conceptURI = URI.create("http://example.com/terminology/concept");
+		EntryImpl linkRef = (EntryImpl) context.createLinkReference(null, conceptURI, conceptURI, null);
+		IRI conceptIRI = linkRef.getSesameResourceURI();
+		IRI newResourceIRI = rm.getValueFactory().createIRI("http://example.com/terminology/concept-renamed");
+		// EntryInfo.setResourceURI in entrystore.js: es:externalMetadata is echoed unchanged
+		Model body = ModelUtil.replaceSubject(linkRef.getGraph(), conceptIRI, newResourceIRI);
+		body.remove(linkRef.getSesameEntryURI(), RepositoryProperties.resource, conceptIRI);
+		body.add(linkRef.getSesameEntryURI(), RepositoryProperties.resource, newResourceIRI);
+
+		linkRef.setGraph(body);
+
+		assertEquals(URI.create(newResourceIRI.stringValue()), linkRef.getResourceURI());
+		assertEquals(conceptURI, linkRef.getExternalMetadataURI());
+		// reloaded from the store, so the es:mdHasEntry index triple is checked too
+		((ContextImpl) context).evictFromCaches(java.util.List.of(linkRef));
+		Entry reloaded = context.get(linkRef.getId());
+		assertEquals(conceptURI, reloaded.getExternalMetadataURI());
+		assertTrue(context.getByExternalMdURI(conceptURI).contains(reloaded));
+		assertTrue(context.getByResourceURI(URI.create(newResourceIRI.stringValue())).contains(reloaded));
+	}
+
+	@Test
 	public void removeAllowedPrincipalsFor_reportsWhetherThePrincipalWasAllowed() {
 		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
 		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);

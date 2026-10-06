@@ -4,6 +4,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1230](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1230) Renaming the resource of a reference whose external metadata URI equals its resource URI keeps the external metadata URI, as in 5.x. 6.x rewrote it too but left the external-metadata index on the old URI, so the entry could no longer be found by its external metadata URI and its deletion left an orphan index triple. EntryScape's external SKOS import creates such entries and its terminology URI migration renames them.
+
 [ENTRYSTORE-1227](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1227) Changing the resource URI of a local entry of graph type None \(a named resource or a file\) through PUT /\{context-id\}/entry/\{entry-id\} works again, as in 5.x; 6.x answered 400 for every local entry, so EntryScape's terminology URI migration and "Update URI" failed halfway. The entry graph, the metadata subject, the resource-level ACL, the resource index and the Solr document follow the new URI; a file stays downloadable. **Behaviour note:** local entries of any other graph type \(List, Graph, String, Pipeline, PipelineResult, ResultList\) and contexts, users and groups still answer 400.
 
 [ENTRYSTORE-1224](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1224) Sign-up checks the password against the configured password rules again before sending the confirmation email, as in 5.x, and answers 400 "The password must conform to the configured rules." otherwise. 6.x only required 8 characters, so an account could be created with a password the rules reject. **Behaviour note:** sign-up no longer requires 8 characters on its own, as in 5.x; with the default rules a password still needs 10. Password reset still only requires 8 characters, as in 5.x.

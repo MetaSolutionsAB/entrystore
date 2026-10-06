@@ -2280,6 +2280,29 @@ class EntryIT extends BaseSpec {
 		resourceConn.getInputStream().readAllBytes() == file.getBytes()
 	}
 
+	def "PUT /{context-id}/entry/{entry-id} renaming a linkreference whose external metadata URI is its resource URI should keep the external metadata URI"() {
+		given:
+		def renameContextId = 'resourceRename'
+		getOrCreateContext([contextId: renameContextId])
+		// EntryScape's external SKOS import: newLinkRef(uri, uri)
+		def conceptUri = 'http://example.com/external-terminology/concept'
+		def entryId = createEntry(renameContextId,
+			[entrytype: 'linkreference', resource: conceptUri, 'cached-external-metadata': conceptUri])
+		def entryUri = EntryStoreClient.baseUrl + '/' + renameContextId + '/entry/' + entryId
+		def newResourceUri = conceptUri + '-renamed'
+		def putBody = renamedEntryInfo(entryInfo(renameContextId, entryId), entryUri, newResourceUri)
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + renameContextId + '/entry/' + entryId,
+			JsonOutput.toJson(putBody), 'admin', 'application/json')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_NO_CONTENT
+		def info = entryInfo(renameContextId, entryId)
+		info[entryUri][NameSpaceConst.TERM_RESOURCE].collect { it['value'] } == [newResourceUri]
+		info[entryUri][NameSpaceConst.TERM_EXTERNAL_METADATA].collect { it['value'] } == [conceptUri]
+	}
+
 	def "PUT /{context-id}/entry/{entry-id} renaming a link's resource should carry its ACL to the new resource URI"() {
 		given:
 		def entryId = 'linkForRename'
