@@ -26,6 +26,7 @@ import org.springframework.stereotype.Service;
 import java.net.URLDecoder;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -38,6 +39,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  * refused: anything but a plain name (see {@link #PLAIN_FIELD}), because Solr reads local params such as
  * {@code {!facet.matches=...}} in a facet field and lets them override the request, and the server-internal
  * language companion {@code [related.]metadata.predicate.literal_l.*} (see {@code LanguageAwareFacets}).
+ * {@code facetFields} also refuses the catch-all text fields in {@link #UNFACETABLE_FIELDS}.
  *
  * <p>{@code facetMatches} and {@code facetLang} are restricted to literal-only patterns because Solr evaluates
  * them as regular expressions, so a crafted pattern could tie up Solr (ReDoS). The length and count caps are
@@ -55,12 +57,23 @@ public class SolrSearchInputValidator {
 	private static final Pattern PLAIN_FIELD = Pattern.compile("^[A-Za-z0-9_.\\-]+$");
 
 	/**
-	 * Constrains {@code facetMatches} to a literal-only character class (alphanumerics, underscore,
-	 * dash) so the value cannot exploit Solr's regex evaluator. Any change to this pattern must
-	 * preserve that property — relaxing the class to include regex metacharacters (e.g. {@code .},
-	 * {@code *}, {@code +}, parentheses) reopens the ReDoS surface this class was added to close.
+	 * Tokenized catch-all fields without docValues. Faceting on them makes Solr uninvert every token of every
+	 * document onto its heap after each commit, and their buckets are word fragments no client uses.
 	 */
-	private static final Pattern FACET_MATCHES = Pattern.compile("^[\\w-]{1,64}$");
+	private static final Set<String> UNFACETABLE_FIELDS = Set.of("all", "fulltext", "metadata.object.literal");
+
+	/**
+	 * Literal text for {@code facetMatches}, which Solr evaluates as a full-match regular expression: any character
+	 * but a regex metacharacter or a control character, or a metacharacter escaped with a backslash, so
+	 * {@code Dr\. Smith} matches "Dr. Smith" as it did in 5.x. Letters of every script pass. Admitting an unescaped
+	 * metacharacter (quantifiers, groups, alternation, classes) reopens the ReDoS surface. Control characters are
+	 * refused because U+001F separates label and language in the companion terms that {@code facetLang} matches.
+	 */
+	private static final Pattern FACET_MATCHES =
+			Pattern.compile("^(?:[^\\\\^$.|?*+()\\[\\]{}\\p{Cc}]|\\\\[\\\\^$.|?*+()\\[\\]{}])+$");
+
+	/** Checked before {@link #FACET_MATCHES}, whose repeated group recurses once per character. */
+	private static final int MAX_FACET_MATCHES_LENGTH = 256;
 
 	/**
 	 * Constrains {@code facetLang} to the BCP 47 alphabet (alphanumerics and dash, at most 35 characters, the
@@ -200,6 +213,9 @@ public class SolrSearchInputValidator {
 			String clientField = LanguageAwareFacets.clientField(field);
 			if (!clientField.isEmpty()) {
 				requirePlainField(clientField, "facetFields");
+				if (UNFACETABLE_FIELDS.contains(clientField)) {
+					throw new BadRequestException("Field '" + clientField + "' is not permitted in 'facetFields'");
+				}
 			}
 		}
 	}
@@ -209,9 +225,9 @@ public class SolrSearchInputValidator {
 		if (matches == null || matches.isEmpty() || facetFields == null || facetFields.isEmpty()) {
 			return;
 		}
-		if (!FACET_MATCHES.matcher(matches).matches()) {
-			throw new BadRequestException(
-					"Query parameter 'facetMatches' must match pattern " + FACET_MATCHES.pattern());
+		if (matches.length() > MAX_FACET_MATCHES_LENGTH || !FACET_MATCHES.matcher(matches).matches()) {
+			throw new BadRequestException("Query parameter 'facetMatches' must be literal text of at most "
+					+ MAX_FACET_MATCHES_LENGTH + " characters; escape any of \\^$.|?*+()[]{} with a backslash");
 		}
 	}
 

@@ -73,7 +73,7 @@ class SearchIT extends BaseSpec {
 	static final String AWKWARD_MARKER_IRI = 'http://example.org/ns/searchIT-awkward-marker'
 	static final String AWKWARD_MARKER_FIELD_S = 'metadata.predicate.literal_s.' + Hashing.hash(AWKWARD_MARKER_IRI, HashType.MD5).substring(0, 8)
 	static final String AWKWARD_MARKER_VALUE = 'awkwardmarkervalue'
-	static final List<String> AWKWARD_LABELS = ['Price ${amount}', '${facet.query}', '{!lucene}*:*', 'a, "b"']
+	static final List<String> AWKWARD_LABELS = ['Price ${amount}', '${facet.query}', '{!lucene}*:*', 'a, "b"', 'Österreich']
 
 	// Test-only predicate carrying an xsd:integer literal, so the facet specs can facet on a metadata.predicate.integer
 	// field and on tag.literal of the same entry.
@@ -1187,7 +1187,27 @@ class SearchIT extends BaseSpec {
 		conn.errorStream.text.contains("'facetMatches'")
 
 		where:
-		matches << ['.*', '(a|b)+', 'foo bar', 'a' * 65]
+		matches << ['.*', '(a|b)+', '\\d+', 'a' * 257]
+	}
+
+	@Unroll
+	def "GET /search?type=solr with literal facetMatches '#matches' should return only the bucket '#label'"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: AWKWARD_MARKER_FIELD_S + ':' + AWKWARD_MARKER_VALUE, facetFields: AWKWARD_MARKER_FIELD_S,
+			 facetMatches: matches]))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		respJson['facetFields'].find { it['name'] == AWKWARD_MARKER_FIELD_S }['values'] == [[name: label, count: 1]]
+
+		where: 'letters outside ASCII pass as they are, and a backslash makes a regex metacharacter literal'
+		matches                    | label
+		'Österreich'               | 'Österreich'
+		'a, "b"'                   | 'a, "b"'
+		'Price \\$\\{amount\\}'      | 'Price ${amount}'
+		'\\{!lucene\\}\\*:\\*'       | '{!lucene}*:*'
 	}
 
 	def "GET /search?type=solr with literal facetMatches should return search results"() {
@@ -1379,10 +1399,11 @@ class SearchIT extends BaseSpec {
 		conn.getContentType().contains('application/json')
 		conn.errorStream.text.contains("'" + parameter + "'")
 
-		where: 'the internal literal_l field, and Solr local params, which would override facet.matches or facet.limit'
+		where: 'the internal literal_l field, a catch-all text field, and Solr local params, which would override facet.matches or facet.limit'
 		parameter     | value
 		'facetFields' | LANG_MARKER_FIELD_L
 		'sort'        | LANG_MARKER_FIELD_L + ' asc'
+		'facetFields' | 'all'
 		'facetFields' | '{!key=x}' + LANG_MARKER_FIELD_L
 		'facetFields' | '{!facet.matches=\'(a+)+$\'}tag.literal'
 		'facetFields' | '{!facet.limit=-1}' + LANG_MARKER_FIELD_S

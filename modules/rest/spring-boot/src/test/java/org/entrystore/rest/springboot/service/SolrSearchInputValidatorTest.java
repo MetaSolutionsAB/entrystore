@@ -339,6 +339,21 @@ class SolrSearchInputValidatorTest {
 		assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
 	}
 
+	@ParameterizedTest(name = "{0}")
+	@ValueSource(strings = {
+			"all",
+			"fulltext",
+			"metadata.object.literal",
+			" all ",
+			"rdfType,metadata.object.literal"
+	})
+	void validateFacetSettingsRejectsCatchAllTextFields(String facetFields) {
+		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
+		req.setFacetFields(facetFields);
+		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
+		assertTrue(ex.getMessage().contains("'facetFields'"), ex.getMessage());
+	}
+
 	@Test
 	void validateFacetSettingsAcceptsAtMaxFacetFieldCount() {
 		StringBuilder fields = new StringBuilder("rdfType");
@@ -379,42 +394,66 @@ class SolrSearchInputValidatorTest {
 				assertDoesNotThrow(() -> context.getBean(SolrSearchInputValidator.class).validateFacetSettings(req)));
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "{0}")
 	@ValueSource(strings = {
 			"abc",
 			"abc-123",
 			"abc_123",
-			"DEADBEEF",
 			"a",
-			"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"     // exactly 64 chars
+			"Österreich",
+			"Łódź",
+			"Café crème",
+			"日本語",
+			"O'Brien",
+			"New York",
+			"a, \"b\"",
+			"Dr\\. Smith",
+			"Price \\$\\{amount\\}",
+			"\\{!lucene\\}\\*:\\*",
+			"C:\\\\temp"
 	})
-	void validateFacetSettingsAcceptsSafeFacetMatches(String matches) {
+	void validateFacetSettingsAcceptsLiteralFacetMatches(String matches) {
 		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
 		req.setFacetFields("rdfType");
 		req.setFacetMatches(matches);
 		assertDoesNotThrow(() -> validator.validateFacetSettings(req));
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "{0}")
 	@ValueSource(strings = {
 			".*",
 			"(a|b)+",
 			"foo.*bar",
 			"a{1,100}",
-			"foo bar"
+			"[ab]",
+			"^a",
+			"a$",
+			"\\d+",
+			"\\Qa\\E",
+			"trailing\\",
+			"label\u001Fsv"
 	})
 	void validateFacetSettingsRejectsRegexFacetMatches(String matches) {
 		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
 		req.setFacetFields("rdfType");
 		req.setFacetMatches(matches);
-		assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
+		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
+		assertTrue(ex.getMessage().contains("'facetMatches'"), ex.getMessage());
 	}
 
 	@Test
-	void validateFacetSettingsRejectsFacetMatchesOverSixtyFourChars() {
+	void validateFacetSettingsAcceptsFacetMatchesOfTwoHundredFiftySixChars() {
 		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
 		req.setFacetFields("rdfType");
-		req.setFacetMatches("a".repeat(65));
+		req.setFacetMatches("ä".repeat(256));
+		assertDoesNotThrow(() -> validator.validateFacetSettings(req));
+	}
+
+	@Test
+	void validateFacetSettingsRejectsFacetMatchesOverTwoHundredFiftySixChars() {
+		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
+		req.setFacetFields("rdfType");
+		req.setFacetMatches("ä".repeat(257));
 		assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
 	}
 
