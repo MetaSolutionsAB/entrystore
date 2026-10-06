@@ -34,8 +34,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>Boolean accessors use Spring's relaxed spellings and report blank or invalid values as the default
  * false, matching {@code Config.getBoolean}. Binding raw strings keeps this report from failing startup
- * for a value tolerated by core. {@code auth.signup} and {@code auth.password-reset} have no other
- * reader: nothing gates signup or password reset on them.
+ * for a value tolerated by core. The sign-up and password-reset switches are reported from
+ * {@link AuthFeatureProperties}, the binding that gates them.
  *
  * <p>The {@code @Value} annotations sit on the explicit canonical constructor's parameters rather than
  * on the record components — see {@link CorsProperties} for why that distinction matters at startup.
@@ -50,8 +50,6 @@ public record StatusReportProperties(
 		String oaiHarvesterRaw,
 		String oaiHarvesterMultiThreadedRaw,
 		String provenanceRaw,
-		String signupRaw,
-		String passwordResetRaw,
 		String solrEnabledRaw,
 		String solrReindexOnStartupRaw,
 		String backupFormat,
@@ -73,8 +71,6 @@ public record StatusReportProperties(
 			@Value("${entrystore.harvester.oai:false}") String oaiHarvesterRaw,
 			@Value("${entrystore.harvester.oai.multithreaded:false}") String oaiHarvesterMultiThreadedRaw,
 			@Value("${entrystore.repository.provenance:false}") String provenanceRaw,
-			@Value("${entrystore.auth.signup:false}") String signupRaw,
-			@Value("${entrystore.auth.password-reset:false}") String passwordResetRaw,
 			@Value("${entrystore.solr:false}") String solrEnabledRaw,
 			@Value("${entrystore.solr.reindex-on-startup:false}") String solrReindexOnStartupRaw,
 			@Value("${entrystore.backup.format:" + UNCONFIGURED + "}") String backupFormat,
@@ -92,8 +88,6 @@ public record StatusReportProperties(
 		this.oaiHarvesterRaw = oaiHarvesterRaw;
 		this.oaiHarvesterMultiThreadedRaw = oaiHarvesterMultiThreadedRaw;
 		this.provenanceRaw = provenanceRaw;
-		this.signupRaw = signupRaw;
-		this.passwordResetRaw = passwordResetRaw;
 		this.solrEnabledRaw = solrEnabledRaw;
 		this.solrReindexOnStartupRaw = solrReindexOnStartupRaw;
 		this.backupFormat = backupFormat;
@@ -118,14 +112,6 @@ public record StatusReportProperties(
 
 	public boolean provenance() {
 		return relaxedBoolean(provenanceRaw);
-	}
-
-	public boolean signup() {
-		return relaxedBoolean(signupRaw);
-	}
-
-	public boolean passwordReset() {
-		return relaxedBoolean(passwordResetRaw);
 	}
 
 	public boolean solrEnabled() {

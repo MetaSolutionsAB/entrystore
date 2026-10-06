@@ -53,8 +53,6 @@ class StatusReportPropertiesTest {
 						"entrystore.harvester.oai=off",
 						"entrystore.harvester.oai.multithreaded=on",
 						"entrystore.repository.provenance=off",
-						"entrystore.auth.signup=true",
-						"entrystore.auth.password-reset=false",
 						"entrystore.solr=on",
 						"entrystore.solr.reindex-on-startup=false",
 						"entrystore.backup.format=trig",
@@ -74,8 +72,6 @@ class StatusReportPropertiesTest {
 					assertFalse(properties.oaiHarvester());
 					assertTrue(properties.oaiHarvesterMultiThreaded());
 					assertFalse(properties.provenance());
-					assertTrue(properties.signup());
-					assertFalse(properties.passwordReset());
 					assertTrue(properties.solrEnabled());
 					assertFalse(properties.solrReindexOnStartup());
 					assertEquals("trig", properties.backupFormat());
@@ -104,8 +100,6 @@ class StatusReportPropertiesTest {
 			assertFalse(properties.quota());
 			assertFalse(properties.oaiHarvester());
 			assertFalse(properties.provenance());
-			assertFalse(properties.signup());
-			assertFalse(properties.passwordReset());
 			assertFalse(properties.solrEnabled());
 			assertFalse(properties.backupMaintenance());
 		});
@@ -133,9 +127,7 @@ class StatusReportPropertiesTest {
 								"entrystore.repository.provenance", value,
 								"entrystore.solr", value,
 								"entrystore.solr.reindex-on-startup", value,
-								"entrystore.backup.maintenance", value,
-								"entrystore.auth.signup", value,
-								"entrystore.auth.password-reset", value))))
+								"entrystore.backup.maintenance", value))))
 				.run(context -> {
 					StatusReportProperties properties = context.getBean(StatusReportProperties.class);
 
@@ -146,8 +138,6 @@ class StatusReportPropertiesTest {
 					assertEquals(expected, properties.solrEnabled());
 					assertEquals(expected, properties.solrReindexOnStartup());
 					assertEquals(expected, properties.backupMaintenance());
-					assertEquals(expected, properties.signup());
-					assertEquals(expected, properties.passwordReset());
 				});
 	}
 
