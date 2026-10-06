@@ -202,7 +202,12 @@ public class ProxyService {
 			if (limited && total > maxBytes) {
 				throw responseTooLarge();
 			}
-			out.write(buf, 0, read);
+			try {
+				out.write(buf, 0, read);
+			} catch (IOException e) {
+				// Unchecked, so SsrfSafeHttpClient does not report the client's disconnect as an upstream failure.
+				throw new CustomResponseException("Proxy client went away", HttpStatus.BAD_GATEWAY, e);
+			}
 		}
 	}
 

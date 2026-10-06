@@ -295,10 +295,12 @@ public class AppExceptionHandler {
 	public ResponseEntity<ErrorResponse> handleCustomResponseException(CustomResponseException ex,
 																	   HttpServletRequest request,
 																	   HttpServletResponse response) {
-		log.info("CustomResponseException ({}) at endpoint '{}': {}", ex.getStatus().value(), request.getRequestURI(), ex.getMessage(), ex);
 		if (response.isCommitted()) {
+			// Jetty logs the escaping exception again, so no stack trace here.
+			log.info("Aborting the already committed response of '{}': {}", request.getRequestURI(), ex.getMessage());
 			throw ex;
 		}
+		log.info("CustomResponseException ({}) at endpoint '{}': {}", ex.getStatus().value(), request.getRequestURI(), ex.getMessage(), ex);
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(ex.getStatus().value())
 				.path(request.getRequestURI())

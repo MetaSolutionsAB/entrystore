@@ -37,6 +37,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.util.unit.DataSize;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
@@ -392,6 +393,37 @@ class ProxyServiceTest {
 
 		assertFalse(response.isCommitted());
 		assertNull(response.getHeader(HttpHeaders.CONTENT_ENCODING));
+	}
+
+	@Test
+	void proxy_clientGoneMidStream_isNotReportedAsAnUpstreamFailure() throws Exception {
+		MockHttpServletResponse response = new MockHttpServletResponse() {
+			@Override
+			public ServletOutputStream getOutputStream() {
+				return new ServletOutputStream() {
+					@Override
+					public void write(int b) throws IOException {
+						throw new IOException("Broken pipe");
+					}
+
+					@Override
+					public boolean isReady() {
+						return true;
+					}
+
+					@Override
+					public void setWriteListener(WriteListener listener) {
+					}
+				};
+			}
+		};
+		HttpURLConnection conn = upstream(200, 5);
+		when(conn.getInputStream()).thenReturn(new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8)));
+
+		CustomResponseException e = assertThrows(CustomResponseException.class,
+				() -> service.proxy(target, null, false, response));
+
+		assertEquals("Proxy client went away", e.getMessage());
 	}
 
 	@Test
