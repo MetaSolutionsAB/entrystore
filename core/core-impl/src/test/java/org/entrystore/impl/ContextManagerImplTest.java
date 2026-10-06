@@ -19,6 +19,7 @@ package org.entrystore.impl;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.query.MalformedQueryException;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
@@ -47,6 +48,10 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -57,6 +62,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 
 /**
  */
@@ -256,9 +264,83 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		assertFalse(dataFile.exists(), "the deferred file deletions must run after a successful import");
 	}
 
+	@Test
+	public void importContext_survivingListReadDuringImport_showsCommittedMembersAfterwards(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		Entry listEntry = context.createResource("_list", GraphType.List, null, null);
+		Entry removed = context.createLink(null, URI.create("http://slashdot.org/"), listEntry.getResourceURI());
+		Entry kept = context.createLink("_kept", URI.create("http://digg.com/"), listEntry.getResourceURI());
+
+		ListImpl list = spy((ListImpl) listEntry.getResource());
+		((EntryImpl) listEntry).setResource(list);
+		AtomicReference<List<URI>> readDuringImport = new AtomicReference<>();
+		ExecutorService reader = Executors.newSingleThreadExecutor();
+		try {
+			// a reader takes no repository monitor, so while the import transaction is open it caches the
+			// members the store still holds
+			doAnswer(invocation -> {
+				invocation.callRealMethod();
+				readDuringImport.set(reader.submit(list::getChildren).get(10, TimeUnit.SECONDS));
+				return null;
+			}).when(list).removeChildrenInTransaction(any(), any(RepositoryConnection.class));
+
+			cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+		} finally {
+			reader.shutdownNow();
+		}
+
+		assertEquals(List.of(removed.getEntryURI(), kept.getEntryURI()), readDuringImport.get(),
+				"precondition: the reader cached the members as they were before the import");
+		assertEquals(List.of(kept.getEntryURI()), list.getChildren());
+		list.removeChild(kept.getEntryURI());
+		assertEquals(List.of(), storedMembers(listEntry),
+				"a list write after the import must not write removed entries back into the list");
+	}
+
+	@Test
+	public void importContext_cachedSurvivingListShowsImportedMembers(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		Entry listEntry = context.createResource("_list", GraphType.List, null, null);
+		Entry kept = context.createLink("_kept", URI.create("http://digg.com/"), null);
+		ListImpl list = (ListImpl) listEntry.getResource();
+		assertEquals(List.of(), list.getChildren(), "precondition: the empty member list is cached");
+
+		String importedMember = """
+				<http://localhost:8181/99/resource/_list> {
+					<http://localhost:8181/99/resource/_list> <%s_1> <http://localhost:8181/99/entry/_kept> .
+				}
+				""".formatted(RDF.NAMESPACE);
+		cm.importContext(contextEntry, createImportZip(tempDataDir, importedMember));
+
+		assertEquals(List.of(kept.getEntryURI()), list.getChildren());
+	}
+
+	/** The members of a list as the store holds them, bypassing every in-memory copy. */
+	private List<URI> storedMembers(Entry listEntry) {
+		ValueFactory vf = rm.getRepository().getValueFactory();
+		IRI listResource = vf.createIRI(listEntry.getResourceURI().toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			return rc.getStatements(listResource, null, null, false, listResource).stream()
+					.filter(statement -> statement.getPredicate().stringValue().startsWith(RDF.NAMESPACE + "_"))
+					.map(statement -> URI.create(statement.getObject().stringValue()))
+					.toList();
+		}
+	}
+
 	// Builds the smallest ZIP that passes importContext's property and RDF validation, so the import
 	// only fails later, inside the removal/add transaction.
 	private static File createMinimalImportZip(Path dir) throws IOException {
+		return createImportZip(dir, "");
+	}
+
+	/** An export of the context http://localhost:8181/99 holding the given TriG, which the import maps to its target. */
+	private static File createImportZip(Path dir, String trig) throws IOException {
 		File zipFile = dir.resolve("entrystore-import-test.zip").toFile();
 		try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(zipFile.toPath()))) {
 			zos.putNextEntry(new ZipEntry("export.properties"));
@@ -271,6 +353,7 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 			zos.write(properties.getBytes(StandardCharsets.UTF_8));
 			zos.closeEntry();
 			zos.putNextEntry(new ZipEntry("triples.rdf"));
+			zos.write(trig.getBytes(StandardCharsets.UTF_8));
 			zos.closeEntry();
 		}
 		return zipFile;
