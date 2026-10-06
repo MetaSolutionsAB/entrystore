@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static org.awaitility.Awaitility.await
 
 class SearchIT extends BaseSpec {
@@ -704,7 +705,7 @@ class SearchIT extends BaseSpec {
 		results[0]['metadata'] != null
 	}
 
-	def "GET /search?type=sparql&query=dc:title as guest should respond with Not Found 404"() {
+	def "GET /search?type=sparql&query=dc:title as guest should respond with Unauthorized 401"() {
 		given:
 		def queryParams = [type: 'sparql', query: 'dc:title']
 
@@ -712,12 +713,10 @@ class SearchIT extends BaseSpec {
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams), '')
 
 		then:
-		// SearchService re-throws core AuthorizationException unchanged; AppExceptionHandler maps anonymous to 404 (CWE-204)
-		conn.getResponseCode() == HTTP_NOT_FOUND
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
 		conn.getContentType().contains('application/json')
 		def respJson = JSON_PARSER.parseText(conn.errorStream.text)
-		respJson['error'] != null
-		respJson['error'].toString().contains('Not Found')
+		respJson['error'] == 'Not authorized'
 	}
 
 	def "GET /search?type=sparql with test-only marker predicate as admin should return entries json response with this IT's entries"() {
@@ -949,7 +948,7 @@ class SearchIT extends BaseSpec {
 		entry1PlAtomEntry['summary'][0].value()[0] == 'lokalne metadane opissearch jawnie po polsku'
 	}
 
-	def "GET /search?type=sparql&query=dc:title&syndication=random-string as guest should respond with Not Found 404"() {
+	def "GET /search?type=sparql&query=dc:title&syndication=random-string as guest should respond with Unauthorized 401"() {
 		given:
 		def queryParams = [type: 'sparql', query: 'dc:title', syndication: 'random-string']
 
@@ -957,8 +956,8 @@ class SearchIT extends BaseSpec {
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams), '')
 
 		then:
-		// SearchService re-throws core AuthorizationException unchanged; AppExceptionHandler maps anonymous to 404 (CWE-204)
-		conn.getResponseCode() == HTTP_NOT_FOUND
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(conn.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	def "GET /search?type=sparql&query=dc:title&syndication=random-string as admin should return BAD-REQUEST 400 due to invalid syndication format"() {

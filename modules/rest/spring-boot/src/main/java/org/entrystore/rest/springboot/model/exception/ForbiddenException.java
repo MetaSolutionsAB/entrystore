@@ -21,8 +21,8 @@ package org.entrystore.rest.springboot.model.exception;
  * {@code AppExceptionHandler}.
  *
  * <p><b>The status depends on the caller, not on this type.</b> An anonymous caller gets
- * <b>401 Unauthorized</b> with only the reason phrase as the {@code error} field; an authenticated
- * caller gets <b>403 Forbidden</b> with this exception's message. Both are logged at {@code info}.
+ * <b>401 Unauthorized</b> with {@code "Not authorized"} as the {@code error} field, as 5.x answered; an
+ * authenticated caller gets <b>403 Forbidden</b> with this exception's message. Both are logged at {@code info}.
  * Write the message to be user-facing: on the 403 path it is returned to the client verbatim.
  *
  * <p>There is deliberately no sibling {@code UnauthorizedException}. One existed until
@@ -30,16 +30,8 @@ package org.entrystore.rest.springboot.model.exception;
  * between the two carried no information and merely invited call sites to imply a status they did
  * not control.
  *
- * <p><b>Do not use this for a denial that reveals whether a particular entry exists.</b> Core's
- * {@code AuthorizationException} is answered <b>404</b> for anonymous callers rather than 401, to stop a
- * guest distinguishing "this entry exists but is private" from "no such entry" (CWE-204). That masking
- * is a property of <em>the check</em>, not of the layer it lives in: a per-entity permission check
- * written here — {@code if (!mayRead) throw new ForbiddenException(...)} on
- * {@code GET /{context-id}/entry/{entry-id}} — would answer 401 for a private entry while
- * {@code EntityNotFoundException} answers 404 for a missing one, reopening exactly that oracle. Let the
- * core ACL check raise {@code AuthorizationException} instead. Use this exception for denials whose
- * outcome does not depend on a specific entry existing. The one exception is
- * {@code ContextService#getContextEntries}: clients probe free context names on its 404, as in 5.x.
+ * <p>Per-entry ACL denials belong to core: let its check raise {@code AuthorizationException}, which
+ * {@code AppExceptionHandler} answers with the same statuses, rather than re-implementing it here.
  */
 public class ForbiddenException extends RuntimeException {
 

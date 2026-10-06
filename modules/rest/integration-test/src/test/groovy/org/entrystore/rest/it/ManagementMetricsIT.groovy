@@ -40,7 +40,7 @@ class ManagementMetricsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 		connection.getContentType().contains('application/json')
-		connection.errorStream.text.contains('"error":"Unauthorized"')
+		connection.errorStream.text.contains('"error":"Not authorized"')
 	}
 
 	def "GET /management/metrics as non-admin user should reply with Forbidden"() {
@@ -50,7 +50,7 @@ class ManagementMetricsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_FORBIDDEN
 		connection.getContentType().contains('application/json')
-		connection.errorStream.text.contains('"error":"Forbidden"')
+		connection.errorStream.text.contains('"error":"Not authorized"')
 	}
 
 	def "GET /management/metrics as admin should reply with list of meter names"() {
@@ -90,7 +90,7 @@ class ManagementMetricsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 		connection.getContentType().contains('application/json')
-		connection.errorStream.text.contains('"error":"Unauthorized"')
+		connection.errorStream.text.contains('"error":"Not authorized"')
 	}
 
 	def "GET /management/metrics/http.server.requests as non-admin user should reply with Forbidden"() {
@@ -100,7 +100,7 @@ class ManagementMetricsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_FORBIDDEN
 		connection.getContentType().contains('application/json')
-		connection.errorStream.text.contains('"error":"Forbidden"')
+		connection.errorStream.text.contains('"error":"Not authorized"')
 	}
 
 	def "GET /management/metrics as userInAdminGroup should reply with list of meter names"() {

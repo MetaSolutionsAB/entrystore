@@ -47,6 +47,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
+import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -72,6 +73,12 @@ import java.util.concurrent.RejectedExecutionException;
 @ControllerAdvice
 @RequiredArgsConstructor
 public class AppExceptionHandler {
+
+	/**
+	 * The {@code error} of every 401 for a denied authorization and of every 403 for a denied ACL, as 5.x answered
+	 * them; EntryScape matches this text.
+	 */
+	static final String NOT_AUTHORIZED = "Not authorized";
 
 	private final WebResourceUrls webResourceUrls;
 
@@ -132,15 +139,10 @@ public class AppExceptionHandler {
 		return jsonResponse(responseBody);
 	}
 
-	// Anonymous callers receive the bare reason phrase to prevent CWE-204 entry-existence enumeration
-	// (the message would carry "No entry with id 'X' found in context 'Y'" and let a guest distinguish
-	// missing-entry from private-entry via handleAccessDeniedException's 404). Authenticated callers
-	// receive the call-site-crafted message: EntityNotFoundException messages don't carry internal
-	// state (no principal URIs, no hostnames), only entry/context IDs the caller already knows.
+	// EntityNotFoundException messages carry only entry/context IDs the caller already knows.
 	@ExceptionHandler(EntityNotFoundException.class)
 	public ResponseEntity<ErrorResponse> handleEntityNotFoundException(EntityNotFoundException ex,
-																	   HttpServletRequest request,
-																	   Authentication authentication) {
+																	   HttpServletRequest request) {
 		if (ex.getCause() != null) {
 			log.debug("EntityNotFoundException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
 		} else {
@@ -149,7 +151,7 @@ public class AppExceptionHandler {
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.NOT_FOUND.value())
 				.path(request.getRequestURI())
-				.error(isAnonymous(authentication) ? HttpStatus.NOT_FOUND.getReasonPhrase() : ex.getMessage())
+				.error(ex.getMessage())
 				.build();
 		return jsonResponse(responseBody);
 	}
@@ -202,6 +204,8 @@ public class AppExceptionHandler {
 		return jsonResponse(responseBody);
 	}
 
+	// InsufficientAuthenticationException is how Spring Security denies an anonymous caller a URL-level role
+	// rule, so it gets the same body as every other authorization denial; failed logins keep the reason phrase.
 	@ExceptionHandler({AuthenticationException.class})
 	public ResponseEntity<ErrorResponse> handleAuthenticationException(RuntimeException ex,
 																	  HttpServletRequest request) {
@@ -210,60 +214,28 @@ public class AppExceptionHandler {
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.UNAUTHORIZED.value())
 				.path(request.getRequestURI())
-				.error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
+				.error(ex instanceof InsufficientAuthenticationException
+						? NOT_AUTHORIZED
+						: HttpStatus.UNAUTHORIZED.getReasonPhrase())
 				.build();
 		return jsonResponse(responseBody);
 	}
 
-	// Handles Spring Security's AccessDeniedException and the core AuthorizationException.
-	// Both carry internal state in their messages (principal URI, entry URI, ACL bit for core,
-	// or a non-informative "Access Denied" for Spring), so the HTTP body is always the reason
-	// phrase; the original message is retained on the server-side log line for debugging.
-	//
-	// Status mapping splits on the exception type for anonymous callers:
-	// - Core `AuthorizationException` (raised by core ACL checks — `PrincipalManager`, `ContextImpl`, etc.) → 404 Not Found,
-	//   to prevent CWE-204 existence enumeration: without this, a guest could distinguish
-	//   "entry exists but is private" (401) from "entry does not exist" (404).
-	// - Spring's `AccessDeniedException` (raised by Spring method security — `@PreAuthorize`,
-	//   `@PostAuthorize`, `@Secured`, or `AuthorizationManager` checks) → 401 Unauthorized,
-	//   preserving the standard "you must authenticate" semantics for endpoints that explicitly
-	//   require a role. In this codebase today these guards are coarse role-based admission and
-	//   don't gate per-entity existence, so they don't open an enumeration oracle. If a future
-	//   contributor adds per-entity SpEL (e.g. `@PreAuthorize("hasPermission(#id, 'read')")`),
-	//   the resulting AccessDeniedException would re-open CWE-204 on that endpoint and this
-	//   mapping must be revisited — see
-	//   AppExceptionHandlerTest#handleAccessDeniedException_anonymousCallerWithSpringAccessDenied_returns401.
-	// Authenticated callers keep 403 in both cases — they've already proven identity, so
-	// existence disclosure is moot.
-	//
-	// The 404 branch also emits a distinguishable log message ("AccessDenied masked as 404 …") so
-	// operators can separate enumeration probes from legitimate missing-entry traffic in dashboards;
-	// that contract is pinned by
-	// AppExceptionHandlerTest#handleAccessDeniedException_emitsMaskedLogLineFor404AndStandardLineForOthers.
+	// Handles Spring Security's AccessDeniedException and the core AuthorizationException. Both carry
+	// internal state in their messages (principal URI, entry URI, ACL bit), so the body never echoes them.
+	// Every caller gets the 5.x body, which EntryScape matches; anonymous callers get 401 so it shows its login
+	// dialog, authenticated callers 403.
 	@ExceptionHandler({AccessDeniedException.class, AuthorizationException.class})
 	public ResponseEntity<ErrorResponse> handleAccessDeniedException(RuntimeException ex,
 																	 HttpServletRequest request,
 																	 Authentication authentication) {
-		HttpStatus status;
-		if (isAnonymous(authentication)) {
-			status = (ex instanceof AuthorizationException) ? HttpStatus.NOT_FOUND : HttpStatus.UNAUTHORIZED;
-		} else {
-			status = HttpStatus.FORBIDDEN;
-		}
-		if (status == HttpStatus.NOT_FOUND) {
-			// Stays at INFO because the log line itself fires per anonymous request and is therefore
-			// attacker-floodable. CWE-204 enumeration-scan detection belongs in an aggregated signal
-			// (e.g. a Micrometer counter on this branch tag), not in a per-event log level.
-			log.info("AccessDenied masked as 404 (anonymous, core ACL) at endpoint '{}'. Original: {}",
-					request.getRequestURI(), ex.getMessage());
-		} else {
-			log.info("AccessDenied of type '{}' at endpoint '{}'. Error: {}",
-					ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
-		}
+		log.info("AccessDenied of type '{}' at endpoint '{}'. Error: {}",
+				ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
+		HttpStatus status = isAnonymous(authentication) ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(status.value())
 				.path(request.getRequestURI())
-				.error(status.getReasonPhrase())
+				.error(NOT_AUTHORIZED)
 				.build();
 		return jsonResponse(responseBody);
 	}
@@ -279,7 +251,7 @@ public class AppExceptionHandler {
 	// the client today and should not — tracked separately; do not treat their exposure as reviewed.
 	//
 	// The status is a function of the caller, not of the exception type: anonymous callers get 401 and
-	// only the reason phrase, authenticated callers get 403 and the call-site message. That is why
+	// only the 5.x "Not authorized" body, authenticated callers get 403 and the call-site message. That is why
 	// ForbiddenException is the single type for both — a separate UnauthorizedException carried no
 	// distinguishing information here and let call sites imply a status they did not control.
 	@ExceptionHandler({ForbiddenException.class, AuthenticationCredentialsNotFoundException.class})
@@ -291,7 +263,7 @@ public class AppExceptionHandler {
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(status.value())
 				.path(request.getRequestURI())
-				.error((status == HttpStatus.UNAUTHORIZED) ? status.getReasonPhrase() : ex.getMessage())
+				.error((status == HttpStatus.UNAUTHORIZED) ? NOT_AUTHORIZED : ex.getMessage())
 				.build();
 		return jsonResponse(responseBody);
 	}

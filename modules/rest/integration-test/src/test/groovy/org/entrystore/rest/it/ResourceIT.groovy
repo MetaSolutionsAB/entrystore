@@ -41,6 +41,7 @@ import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NOT_IMPLEMENTED
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class ResourceIT extends BaseSpec {
 
@@ -65,7 +66,7 @@ class ResourceIT extends BaseSpec {
 		EntryStoreClient.restoreCreds()
 	}
 
-	def "GET /{context-id}/resource/{entry-id} as guest on String graph should respond with Not Found 404 to avoid entry-existence disclosure"() {
+	def "GET /{context-id}/resource/{entry-id} as guest on String graph should respond with Unauthorized 401"() {
 		given:
 		// create local String entry
 		def someText = 'Some text'
@@ -92,8 +93,8 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(createdResourceUri, '')
 
 		then:
-		// Guests get 404 (not 401) so they cannot distinguish "entry exists but is private" from "entry does not exist"
-		resourceConn.getResponseCode() == HTTP_NOT_FOUND
+		resourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(resourceConn.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	def "GET /{context-id}/resource/{entry-id} as admin on String graph should return the text data"() {
@@ -129,7 +130,7 @@ class ResourceIT extends BaseSpec {
 		resourceConn.inputStream.text == someText
 	}
 
-	def "GET /{context-id}/resource/{entry-id} as guest on List graph should respond with Not Found 404"() {
+	def "GET /{context-id}/resource/{entry-id} as guest on List graph should respond with Unauthorized 401"() {
 		given:
 		// create minimal entry to be used in the list
 		def givenEntryId = createEntry(contextId, [:])
@@ -157,7 +158,8 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(createdResourceUri, '')
 
 		then:
-		resourceConn.getResponseCode() == HTTP_NOT_FOUND
+		resourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(resourceConn.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	def "GET /{context-id}/resource/{entry-id} as admin on List graph should return the entries list"() {
@@ -310,7 +312,7 @@ class ResourceIT extends BaseSpec {
 		resourceResp['children'] == []
 	}
 
-	def "GET /{context-id}/resource/{entry-id} as guest on None graph should respond with Not Found 404"() {
+	def "GET /{context-id}/resource/{entry-id} as guest on None graph should respond with Unauthorized 401"() {
 		given:
 		def requestResourceName = [name: 'None graph entryyyy']
 		def body = [resource: requestResourceName]
@@ -321,7 +323,8 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId, '')
 
 		then:
-		resourceConn.getResponseCode() == HTTP_NOT_FOUND
+		resourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(resourceConn.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	def "GET /{context-id}/resource/{entry-id} as admin on None graph should return 204 (No Content) when file was not sent with the entry"() {
@@ -339,7 +342,7 @@ class ResourceIT extends BaseSpec {
 		resourceConn.inputStream.text == ''
 	}
 
-	def "GET /{context-id}/resource/{entry-id} as guest on None graph entry with octet-stream file should respond with Not Found 404"() {
+	def "GET /{context-id}/resource/{entry-id} as guest on None graph entry with octet-stream file should respond with Unauthorized 401"() {
 		given:
 		def requestResourceName = [name: 'None graph entry']
 		def body = [resource: requestResourceName]
@@ -356,7 +359,8 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId, '')
 
 		then:
-		resourceConn.getResponseCode() == HTTP_NOT_FOUND
+		resourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(resourceConn.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	def "GET /{context-id}/resource/{entry-id} as admin on None graph entry with octet-stream file should return the entry's file"() {
@@ -468,7 +472,7 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getInputStream().readAllBytes() == payload
 	}
 
-	def "PUT /{context-id}/resource/{entry-id} as guest should respond with Not Found 404"() {
+	def "PUT /{context-id}/resource/{entry-id} as guest should respond with Unauthorized 401"() {
 		given:
 		// create local String entry
 		def someText = 'Some text'
@@ -496,7 +500,8 @@ class ResourceIT extends BaseSpec {
 		def editResourceConn = EntryStoreClient.putRequest(resourceUri, newBody, '')
 
 		then:
-		editResourceConn.getResponseCode() == HTTP_NOT_FOUND
+		editResourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(editResourceConn.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	def "PUT /{context-id}/resource/{entry-id} as admin should edit String-resource"() {
@@ -1282,7 +1287,7 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getResponseCode() == HTTP_NOT_FOUND
 	}
 
-	def "DELETE /{context-id}/resource/{entry-id} as guest should respond with Not Found 404"() {
+	def "DELETE /{context-id}/resource/{entry-id} as guest should respond with Unauthorized 401"() {
 		given:
 		// create minimal entry to be used in the list
 		def minimalEntryId = createEntry(contextId, [:])
@@ -1309,8 +1314,8 @@ class ResourceIT extends BaseSpec {
 		def deleteResourceConn = EntryStoreClient.deleteRequest(resourceUri, '[]', '')
 
 		then:
-		// 404 (not 401) so guests cannot distinguish existing-private from missing
-		deleteResourceConn.getResponseCode() == HTTP_NOT_FOUND
+		deleteResourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(deleteResourceConn.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	def "DELETE /{context-id}/resource/{entry-id} as admin should remove resource"() {
@@ -1391,7 +1396,7 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.inputStream.text == ''
 	}
 
-	def "DELETE /{context-id}/resource/{entry-id} on file resource as guest should respond with 404 Not Found and not delete the file"() {
+	def "DELETE /{context-id}/resource/{entry-id} on file resource as guest should respond with 401 Unauthorized and not delete the file"() {
 		given:
 		// create None-graph entry as admin and PUT a small binary file into it
 		def fileEntryId = createEntry(contextId, [:], [resource: [name: 'Guest delete target']])
@@ -1407,8 +1412,8 @@ class ResourceIT extends BaseSpec {
 		def deleteResourceConn = EntryStoreClient.deleteRequest(resourcePath, '', '')
 
 		then:
-		// CWE-204 enumeration mask: anonymous gets 404, not 401
-		deleteResourceConn.getResponseCode() == HTTP_NOT_FOUND
+		deleteResourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(deleteResourceConn.errorStream.text)['error'] == 'Not authorized'
 		// file is still on disk — admin can still read its bytes back
 		def readBackConn = EntryStoreClient.getRequest(resourcePath)
 		readBackConn.getResponseCode() == HTTP_OK
@@ -1441,7 +1446,7 @@ class ResourceIT extends BaseSpec {
 		readBackConn.inputStream.bytes == expectedBytes
 	}
 
-	def "DELETE /{context-id}/resource/{entry-id}?proxy=true on link entry as guest should respond with 404 Not Found and not issue an outbound request"() {
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true on link entry as guest should respond with 401 Unauthorized and not issue an outbound request"() {
 		given:
 		// register a WireMock stub for the would-be proxy target; if the auth check fails to fire,
 		// the outbound DELETE will land here and the verify(0, ...) below will catch the regression
@@ -1456,7 +1461,8 @@ class ResourceIT extends BaseSpec {
 		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true', '', '')
 
 		then:
-		deleteResourceConn.getResponseCode() == HTTP_NOT_FOUND
+		deleteResourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(deleteResourceConn.errorStream.text)['error'] == 'Not authorized'
 		// the auth check must fire before the outbound proxy — no DELETE must reach the external URL
 		wireMockServer.verify(0, deleteRequestedFor(urlPathEqualTo(stubPath)))
 	}
@@ -1712,7 +1718,7 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.inputStream.text == someText
 	}
 
-	def "POST /{context-id}/resource/{entry-id} as guest should respond with Not Found 404"() {
+	def "POST /{context-id}/resource/{entry-id} as guest should respond with Unauthorized 401"() {
 		given:
 		// create minimal entry to be used in the list
 		def givenEntryId = createEntry(contextId, [:])
@@ -1757,7 +1763,8 @@ class ResourceIT extends BaseSpec {
 		def editResourceConn = EntryStoreClient.postRequest(targetResourceUri + convertMapToQueryParams(postParams), '', '')
 
 		then:
-		editResourceConn.getResponseCode() == HTTP_NOT_FOUND
+		editResourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(editResourceConn.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	def "POST /{context-id}/resource/{entry-id} as admin should move entry between lists"() {

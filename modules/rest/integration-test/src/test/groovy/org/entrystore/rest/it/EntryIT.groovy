@@ -956,6 +956,7 @@ class EntryIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(connection.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	def "POST /{context-id}?entrytype=link as non-admin user should respond with Forbidden"() {
@@ -2281,8 +2282,8 @@ class EntryIT extends BaseSpec {
 		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId, putBody, '', 'text/turtle')
 
 		then:
-		// Guests get 404 (not 401) for existing-private so they cannot enumerate entries
-		editEntryConn.getResponseCode() == HTTP_NOT_FOUND
+		editEntryConn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(editEntryConn.errorStream.text)['error'] == 'Not authorized'
 
 		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
 		getEntryConn.getResponseCode() == HTTP_OK
@@ -2417,11 +2418,9 @@ class EntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId, '[]', '')
 
 		then:
-		// Guests get 404 (not 401) for existing-private so they cannot enumerate entries
-		entryConn.getResponseCode() == HTTP_NOT_FOUND
+		entryConn.getResponseCode() == HTTP_UNAUTHORIZED
 		entryConn.getContentType().contains('application/json')
-		def response = entryConn.errorStream.text
-		response.contains('Not Found')
+		JSON_PARSER.parseText(entryConn.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	def "DELETE /{context-id}/entry/{entry-id} as non-admin user should respond with Forbidden and not delete the entry"() {
@@ -2444,10 +2443,10 @@ class EntryIT extends BaseSpec {
 		entryConn.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(entryConn.errorStream.text)
 		// Pins the no-ACL-leak invariant by construction: any new field, or any deviation from the
-		// bare "Forbidden" reason phrase, fails the test. A denylist of substrings would miss https://,
+		// fixed "Not authorized" text, fails the test. A denylist of substrings would miss https://,
 		// bare hostnames, principal usernames — equivalent CWE-209 disclosures.
 		responseJson.keySet().sort() == ['error', 'path', 'status', 'timestamp']
-		responseJson['error'] == 'Forbidden'
+		responseJson['error'] == 'Not authorized'
 		responseJson['status'] == 403
 	}
 

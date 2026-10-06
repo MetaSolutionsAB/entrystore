@@ -29,6 +29,7 @@ import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class LocalMetadataResourceIT extends BaseSpec {
 
@@ -48,7 +49,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		return [entryId, metadataUri]
 	}
 
-	def "GET /{context-id}/metadata/{entryId} as guest should respond with Not Found 404"() {
+	def "GET /{context-id}/metadata/{entryId} as guest should respond with Unauthorized 401"() {
 		given:
 		def (entryId, metadataUri) = createEntryWithTitle()
 
@@ -56,8 +57,8 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri, '')
 
 		then:
-		// Guests get 404 (not 401) for existing-private so they cannot enumerate entries
-		entryMetaConn.getResponseCode() == HTTP_NOT_FOUND
+		entryMetaConn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(entryMetaConn.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	def "GET /{context-id}/metadata/{entryId} as non-admin user should respond with Forbidden"() {
@@ -247,8 +248,8 @@ class LocalMetadataResourceIT extends BaseSpec {
 			JsonOutput.toJson(newBody), '', 'application/json')
 
 		then:
-		// Guests get 404 (not 401) for existing-private so they cannot enumerate entries
-		editEntryConn.getResponseCode() == HTTP_NOT_FOUND
+		editEntryConn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(editEntryConn.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	def "PUT /{context-id}/metadata/{entry-id} should not update the metadata of the non-existing entry"() {
@@ -324,8 +325,8 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def entryDeleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/metadata/' + entryId, '[]', '')
 
 		then:
-		// Guests get 404 (not 401) for existing-private so they cannot enumerate entries
-		entryDeleteConn.getResponseCode() == HTTP_NOT_FOUND
+		entryDeleteConn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(entryDeleteConn.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	// DELETE on `/metadata/{id}` for reference-type entries: MetadataService.getEntryLocalMetadata

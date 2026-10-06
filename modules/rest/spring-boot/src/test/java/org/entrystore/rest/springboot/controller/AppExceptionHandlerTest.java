@@ -17,18 +17,12 @@
 package org.entrystore.rest.springboot.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.LogEvent;
-import org.apache.logging.log4j.core.LoggerContext;
-import org.apache.logging.log4j.core.appender.AbstractAppender;
-import org.apache.logging.log4j.core.config.LoggerConfig;
-import org.apache.logging.log4j.core.config.Property;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
+import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.util.WebResourceUrls;
@@ -41,6 +35,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.security.authorization.AuthorizationResult;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -53,7 +49,6 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
 
@@ -87,13 +82,9 @@ class AppExceptionHandlerTest {
 	}
 
 	@Test
-	void handleAccessDeniedException_anonymousCaller_returns404ToPreventEnumeration() {
-		// Pins the CWE-204 fix: an anonymous caller hitting a private entry must receive 404 with
-		// `body.error()` equal to the bare reason phrase, indistinguishable from a missing entry.
-		// The AuthorizationException is built with realistic principal/entry URIs so `ex.getMessage()`
-		// genuinely carries those substrings; the assertions below pin that `body.error()` stays
-		// exactly "Not Found" and never echoes them, which would fail if a future regression wires
-		// `ex.getMessage()` into that field.
+	void handleAccessDeniedException_anonymousCaller_returns401NotAuthorizedAs5x() {
+		// EntryScape opens its login dialog on 401 and matches "Not authorized" in the body. The exception is
+		// built with realistic principal/entry URIs so the assertion also pins that its message never leaks.
 		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
 		Mockito.when(req.getRequestURI()).thenReturn("/1/entry/42");
 		Authentication anonymous = new AnonymousAuthenticationToken(
@@ -108,27 +99,16 @@ class AppExceptionHandlerTest {
 
 		ResponseEntity<ErrorResponse> response = handler.handleAccessDeniedException(ex, req, anonymous);
 
-		assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+		assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
 		ErrorResponse body = response.getBody();
 		assertNotNull(body, "Expected non-null ErrorResponse body");
-		assertEquals(404, body.status());
-		// Body field MUST be exactly the reason phrase — not just any non-null string. Below assertions
-		// pin that none of the realistic internal substrings from ex.getMessage() leak.
-		assertEquals("Not Found", body.error());
-		assertFalse(body.error().contains("_principals"));
-		assertFalse(body.error().contains("ReadMetadata"));
-		assertFalse(body.error().contains("alice"));
+		assertEquals(401, body.status());
+		assertEquals("Not authorized", body.error());
 	}
 
 	@Test
-	void handleAccessDeniedException_anonymousCallerWithSpringAccessDenied_returns401() {
-		// Pins the boundary of the CWE-204 fix: in this codebase today, @PreAuthorize is used only
-		// for coarse role-based admission (e.g. hasAnyRole('USER','ADMIN')) — per-entity ACL goes
-		// through core AuthorizationException, which takes the 404 branch. The resulting Spring
-		// AccessDeniedException must therefore keep the 401 WWW-Authenticate semantics for anonymous.
-		// Note: @PreAuthorize CAN express per-entity SpEL (e.g. hasPermission(#id, ...)). If a future
-		// endpoint adopts that, the mapping rule in handleAccessDeniedException must be revisited so
-		// the per-entity AccessDeniedException doesn't re-open the enumeration oracle.
+	void handleAccessDeniedException_anonymousCallerWithSpringAccessDenied_returns401NotAuthorized() {
+		// @PreAuthorize denials answer like core ACL denials, as 5.x answered every authorization denial.
 		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
 		Mockito.when(req.getRequestURI()).thenReturn("/management/loggers/ROOT");
 		Authentication anonymous = new AnonymousAuthenticationToken(
@@ -143,16 +123,13 @@ class AppExceptionHandlerTest {
 		ErrorResponse body = response.getBody();
 		assertNotNull(body, "Expected non-null ErrorResponse body");
 		assertEquals(401, body.status());
-		assertEquals("Unauthorized", body.error());
+		assertEquals("Not authorized", body.error());
 	}
 
 	@Test
-	void handleAccessDeniedException_anonymousCallerWithAuthorizationDenied_returns401() {
-		// Spring Security 6 raises AuthorizationDeniedException (a subclass of AccessDeniedException)
-		// from @PreAuthorize at the AuthorizationManager level. The handler's discriminator must treat
-		// the whole AccessDeniedException family the same way — i.e. not match against the bare class
-		// only. A regression that special-cased the exact class would slip this case to 404 (re-opening
-		// the oracle on @PreAuthorize-guarded endpoints).
+	void handleAccessDeniedException_anonymousCallerWithAuthorizationDenied_returns401NotAuthorized() {
+		// Spring Security raises AuthorizationDeniedException, a subclass of AccessDeniedException, from
+		// @PreAuthorize; it must be answered like the rest of the family.
 		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
 		Mockito.when(req.getRequestURI()).thenReturn("/management/loggers/ROOT");
 		Authentication anonymous = new AnonymousAuthenticationToken(
@@ -168,14 +145,13 @@ class AppExceptionHandlerTest {
 		ErrorResponse body = response.getBody();
 		assertNotNull(body, "Expected non-null ErrorResponse body");
 		assertEquals(401, body.status());
-		assertEquals("Unauthorized", body.error());
+		assertEquals("Not authorized", body.error());
 	}
 
 	@Test
-	void handleAccessDeniedException_authenticatedCaller_returns403() {
-		// Authenticated callers have already proven identity, so existence disclosure is moot —
-		// 403 is the correct status and CWE-204 doesn't apply. This guards against a regression
-		// that would over-apply the anonymous→404 rewrite to authenticated callers.
+	void handleAccessDeniedException_authenticatedCaller_returns403NotAuthorized() {
+		// Logging in would not help an authenticated caller, so it gets 403 rather than the anonymous 401, with the
+		// same 5.x body, which EntryScape matches for every caller.
 		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
 		Mockito.when(req.getRequestURI()).thenReturn("/1/entry/42");
 		Authentication authenticated = new UsernamePasswordAuthenticationToken(
@@ -190,7 +166,7 @@ class AppExceptionHandlerTest {
 		ErrorResponse body = response.getBody();
 		assertNotNull(body, "Expected non-null ErrorResponse body");
 		assertEquals(403, body.status());
-		assertEquals("Forbidden", body.error());
+		assertEquals("Not authorized", body.error());
 	}
 
 	/**
@@ -216,7 +192,7 @@ class AppExceptionHandlerTest {
 		ErrorResponse body = response.getBody();
 		assertNotNull(body, "Expected non-null ErrorResponse body");
 		assertEquals(401, body.status());
-		assertEquals("Unauthorized", body.error());
+		assertEquals("Not authorized", body.error());
 		// The call-site message names which guard fired and that the caller is merely non-admin rather
 		// than unauthenticated; an unauthenticated prober must learn neither, from any field.
 		assertFalse(body.toString().contains("not-admin"),
@@ -242,12 +218,8 @@ class AppExceptionHandlerTest {
 	}
 
 	@Test
-	void handleAccessDeniedException_authenticatedCallerWithSpringAccessDenied_returns403() {
-		// Completes the 2×2 quadrant: authenticated × Spring AccessDeniedException. The split
-		// logic in handleAccessDeniedException only branches on exception type for anonymous
-		// callers; for authenticated callers it must always return 403 regardless of which
-		// exception subclass fired. A regression that flipped this cell (e.g. to 401) would
-		// otherwise slip through.
+	void handleAccessDeniedException_authenticatedCallerWithSpringAccessDenied_returns403NotAuthorized() {
+		// Completes the 2×2 quadrant: authenticated × Spring AccessDeniedException.
 		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
 		Mockito.when(req.getRequestURI()).thenReturn("/management/loggers/ROOT");
 		Authentication authenticated = new UsernamePasswordAuthenticationToken(
@@ -262,15 +234,12 @@ class AppExceptionHandlerTest {
 		ErrorResponse body = response.getBody();
 		assertNotNull(body, "Expected non-null ErrorResponse body");
 		assertEquals(403, body.status());
-		assertEquals("Forbidden", body.error());
+		assertEquals("Not authorized", body.error());
 	}
 
 	@Test
-	void handleAccessDeniedException_nullAuthentication_returns404() {
-		// The handler's anonymous discriminator is `authentication == null || instanceof Anonymous…`,
-		// so a null Authentication (e.g. filter-stage failure before SecurityContext is populated) must
-		// take the same 404 branch as AnonymousAuthenticationToken. A regression dropping the null
-		// short-circuit would NPE here.
+	void handleAccessDeniedException_nullAuthentication_returns401() {
+		// A null Authentication (e.g. a failure before the SecurityContext is populated) counts as anonymous.
 		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
 		Mockito.when(req.getRequestURI()).thenReturn("/1/entry/42");
 
@@ -278,78 +247,55 @@ class AppExceptionHandlerTest {
 
 		ResponseEntity<ErrorResponse> response = handler.handleAccessDeniedException(ex, req, null);
 
+		assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertEquals(401, body.status());
+		assertEquals("Not authorized", body.error());
+	}
+
+	@Test
+	void handleAuthenticationException_anonymousDeniedByUrlRule_returns401NotAuthorized() {
+		// ExceptionTranslationFilter raises this when an anonymous caller hits a URL-level role rule.
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/management/status/extended");
+
+		ResponseEntity<ErrorResponse> response = handler.handleAuthenticationException(
+				new InsufficientAuthenticationException("Full authentication is required"), req);
+
+		assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertEquals("Not authorized", body.error());
+	}
+
+	@Test
+	void handleAuthenticationException_badCredentials_returns401WithReasonPhrase() {
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/auth/cookie");
+
+		ResponseEntity<ErrorResponse> response = handler.handleAuthenticationException(
+				new BadCredentialsException("Bad credentials"), req);
+
+		assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+		ErrorResponse body = response.getBody();
+		assertNotNull(body, "Expected non-null ErrorResponse body");
+		assertEquals("Unauthorized", body.error());
+	}
+
+	@Test
+	void handleEntityNotFoundException_returns404WithTheCallSiteMessageToEveryCaller() {
+		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
+		Mockito.when(req.getRequestURI()).thenReturn("/1/entry/42");
+
+		ResponseEntity<ErrorResponse> response = handler.handleEntityNotFoundException(
+				new EntityNotFoundException("No entry with id '42' found in context '1'"), req);
+
 		assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
 		ErrorResponse body = response.getBody();
 		assertNotNull(body, "Expected non-null ErrorResponse body");
 		assertEquals(404, body.status());
-		assertEquals("Not Found", body.error());
-	}
-
-	@Test
-	void handleAccessDeniedException_emitsMaskedLogLineFor404AndStandardLineForOthers() {
-		// Pins the differentiated log-line contract documented inline above the handler: ops/dashboards
-		// depend on the "masked as 404" tag to separate enumeration probes from legitimate 404 traffic.
-		// A refactor that collapses the two log branches back into one would silently break the tag and
-		// degrade alerting; this test fails in that case.
-		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
-		Mockito.when(req.getRequestURI()).thenReturn("/1/entry/42");
-		Authentication anonymous = new AnonymousAuthenticationToken(
-				"key", "anonymousUser",
-				List.of(new SimpleGrantedAuthority("ROLE_ANONYMOUS")));
-		Authentication authenticated = new UsernamePasswordAuthenticationToken(
-				"alice", "n/a",
-				List.of(new SimpleGrantedAuthority("ROLE_USER")));
-
-		// Register a class-specific LoggerConfig so the appender only captures events emitted by
-		// AppExceptionHandler's logger (not anything else logging at INFO during the test). The
-		// `additive=false` flag prevents events from also propagating to the root logger.
-		List<LogEvent> captured = new ArrayList<>();
-		AbstractAppender appender = new AbstractAppender("captureForTest", null, null, true, Property.EMPTY_ARRAY) {
-			@Override
-			public void append(LogEvent event) {
-				captured.add(event.toImmutable());
-			}
-		};
-		appender.start();
-		try {
-			LoggerContext context = (LoggerContext) LogManager.getContext(false);
-			String loggerName = AppExceptionHandler.class.getName();
-			LoggerConfig scopedConfig = new LoggerConfig(loggerName, Level.INFO, false);
-			scopedConfig.addAppender(appender, Level.INFO, null);
-			context.getConfiguration().addLogger(loggerName, scopedConfig);
-			try {
-				context.updateLoggers();
-				// Anonymous + core AuthorizationException → masked 404 log line.
-				handler.handleAccessDeniedException(
-						new AuthorizationException(null, null, AccessProperty.ReadMetadata), req, anonymous);
-				// Anonymous + Spring AccessDeniedException → standard log line (401 path).
-				handler.handleAccessDeniedException(new AccessDeniedException("Access is denied"), req, anonymous);
-				// Authenticated + core AuthorizationException → standard log line (403 path).
-				handler.handleAccessDeniedException(
-						new AuthorizationException(null, null, AccessProperty.ReadMetadata), req, authenticated);
-			} finally {
-				context.getConfiguration().removeLogger(loggerName);
-				context.updateLoggers();
-			}
-		} finally {
-			appender.stop();
-		}
-
-		// Predicate-based counts decouple the assertion from emission order, so the handler is free
-		// to reorder its two branches without touching the test. The "of type" substring is paired
-		// with the exception class name so a reworded template that drops the URI/class fields would
-		// degrade the ops signal AND fail the assertion.
-		long masked = captured.stream()
-				.filter(e -> e.getMessage().getFormattedMessage().contains("masked as 404 (anonymous, core ACL)"))
-				.count();
-		long standard = captured.stream()
-				.filter(e -> e.getMessage().getFormattedMessage().contains("AccessDenied of type"))
-				.filter(e -> e.getMessage().getFormattedMessage().contains("AuthorizationException")
-						|| e.getMessage().getFormattedMessage().contains("AccessDeniedException"))
-				.count();
-		assertEquals(1L, masked, "Exactly one event must carry the masked-404 tag");
-		assertEquals(2L, standard, "Exactly two events must take the standard branch with exception-class detail");
-		assertEquals(3, captured.size(), "Total captured events must match the three handler invocations");
+		assertEquals("No entry with id '42' found in context '1'", body.error());
 	}
 
 	@Test

@@ -123,7 +123,7 @@ class ErrorResponseIT extends BaseSpec {
 		conn.getContentType().contains('application/json')
 		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 401
-		resp['error'] == 'Unauthorized'
+		resp['error'] == 'Not authorized'
 		resp['timestamp'] != null
 		resp['path'] != null
 	}
