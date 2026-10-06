@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.springboot.model.api;
 
-import jakarta.validation.constraints.Min;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -29,8 +28,7 @@ public class FacetSettingsRequestParams {
 
 	private String facetFields;
 
-	@Min(1)
-	private Integer facetMinCount = 1;   // default = 1
+	private Integer facetMinCount = 1;
 
 	private Integer facetLimit;          // we'll enforce min and max in code
 
@@ -46,19 +44,16 @@ public class FacetSettingsRequestParams {
 		SolrSearchIndex.FacetSettings facetSettings = new SolrSearchIndex.FacetSettings();
 
 		facetSettings.fields = this.facetFields;
-		// Clamp minCount to >= 1. The @Min(1) annotation is inert because this DTO is bound from
-		// @RequestParam without @Valid, so a guest can still bind minCount=0 or negative on the
-		// public /search endpoint; clamp here to mirror the facetLimit defense below.
-		facetSettings.minCount = this.facetMinCount != null && this.facetMinCount >= 1
-				? this.facetMinCount
-				: 1;
+		// Passed through unchanged: facetMinCount=0 lists the buckets without hits.
+		facetSettings.minCount = this.facetMinCount != null ? this.facetMinCount : 1;
 
 		int limit = this.facetLimit != null
 				? Math.min(this.facetLimit, maxFacetLimit)
 				: defaultFacetLimit;
 		facetSettings.limit = limit < 1 ? defaultFacetLimit : limit;
 
-		facetSettings.matches = this.facetMatches;
+		// Without fields, the matches regex is ignored unvalidated, so it must not reach Solr.
+		facetSettings.matches = this.facetFields == null || this.facetFields.isEmpty() ? null : this.facetMatches;
 		facetSettings.missing = Boolean.TRUE.equals(this.facetMissing);
 		facetSettings.lang = this.facetLang == null || this.facetLang.isBlank() ? null : this.facetLang.trim();
 

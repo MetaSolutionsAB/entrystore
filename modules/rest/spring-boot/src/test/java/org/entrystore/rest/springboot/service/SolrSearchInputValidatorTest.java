@@ -16,20 +16,26 @@
 
 package org.entrystore.rest.springboot.service;
 
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.entrystore.rest.springboot.model.api.FacetSettingsRequestParams;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -67,41 +73,115 @@ class SolrSearchInputValidatorTest {
 	}
 
 	@Test
+	void defaultConfigAcceptsAQueryOringTwentyResourceUris() {
+		// entrystore.js and EntryScape OR up to 20 resource URIs into one query; 5.x had no length cap.
+		String query = IntStream.rangeClosed(1, 20)
+				.mapToObj(i -> "resource:\"https://catalog.example.org/store/1234/resource/" + i + "\"")
+				.collect(Collectors.joining(" OR ", "(", ")"));
+		assertTrue(query.length() > MAX_LEN, "test setup: query must exceed the former 1024 default");
+
+		contextRunner().run(context ->
+				assertDoesNotThrow(() -> context.getBean(SolrSearchInputValidator.class).validateQuery(query)));
+	}
+
+	@Test
+	void defaultConfigAcceptsAFilterQueryOverTheFormerDefaultCap() {
+		String raw = "resource:" + "a".repeat(2 * MAX_LEN);
+
+		contextRunner().run(context ->
+				assertEquals(List.of(raw), context.getBean(SolrSearchInputValidator.class).parseFilterQueries(raw)));
+	}
+
+	@Test
+	void configuredQueryMaxLengthRejectsLongerQueries() {
+		contextRunner()
+				.withPropertyValues("entrystore.solr.search.query.max-length=10")
+				.run(context -> {
+					SolrSearchInputValidator configured = context.getBean(SolrSearchInputValidator.class);
+					assertDoesNotThrow(() -> configured.validateQuery("a".repeat(10)));
+					BadRequestException ex = assertThrows(BadRequestException.class,
+							() -> configured.validateQuery("a".repeat(11)));
+					assertTrue(ex.getMessage().contains("'query'"), ex.getMessage());
+				});
+	}
+
+	@Test
+	void configuredFilterQueryMaxLengthRejectsLongerFilterQueries() {
+		contextRunner()
+				.withPropertyValues("entrystore.solr.search.filter-query.max-length=10")
+				.run(context -> assertThrows(BadRequestException.class,
+						() -> context.getBean(SolrSearchInputValidator.class).parseFilterQueries("a".repeat(11))));
+	}
+
+	@Test
+	void negativeLimitFailsStartup() {
+		contextRunner()
+				.withPropertyValues("entrystore.solr.search.query.max-length=-1")
+				.run(context -> {
+					Throwable failure = context.getStartupFailure();
+					assertNotNull(failure);
+					assertTrue(ExceptionUtils.getRootCause(failure).getMessage()
+							.contains("entrystore.solr.search.query.max-length"), failure.toString());
+				});
+	}
+
+	@Test
+	void defaultConfigAcceptsAnyNumberOfFilterQueries() {
+		String raw = String.join(",", Collections.nCopies(MAX_FQ_COUNT + 1, "f:v"));
+
+		contextRunner().run(context -> assertEquals(MAX_FQ_COUNT + 1,
+				context.getBean(SolrSearchInputValidator.class).parseFilterQueries(raw).size()));
+	}
+
+	private static ApplicationContextRunner contextRunner() {
+		return new ApplicationContextRunner()
+				.withBean(PropertySourcesPlaceholderConfigurer.class)
+				.withBean(SolrSearchInputValidator.class);
+	}
+
+	@Test
 	void validateSortAcceptsNullAndEmpty() {
 		assertDoesNotThrow(() -> validator.validateSort(null));
 		assertDoesNotThrow(() -> validator.validateSort(""));
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "{0}")
 	@ValueSource(strings = {
 			"modified desc",
 			"score desc",
 			"created asc",
 			"title.en desc",
 			"title.pl asc",
+			"title.sv-SE asc",
+			"uri asc",
 			"score desc,modified desc",
-			"rdfType asc"
+			"rdfType asc",
+			"public desc",
+			"graphType asc",
+			"description asc",
+			"tag.literal asc",
+			"metadata.predicate.integer.0123abcd desc",
+			"unknownField asc"    // Solr answers an unknown field with 400
 	})
-	void validateSortAcceptsAllowedFields(String sort) {
+	void validateSortAcceptsAnyPlainFieldButTheLanguageCompanion(String sort) {
 		assertDoesNotThrow(() -> validator.validateSort(sort));
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "{0}")
 	@ValueSource(strings = {
-			"evilField asc",
-			"password desc",
-			"sun.java.command asc",
-			"title.<script> desc"
+			"{!func}modified desc",
+			"modified desc,{!key=x}created asc",
+			"query({!lucene v=x}) desc",
+			"metadata.predicate.literal_l.0123abcd asc"
 	})
-	void validateSortRejectsDisallowedFields(String sort) {
-		assertThrows(BadRequestException.class, () -> validator.validateSort(sort));
+	void validateSortRejectsLocalParamsAndTheLanguageCompanion(String sort) {
+		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.validateSort(sort));
+		assertTrue(ex.getMessage().contains("'sort'"), ex.getMessage());
 	}
 
 	@Test
 	void validateSortAcceptsAtMaxLength() {
-		// Build a single-clause sort that is exactly MAX_LEN chars long. Padding via the allow-listed
-		// "modified" field name plus repeated spaces (the order token is parsed lazily by
-		// SearchService.ORDER.valueOf and falls back to asc on unknown values).
+		// Single clause of exactly MAX_LEN chars; SearchService parses the order token leniently (unknown means asc).
 		String padded = "modified " + "a".repeat(MAX_LEN - "modified ".length());
 		// Sanity check: at-cap.
 		assertEquals(MAX_LEN, padded.length(), "test setup: padded length != MAX_LEN");
@@ -121,8 +201,17 @@ class SolrSearchInputValidatorTest {
 			",,",
 			"modified desc, ,score desc"
 	})
-	void validateSortRejectsEmptyClauses(String sort) {
-		assertThrows(BadRequestException.class, () -> validator.validateSort(sort));
+	void validateSortAcceptsEmptyClauses(String sort) {
+		// SearchService skips clauses that are not "field order"
+		assertDoesNotThrow(() -> validator.validateSort(sort));
+	}
+
+	@Test
+	void defaultConfigAcceptsSortOverTheFormerDefaultCap() {
+		String sort = "modified desc," + "a".repeat(2 * MAX_LEN);
+
+		contextRunner().run(context ->
+				assertDoesNotThrow(() -> context.getBean(SolrSearchInputValidator.class).validateSort(sort)));
 	}
 
 	@Test
@@ -203,7 +292,7 @@ class SolrSearchInputValidatorTest {
 		assertDoesNotThrow(() -> validator.validateFacetSettings(empty));
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "{0}")
 	@ValueSource(strings = {
 			"rdfType",
 			"lang",
@@ -215,39 +304,58 @@ class SolrSearchInputValidatorTest {
 			"metadata.predicate.literal_t.cafebabe",
 			"metadata.predicate.literal.shorthand_form",
 			"related.metadata.predicate.uri.0123abcd",
-			"rdfType,lang,status"
+			"related.metadata.predicate.literal_s.deadbeef",
+			"rdfType,lang,status",
+			" rdfType , lang ",
+			"tag.literal",
+			"public",
+			"graphType",
+			"description",
+			"metadata.predicate.integer.0123abcd",
+			"related.metadata.predicate.integer.0123abcd",
+			"unknownField"    // Solr answers an unknown field with 400
 	})
-	void validateFacetSettingsAcceptsAllowedFields(String facetFields) {
+	void validateFacetSettingsAcceptsAnyPlainFieldButTheLanguageCompanion(String facetFields) {
 		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
 		req.setFacetFields(facetFields);
 		assertDoesNotThrow(() -> validator.validateFacetSettings(req));
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "{0}")
 	@ValueSource(strings = {
-			"secretField",
-			"unknown.predicate.uri.xyz",
-			"metadata.predicate.uri.",                  // empty tail
-			"metadata.predicate.uri.has spaces",        // disallowed char
-			"metadata.predicate.literal_l.0123abcd",    // internal language companion, never client-visible
-			"related.metadata.predicate.literal_l.0123abcd"
+			"metadata.predicate.literal_l.0123abcd",
+			"related.metadata.predicate.literal_l.0123abcd",
+			" metadata.predicate.literal_l.0123abcd",
+			"rdfType,metadata.predicate.literal_l.0123abcd",
+			"{!key=x}metadata.predicate.literal_l.0123abcd",
+			"{!facet.matches='(a+)+$'}tag.literal",
+			"{!facet.limit=-1}metadata.predicate.literal_s.0123abcd",
+			"rdfType,{!ex=t}lang",
+			"tag literal"
 	})
-	void validateFacetSettingsRejectsDisallowedFields(String facetFields) {
+	void validateFacetSettingsRejectsLocalParamsAndTheLanguageCompanion(String facetFields) {
 		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
 		req.setFacetFields(facetFields);
 		assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
 	}
 
-	@Test
-	void validateFacetSettingsRejectsDynamicPrefixWithOverlongTail() {
+	@ParameterizedTest(name = "{0}")
+	@ValueSource(strings = {
+			"all",
+			"fulltext",
+			"metadata.object.literal",
+			" all ",
+			"rdfType,metadata.object.literal"
+	})
+	void validateFacetSettingsRejectsCatchAllTextFields(String facetFields) {
 		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
-		req.setFacetFields("metadata.predicate.uri." + "a".repeat(65));
-		assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
+		req.setFacetFields(facetFields);
+		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
+		assertTrue(ex.getMessage().contains("'facetFields'"), ex.getMessage());
 	}
 
 	@Test
 	void validateFacetSettingsAcceptsAtMaxFacetFieldCount() {
-		// Build exactly MAX_FACET_COUNT allow-listed comma-separated fields.
 		StringBuilder fields = new StringBuilder("rdfType");
 		for (int i = 1; i < MAX_FACET_COUNT; i++) {
 			fields.append(",lang");
@@ -276,42 +384,76 @@ class SolrSearchInputValidatorTest {
 		assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
 	}
 
-	@ParameterizedTest
+	@Test
+	void defaultConfigAcceptsAnyNumberAndLengthOfFacetFields() {
+		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
+		req.setFacetFields(String.join(",", Collections.nCopies(MAX_FACET_COUNT + 1, "metadata.predicate.uri.0123abcd"))
+				+ ",metadata.predicate.uri." + "a".repeat(MAX_LEN));
+
+		contextRunner().run(context ->
+				assertDoesNotThrow(() -> context.getBean(SolrSearchInputValidator.class).validateFacetSettings(req)));
+	}
+
+	@ParameterizedTest(name = "{0}")
 	@ValueSource(strings = {
 			"abc",
 			"abc-123",
 			"abc_123",
-			"DEADBEEF",
 			"a",
-			"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"     // exactly 64 chars
+			"Österreich",
+			"Łódź",
+			"Café crème",
+			"日本語",
+			"O'Brien",
+			"New York",
+			"a, \"b\"",
+			"Dr\\. Smith",
+			"Price \\$\\{amount\\}",
+			"\\{!lucene\\}\\*:\\*",
+			"C:\\\\temp"
 	})
-	void validateFacetSettingsAcceptsSafeFacetMatches(String matches) {
+	void validateFacetSettingsAcceptsLiteralFacetMatches(String matches) {
 		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
 		req.setFacetFields("rdfType");
 		req.setFacetMatches(matches);
 		assertDoesNotThrow(() -> validator.validateFacetSettings(req));
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "{0}")
 	@ValueSource(strings = {
 			".*",
 			"(a|b)+",
 			"foo.*bar",
 			"a{1,100}",
-			"foo bar"
+			"[ab]",
+			"^a",
+			"a$",
+			"\\d+",
+			"\\Qa\\E",
+			"trailing\\",
+			"label\u001Fsv"
 	})
 	void validateFacetSettingsRejectsRegexFacetMatches(String matches) {
 		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
 		req.setFacetFields("rdfType");
 		req.setFacetMatches(matches);
-		assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
+		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
+		assertTrue(ex.getMessage().contains("'facetMatches'"), ex.getMessage());
 	}
 
 	@Test
-	void validateFacetSettingsRejectsFacetMatchesOverSixtyFourChars() {
+	void validateFacetSettingsAcceptsFacetMatchesOfTwoHundredFiftySixChars() {
 		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
 		req.setFacetFields("rdfType");
-		req.setFacetMatches("a".repeat(65));
+		req.setFacetMatches("ä".repeat(256));
+		assertDoesNotThrow(() -> validator.validateFacetSettings(req));
+	}
+
+	@Test
+	void validateFacetSettingsRejectsFacetMatchesOverTwoHundredFiftySixChars() {
+		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
+		req.setFacetFields("rdfType");
+		req.setFacetMatches("ä".repeat(257));
 		assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
 	}
 
@@ -326,19 +468,11 @@ class SolrSearchInputValidatorTest {
 	}
 
 	@Test
-	void validateFacetSettingsRejectsNonEmptyFacetMatchesWithoutFacetFields() {
-		// Solr's facet.matches regex filter only makes sense when applied to a facet field; without
-		// facetFields the parameter is semantically meaningless.
+	void validateFacetSettingsIgnoresFacetMatchesWithoutFacetFields() {
+		// Without facetFields there is no faceting, so facetMatches never reaches Solr, as in 5.x.
 		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
-		req.setFacetMatches("abc");
-		assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
-	}
-
-	@Test
-	void validateSortRejectsTheInternalLanguageCompanionField() {
-		// The companion is server-internal; the shared allowlist keeps it out of sort= as well as facetFields=.
-		assertThrows(BadRequestException.class,
-				() -> validator.validateSort("metadata.predicate.literal_l.0123abcd asc"));
+		req.setFacetMatches("(a+)+$");
+		assertDoesNotThrow(() -> validator.validateFacetSettings(req));
 	}
 
 	@ParameterizedTest

@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.springboot.service;
 
+import jakarta.annotation.PostConstruct;
+import org.entrystore.repository.util.LangFacetValue;
 import org.entrystore.rest.springboot.model.api.FacetSettingsRequestParams;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,69 +32,48 @@ import java.util.regex.Pattern;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
- * Boundary validation for the Solr-backed {@code /search?type=solr} endpoint. The endpoint is
- * guest-accessible, so every parameter that flows into {@link org.apache.solr.client.solrj.request.SolrQuery}
- * is treated as untrusted input. The validator caps each parameter's length, caps the number of
- * filter-queries and facet-fields, restricts {@code sort} and {@code facetFields} field names to a
- * fixed allow-list (plus a few dynamic {@code metadata.predicate.*} families), and constrains
- * {@code facetMatches} to a literal-only pattern so Solr's per-field regex filter cannot be
- * abused for ReDoS or arbitrary regex evaluation. Violations throw {@link BadRequestException};
- * {@code AppExceptionHandler} maps that to {@code 400 Bad Request}.
+ * Boundary validation for the Solr-backed {@code /search?type=solr} endpoint, which is guest-accessible.
+ *
+ * <p>{@code sort} and {@code facetFields} accept any plain field name, including dynamic ones such as
+ * {@code metadata.predicate.integer.<hash>}; Solr itself answers an unknown field with 400. Two shapes are
+ * refused: anything but a plain name (see {@link #PLAIN_FIELD}), because Solr reads local params such as
+ * {@code {!facet.matches=...}} in a facet field and lets them override the request, and the server-internal
+ * language companion {@code [related.]metadata.predicate.literal_l.*} (see {@code LanguageAwareFacets}).
+ * {@code facetFields} also refuses the catch-all text fields in {@link #UNFACETABLE_FIELDS}.
+ *
+ * <p>{@code facetMatches} and {@code facetLang} are restricted to literal-only patterns because Solr evaluates
+ * them as regular expressions, so a crafted pattern could tie up Solr (ReDoS). The length and count caps are
+ * opt-in ({@code entrystore.solr.search.*}, 0 by default, which means unlimited). Violations throw
+ * {@link BadRequestException}, which {@code AppExceptionHandler} maps to 400.
  */
 @Service
 public class SolrSearchInputValidator {
 
 	/**
-	 * Field names exposed to client {@code sort} and {@code facetFields} input. Adding a field here
-	 * makes it user-controllable on the public {@code /search} endpoint — verify the field is
-	 * declared and indexed in the production Solr schema before adding.
+	 * A plain Solr field name, which covers every field the index declares, e.g. {@code title.sv-SE} and
+	 * {@code related.metadata.predicate.literal_s.<hash>}. Admitting braces, exclamation marks, equals signs or
+	 * spaces would let local params through, which override facet.matches, facet.limit and the response key.
 	 */
-	private static final Set<String> ALLOWED_NAMED_FIELDS = Set.of(
-			"uri", "resource", "context", "rdfType", "creator", "contributors",
-			"lists", "entryType", "resourceType", "username", "contextname",
-			"profile", "projectType", "lang", "status", "email", "tag.uri",
-			"acl.admin", "acl.metadata.r", "acl.metadata.rw",
-			"acl.resource.r", "acl.resource.rw",
-			// Sort defaults applied in SearchService when no `sort` is supplied; clients may also
-			// request these explicitly. `score` is Solr's implicit relevance pseudo-field, not a
-			// schema field.
-			"score", "modified", "created");
+	private static final Pattern PLAIN_FIELD = Pattern.compile("^[A-Za-z0-9_.\\-]+$");
 
 	/**
-	 * Allowed prefixes for dynamic Solr fields. The tail after the prefix must match
-	 * {@link #DYNAMIC_TAIL}. The {@code metadata.predicate.literal.} prefix is the shorthand form
-	 * rewritten to {@code metadata.predicate.literal_s.} by {@code SearchService} when used as a
-	 * facet field; the rewrite does NOT apply to sort clauses, so passing
-	 * {@code metadata.predicate.literal.<tail>} in {@code sort=} reaches Solr unrewritten. The
-	 * {@code title.} prefix covers the sort form {@code title.<lang>}, which {@code SearchService}
-	 * rewrites to {@code title_sort.<lang>}. The {@code metadata.predicate.literal_l.} family is the internal
-	 * companion the server facets on for language information (see {@code LangFacetValue}) and is deliberately
-	 * absent here, so clients can neither facet nor sort on it.
+	 * Tokenized catch-all fields without docValues. Faceting on them makes Solr uninvert every token of every
+	 * document onto its heap after each commit, and their buckets are word fragments no client uses.
 	 */
-	private static final List<String> ALLOWED_DYNAMIC_PREFIXES = List.of(
-			"metadata.predicate.uri.",
-			"metadata.predicate.literal_s.",
-			"metadata.predicate.literal_t.",
-			"metadata.predicate.literal.",
-			"related.metadata.predicate.uri.",
-			"related.metadata.predicate.literal_s.",
-			"related.metadata.predicate.literal_t.",
-			"title.");
+	private static final Set<String> UNFACETABLE_FIELDS = Set.of("all", "fulltext", "metadata.object.literal");
 
 	/**
-	 * Conservative tail for dynamic-prefix fields: alphanumerics, underscore, dash, and dot. This
-	 * covers hashed predicate URIs (hex, sometimes with separators) and ISO language tags used for
-	 * the {@code title.} sort form.
+	 * Literal text for {@code facetMatches}, which Solr evaluates as a full-match regular expression: any character
+	 * but a regex metacharacter or a control character, or a metacharacter escaped with a backslash, so
+	 * {@code Dr\. Smith} matches "Dr. Smith" as it did in 5.x. Letters of every script pass. Admitting an unescaped
+	 * metacharacter (quantifiers, groups, alternation, classes) reopens the ReDoS surface. Control characters are
+	 * refused because U+001F separates label and language in the companion terms that {@code facetLang} matches.
 	 */
-	private static final Pattern DYNAMIC_TAIL = Pattern.compile("^[A-Za-z0-9_.\\-]{1,64}$");
+	private static final Pattern FACET_MATCHES =
+			Pattern.compile("^(?:[^\\\\^$.|?*+()\\[\\]{}\\p{Cc}]|\\\\[\\\\^$.|?*+()\\[\\]{}])+$");
 
-	/**
-	 * Constrains {@code facetMatches} to a literal-only character class (alphanumerics, underscore,
-	 * dash) so the value cannot exploit Solr's regex evaluator. Any change to this pattern must
-	 * preserve that property — relaxing the class to include regex metacharacters (e.g. {@code .},
-	 * {@code *}, {@code +}, parentheses) reopens the ReDoS surface this class was added to close.
-	 */
-	private static final Pattern FACET_MATCHES = Pattern.compile("^[\\w-]{1,64}$");
+	/** Checked before {@link #FACET_MATCHES}, whose repeated group recurses once per character. */
+	private static final int MAX_FACET_MATCHES_LENGTH = 256;
 
 	/**
 	 * Constrains {@code facetLang} to the BCP 47 alphabet (alphanumerics and dash, at most 35 characters, the
@@ -103,26 +84,50 @@ public class SolrSearchInputValidator {
 	 */
 	private static final Pattern FACET_LANG = Pattern.compile("^[A-Za-z0-9-]{1,35}$");
 
-	@Value("${entrystore.solr.search.query.max-length:1024}")
+	@Value("${entrystore.solr.search.query.max-length:0}")
 	private int maxQueryLength;
 
-	@Value("${entrystore.solr.search.sort.max-length:1024}")
+	@Value("${entrystore.solr.search.sort.max-length:0}")
 	private int maxSortLength;
 
-	@Value("${entrystore.solr.search.filter-query.max-length:1024}")
+	@Value("${entrystore.solr.search.filter-query.max-length:0}")
 	private int maxFilterQueryLength;
 
-	@Value("${entrystore.solr.search.filter-query.max-count:16}")
+	@Value("${entrystore.solr.search.filter-query.max-count:0}")
 	private int maxFilterQueryCount;
 
-	@Value("${entrystore.solr.search.facet-fields.max-length:1024}")
+	@Value("${entrystore.solr.search.facet-fields.max-length:0}")
 	private int maxFacetFieldsLength;
 
-	@Value("${entrystore.solr.search.facet-fields.max-count:16}")
+	@Value("${entrystore.solr.search.facet-fields.max-count:0}")
 	private int maxFacetFieldCount;
 
+	/**
+	 * Fails startup on a negative limit, which would otherwise silently act as "unlimited".
+	 */
+	@PostConstruct
+	void checkLimits() {
+		requireNonNegative(maxQueryLength, "entrystore.solr.search.query.max-length");
+		requireNonNegative(maxSortLength, "entrystore.solr.search.sort.max-length");
+		requireNonNegative(maxFilterQueryLength, "entrystore.solr.search.filter-query.max-length");
+		requireNonNegative(maxFilterQueryCount, "entrystore.solr.search.filter-query.max-count");
+		requireNonNegative(maxFacetFieldsLength, "entrystore.solr.search.facet-fields.max-length");
+		requireNonNegative(maxFacetFieldCount, "entrystore.solr.search.facet-fields.max-count");
+	}
+
+	private static void requireNonNegative(int limit, String key) {
+		if (limit < 0) {
+			throw new IllegalStateException(key + " must be 0 (unlimited) or positive, got " + limit);
+		}
+	}
+
+	/** A limit of 0 means unlimited. */
+	private static boolean exceeds(int value, int limit) {
+		return limit > 0 && value > limit;
+	}
+
 	public void validateQuery(String query) {
-		if (query != null && query.length() > maxQueryLength) {
+		if (query != null && exceeds(query.length(), maxQueryLength)) {
 			throw new BadRequestException(
 					"Query parameter 'query' exceeds maximum length of " + maxQueryLength);
 		}
@@ -132,20 +137,14 @@ public class SolrSearchInputValidator {
 		if (sort == null || sort.isEmpty()) {
 			return;
 		}
-		if (sort.length() > maxSortLength) {
+		if (exceeds(sort.length(), maxSortLength)) {
 			throw new BadRequestException(
 					"Query parameter 'sort' exceeds maximum length of " + maxSortLength);
 		}
-		// split(-1) preserves trailing empty clauses (default split strips them) so
-		// sort=modified+desc, and sort=,, are both rejected as malformed at the boundary.
-		for (String clause : sort.split(",", -1)) {
-			String trimmed = clause.trim();
-			if (trimmed.isEmpty()) {
-				throw new BadRequestException(
-						"Query parameter 'sort' contains an empty clause");
+		for (String token : sort.split("[,\\s]+")) {
+			if (!token.isEmpty()) {
+				requirePlainField(token, "sort");
 			}
-			String fieldName = trimmed.split("\\s+", 2)[0];
-			requireAllowedField(fieldName, "sort");
 		}
 	}
 
@@ -156,7 +155,8 @@ public class SolrSearchInputValidator {
 	 *
 	 * @return the decoded filter queries; empty when the parameter is absent (a blank value yields one empty query)
 	 * @throws BadRequestException if the raw value exceeds {@code entrystore.solr.search.filter-query.max-length} or
-	 *                             splits into more than {@code entrystore.solr.search.filter-query.max-count} entries
+	 *                             splits into more than {@code entrystore.solr.search.filter-query.max-count} entries,
+	 *                             where a limit of 0 means unlimited
 	 */
 	public List<String> parseFilterQueries(String rawFilterQuery) {
 		List<String> filterQueries = rawFilterQuery == null
@@ -170,18 +170,18 @@ public class SolrSearchInputValidator {
 		if (rawFilterQuery == null || rawFilterQuery.isEmpty()) {
 			return;
 		}
-		if (rawFilterQuery.length() > maxFilterQueryLength) {
+		if (exceeds(rawFilterQuery.length(), maxFilterQueryLength)) {
 			throw new BadRequestException(
 					"Query parameter 'filterQuery' exceeds maximum length of " + maxFilterQueryLength);
 		}
-		if (filterQueries.size() > maxFilterQueryCount) {
+		if (exceeds(filterQueries.size(), maxFilterQueryCount)) {
 			throw new BadRequestException(
 					"Query parameter 'filterQuery' contains more than " + maxFilterQueryCount + " entries");
 		}
 		// Per-entry backstop. Unreachable via parseFilterQueries (decode only shrinks the already
 		// length-capped raw value); kept for same-package callers passing pre-decoded entries.
 		for (String fq : filterQueries) {
-			if (fq != null && fq.length() > maxFilterQueryLength) {
+			if (fq != null && exceeds(fq.length(), maxFilterQueryLength)) {
 				throw new BadRequestException(
 						"Query parameter 'filterQuery' entry exceeds maximum length of " + maxFilterQueryLength);
 			}
@@ -200,33 +200,34 @@ public class SolrSearchInputValidator {
 		if (facetFields == null || facetFields.isEmpty()) {
 			return;
 		}
-		if (facetFields.length() > maxFacetFieldsLength) {
+		if (exceeds(facetFields.length(), maxFacetFieldsLength)) {
 			throw new BadRequestException(
 					"Query parameter 'facetFields' exceeds maximum length of " + maxFacetFieldsLength);
 		}
-		String[] fields = facetFields.split(",", -1);
-		if (fields.length > maxFacetFieldCount) {
+		String[] fields = facetFields.split(",");
+		if (exceeds(fields.length, maxFacetFieldCount)) {
 			throw new BadRequestException(
 					"Query parameter 'facetFields' contains more than " + maxFacetFieldCount + " entries");
 		}
 		for (String field : fields) {
-			requireAllowedField(field.trim(), "facetFields");
+			String clientField = LanguageAwareFacets.clientField(field);
+			if (!clientField.isEmpty()) {
+				requirePlainField(clientField, "facetFields");
+				if (UNFACETABLE_FIELDS.contains(clientField)) {
+					throw new BadRequestException("Field '" + clientField + "' is not permitted in 'facetFields'");
+				}
+			}
 		}
 	}
 
+	/** Without facetFields, facetMatches never reaches Solr, so it is ignored. */
 	private static void validateFacetMatches(String matches, String facetFields) {
-		if (matches == null || matches.isEmpty()) {
-			// An empty value is equivalent to omitting the parameter — Solr treats it as a no-op.
-			// Reject only when a regex shape is actually present.
+		if (matches == null || matches.isEmpty() || facetFields == null || facetFields.isEmpty()) {
 			return;
 		}
-		if (facetFields == null || facetFields.isEmpty()) {
-			throw new BadRequestException(
-					"Query parameter 'facetMatches' requires 'facetFields' to be set");
-		}
-		if (!FACET_MATCHES.matcher(matches).matches()) {
-			throw new BadRequestException(
-					"Query parameter 'facetMatches' must match pattern " + FACET_MATCHES.pattern());
+		if (matches.length() > MAX_FACET_MATCHES_LENGTH || !FACET_MATCHES.matcher(matches).matches()) {
+			throw new BadRequestException("Query parameter 'facetMatches' must be literal text of at most "
+					+ MAX_FACET_MATCHES_LENGTH + " characters; escape any of \\^$.|?*+()[]{} with a backslash");
 		}
 	}
 
@@ -245,24 +246,10 @@ public class SolrSearchInputValidator {
 		}
 	}
 
-	private static void requireAllowedField(String field, String parameterName) {
-		if (field.isEmpty()) {
+	private static void requirePlainField(String field, String parameterName) {
+		if (!PLAIN_FIELD.matcher(field).matches() || LangFacetValue.isLangFacetField(field)) {
 			throw new BadRequestException(
-					"Query parameter '" + parameterName + "' contains an empty field name");
+					"Field '" + field + "' is not permitted in '" + parameterName + "'");
 		}
-		if (isAllowedField(field)) {
-			return;
-		}
-		throw new BadRequestException(
-				"Field '" + field + "' is not permitted in '" + parameterName + "'");
-	}
-
-	private static boolean isAllowedField(String field) {
-		if (ALLOWED_NAMED_FIELDS.contains(field)) {
-			return true;
-		}
-		return ALLOWED_DYNAMIC_PREFIXES.stream().anyMatch(prefix ->
-				field.startsWith(prefix)
-						&& DYNAMIC_TAIL.matcher(field.substring(prefix.length())).matches());
 	}
 }
