@@ -20,9 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.entrystore.rest.springboot.filter.IfUnmodifiedSinceInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.MediaType;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
-import org.springframework.web.accept.ContentNegotiationStrategy;
 import org.springframework.web.accept.HeaderContentNegotiationStrategy;
 import org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer;
 import org.springframework.web.servlet.config.annotation.ContentNegotiationConfigurer;
@@ -40,18 +38,15 @@ public class MvcConfiguration implements WebMvcConfigurer {
 
 	private final IfUnmodifiedSinceInterceptor ifUnmodifiedSinceInterceptor;
 
+	/**
+	 * Negotiates on the Accept header, and on entry URIs also on the {@code format} parameter. Other handlers
+	 * that honour {@code format} read it themselves: setting strategies disables the configurer's parameter
+	 * and default-type options.
+	 */
 	@Override
 	public void configureContentNegotiation(ContentNegotiationConfigurer configurer) {
-
-		ContentNegotiationStrategy defaultStrategy = new HeaderContentNegotiationStrategy();
-
-		configurer
-			.defaultContentType(MediaType.APPLICATION_JSON)
-			.favorParameter(true)
-			.parameterName("format")
-			.mediaType("xml", MediaType.APPLICATION_XML)
-			.mediaType("json", MediaType.APPLICATION_JSON)
-			.strategies(List.of(new EntryEndpointContentNegotiationStrategy(defaultStrategy)));
+		configurer.strategies(List.of(
+				new EntryEndpointContentNegotiationStrategy(new HeaderContentNegotiationStrategy())));
 	}
 
 	@Override
