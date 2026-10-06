@@ -16,20 +16,26 @@
 
 package org.entrystore.rest.springboot.service;
 
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.entrystore.rest.springboot.model.api.FacetSettingsRequestParams;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -64,6 +70,73 @@ class SolrSearchInputValidatorTest {
 		// Message must name the parameter and the limit so operators can diagnose without server logs.
 		assertTrue(ex.getMessage().contains("'query'"), ex.getMessage());
 		assertTrue(ex.getMessage().contains(String.valueOf(MAX_LEN)), ex.getMessage());
+	}
+
+	@Test
+	void defaultConfigAcceptsAQueryOringTwentyResourceUris() {
+		// entrystore.js and EntryScape OR up to 20 resource URIs into one query; 5.x had no length cap.
+		String query = IntStream.rangeClosed(1, 20)
+				.mapToObj(i -> "resource:\"https://catalog.example.org/store/1234/resource/" + i + "\"")
+				.collect(Collectors.joining(" OR ", "(", ")"));
+		assertTrue(query.length() > MAX_LEN, "test setup: query must exceed the former 1024 default");
+
+		contextRunner().run(context ->
+				assertDoesNotThrow(() -> context.getBean(SolrSearchInputValidator.class).validateQuery(query)));
+	}
+
+	@Test
+	void defaultConfigAcceptsAFilterQueryOverTheFormerDefaultCap() {
+		String raw = "resource:" + "a".repeat(2 * MAX_LEN);
+
+		contextRunner().run(context ->
+				assertEquals(List.of(raw), context.getBean(SolrSearchInputValidator.class).parseFilterQueries(raw)));
+	}
+
+	@Test
+	void configuredQueryMaxLengthRejectsLongerQueries() {
+		contextRunner()
+				.withPropertyValues("entrystore.solr.search.query.max-length=10")
+				.run(context -> {
+					SolrSearchInputValidator configured = context.getBean(SolrSearchInputValidator.class);
+					assertDoesNotThrow(() -> configured.validateQuery("a".repeat(10)));
+					BadRequestException ex = assertThrows(BadRequestException.class,
+							() -> configured.validateQuery("a".repeat(11)));
+					assertTrue(ex.getMessage().contains("'query'"), ex.getMessage());
+				});
+	}
+
+	@Test
+	void configuredFilterQueryMaxLengthRejectsLongerFilterQueries() {
+		contextRunner()
+				.withPropertyValues("entrystore.solr.search.filter-query.max-length=10")
+				.run(context -> assertThrows(BadRequestException.class,
+						() -> context.getBean(SolrSearchInputValidator.class).parseFilterQueries("a".repeat(11))));
+	}
+
+	@Test
+	void negativeLimitFailsStartup() {
+		contextRunner()
+				.withPropertyValues("entrystore.solr.search.query.max-length=-1")
+				.run(context -> {
+					Throwable failure = context.getStartupFailure();
+					assertNotNull(failure);
+					assertTrue(ExceptionUtils.getRootCause(failure).getMessage()
+							.contains("entrystore.solr.search.query.max-length"), failure.toString());
+				});
+	}
+
+	@Test
+	void defaultConfigAcceptsAnyNumberOfFilterQueries() {
+		String raw = String.join(",", Collections.nCopies(MAX_FQ_COUNT + 1, "f:v"));
+
+		contextRunner().run(context -> assertEquals(MAX_FQ_COUNT + 1,
+				context.getBean(SolrSearchInputValidator.class).parseFilterQueries(raw).size()));
+	}
+
+	private static ApplicationContextRunner contextRunner() {
+		return new ApplicationContextRunner()
+				.withBean(PropertySourcesPlaceholderConfigurer.class)
+				.withBean(SolrSearchInputValidator.class);
 	}
 
 	@Test

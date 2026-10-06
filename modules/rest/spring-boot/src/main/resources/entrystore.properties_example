@@ -183,10 +183,14 @@ entrystore.data.folder=/srv/entrystore/files/
 ## so clients sharing an IP (pipelines, EntryScape API, users behind NAT) share one budget.
 # entrystore.solr.search.rate.limit.max=0
 # entrystore.solr.search.rate.limit.window=1m
-# entrystore.solr.search.query.max-length=1024
+## The max-length and max-count caps below reject longer input with 400. 0 means unlimited; a negative
+## value fails startup. query.max-length, filter-query.max-length and filter-query.max-count are unlimited
+## by default, as in 5.x: entrystore.js and EntryScape OR up to 20 resource URIs into one query, which is
+## about 2 KB.
+# entrystore.solr.search.query.max-length=0
 # entrystore.solr.search.sort.max-length=1024
-# entrystore.solr.search.filter-query.max-length=1024
-# entrystore.solr.search.filter-query.max-count=16
+# entrystore.solr.search.filter-query.max-length=0
+# entrystore.solr.search.filter-query.max-count=0
 # entrystore.solr.search.facet-fields.max-length=1024
 # entrystore.solr.search.facet-fields.max-count=16
 

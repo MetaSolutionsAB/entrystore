@@ -1003,17 +1003,19 @@ class SearchIT extends BaseSpec {
 
 	// ---------- ENTRYSTORE-1010: input validation specs ----------
 
-	def "GET /search?type=solr with overlong 'query' should reply with Bad Request 400"() {
-		given: 'a query parameter exceeding the configured 1024-char cap'
-		def oversize = 'a' * 1025
+	def "GET /search?type=solr with a query OR-ing 20 resource URIs should return the matching entry"() {
+		given: 'the query entrystore.js and EntryScape build to load up to 20 entries at once, longer than the former 1024-char cap'
+		def query = resourceUrisQuery('resource')
 
 		when:
-		def conn = EntryStoreClient.getRequest('/search?type=solr&query=' + oversize, '')
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams([type: 'solr', query: query]))
 
 		then:
-		conn.getResponseCode() == HTTP_BAD_REQUEST
-		conn.getContentType().contains('application/json')
-		conn.errorStream.text.contains("'query'")
+		query.length() > 1024
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		respJson['results'] == 1
+		respJson['resource']['children'][0]['entryId'] == entryId
 	}
 
 	def "GET /search?type=solr with 'sort' on a non-allowlisted field should reply with Bad Request 400"() {
@@ -1036,32 +1038,29 @@ class SearchIT extends BaseSpec {
 		conn.getContentType().contains('application/json')
 	}
 
-	def "GET /search?type=solr with too many filter queries should reply with Bad Request 400"() {
-		given: '17 comma-separated FQs (cap is 16)'
-		def fqs = (1..17).collect { "rdfType:Type${it}" }.join(',')
+	def "GET /search?type=solr with 17 filter queries should apply all of them"() {
+		given: 'more filter queries than the former default cap of 16, each matching the entry'
+		def fqs = (1..17).collect { "uri:\"${EntryStoreClient.baseUrl}/${contextId}/entry/${entryId}\"" }.join(',')
 
 		when:
 		def conn = EntryStoreClient.getRequest(
-			'/search' + convertMapToQueryParams([type: 'solr', query: 'description.pl:opissearch', filterQuery: fqs]), '')
+			'/search' + convertMapToQueryParams([type: 'solr', query: 'description.pl:opissearch', filterQuery: fqs]))
 
 		then:
-		conn.getResponseCode() == HTTP_BAD_REQUEST
-		conn.getContentType().contains('application/json')
-		conn.errorStream.text.contains("'filterQuery'")
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['results'] == 1
 	}
 
-	def "GET /search?type=solr with overlong combined 'filterQuery' should reply with Bad Request 400"() {
-		given: 'a single FQ longer than the 1024-char cap'
-		def oversize = 'rdfType:' + ('a' * 1025)
-
+	def "GET /search?type=solr with a filterQuery OR-ing 20 resource URIs should return the matching entry"() {
 		when:
-		def conn = EntryStoreClient.getRequest(
-			'/search' + convertMapToQueryParams([type: 'solr', query: 'description.pl:opissearch', filterQuery: oversize]), '')
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: '*:*', filterQuery: resourceUrisQuery('resource')]))
 
 		then:
-		conn.getResponseCode() == HTTP_BAD_REQUEST
-		conn.getContentType().contains('application/json')
-		conn.errorStream.text.contains("'filterQuery'")
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		respJson['results'] == 1
+		respJson['resource']['children'][0]['entryId'] == entryId
 	}
 
 	def "GET /search?type=solr with 'facetFields' on a non-allowlisted field should reply with Bad Request 400"() {
@@ -1330,5 +1329,15 @@ class SearchIT extends BaseSpec {
 
 		then:
 		statuses.every { it == HTTP_OK }
+	}
+
+	/**
+	 * The shape entrystore.js builds in EntryStoreUtil.loadEntriesByResourceURIs: 20 resource URIs OR-ed into one
+	 * query, of which only the first one, searchEntryId's, exists.
+	 */
+	private static String resourceUrisQuery(String field) {
+		def existing = EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryId
+		def missing = (1..19).collect { EntryStoreClient.baseUrl + '/' + contextId + '/resource/searchIT-missing-entry-' + it }
+		return '(' + ([existing] + missing).collect { field + ':"' + it + '"' }.join(' OR ') + ')'
 	}
 }

@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.service;
 
+import jakarta.annotation.PostConstruct;
 import org.entrystore.rest.springboot.model.api.FacetSettingsRequestParams;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.springframework.beans.factory.annotation.Value;
@@ -103,16 +104,16 @@ public class SolrSearchInputValidator {
 	 */
 	private static final Pattern FACET_LANG = Pattern.compile("^[A-Za-z0-9-]{1,35}$");
 
-	@Value("${entrystore.solr.search.query.max-length:1024}")
+	@Value("${entrystore.solr.search.query.max-length:0}")
 	private int maxQueryLength;
 
 	@Value("${entrystore.solr.search.sort.max-length:1024}")
 	private int maxSortLength;
 
-	@Value("${entrystore.solr.search.filter-query.max-length:1024}")
+	@Value("${entrystore.solr.search.filter-query.max-length:0}")
 	private int maxFilterQueryLength;
 
-	@Value("${entrystore.solr.search.filter-query.max-count:16}")
+	@Value("${entrystore.solr.search.filter-query.max-count:0}")
 	private int maxFilterQueryCount;
 
 	@Value("${entrystore.solr.search.facet-fields.max-length:1024}")
@@ -121,8 +122,32 @@ public class SolrSearchInputValidator {
 	@Value("${entrystore.solr.search.facet-fields.max-count:16}")
 	private int maxFacetFieldCount;
 
+	/**
+	 * Fails startup on a negative limit, which would otherwise silently act as "unlimited".
+	 */
+	@PostConstruct
+	void checkLimits() {
+		requireNonNegative(maxQueryLength, "entrystore.solr.search.query.max-length");
+		requireNonNegative(maxSortLength, "entrystore.solr.search.sort.max-length");
+		requireNonNegative(maxFilterQueryLength, "entrystore.solr.search.filter-query.max-length");
+		requireNonNegative(maxFilterQueryCount, "entrystore.solr.search.filter-query.max-count");
+		requireNonNegative(maxFacetFieldsLength, "entrystore.solr.search.facet-fields.max-length");
+		requireNonNegative(maxFacetFieldCount, "entrystore.solr.search.facet-fields.max-count");
+	}
+
+	private static void requireNonNegative(int limit, String key) {
+		if (limit < 0) {
+			throw new IllegalStateException(key + " must be 0 (unlimited) or positive, got " + limit);
+		}
+	}
+
+	/** A limit of 0 means unlimited. */
+	private static boolean exceeds(int value, int limit) {
+		return limit > 0 && value > limit;
+	}
+
 	public void validateQuery(String query) {
-		if (query != null && query.length() > maxQueryLength) {
+		if (query != null && exceeds(query.length(), maxQueryLength)) {
 			throw new BadRequestException(
 					"Query parameter 'query' exceeds maximum length of " + maxQueryLength);
 		}
@@ -132,7 +157,7 @@ public class SolrSearchInputValidator {
 		if (sort == null || sort.isEmpty()) {
 			return;
 		}
-		if (sort.length() > maxSortLength) {
+		if (exceeds(sort.length(), maxSortLength)) {
 			throw new BadRequestException(
 					"Query parameter 'sort' exceeds maximum length of " + maxSortLength);
 		}
@@ -156,7 +181,8 @@ public class SolrSearchInputValidator {
 	 *
 	 * @return the decoded filter queries; empty when the parameter is absent (a blank value yields one empty query)
 	 * @throws BadRequestException if the raw value exceeds {@code entrystore.solr.search.filter-query.max-length} or
-	 *                             splits into more than {@code entrystore.solr.search.filter-query.max-count} entries
+	 *                             splits into more than {@code entrystore.solr.search.filter-query.max-count} entries,
+	 *                             where a limit of 0 means unlimited
 	 */
 	public List<String> parseFilterQueries(String rawFilterQuery) {
 		List<String> filterQueries = rawFilterQuery == null
@@ -170,18 +196,18 @@ public class SolrSearchInputValidator {
 		if (rawFilterQuery == null || rawFilterQuery.isEmpty()) {
 			return;
 		}
-		if (rawFilterQuery.length() > maxFilterQueryLength) {
+		if (exceeds(rawFilterQuery.length(), maxFilterQueryLength)) {
 			throw new BadRequestException(
 					"Query parameter 'filterQuery' exceeds maximum length of " + maxFilterQueryLength);
 		}
-		if (filterQueries.size() > maxFilterQueryCount) {
+		if (exceeds(filterQueries.size(), maxFilterQueryCount)) {
 			throw new BadRequestException(
 					"Query parameter 'filterQuery' contains more than " + maxFilterQueryCount + " entries");
 		}
 		// Per-entry backstop. Unreachable via parseFilterQueries (decode only shrinks the already
 		// length-capped raw value); kept for same-package callers passing pre-decoded entries.
 		for (String fq : filterQueries) {
-			if (fq != null && fq.length() > maxFilterQueryLength) {
+			if (fq != null && exceeds(fq.length(), maxFilterQueryLength)) {
 				throw new BadRequestException(
 						"Query parameter 'filterQuery' entry exceeds maximum length of " + maxFilterQueryLength);
 			}
@@ -200,12 +226,12 @@ public class SolrSearchInputValidator {
 		if (facetFields == null || facetFields.isEmpty()) {
 			return;
 		}
-		if (facetFields.length() > maxFacetFieldsLength) {
+		if (exceeds(facetFields.length(), maxFacetFieldsLength)) {
 			throw new BadRequestException(
 					"Query parameter 'facetFields' exceeds maximum length of " + maxFacetFieldsLength);
 		}
 		String[] fields = facetFields.split(",", -1);
-		if (fields.length > maxFacetFieldCount) {
+		if (exceeds(fields.length, maxFacetFieldCount)) {
 			throw new BadRequestException(
 					"Query parameter 'facetFields' contains more than " + maxFacetFieldCount + " entries");
 		}
