@@ -33,6 +33,7 @@ import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.EnumerablePropertySource;
 import org.springframework.core.env.Environment;
@@ -84,7 +85,9 @@ public class EntryStoreConfiguration {
 		return properties;
 	}
 
+	/** Depends on the password rules so core applies the configured ones from its first password check on. */
 	@Bean(destroyMethod = "shutdown")
+	@DependsOn(PasswordRulesInitializer.BEAN_NAME)
 	public RepositoryManagerImpl createRepositoryManager(Config config) {
 		String baseURI = config.getString(Settings.BASE_URL);
 		if (baseURI == null) {

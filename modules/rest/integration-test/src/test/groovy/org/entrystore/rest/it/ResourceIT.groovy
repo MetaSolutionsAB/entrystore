@@ -56,6 +56,7 @@ class ResourceIT extends BaseSpec {
 		EntryStoreClient.creds.put('userChangePasswordBadCurrentPassword@test.com', password)
 		EntryStoreClient.creds.put('userChangePasswordNoCurrentPassword@test.com', password)
 		EntryStoreClient.creds.put('userChangePasswordBadNewPassword@test.com', password)
+		EntryStoreClient.creds.put('userChangePasswordRuleViolation@test.com', password)
 		EntryStoreClient.creds.put('userAdminChangePassword@test.com', password)
 		EntryStoreClient.creds.put('resourceTestUserName@test.com', password)
 		EntryStoreClient.creds.put('resDelOther@test.com', password)
@@ -1260,6 +1261,44 @@ class ResourceIT extends BaseSpec {
 		editResourceConn.getContentType().contains('application/json')
 		def editRespJson = JSON_PARSER.parseText(editResourceConn.errorStream.text)
 		editRespJson['error'] == 'Password must conform to configured rules.'
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} should not change own password when new password breaks a configured custom rule"() {
+		given:
+		def username = 'userChangePasswordRuleViolation@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+
+		// Meets the default rules, but entrystore-it.properties adds a custom rule that rejects whitespace
+		def passwordChangeRequestBody = JsonOutput.toJson([
+			password       : 'New pass1234',
+			currentPassword: password
+		])
+
+		when:
+		def editResourceConn = EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, username)
+
+		then:
+		editResourceConn.getResponseCode() == HTTP_BAD_REQUEST
+		editResourceConn.getContentType().contains('application/json')
+		def editRespJson = JSON_PARSER.parseText(editResourceConn.errorStream.text)
+		editRespJson['error'] == 'Password must conform to configured rules.'
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} as admin should set a password that only a configured rule relaxation allows"() {
+		given:
+		def user = UserUtil.createUser('userRelaxedPasswordRule@test.com')
+		def resourceUri = user['resourceUri'].toString()
+
+		// The default rules require an upper-case letter; entrystore-it.properties turns that rule off
+		def passwordRequestBody = JsonOutput.toJson([password: 'lowercase1234'])
+
+		when:
+		def editResourceConn = EntryStoreClient.putRequest(resourceUri, passwordRequestBody)
+
+		then:
+		editResourceConn.getResponseCode() == HTTP_NO_CONTENT
 	}
 
 	def "DELETE /{context-id}/resource/{entry-id} should delete user"() {

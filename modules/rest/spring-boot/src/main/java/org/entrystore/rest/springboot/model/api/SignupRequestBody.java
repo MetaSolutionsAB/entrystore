@@ -37,18 +37,18 @@ import java.util.stream.Collectors;
  * configured password rules for {@code password}, the name rules for the two name fields. Switching to
  * {@code @NotBlank} would report all four as missing instead.
  *
- * <p>Password length and name format are checked in {@code AuthService} rather than here, because both
- * need more than the field's own value: the length applies to the trimmed password, and the name rules
+ * <p>Password rules and name format are checked in {@code AuthService} rather than here, because both
+ * need more than the field's own value: the password rules apply to the trimmed password, and the name rules
  * span two fields.
  *
  * <p>Message precedence, when a body breaks several rules at once: every constraint on this record
  * first — presence and address format, resolved in component-declaration order — and only then the
- * service-side password length and name format. Component order is therefore a client-visible contract;
+ * service-side password rules and name format. Component order is therefore a client-visible contract;
  * reordering the components below changes which message a caller receives.
  *
  * <p>This is <em>not</em> the precedence the sequential {@code if} chain had. That chain interleaved
- * per field, checking the password's length before the two names' presence, so a body with both a short
- * password and a missing surname answered "The password must conform to the configured rules." and now
+ * per field, checking the password before the two names' presence, so a body with both a password that
+ * breaks the rules and a missing surname answered "The password must conform to the configured rules." and now
  * answers "One or more parameters are missing.". Every single-fault body is unaffected, which is why no
  * integration test moves.
  */

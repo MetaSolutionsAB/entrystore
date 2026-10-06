@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2025 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,10 @@
 
 package org.entrystore.repository.security;
 
-import com.google.common.collect.Sets;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.apache.commons.codec.binary.Base64;
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +33,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Date;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.IntPredicate;
 import java.util.regex.Pattern;
@@ -72,16 +69,16 @@ public class Password {
 
 	public static final int PASSWORD_MAX_LENGTH = 2048;
 
-	private static SecureRandom random;
+	private static final SecureRandom random;
 
-	private static SecretKeyFactory secretKeyFactory;
-
-	@Getter
-	@Setter
-	private static Rules rules;
+	private static final SecretKeyFactory secretKeyFactory;
 
 	@Getter
 	private static final Rules defaultRules = new Rules(true, true, false, true, 10, null);
+
+	/** Volatile because the startup thread sets the configured rules that request threads read. */
+	@Getter
+	private static volatile Rules rules = defaultRules;
 
 	@AllArgsConstructor
 	@Getter
@@ -129,8 +126,17 @@ public class Password {
 			random.setSeed(random.generateSeed(saltLen));
 			log.info("Seeding of SecureRandom took {} ms", new Date().getTime() - before);
 		} catch (NoSuchAlgorithmException e) {
-			log.error(e.getMessage());
+			// Fail class loading: without these, every hash would be unusable.
+			throw new ExceptionInInitializerError(e);
 		}
+	}
+
+	/**
+	 * Sets the rules that {@link #conformsToRules(String)} applies. Until called, the
+	 * {@link #getDefaultRules() defaults} apply.
+	 */
+	public static void setRules(Rules rules) {
+		Password.rules = Objects.requireNonNull(rules, "rules");
 	}
 
 	// TODO: Security issue - we should not use String type to pass passwords - Use char[] or byte[] instead.
@@ -161,39 +167,44 @@ public class Password {
 		if (saltAndPass.length != 2) {
 			return false;
 		}
-		String hashOfInput = hash(password, Base64.decodeBase64(saltAndPass[0]));
-		if (hashOfInput != null) {
-			return hashOfInput.equals(saltAndPass[1]);
-		}
-		return false;
+		return hash(password, Base64.decodeBase64(saltAndPass[0])).equals(saltAndPass[1]);
 	}
 
 	private static String hash(String password, byte[] salt) {
+		return hash(secretKeyFactory, password, salt);
+	}
+
+	/**
+	 * Throws on failure rather than returning null, so a failure can never be stored as a credential that
+	 * no password verifies against. Package-private so tests can pass a factory that fails.
+	 */
+	static String hash(SecretKeyFactory factory, String password, byte[] salt) {
 		checkMinimumRequirements(password);
 
 		try {
 			long before = new Date().getTime();
-			SecretKey key = secretKeyFactory.generateSecret(new PBEKeySpec(password.toCharArray(), salt, iterations, desiredKeyLen));
+			SecretKey key = factory.generateSecret(new PBEKeySpec(password.toCharArray(), salt, iterations, desiredKeyLen));
 			log.info("Password hashing took {} ms", new Date().getTime() - before);
 			return Base64.encodeBase64String(key.getEncoded());
 		} catch (GeneralSecurityException gse) {
-			log.error(gse.getMessage());
+			throw new IllegalStateException("Password hashing failed", gse);
 		}
-		return null;
 	}
 
 	public static String sha256(String s) {
-		MessageDigest digester;
+		return digest("SHA-256", s);
+	}
+
+	/** Package-private so tests can name an algorithm that does not exist. */
+	static String digest(String algorithm, String s) {
 		try {
-			digester = MessageDigest.getInstance("SHA-256");
+			MessageDigest digester = MessageDigest.getInstance(algorithm);
 			digester.update(s.getBytes(StandardCharsets.UTF_8));
-			byte[] key = digester.digest();
-			SecretKeySpec spec = new SecretKeySpec(key, "AES");
+			SecretKeySpec spec = new SecretKeySpec(digester.digest(), "AES");
 			return Base64.encodeBase64String(spec.getEncoded());
 		} catch (NoSuchAlgorithmException nsae) {
-			log.error(nsae.getMessage());
+			throw new IllegalStateException(algorithm + " is not available", nsae);
 		}
-		return null;
 	}
 
 	private static void checkMinimumRequirements(String password) {
@@ -212,10 +223,7 @@ public class Password {
 			return false;
 		}
 
-		if (rules == null) {
-			rules = defaultRules;
-		}
-
+		Rules rules = Password.rules;
 		if (password.length() < rules.getMinLength()) {
 			return false;
 		}
@@ -265,16 +273,6 @@ public class Password {
 
 	private static boolean contains(String value, IntPredicate predicate) {
 		return value.chars().anyMatch(predicate);
-	}
-
-	public static void loadRules(Config config) {
-		rules = new Rules();
-		rules.lowercase = config.getBoolean(Settings.AUTH_PASSWORD_RULE_LOWERCASE, defaultRules.isLowercase());
-		rules.uppercase = config.getBoolean(Settings.AUTH_PASSWORD_RULE_UPPERCASE, defaultRules.isUppercase());
-		rules.number = config.getBoolean(Settings.AUTH_PASSWORD_RULE_NUMBER, defaultRules.isNumber());
-		rules.symbol = config.getBoolean(Settings.AUTH_PASSWORD_RULE_SYMBOL, defaultRules.isSymbol());
-		rules.minLength = config.getInt(Settings.AUTH_PASSWORD_RULE_MINLENGTH, defaultRules.getMinLength());
-		rules.custom = Sets.newHashSet(config.getStringList(Settings.AUTH_PASSWORD_RULE_CUSTOM));
 	}
 
 }

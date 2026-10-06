@@ -143,7 +143,7 @@ class IndexedListConfigValidatorTest {
 
 	@Test
 	void anonymousProxyWhitelist_isAlsoChecked() {
-		// The one INDEXED_LIST_KEYS entry no other case here covers.
+		// An INDEXED_LIST_KEYS entry no other case here covers.
 		var environment = new MockEnvironment()
 				.withProperty("entrystore.proxy.whitelist.anonymous.2", "guest.example");
 
@@ -151,6 +151,18 @@ class IndexedListConfigValidatorTest {
 
 		assertTrue(message.contains("entrystore.proxy.whitelist.anonymous"),
 				"the diagnostic must name the key; got: " + message);
+	}
+
+	@Test
+	void bareCustomPasswordRule_abortsWithTheRequiredIndexedForm() {
+		// The legacy reader applied a bare custom rule; the map binding would silently drop it.
+		var environment = new MockEnvironment()
+				.withProperty("entrystore.auth.password.rule.custom", "[0-9]");
+
+		String message = assertAborts(environment);
+
+		assertTrue(message.contains("entrystore.auth.password.rule.custom.1=<value>"),
+				"the diagnostic must show the required indexed form; got: " + message);
 	}
 
 	@Test
