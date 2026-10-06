@@ -34,6 +34,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -120,6 +121,32 @@ public class DataImplTest extends AbstractCoreTest {
 		contextEntry.addAllowedPrincipalsFor(AccessProperty.WriteResource, mickey.getResourceURI());
 		pm.setAuthenticatedUserURI(mickey.getResourceURI());
 		assertDoesNotThrow(() -> context.remove(entry.getEntryURI()));
+	}
+
+	@Test
+	public void readDigest_throwsForGuestWhenThereIsNoFile() {
+		pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+		assertThrows(AuthorizationException.class, () -> ((DataImpl) data).readDigest());
+	}
+
+	@Test
+	public void readDigest_throwsForGuestWhenThereIsAFile() throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		data.setData(new ByteArrayInputStream("test content".getBytes(StandardCharsets.UTF_8)));
+		pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+		assertThrows(AuthorizationException.class, () -> ((DataImpl) data).readDigest());
+	}
+
+	@Test
+	public void readDigest_returnsTheDigestToAReader() throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		data.setData(new ByteArrayInputStream("test content".getBytes(StandardCharsets.UTF_8)));
+		Entry mickey = pm.getPrincipalEntry("Mickey");
+		entry.addAllowedPrincipalsFor(AccessProperty.ReadResource, mickey.getResourceURI());
+		pm.setAuthenticatedUserURI(mickey.getResourceURI());
+		// SHA-256 of "test content"
+		assertEquals("6ae8a75555209fd6c44157c0aed8016e763ff435a19cf186f76863140143ff72",
+				((DataImpl) data).readDigest());
 	}
 
 	@Disabled("To be implemented")
