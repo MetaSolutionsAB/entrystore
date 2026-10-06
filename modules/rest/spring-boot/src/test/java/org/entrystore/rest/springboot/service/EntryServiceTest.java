@@ -91,13 +91,13 @@ class EntryServiceTest {
 
 	@Test
 	void modifyEntry_rejectsCoreValidationErrorsAsBadRequestsWithoutAStackTraceCause() {
-		doThrow(new IllegalArgumentException("The resource URI of a local entry cannot be changed"))
+		doThrow(new IllegalArgumentException("The resource URI of a local entry of graph type List cannot be changed"))
 				.when(entry).setGraph(any());
 
 		BadRequestException thrown = assertThrows(BadRequestException.class,
 				() -> service.modifyEntry(entry, "", "text/turtle", false));
 
-		assertEquals("The resource URI of a local entry cannot be changed", thrown.getMessage());
+		assertEquals("The resource URI of a local entry of graph type List cannot be changed", thrown.getMessage());
 		assertNull(thrown.getCause());
 	}
 

@@ -486,10 +486,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 				return concurrentlyPublished;
 			}
 			// Retried rather than trusted once. Holding this monitor does not stop every index write:
-			// EntryImpl.setResourceURI and setExternalMetadataURI release it before calling in, so one
-			// already past its commit can still trip the limit mid-scan. What the monitor does stop is
-			// any further write from committing, so each retry would need a whole buffer's worth of ops
-			// from threads that were already in that window — which is why this terminates.
+			// EntryImpl.setExternalMetadataURI can release it before calling in, so one already past its
+			// commit can still trip the limit mid-scan. What the monitor does stop is any further write
+			// from committing, so each retry would need a whole buffer's worth of ops from threads that
+			// were already in that window — which is why this terminates.
 			Indexes exclusivelyScanned;
 			while ((exclusivelyScanned = scanAndPublish()) == null) {
 				log.warn("Index scan of context {} raced an overflowing pending-write buffer; rescanning",
@@ -650,9 +650,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * not published yet.
 	 *
 	 * <p>Where both monitors are held the order is {@code repository} → {@code indexLock}. Not every
-	 * caller holds {@code entry.repository}: {@code EntryImpl.setResourceURI} and
-	 * {@code setExternalMetadataURI} release it before calling in through
-	 * {@link #updateResource2EntryIndex}.
+	 * caller holds {@code entry.repository}: {@code EntryImpl.setExternalMetadataURI} can release it
+	 * before calling in through {@link #updateExternalMetadata2EntryIndex}.
 	 */
 	private void applyIndexOp(IndexKind kind, boolean isPush, URI from, URI to) {
 		if (from == null || to == null) {
@@ -1474,10 +1473,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 		synchronized (this.entry.repository) {
 			// The child list comes from the transaction, not from the in-memory index. That index is
 			// weakly consistent: updateResource2EntryIndex pops and pushes as two separate compute()
-			// calls, and EntryImpl.setResourceURI calls it after releasing this monitor, so an entry
-			// observed in that gap would keep its entry, metadata and resource graphs while the
-			// rc.clear(this.resourceURI) below destroys the graph that named them — permanently orphaned
-			// data. A statement the index could not parse would be skipped for the same effect. Reading
+			// calls, so an entry observed in that gap would keep its entry, metadata and resource graphs
+			// while the rc.clear(this.resourceURI) below destroys the graph that named them — permanently
+			// orphaned data. A statement the index could not parse would be skipped for the same effect. Reading
 			// resHasEntry through rc sees this transaction's own view and cannot miss an entry.
 			//
 			// Collected as RDF4J IRIs rather than java.net.URIs: this enumeration is fed straight from the
