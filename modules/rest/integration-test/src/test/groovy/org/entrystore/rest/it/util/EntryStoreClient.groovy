@@ -174,6 +174,65 @@ class EntryStoreClient {
 		return connection
 	}
 
+	/**
+	 * Sends a raw (non-multipart) PUT of {@code size} zero bytes, generated while they are written so that no buffer
+	 * of that size exists on either side of the client, with a Content-Length unless {@code chunked}.
+	 */
+	def static putRequestStreamed(String path, long size, boolean chunked = false, String asUser = 'admin') {
+		def connection = createConnection(path)
+		connection.setRequestMethod(HttpMethod.PUT.name())
+		if (asUser?.trim()) {
+			connection.setRequestProperty('Cookie', cookieHeader(asUser))
+			if (csrfTokens[asUser] != null) {
+				connection.setRequestProperty('X-XSRF-TOKEN', csrfTokens[asUser].toString())
+			}
+		}
+		connection.setRequestProperty('Content-Type', 'application/octet-stream')
+		connection.setDoOutput(true)
+		if (chunked) {
+			connection.setChunkedStreamingMode(64 * 1024)
+		} else {
+			connection.setFixedLengthStreamingMode(size)
+		}
+		connection.outputStream.withStream { output ->
+			def chunk = new byte[64 * 1024]
+			for (long written = 0; written < size; written += chunk.length) {
+				output.write(chunk, 0, (int) Math.min(chunk.length, size - written))
+			}
+		}
+		return connection
+	}
+
+	/**
+	 * Sends the head of a raw PUT announcing a body of {@code contentLength} bytes with Expect: 100-continue, and
+	 * returns the status of the first response line. Jetty answers 100 only once the application reads the body,
+	 * so any other status means the request was decided without reading it. The body itself is never sent.
+	 */
+	def static firstStatusOfPutExpectingContinue(String path, String asUser = 'admin', long contentLength = 1024,
+												 String contentType = 'application/octet-stream') {
+		def head = new StringBuilder()
+		head << "PUT ${contextPath}${path} HTTP/1.1\r\n"
+		head << "Host: ${host}:${port}\r\n"
+		head << "Content-Type: ${contentType}\r\n"
+		head << "Content-Length: ${contentLength}\r\n"
+		head << 'Expect: 100-continue\r\n'
+		head << 'Connection: close\r\n'
+		if (asUser?.trim()) {
+			head << "Cookie: ${cookieHeader(asUser)}\r\n"
+			if (csrfTokens[asUser] != null) {
+				head << "X-XSRF-TOKEN: ${csrfTokens[asUser]}\r\n"
+			}
+		}
+		head << '\r\n'
+		new Socket(host, port).withCloseable { socket ->
+			socket.soTimeout = 10_000
+			socket.outputStream.write(head.toString().getBytes(UTF_8))
+			socket.outputStream.flush()
+			def statusLine = new BufferedReader(new InputStreamReader(socket.inputStream, UTF_8)).readLine()
+			return Integer.parseInt(statusLine.split(' ')[1])
+		}
+	}
+
 	/** Sends a multipart/form-data request carrying only form fields, i.e. without any file part. */
 	def static putRequestMultiPartWithoutFile(String path, Map<String, String> formData, String asUser = 'admin') {
 		return putRequestMultiPart(path, null, asUser, formData)

@@ -22,6 +22,7 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 5s
   mvc.problemdetails.enabled: false
+  mvc.formcontent.filter.enabled: false
   servlet.multipart:
     max-file-size: -1B
     max-request-size: -1B

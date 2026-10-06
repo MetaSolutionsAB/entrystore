@@ -26,6 +26,7 @@ import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.impl.DataImpl;
 import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.FileOperations;
@@ -47,6 +48,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
@@ -272,9 +274,7 @@ public class ContextService {
 					File contextFolder = new File(contextPathFile, contextId);
 					File[] contextFiles = contextFolder.listFiles();
 					if (contextFiles != null) {
-						for (File contextFile : contextFiles) {
-							addZipEntry(zipOS, "resources/" + contextFile.getName(), contextFile);
-						}
+						addDataFiles(zipOS, contextFiles);
 					} else {
 						log.warn("The data path of context {} is not a folder: {}", contextId, contextFolder);
 					}
@@ -303,16 +303,34 @@ public class ContextService {
 	}
 
 	/**
+	 * Adds the files of a context's data folder under {@code resources/}, leaving out staging files of uploads in
+	 * progress and files that are gone by the time they are read, such as a digest an upload is replacing.
+	 */
+	static void addDataFiles(ZipOutputStream zipOS, File[] dataFiles) throws IOException {
+		for (File dataFile : dataFiles) {
+			if (DataImpl.isStagingFile(dataFile.getName())) {
+				continue;
+			}
+			try {
+				addZipEntry(zipOS, "resources/" + dataFile.getName(), dataFile);
+			} catch (NoSuchFileException e) {
+				log.debug("Not exporting {}, which was removed while the export ran", dataFile);
+			}
+		}
+	}
+
+	/**
 	 * Writes {@code source} into the zip stream as a DEFLATED entry named {@code name}, carrying the
 	 * file's modification time. Sizes and CRC are computed by the stream and written in the entry's
-	 * data descriptor.
+	 * data descriptor. The source is opened before the entry is written, so that a source that is gone
+	 * leaves no empty entry behind.
 	 */
 	static void addZipEntry(ZipOutputStream zipOS, String name, File source) throws IOException {
-		ZipEntry zipEntry = new ZipEntry(name);
-		zipEntry.setTime(source.lastModified());
-		zipEntry.setMethod(ZipEntry.DEFLATED);
-		zipOS.putNextEntry(zipEntry);
 		try (InputStream is = new BufferedInputStream(Files.newInputStream(source.toPath()), 8192)) {
+			ZipEntry zipEntry = new ZipEntry(name);
+			zipEntry.setTime(source.lastModified());
+			zipEntry.setMethod(ZipEntry.DEFLATED);
+			zipOS.putNextEntry(zipEntry);
 			is.transferTo(zipOS);
 		}
 	}

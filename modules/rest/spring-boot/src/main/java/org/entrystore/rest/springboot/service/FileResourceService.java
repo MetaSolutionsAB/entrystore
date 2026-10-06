@@ -20,14 +20,18 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.function.IOSupplier;
+import org.apache.commons.io.input.ProxyInputStream;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.QuotaException;
 import org.entrystore.ResourceType;
+import org.entrystore.impl.DataImpl;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
@@ -38,9 +42,9 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Objects;
 
 /**
@@ -59,19 +63,30 @@ public class FileResourceService {
 	private boolean rewriteMediaTypeJavaScript;
 
 	/**
-	 * Stores the request body as the entry's data, enforcing the repository's maximum file size, and records its
-	 * size, mimetype (the explicit {@code mimeType} parameter, else the request media type, else octet-stream) and,
-	 * when one is supplied, the sanitized filename. Multipart content is rejected here; it goes through
-	 * {@link #setDataMultipart}.
+	 * Streams the request body to the entry's data, enforcing the repository's maximum file size up front from
+	 * {@code contentLength} (-1 when unknown) and while reading, and records its size, mimetype (the explicit
+	 * {@code mimeType} parameter, else the request media type, else octet-stream) and, when one is supplied, the
+	 * sanitized filename. The body may be of any size, so callers must check write access first; it is opened only
+	 * once the up-front checks pass, as opening it makes Jetty answer Expect: 100-continue. Multipart content is
+	 * rejected here; it goes through {@link #setDataMultipart}.
 	 */
-	public void setData(Entry entry, byte[] requestBody, String mediaType, String mimeType, String filename) {
+	public void setData(Entry entry, IOSupplier<InputStream> body, long contentLength, String mediaType,
+						String mimeType, String filename) {
 		if (MediaType.MULTIPART_FORM_DATA_VALUE.equals(mediaType)) {
 			throw new BadRequestException("Content negotiation failure, Multipart file content should be handled by other endpoint.");
 		}
-		rejectIfAboveMaximum(requestBody.length);
+		long maxFileSize = repositoryManager.getMaximumFileSize();
+		rejectIfAboveMaximum(contentLength, maxFileSize);
+		InputStream in;
 		try {
-			((Data) entry.getResource()).setData(new ByteArrayInputStream(requestBody));
-			entry.setFileSize(((Data) entry.getResource()).getDataFile().length());
+			in = body.get();
+		} catch (IOException e) {
+			throw new BadRequestException("Failed to read the request body", e);
+		}
+		try {
+			Data data = (Data) entry.getResource();
+			data.setData(new RequestBodyInputStream(in, maxFileSize));
+			entry.setFileSize(data.getDataFile().length());
 			if (mimeType == null) {
 				mimeType = Objects.requireNonNullElse(mediaType, MediaType.APPLICATION_OCTET_STREAM_VALUE);
 			}
@@ -81,6 +96,12 @@ public class FileResourceService {
 			}
 		} catch (QuotaException qe) {
 			throw new EntityTooLargeException(qe.getMessage(), qe);
+		} catch (SizeLimitExceededException e) {
+			throw new EntityTooLargeException("Received file exceeds maximum allowed size of: " + maxFileSize + "b", e);
+		} catch (RequestBodyReadException e) {
+			throw new BadRequestException("Failed to read the request body", e);
+		} catch (DataImpl.EntryRemovedException e) {
+			throw new EntityNotFoundException("The entry was removed while its resource was uploaded", e);
 		} catch (IOException ioe) {
 			if (ioe.getCause() instanceof NullPointerException) {
 				throw new BadRequestException("Invalid request data", ioe);
@@ -102,7 +123,7 @@ public class FileResourceService {
 			throw new BadRequestException("Cannot set resource for entry with GraphType " + entry.getGraphType() + ". Only None GraphType can set a multipart file.");
 		}
 
-		rejectIfAboveMaximum(file.getSize());
+		rejectIfAboveMaximum(file.getSize(), repositoryManager.getMaximumFileSize());
 		try {
 			((Data) entry.getResource()).setData(file.getInputStream());
 			entry.setFileSize(((Data) entry.getResource()).getDataFile().length());
@@ -124,6 +145,8 @@ public class FileResourceService {
 						entry.getEntryURI());
 				entry.setFilename(FileUtil.sanitizeFilename(entry.getId()));
 			}
+		} catch (DataImpl.EntryRemovedException e) {
+			throw new EntityNotFoundException("The entry was removed while its resource was uploaded", e);
 		} catch (IOException ioe) {
 			throw new InternalServerErrorException("Failed to process multipart resource data", ioe);
 		} catch (QuotaException qe) {
@@ -131,8 +154,7 @@ public class FileResourceService {
 		}
 	}
 
-	private void rejectIfAboveMaximum(long size) {
-		long maxFileSize = repositoryManager.getMaximumFileSize();
+	private static void rejectIfAboveMaximum(long size, long maxFileSize) {
 		if (maxFileSize != -1 && size > maxFileSize) {
 			throw new EntityTooLargeException("Received file size (of " + size + "b) exceeds maximum allowed size of: "
 					+ maxFileSize + "b");
@@ -201,6 +223,48 @@ public class FileResourceService {
 			}
 			throw new InternalServerErrorException("Unable to delete resource of entry " + entry.getEntryURI()
 					+ " (" + diagnostics + ")");
+		}
+	}
+
+	/** Thrown by {@link RequestBodyInputStream} once more than its limit has been read. */
+	private static final class SizeLimitExceededException extends IOException {
+	}
+
+	/** Thrown by {@link RequestBodyInputStream} when the body cannot be read, typically as the client went away. */
+	private static final class RequestBodyReadException extends IOException {
+		RequestBodyReadException(IOException cause) {
+			super(cause);
+		}
+	}
+
+	/**
+	 * Tells failures to read the body apart from failures to store it, and fails the read that takes the total
+	 * past {@code maxBytes} (-1 for no limit), so a body without Content-Length is capped too.
+	 */
+	private static final class RequestBodyInputStream extends ProxyInputStream {
+
+		private final long maxBytes;
+		private long count;
+
+		RequestBodyInputStream(InputStream in, long maxBytes) {
+			super(in);
+			this.maxBytes = maxBytes;
+		}
+
+		@Override
+		protected void afterRead(int n) throws IOException {
+			if (maxBytes != -1 && n > 0) {
+				count += n;
+				if (count > maxBytes) {
+					throw new SizeLimitExceededException();
+				}
+			}
+		}
+
+		@Override
+		protected void handleIOException(IOException e) throws IOException {
+			// Also receives what afterRead throws.
+			throw e instanceof SizeLimitExceededException ? e : new RequestBodyReadException(e);
 		}
 	}
 }

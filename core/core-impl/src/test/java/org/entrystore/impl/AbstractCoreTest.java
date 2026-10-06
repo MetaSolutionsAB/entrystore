@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 
 import java.net.URI;
+import java.util.Map;
 
 /**
  * Manages EntryStore instance(s) as preparation for the tests in entrystore-core-impl.
@@ -45,12 +46,18 @@ public abstract class AbstractCoreTest {
 	public PrincipalManager pm;
 
 	private void setUpEnvironment() {
+		setUpEnvironment(Map.of());
+	}
+
+	/** Starts a repository manager whose configuration has {@code extraSettings} on top of the defaults. */
+	protected void setUpEnvironment(Map<String, String> extraSettings) {
 		Config config = new PropertiesConfiguration("EntryStore Configuration");
 		config.setProperty(Settings.STORE_TYPE, "memory");
 		config.setProperty(Settings.BASE_URL, "http://localhost:8181/");
 		config.setProperty(Settings.SOLR, "off");
 		//config.setProperty(Settings.SOLR_REINDEX_ON_STARTUP, "off");
 		//config.setProperty(Settings.SOLR_URL, "/tmp/entrystore-test-solr/");
+		extraSettings.forEach(config::setProperty);
 
 		rm = new RepositoryManagerImpl("http://localhost:8181/", config);
 		pm = rm.getPrincipalManager();

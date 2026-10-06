@@ -31,7 +31,6 @@ import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.PathContainer;
@@ -48,7 +47,6 @@ import org.springframework.web.util.pattern.PathPattern;
 import org.springframework.web.util.pattern.PathPatternParser;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.List;
 
 /**
@@ -78,8 +76,6 @@ public class MultipartRequestFilter extends OncePerRequestFilter {
 			new Route(HttpMethod.POST, "/*/import", false),
 			// /echo answers every failure in a textarea, as 5.x did, because EntryScape reads it from an iframe.
 			new Route(HttpMethod.POST, "/echo", true));
-
-	static final long MAX_DRAIN_BYTES = 4L * 1024 * 1024;
 
 	private record Route(HttpMethod method, PathPattern pattern, boolean textareaErrors) {
 		Route(HttpMethod method, String pattern, boolean textareaErrors) {
@@ -145,9 +141,7 @@ public class MultipartRequestFilter extends OncePerRequestFilter {
 					.error(error)
 					.build());
 		}
-		if (!"100-continue".equalsIgnoreCase(request.getHeader(HttpHeaders.EXPECT))) {
-			drain(request);
-		}
+		HttpUtil.discardRejectedBody(request);
 	}
 
 	/** Writes what {@code AppExceptionHandler} renders for a {@code TextareaHtmlResponseException}. */
@@ -157,20 +151,6 @@ public class MultipartRequestFilter extends OncePerRequestFilter {
 		var writer = response.getWriter();
 		writer.write("<textarea>" + HtmlUtils.htmlEscape("status:" + status.value() + "\n" + message) + "</textarea>");
 		writer.flush();
-	}
-
-	private static void drain(HttpServletRequest request) {
-		try {
-			InputStream in = request.getInputStream();
-			byte[] buf = new byte[8192];
-			long drained = 0;
-			int read;
-			while (drained < MAX_DRAIN_BYTES && (read = in.read(buf)) != -1) {
-				drained += read;
-			}
-		} catch (IOException e) {
-			log.debug("Client went away while its rejected request body was discarded: {}", e.getMessage());
-		}
 	}
 
 	/** The multipart route the request is for, or null. */

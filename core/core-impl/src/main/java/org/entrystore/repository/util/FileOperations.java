@@ -35,12 +35,14 @@ import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 import java.util.zip.CRC32;
 import java.util.zip.CheckedInputStream;
 import java.util.zip.ZipEntry;
@@ -338,7 +340,11 @@ public class FileOperations {
 		return tempFile;
 	}
 
-	public static void copyPath(Path src, Path dst) throws IOException {
+	/**
+	 * Copies a directory tree, leaving out the files whose name matches {@code excludeFileName} and files that
+	 * disappear while the tree is walked.
+	 */
+	public static void copyPath(Path src, Path dst, Predicate<String> excludeFileName) throws IOException {
 		Files.walkFileTree(src, new SimpleFileVisitor<>() {
 			@Override
 			public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
@@ -350,8 +356,22 @@ public class FileOperations {
 			@Override
 			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
 				throws IOException {
-				Files.copy(file, dst.resolve(src.relativize(file)), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+				if (!excludeFileName.test(file.getFileName().toString())) {
+					try {
+						Files.copy(file, dst.resolve(src.relativize(file)), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+					} catch (NoSuchFileException e) {
+						log.debug("{} disappeared while it was being copied", file);
+					}
+				}
 				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult visitFileFailed(Path file, IOException e) throws IOException {
+				if (e instanceof NoSuchFileException) {
+					return FileVisitResult.CONTINUE;
+				}
+				throw e;
 			}
 		});
 	}

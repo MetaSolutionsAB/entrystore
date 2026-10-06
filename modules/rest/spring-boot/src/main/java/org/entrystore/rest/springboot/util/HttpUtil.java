@@ -30,6 +30,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.DigestUtils;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.ZonedDateTime;
@@ -204,6 +206,32 @@ public class HttpUtil {
 	public static void checkRequestSize(HttpServletRequest request, int maxRequestSize) {
 		if (HttpUtil.isLargerThan(request, maxRequestSize)) {
 			throw new EntityTooLargeException("The size of the representation is larger than " + maxRequestSize + "bytes or unknown, request blocked.");
+		}
+	}
+
+	/** How much of a rejected request body {@link #discardRejectedBody} reads at most. */
+	public static final long MAX_DRAIN_BYTES = 4L * 1024 * 1024;
+
+	/**
+	 * Reads and discards up to {@link #MAX_DRAIN_BYTES} of a rejected request body, so that a client that reads the
+	 * response only once it has sent a moderately oversized body, like {@code HttpURLConnection} or a piped Node
+	 * stream, gets the error response instead of a connection reset. Skipped after {@code Expect: 100-continue},
+	 * whose client has not sent the body and would be asked for it.
+	 */
+	public static void discardRejectedBody(HttpServletRequest request) {
+		if ("100-continue".equalsIgnoreCase(request.getHeader(HttpHeaders.EXPECT))) {
+			return;
+		}
+		try {
+			InputStream in = request.getInputStream();
+			byte[] buf = new byte[8192];
+			long drained = 0;
+			int read;
+			while (drained < MAX_DRAIN_BYTES && (read = in.read(buf)) != -1) {
+				drained += read;
+			}
+		} catch (IOException e) {
+			log.debug("Client went away while its rejected request body was discarded: {}", e.getMessage());
 		}
 	}
 

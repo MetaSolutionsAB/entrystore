@@ -47,7 +47,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -333,16 +335,46 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		}
 	}
 
+	@Test
+	public void importContext_leavesOutStagingFilesOfTheExport(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		String stagingFile = "." + UUID.randomUUID() + DataImpl.STAGING_POSTFIX;
+
+		cm.importContext(contextEntry, createImportZip(tempDataDir, "", Map.of(
+				"resources/7", "data", "resources/.document.part", "data", "resources/" + stagingFile, "partial")));
+
+		File contextFolder = new File(tempDataDir.toFile(), contextEntry.getId());
+		assertTrue(new File(contextFolder, "7").exists());
+		// The file of an entry whose id resembles a staging name
+		assertTrue(new File(contextFolder, ".document.part").exists());
+		assertFalse(new File(contextFolder, stagingFile).exists());
+	}
+
+	private static File createImportZip(Path dir, String trig) throws IOException {
+		return createImportZip(dir, trig, Map.of());
+	}
+
 	// Builds the smallest ZIP that passes importContext's property and RDF validation, so the import
 	// only fails later, inside the removal/add transaction.
 	private static File createMinimalImportZip(Path dir) throws IOException {
 		return createImportZip(dir, "");
 	}
 
-	/** An export of the context http://localhost:8181/99 holding the given TriG, which the import maps to its target. */
-	private static File createImportZip(Path dir, String trig) throws IOException {
+	/**
+	 * An export of the context http://localhost:8181/99 holding the given TriG, which the import maps to its
+	 * target, and {@code extraEntries} as further ZIP entries, e.g. data files under {@code resources/}.
+	 */
+	private static File createImportZip(Path dir, String trig, Map<String, String> extraEntries)
+			throws IOException {
 		File zipFile = dir.resolve("entrystore-import-test.zip").toFile();
 		try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(zipFile.toPath()))) {
+			for (Map.Entry<String, String> extra : extraEntries.entrySet()) {
+				zos.putNextEntry(new ZipEntry(extra.getKey()));
+				zos.write(extra.getValue().getBytes(StandardCharsets.UTF_8));
+				zos.closeEntry();
+			}
 			zos.putNextEntry(new ZipEntry("export.properties"));
 			String properties = """
 					baseURI=http://localhost:8181/

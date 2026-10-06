@@ -455,8 +455,9 @@ entrystore.solr.extract-fulltext=off
 ## spooled to spring.servlet.multipart.location. entrystore.data.max-file-size defaults
 ## to -1 (no application backstop), so the servlet-layer cap here is the
 ## effective per-request ceiling unless an operator opts into a tighter cap.
-## Raw (non-multipart) PUT bodies on /{context-id}/resource/{entry-id} are still read into memory,
-## see ENTRYSTORE-1232.
+## Raw (non-multipart) PUT bodies on /{context-id}/resource/{entry-id} are not subject to these limits:
+## a file body is streamed into the data folder after the access check, capped only by
+## entrystore.data.max-file-size.
 # spring.servlet.multipart.max-file-size=-1B
 # spring.servlet.multipart.max-request-size=-1B
 # spring.servlet.multipart.location=/srv/entrystore/upload-tmp

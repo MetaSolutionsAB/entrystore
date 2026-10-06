@@ -150,6 +150,38 @@ class ContextImportIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
+	def "GET /{context-id}/export leaves out the staging file of an upload in progress, and only that"() {
+		given:
+		def contextId = 'context-export-staging'
+		getOrCreateContext([contextId: contextId])
+		def entryId = getOrCreateEntry(contextId, [id: 'staged-file'], [resource: [name: 'Staged file']])
+		assert EntryStoreClient.putRequestStreamed('/' + contextId + '/resource/' + entryId, 16).getResponseCode() == HTTP_CREATED
+		def stagingFile = new File(new File(ownedDataFolder, contextId), '.' + UUID.randomUUID() + '.part')
+		stagingFile.text = 'partial'
+		// Stands in for the file of an entry whose id resembles a staging name
+		def lookalikeFile = new File(new File(ownedDataFolder, contextId), '.document.part')
+		lookalikeFile.text = 'data'
+
+		when:
+		def exportConn = EntryStoreClient.getRequest('/' + contextId + '/export')
+		def names = []
+		new ZipInputStream(exportConn.inputStream).withCloseable { zip ->
+			for (def zipEntry = zip.nextEntry; zipEntry != null; zipEntry = zip.nextEntry) {
+				names << zipEntry.name
+			}
+		}
+
+		then:
+		exportConn.getResponseCode() == HTTP_OK
+		names.contains('resources/' + entryId)
+		names.contains('resources/.document.part')
+		!names.contains('resources/' + stagingFile.name)
+
+		cleanup:
+		stagingFile?.delete()
+		lookalikeFile?.delete()
+	}
+
 	def "POST /{context-id}/import as admin with zip-file as body should import context from the file, overriding existing entries"() {
 		given:
 		// check existing list of entries for context that will be overridden

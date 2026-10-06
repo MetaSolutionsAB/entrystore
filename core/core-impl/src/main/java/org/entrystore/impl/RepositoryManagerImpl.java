@@ -280,6 +280,12 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 			try {
 				repository.init();
+				// Only once the store is ours: a second instance fails on its lock instead of deleting the
+				// staging files of uploads the running instance has in progress.
+				String dataFolderValue = configuration.getString(Settings.DATA_FOLDER);
+				if (dataFolderValue != null) {
+					DataImpl.deleteStaleStagingFiles(dataFolderValue);
+				}
 			} catch (RepositoryException e) {
 				log.error(e.getMessage());
 			}
