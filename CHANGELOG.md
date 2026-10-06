@@ -4,6 +4,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1219](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1219) GET /\_contexts/entry/\{entry-id\}?includeAll returns an empty resource again, as in 5.x, instead of the IDs of all entries in the context, which anyone who could read the context entry received.
+
 [ENTRYSTORE-1213](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1213) GET /\{context-id\}/entry/\{entry-id\}?includeAll on a local entry of graph type None \(a file or named resource\) is denied again to callers who may not read its resource \(401 for guests, 403 for logged-in users\), as in 5.x; 6.x answered 200 with the info graph. **Behaviour note:** this also applies when only the metadata is readable; without includeAll the info graph is still returned.
 
 [ENTRYSTORE-1214](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1214) Guests denied access by an ACL get 401 with the error "Not authorized" again, as in 5.x, instead of 404, so EntryScape shows its login dialog. Logged-in callers still get 403, now with the same error, and every other 401 for a denied authorization carries it too; a 404 for a missing entry names it to every caller.
