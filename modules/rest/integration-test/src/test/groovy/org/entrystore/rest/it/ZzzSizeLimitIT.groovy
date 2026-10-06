@@ -16,15 +16,18 @@
 
 package org.entrystore.rest.it
 
+import com.sun.net.httpserver.HttpServer
 import org.entrystore.rest.it.util.EntryStoreClient
 
+import static java.net.HttpURLConnection.HTTP_BAD_GATEWAY
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 
+// Configured size limits on uploads and on proxied responses, sharing one app start.
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
-class ZzzMultipartSizeLimitIT extends BaseSpec {
+class ZzzSizeLimitIT extends BaseSpec {
 
 	static final String contextId = '666'
 
@@ -37,7 +40,21 @@ class ZzzMultipartSizeLimitIT extends BaseSpec {
 	static final String SANITIZED_ERROR_MARKER = 'HTTP ERROR 400 Bad Request'
 	static final String JETTY_INTERNAL_MULTIPART_MESSAGE = 'bad multipart'
 
+	// Above Jetty's 32 KiB output buffer, so a body cut off at the cap has already been committed.
+	static final int PROXY_CAP = 64 * 1024
+
+	static HttpServer upstream
+	static String upstreamOrigin
+
 	def setupSpec() {
+		upstream = HttpServer.create(new InetSocketAddress('localhost', 0), 0)
+		upstreamOrigin = 'http://localhost:' + upstream.address.port
+		upstream.createContext('/at-cap') { exchange -> respond(exchange, PROXY_CAP, PROXY_CAP) }
+		upstream.createContext('/over-cap-with-length') { exchange -> respond(exchange, PROXY_CAP + 1, PROXY_CAP + 1) }
+		// Length 0 makes the JDK server send the body chunked, without Content-Length.
+		upstream.createContext('/over-cap-chunked') { exchange -> respond(exchange, 0, 1024 * 1024) }
+		upstream.start()
+
 		stopPreexistingAppIfRunning()
 
 		// Caps are intentionally tiny so that all request bodies stay below EntryStoreClient's
@@ -47,8 +64,63 @@ class ZzzMultipartSizeLimitIT extends BaseSpec {
 		// one of the two properties fails the cap it leaves unbound.
 		startOwnedApp([
 			'--spring.servlet.multipart.max-file-size=2KB',
-			'--spring.servlet.multipart.max-request-size=4KB'
+			'--spring.servlet.multipart.max-request-size=4KB',
+			'--entrystore.proxy.max-response-size=' + PROXY_CAP + 'B'
 		])
+	}
+
+	def cleanupSpec() {
+		upstream?.stop(0)
+	}
+
+	private static void respond(exchange, long announcedLength, int bodySize) {
+		// JSON, because Spring would append its JSON error body to a committed JSON response.
+		exchange.responseHeaders.set('Content-Type', 'application/json')
+		exchange.sendResponseHeaders(200, announcedLength)
+		try {
+			exchange.responseBody.write(new byte[bodySize])
+		} catch (IOException ignored) {
+			// The proxy stops reading once the cap is exceeded.
+		} finally {
+			exchange.close()
+		}
+	}
+
+	def "GET /proxy streams an upstream body exactly at entrystore.proxy.max-response-size"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: upstreamOrigin + '/at-cap']), 'admin', '*/*')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.inputStream.bytes.length == PROXY_CAP
+	}
+
+	def "GET /proxy answers 502 up front when the upstream Content-Length exceeds entrystore.proxy.max-response-size"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: upstreamOrigin + '/over-cap-with-length']), 'admin', '*/*')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_GATEWAY
+		JSON_PARSER.parseText(conn.errorStream.text).error == "Upstream response exceeds maximum allowed size of ${PROXY_CAP} bytes"
+	}
+
+	def "GET /proxy aborts the transfer when an upstream body without Content-Length exceeds entrystore.proxy.max-response-size"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: upstreamOrigin + '/over-cap-chunked']), 'admin', '*/*')
+		def status = conn.getResponseCode()
+		long received = 0
+		conn.inputStream.withCloseable { body ->
+			def buf = new byte[8192]
+			int read
+			while ((read = body.read(buf)) != -1) {
+				received += read
+			}
+		}
+
+		then: 'the client sees a broken transfer, not a complete body that is silently truncated'
+		status == HTTP_OK
+		thrown(IOException)
+		received <= PROXY_CAP
 	}
 
 	// Intentionally no cleanupSpec — matches the canonical pattern of ZzzCasLoginIT and

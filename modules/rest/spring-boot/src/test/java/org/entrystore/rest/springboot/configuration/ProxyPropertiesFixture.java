@@ -34,7 +34,7 @@ public final class ProxyPropertiesFixture {
 
 	/** The shipped defaults, matching the {@code @DefaultValue}s on {@link ProxyProperties}. */
 	public static ProxyProperties defaults() {
-		return new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ofSeconds(30), Duration.ofSeconds(60),
+		return new ProxyProperties(DataSize.ofBytes(-1), 15, Duration.ofSeconds(30), Duration.ofSeconds(60),
 				null, null);
 	}
 

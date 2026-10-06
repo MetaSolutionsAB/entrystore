@@ -271,7 +271,7 @@ public class SsrfValidator {
 
 	/**
 	 * Combined parse + resolve for the proxy GET path. Equivalent to
-	 * {@code resolveForProxy(parseAndValidateUrl(url))}. Used by {@code ProxyService.fetchUrl}
+	 * {@code resolveForProxy(parseAndValidateUrl(url))}. Used by {@code ProxyService.proxy}
 	 * on each redirect hop where parse and resolve always happen together.
 	 */
 	public ValidatedTarget validateForProxy(String url) {

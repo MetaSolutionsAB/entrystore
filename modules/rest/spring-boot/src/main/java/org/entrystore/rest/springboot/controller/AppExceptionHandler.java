@@ -284,10 +284,19 @@ public class AppExceptionHandler {
 		return jsonResponse(responseBody);
 	}
 
+	/**
+	 * Rethrows when the response is already committed, e.g. a {@code /proxy} transfer that fails or exceeds
+	 * its cap mid-stream: the status can no longer change, and an error body appended to the partial one would
+	 * end a truncated response normally. Escaping to Jetty instead makes it abort the connection.
+	 */
 	@ExceptionHandler(CustomResponseException.class)
 	public ResponseEntity<ErrorResponse> handleCustomResponseException(CustomResponseException ex,
-																	   HttpServletRequest request) {
+																	   HttpServletRequest request,
+																	   HttpServletResponse response) {
 		log.info("CustomResponseException ({}) at endpoint '{}': {}", ex.getStatus().value(), request.getRequestURI(), ex.getMessage(), ex);
+		if (response.isCommitted()) {
+			throw ex;
+		}
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(ex.getStatus().value())
 				.path(request.getRequestURI())

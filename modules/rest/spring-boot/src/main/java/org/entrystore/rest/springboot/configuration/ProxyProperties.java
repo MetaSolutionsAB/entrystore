@@ -33,19 +33,19 @@ import java.util.Set;
 
 /**
  * Bindings for {@code entrystore.proxy.*}: the outbound-fetch limits, consumed by
- * {@code ProxyService} (response-size cap), {@code SsrfSafeHttpClient} (redirect cap) and
+ * {@code ProxyService} (optional response-size cap), {@code SsrfSafeHttpClient} (redirect cap) and
  * {@code SsrfValidator} (socket timeouts), and the proxy/SSRF whitelists.
  *
- * <p><b>Outbound-fetch limits.</b> All defaults are the constants these keys replaced, so existing
- * deployments see no change. The timeouts apply per hop on <b>both</b> outbound paths that go through
+ * <p><b>Outbound-fetch limits.</b> The defaults are the 5.x values: the constants these keys replaced,
+ * and no response-size limit. The timeouts apply per hop on <b>both</b> outbound paths that go through
  * {@code SsrfValidator.openPinnedConnection}: {@code GET /proxy} (and its context-scoped form) and
  * {@code DELETE /{context-id}/resource/{entry-id}?proxy=true}. Establishing all hops costs at worst
  * roughly {@code (maxRedirects + 1) × connectTimeout}; {@code readTimeout} bounds each socket read
  * rather than the exchange, so total wall time is <b>not</b> bounded by it — a slow-drip upstream can
- * hold a request thread until {@code maxResponseSize} is reached. Plus DNS resolution, which no timeout
- * here covers. Lowering {@code maxResponseSize} bounds the read loop; lowering the timeouts alone does
- * not. {@code maxResponseSize} applies to {@code GET /proxy} only — the resource-DELETE path never reads
- * a response body.
+ * hold a request thread for as long as it keeps sending, or until {@code maxResponseSize} is reached if
+ * one is set. Plus DNS resolution, which no timeout here covers. {@code maxResponseSize} is unlimited
+ * when negative (the default, as in 5.x); the body is streamed, so the cap bounds transfer size, not heap.
+ * It applies to {@code GET /proxy} only — the resource-DELETE path never reads a response body.
  *
  * <p><b>Whitelists.</b> EntryStore expresses lists in the legacy indexed form
  * ({@code ...whitelist.local.1=host}, {@code ...whitelist.local.2=...}), which Spring's binder reads
@@ -64,7 +64,7 @@ import java.util.Set;
 @Slf4j
 @ConfigurationProperties(prefix = "entrystore.proxy")
 public record ProxyProperties(
-		@DefaultValue("10MB") DataSize maxResponseSize,
+		@DefaultValue("-1B") DataSize maxResponseSize,
 		@DefaultValue("15") int maxRedirects,
 		@DurationUnit(ChronoUnit.SECONDS) @DefaultValue("30s") Duration connectTimeout,
 		@DurationUnit(ChronoUnit.SECONDS) @DefaultValue("60s") Duration readTimeout,
@@ -76,14 +76,6 @@ public record ProxyProperties(
 	private static final int MAX_REDIRECTS_CEILING = 50;
 
 	/**
-	 * Bounds per-request heap, and is also what keeps the cap enforceable at all: the body is
-	 * accumulated in a {@code ByteArrayOutputStream}, whose backing array is int-indexed, so without a
-	 * ceiling a large enough cap would throw {@code OutOfMemoryError} out of {@code out.write} before
-	 * the size check could ever trip — an unmapped 500 instead of the 502 the cap exists to produce.
-	 */
-	private static final DataSize MAX_RESPONSE_SIZE_CEILING = DataSize.ofMegabytes(512);
-
-	/**
 	 * Upper bound on the timeouts. Also what makes {@link #connectTimeoutMillis()} safe: those return
 	 * {@code int} because that is what {@code URLConnection} takes, and an hour is far short of the
 	 * ~24.8 days at which a millisecond count would overflow.
@@ -91,16 +83,9 @@ public record ProxyProperties(
 	private static final Duration TIMEOUT_CEILING = Duration.ofHours(1);
 
 	public ProxyProperties {
-		if (maxResponseSize == null || maxResponseSize.toBytes() < 1) {
-			throw new IllegalArgumentException(
-					"entrystore.proxy.max-response-size must be positive, got " + maxResponseSize);
-		}
-		if (maxResponseSize.compareTo(MAX_RESPONSE_SIZE_CEILING) > 0) {
-			// Ceiling spelled in MB rather than via DataSize.toString(), which renders raw bytes: the
-			// operator writes this key as "512MB", so that is what the remedy should read as.
-			throw new IllegalArgumentException("entrystore.proxy.max-response-size must not exceed "
-					+ MAX_RESPONSE_SIZE_CEILING.toMegabytes() + "MB — the response is buffered in memory "
-					+ "per request, got " + maxResponseSize);
+		if (maxResponseSize == null || maxResponseSize.toBytes() == 0) {
+			throw new IllegalArgumentException("entrystore.proxy.max-response-size must be positive, "
+					+ "or negative for no limit, got " + maxResponseSize);
 		}
 		if (maxRedirects < 0 || maxRedirects > MAX_REDIRECTS_CEILING) {
 			throw new IllegalArgumentException("entrystore.proxy.max-redirects must be between 0 and "
@@ -120,6 +105,11 @@ public record ProxyProperties(
 		if (value.compareTo(TIMEOUT_CEILING) > 0) {
 			throw new IllegalArgumentException(key + " must not exceed " + TIMEOUT_CEILING + ", got " + value);
 		}
+	}
+
+	/** Whether {@code GET /proxy} caps the upstream body at {@link #maxResponseSize()}. */
+	public boolean isResponseSizeLimited() {
+		return maxResponseSize.toBytes() > 0;
 	}
 
 	/**

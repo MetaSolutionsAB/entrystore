@@ -17,11 +17,19 @@
 package org.entrystore.rest.it
 
 import com.sun.net.httpserver.HttpServer
+import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.entrystore.rest.it.util.NameSpaceConst
+
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
@@ -29,6 +37,11 @@ class ProxyIT extends BaseSpec {
 
 	static HttpServer mockServer
 	static String mockOrigin
+
+	static final long LARGE_BODY_SIZE = 100L * 1024 * 1024
+	static final int FIRST_PART_SIZE = 1024 * 1024
+	// Released by the test once the client has received the first part of /large through the proxy.
+	static volatile CountDownLatch firstPartReceived
 
 	def setupSpec() {
 		// Start a lightweight mock HTTP server for proxy target
@@ -96,6 +109,47 @@ class ProxyIT extends BaseSpec {
 			exchange.responseHeaders.set('Content-Type', 'text/plain')
 			exchange.sendResponseHeaders(200, target.bytes.length)
 			exchange.responseBody.write(target.bytes)
+			exchange.responseBody.close()
+		}
+
+		// Sends the first MiB, then holds the rest back until the client has received that MiB through the
+		// proxy. A proxy that buffers the body would never pass it on, so the upstream gives up and the
+		// test fails.
+		mockServer.createContext('/large') { exchange ->
+			exchange.responseHeaders.set('Content-Type', 'application/octet-stream')
+			exchange.sendResponseHeaders(200, LARGE_BODY_SIZE)
+			def out = exchange.responseBody
+			def chunk = new byte[64 * 1024]
+			try {
+				out.write(new byte[FIRST_PART_SIZE])
+				out.flush()
+				if (!firstPartReceived.await(20, TimeUnit.SECONDS)) {
+					log.error('/large: the client never received the first part, the proxy buffers the body')
+					return
+				}
+				for (long sent = FIRST_PART_SIZE; sent < LARGE_BODY_SIZE; sent += chunk.length) {
+					out.write(chunk, 0, (int) Math.min(chunk.length, LARGE_BODY_SIZE - sent))
+				}
+			} catch (IOException e) {
+				log.info('/large: client went away: {}', e.message)
+			} finally {
+				exchange.close()
+			}
+		}
+
+		mockServer.createContext('/entity-headers') { exchange ->
+			def gzipped = new ByteArrayOutputStream()
+			new GZIPOutputStream(gzipped).withCloseable { it.write('@prefix ex: <http://example.org/> .'.bytes) }
+			exchange.responseHeaders.set('Content-Type', 'text/turtle;charset=UTF-8')
+			exchange.responseHeaders.set('Content-Encoding', 'gzip')
+			exchange.responseHeaders.set('Content-Language', 'sv')
+			exchange.responseHeaders.set('Content-Disposition', 'attachment; filename="vocab.ttl"')
+			exchange.responseHeaders.set('Last-Modified', 'Tue, 06 Oct 2026 10:00:00 GMT')
+			exchange.responseHeaders.set('ETag', '"v1"')
+			exchange.responseHeaders.set('Expires', 'Wed, 07 Oct 2026 10:00:00 GMT')
+			exchange.responseHeaders.set('X-Upstream-Internal', 'secret')
+			exchange.sendResponseHeaders(200, gzipped.size())
+			exchange.responseBody.write(gzipped.toByteArray())
 			exchange.responseBody.close()
 		}
 
@@ -278,6 +332,61 @@ class ProxyIT extends BaseSpec {
 		conn.inputStream.text == '{"key":"value"}'
 	}
 
+	def 'GET /proxy streams a 100 MB upstream body to the client'() {
+		given:
+		firstPartReceived = new CountDownLatch(1)
+
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: mockOrigin + '/large']), 'admin', '*/*')
+		def status = conn.getResponseCode()
+		def contentLength = conn.getHeaderFieldLong('Content-Length', -1)
+		long received = 0
+		conn.inputStream.withCloseable { body ->
+			def buf = new byte[64 * 1024]
+			int read
+			while ((read = body.read(buf)) != -1) {
+				received += read
+				// Half the first part, so that how much the proxy and Jetty buffer does not matter.
+				if (received > FIRST_PART_SIZE / 2) {
+					firstPartReceived.countDown()
+				}
+			}
+		}
+
+		then:
+		status == HTTP_OK
+		contentLength == LARGE_BODY_SIZE
+		received == LARGE_BODY_SIZE
+	}
+
+	def 'HEAD /proxy answers with the upstream headers and no body'() {
+		when:
+		def conn = EntryStoreClient.headRequest('/proxy' + convertMapToQueryParams([url: mockOrigin + '/api/data']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		conn.getHeaderFieldLong('Content-Length', -1) == '{"key":"value"}'.length()
+		conn.inputStream.bytes.length == 0
+	}
+
+	def 'GET /proxy passes the upstream entity headers through, as 5.x did'() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: mockOrigin + '/entity-headers']), 'admin', '*/*')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType() == 'text/turtle;charset=UTF-8'
+		conn.getHeaderField('Content-Encoding') == 'gzip'
+		conn.getHeaderField('Content-Language') == 'sv'
+		conn.getHeaderField('Content-Disposition') == 'attachment; filename="vocab.ttl"'
+		conn.getHeaderField('Last-Modified') == 'Tue, 06 Oct 2026 10:00:00 GMT'
+		conn.getHeaderField('ETag') == '"v1"'
+		conn.getHeaderField('Expires') == 'Wed, 07 Oct 2026 10:00:00 GMT'
+		conn.getHeaderField('X-Upstream-Internal') == null
+		new GZIPInputStream(conn.inputStream).text == '@prefix ex: <http://example.org/> .'
+	}
+
 	// --- Context-scoped /{context-id}/proxy ---
 
 	def 'GET /{context-id}/proxy with non-existent context should return 404'() {
@@ -298,6 +407,22 @@ class ProxyIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
 		JSON_PARSER.parseText(conn.errorStream.text)['error'] == 'Not authorized'
+	}
+
+	def 'GET /{context-id}/proxy as guest with read access still enforces the anonymous host whitelist, as 5.x did'() {
+		given:
+		getOrCreateContext([contextId: 'proxy-public'])
+		// ReadResource on a context is es:read on its resource URI, which is the context itself.
+		def contextResourceUri = EntryStoreClient.baseUrl + '/proxy-public'
+		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
+		def acl = JsonOutput.toJson([(contextResourceUri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]])
+		assert EntryStoreClient.putRequest('/_contexts/entry/proxy-public', acl).getResponseCode() == HTTP_NO_CONTENT
+
+		when: 'the mock upstream is not on the anonymous whitelist'
+		def conn = EntryStoreClient.getRequest('/proxy-public/proxy' + convertMapToQueryParams([url: mockOrigin + '/api/data']), '')
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	def 'GET /{context-id}/proxy as non-admin user without context access should return 403'() {
