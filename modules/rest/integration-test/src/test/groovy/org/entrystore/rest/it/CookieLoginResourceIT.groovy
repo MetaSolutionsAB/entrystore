@@ -521,6 +521,21 @@ class CookieLoginResourceIT extends BaseSpec {
 		EntryStoreClient.findSetCookies(connection, 'auth_token').isEmpty()
 	}
 
+	def "HTTP Basic for a user absent from the password login whitelist should answer 401 with a challenge"() {
+		given: 'the shared app runs with entrystore.auth.password=whitelist, which does not list this user'
+		def username = 'userForBasicNotWhitelisted@test.com'
+		UserUtil.createUserWithPassword(username, password)
+		def basic = 'Basic ' + Base64.getEncoder().encodeToString((username + ':' + password).getBytes(UTF_8))
+
+		when:
+		def connection = EntryStoreClient.getRequest('/auth/user', '', null, [Authorization: basic])
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		connection.getHeaderField('WWW-Authenticate')?.contains('Basic')
+		EntryStoreClient.findSetCookies(connection, 'auth_token').isEmpty()
+	}
+
 	def "a guest browser request to a protected page should not issue an auth_token cookie"() {
 		when: 'Spring Security would save an HTML GET in a new session to resume it after login'
 		def connection = EntryStoreClient.getRequest(path, '', 'text/html')

@@ -79,7 +79,8 @@ class AuthChallengeIT extends BaseSpec {
 
 	def "GET with invalid Basic credentials and auth_challenge=false should return 401 without WWW-Authenticate header"() {
 		when:
-		def invalidBasicAuth = 'Basic ' + Base64.getEncoder().encodeToString('baduser:badpass'.getBytes())
+		// A whitelisted user with a wrong password, so the password check runs rather than the whitelist check
+		def invalidBasicAuth = 'Basic ' + Base64.getEncoder().encodeToString('admin:badpass'.getBytes())
 		def connection = EntryStoreClient.getRequest(
 				'/management/status/extended?auth_challenge=false', '',
 				'application/json', ['Authorization': invalidBasicAuth])

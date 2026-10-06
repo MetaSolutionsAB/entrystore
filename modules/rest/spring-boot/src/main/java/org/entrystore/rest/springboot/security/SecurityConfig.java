@@ -25,6 +25,7 @@ import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.CorsProperties;
 import org.entrystore.rest.springboot.configuration.HttpBasicAuthConfiguration;
 import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration;
+import org.entrystore.rest.springboot.configuration.PasswordLoginListProperties;
 import org.entrystore.rest.springboot.configuration.PasswordLoginMode;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.filter.CheckUsernamePasswordFilter;
@@ -73,6 +74,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.context.DelegatingSecurityContextRepository;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
@@ -88,6 +90,7 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -136,6 +139,7 @@ public class SecurityConfig {
 
 	private final HttpBasicAuthConfiguration httpBasicConfig;
 	private final PasswordLoginMode passwordLoginMode;
+	private final PasswordLoginListProperties passwordLoginLists;
 
 	private final Environment environment;
 
@@ -286,7 +290,20 @@ public class SecurityConfig {
 		if (isHttpBasicEnabled()) {
 			log.info("Basic Auth Enabled (credential cache TTL={}, max entries={})",
 					httpBasicConfig.cache().ttl(), httpBasicConfig.cache().maxSize());
-			http.httpBasic(basic -> basic.authenticationEntryPoint(entryPoint));
+			http.httpBasic(basic -> {
+				basic.authenticationEntryPoint(entryPoint);
+				if (passwordLoginMode == PasswordLoginMode.WHITELIST) {
+					var whitelist = List.copyOf(passwordLoginLists.whitelist().values());
+					// An anonymous class, not a lambda: see the SAML branch below.
+					basic.withObjectPostProcessor(new ObjectPostProcessor<BasicAuthenticationFilter>() {
+						@Override
+						public <O extends BasicAuthenticationFilter> O postProcess(O filter) {
+							filter.setAuthenticationConverter(new WhitelistBasicAuthenticationConverter(whitelist));
+							return filter;
+						}
+					});
+				}
+			});
 		} else if (httpBasicConfig.enabled()) {
 			log.warn("Basic Auth Disabled: entrystore.auth.password=off overrides "
 					+ "entrystore.auth.http-basic.enabled=true");

@@ -256,8 +256,8 @@ entrystore.auth.temp.lockout.duration=0ms
 ## off       - no password login: /auth/cookie and /auth/login answer 404 and HTTP Basic is disabled,
 ##             even with entrystore.auth.http-basic.enabled=true. SSO logins and existing sessions keep
 ##             working. Users can still change their password and, if enabled, reset it.
-## whitelist - only the usernames listed below may log in with a password. An empty or missing
-##             whitelist in this mode denies every password login.
+## whitelist - only the usernames listed below may log in with a password, by form login or HTTP
+##             Basic. An empty or missing whitelist in this mode denies every password login.
 ## true/yes/1 and false/no/0 also mean on and off; any other value fails startup.
 ## Use the indexed form (.1, .2, ...); a bare "whitelist=user" value is not supported.
 # entrystore.auth.password=on|off|whitelist

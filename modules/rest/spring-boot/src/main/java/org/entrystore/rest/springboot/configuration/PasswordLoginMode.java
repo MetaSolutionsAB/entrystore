@@ -23,7 +23,7 @@ import java.util.Optional;
 
 /**
  * Local password login, set by {@code entrystore.auth.password}. {@code OFF} disables form login and HTTP Basic;
- * {@code WHITELIST} admits only the listed usernames to form login.
+ * {@code WHITELIST} admits only the listed usernames to password login, by form login and HTTP Basic.
  */
 public enum PasswordLoginMode {
 
