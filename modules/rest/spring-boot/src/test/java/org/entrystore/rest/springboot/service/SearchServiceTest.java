@@ -146,6 +146,33 @@ class SearchServiceTest {
 	}
 
 	@Test
+	void toFacetSettings_withoutFacetMinCount_usesOne() {
+		var service = new SearchService(null, null, null);
+
+		assertEquals(1, service.toFacetSettings(new FacetSettingsRequestParams()).minCount);
+	}
+
+	@Test
+	void toFacetSettings_withFacetMatchesButNoFacetFields_dropsFacetMatches() {
+		// The validator ignores facetMatches without facetFields, so the unvalidated value must not reach Solr.
+		var request = new FacetSettingsRequestParams();
+		request.setFacetMatches("(a+)+$");
+		var service = new SearchService(null, null, null);
+
+		assertNull(service.toFacetSettings(request).matches);
+	}
+
+	@Test
+	void toFacetSettings_withFacetMinCountZero_keepsZero() {
+		// facetMinCount=0 lists the buckets without hits, as in 5.x.
+		var request = new FacetSettingsRequestParams();
+		request.setFacetMinCount(0);
+		var service = new SearchService(null, null, null);
+
+		assertEquals(0, service.toFacetSettings(request).minCount);
+	}
+
+	@Test
 	void findEntriesSolr_clampsRowsToConfiguredMaximum() {
 		// The cap must hold inside the service, not only for callers that remembered clampLimit().
 		SolrSearchIndex solrIndex = mock(SolrSearchIndex.class);

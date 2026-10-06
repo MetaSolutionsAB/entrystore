@@ -75,6 +75,17 @@ class SearchIT extends BaseSpec {
 	static final String AWKWARD_MARKER_VALUE = 'awkwardmarkervalue'
 	static final List<String> AWKWARD_LABELS = ['Price ${amount}', '${facet.query}', '{!lucene}*:*', 'a, "b"']
 
+	// Test-only predicate carrying an xsd:integer literal, so the facet specs can facet on a metadata.predicate.integer
+	// field and on tag.literal of the same entry.
+	static final String INTEGER_PREDICATE_IRI = 'http://example.org/ns/searchIT-integer'
+	static final String INTEGER_FIELD = 'metadata.predicate.integer.' + Hashing.hash(INTEGER_PREDICATE_IRI, HashType.MD5).substring(0, 8)
+	static final String FACET_TAG = 'searchitfacettag'
+
+	// Test-only predicate shared by a private and a public entry, so the sort specs can order by public.
+	static final String SORT_MARKER_IRI = 'http://example.org/ns/searchIT-sort-marker'
+	static final String SORT_MARKER_FIELD = 'metadata.predicate.literal_s.' + Hashing.hash(SORT_MARKER_IRI, HashType.MD5).substring(0, 8)
+	static final String SORT_MARKER_VALUE = 'sortmarkervalue'
+
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
@@ -201,6 +212,28 @@ class SearchIT extends BaseSpec {
 								   + [[type: 'literal', value: AWKWARD_MARKER_VALUE]]
 						   ]]]
 		assert getOrCreateEntry(contextId, awkwardParams, awkwardBody).length() > 0
+
+		// Entry carrying only a tag (indexed as tag.literal) and an integer literal, for the facet specs.
+		def facetParams = [id: 'searchFacetEntryId', graphtype: 'string']
+		def facetBody = [resource: 'Facet text',
+						 metadata: [(newResourceIri): [
+							 (NameSpaceConst.DC_TERM_SUBJECT): [[type: 'literal', value: FACET_TAG]],
+							 (INTEGER_PREDICATE_IRI)         : [
+								 [type: 'literal', value: '42', datatype: 'http://www.w3.org/2001/XMLSchema#integer']
+							 ]
+						 ]]]
+		assert getOrCreateEntry(contextId, facetParams, facetBody).length() > 0
+
+		// Two entries for the sort specs: A is private and created first, B is guest-readable (public:true), so
+		// sorting by public desc reverses both their URI order and their index order.
+		def sortMetadata = [(newResourceIri): [(SORT_MARKER_IRI): [[type: 'literal', value: SORT_MARKER_VALUE]]]]
+		assert getOrCreateEntry(contextId, [id: 'searchSortEntryA', graphtype: 'string'],
+			[resource: 'Sort text A', metadata: sortMetadata]).length() > 0
+		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
+		def newMetadataIri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/_newId'
+		assert getOrCreateEntry(contextId, [id: 'searchSortEntryB', graphtype: 'string'],
+			[resource: 'Sort text B', metadata: sortMetadata,
+			 info    : [(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]]]).length() > 0
 
 		// Entry whose DECIMAL_PREDICATE_IRI value is typed xsd:double but has a non-numeric lexical
 		// form. The indexer's isDecimalLiteral guard matches (datatype is xsd:double), l.doubleValue()
@@ -1018,17 +1051,36 @@ class SearchIT extends BaseSpec {
 		respJson['resource']['children'][0]['entryId'] == entryId
 	}
 
-	def "GET /search?type=solr with 'sort' on a non-allowlisted field should reply with Bad Request 400"() {
+	def "GET /search?type=solr with 'sort' on a field unknown to Solr should reply with Bad Request 400"() {
 		when:
 		def conn = EntryStoreClient.getRequest('/search?type=solr&query=description.pl:opissearch&sort=evilField+desc', '')
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('application/json')
-		conn.errorStream.text.contains("'sort'")
 	}
 
-	def "GET /search?type=solr with 'sort' on an allowlisted field should return search results"() {
+	def "GET /search?type=solr with sort=public desc should list the public entry first"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: SORT_MARKER_FIELD + ':' + SORT_MARKER_VALUE, sort: 'public desc']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['resource']['children'].collect { it['entryId'] } == ['searchSortEntryB', 'searchSortEntryA']
+	}
+
+	def "GET /search?type=solr with sort=public asc should list the private entry first"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: SORT_MARKER_FIELD + ':' + SORT_MARKER_VALUE, sort: 'public asc']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['resource']['children'].collect { it['entryId'] } == ['searchSortEntryA', 'searchSortEntryB']
+	}
+
+	def "GET /search?type=solr with 'sort' on title.<lang> should return search results"() {
 		when:
 		def conn = EntryStoreClient.getRequest(
 			'/search?type=solr&query=description.pl:opissearch&sort=modified+desc,title.en+asc')
@@ -1063,7 +1115,7 @@ class SearchIT extends BaseSpec {
 		respJson['resource']['children'][0]['entryId'] == entryId
 	}
 
-	def "GET /search?type=solr with 'facetFields' on a non-allowlisted field should reply with Bad Request 400"() {
+	def "GET /search?type=solr with 'facetFields' on a field unknown to Solr should reply with Bad Request 400"() {
 		when:
 		def conn = EntryStoreClient.getRequest(
 			'/search?type=solr&query=description.pl:opissearch&facetFields=secret_field', '')
@@ -1071,7 +1123,45 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('application/json')
-		conn.errorStream.text.contains("'facetFields'")
+	}
+
+	def "GET /search?type=solr faceting on tag.literal should return the tag bucket"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: INTEGER_FIELD + ':42', facetFields: 'tag.literal', facetMatches: FACET_TAG]))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		respJson['results'] == 1
+		// tag.literal is n-gram tokenized; facetMatches keeps only the gram that is the whole tag
+		respJson['facetFields'].find { it['name'] == 'tag.literal' }['values'] == [[name: FACET_TAG, count: 1]]
+	}
+
+	def "GET /search?type=solr faceting on a metadata.predicate.integer field should return the integer bucket"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: INTEGER_FIELD + ':42', facetFields: INTEGER_FIELD]))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		respJson['facetFields'].find { it['name'] == INTEGER_FIELD }['values'] == [[name: '42', count: 1]]
+	}
+
+	def "GET /search?type=solr with facetMinCount=0 should also return the buckets without hits"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Britain', facetFields: LANG_MARKER_FIELD_S, facetMinCount: '0']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		respJson['facetFields'].find { it['name'] == LANG_MARKER_FIELD_S }['values'] as Set == [
+			[name: 'Sweden', count: 1],
+			[name: 'Britain', count: 1],
+			[name: 'Sverige', count: 0]
+		] as Set
 	}
 
 	def "GET /search?type=solr with dynamic-family 'facetFields' (metadata.predicate.uri.*) should return search results"() {
@@ -1279,7 +1369,7 @@ class SearchIT extends BaseSpec {
 	}
 
 	@Unroll
-	def "GET /search?type=solr with the internal literal_l field in '#parameter' should reply with Bad Request 400"() {
+	def "GET /search?type=solr with '#value' in '#parameter' should reply with Bad Request 400"() {
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
 			[type: 'solr', query: LANG_MARKER_FIELD_S + ':Sweden', (parameter): value]), '')
@@ -1289,10 +1379,14 @@ class SearchIT extends BaseSpec {
 		conn.getContentType().contains('application/json')
 		conn.errorStream.text.contains("'" + parameter + "'")
 
-		where:
+		where: 'the internal literal_l field, and Solr local params, which would override facet.matches or facet.limit'
 		parameter     | value
 		'facetFields' | LANG_MARKER_FIELD_L
 		'sort'        | LANG_MARKER_FIELD_L + ' asc'
+		'facetFields' | '{!key=x}' + LANG_MARKER_FIELD_L
+		'facetFields' | '{!facet.matches=\'(a+)+$\'}tag.literal'
+		'facetFields' | '{!facet.limit=-1}' + LANG_MARKER_FIELD_S
+		'sort'        | '{!func}modified desc'
 	}
 
 	@Unroll

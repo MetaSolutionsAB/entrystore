@@ -102,7 +102,7 @@ public class SearchService {
 	/**
 	 * Converts the bound facet request parameters into Solr facet settings, capping the facet limit at
 	 * {@code entrystore.solr.facet-max-limit} and substituting {@link #DEFAULT_FACET_LIMIT} when it is absent or
-	 * below 1; {@code facetMinCount} is raised to at least 1.
+	 * below 1; {@code facetMinCount} defaults to 1 and is otherwise passed through.
 	 */
 	public SolrSearchIndex.FacetSettings toFacetSettings(FacetSettingsRequestParams request) {
 		return request.toSolrFacetSettings(solrMaxFacetLimit, DEFAULT_FACET_LIMIT);
