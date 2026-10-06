@@ -131,6 +131,41 @@ class CheckUsernamePasswordFilterTest {
 		assertEquals(HttpStatus.UNAUTHORIZED.value(), response.getStatus());
 	}
 
+	@Test
+	void multipartUpload_passesWithoutItsParametersBeingRead() throws Exception {
+		// Reading a parameter makes Jetty parse the whole upload, before any access check.
+		var request = parameterlessMultipart("PUT", "/1/resource/2");
+		var chain = new MockFilterChain();
+
+		filter(PasswordLoginMode.ON, Map.of(), Map.of()).doFilter(request, new MockHttpServletResponse(), chain);
+
+		assertNotNull(chain.getRequest());
+	}
+
+	@Test
+	void multipartLogin_isRefusedRatherThanLetPastTheCredentialChecks() throws Exception {
+		var request = parameterlessMultipart("POST", "/auth/cookie");
+		var response = new MockHttpServletResponse();
+		var chain = new MockFilterChain();
+
+		filter(PasswordLoginMode.WHITELIST, Map.of("1", "admin"), Map.of()).doFilter(request, response, chain);
+
+		assertNull(chain.getRequest());
+		assertEquals(HttpStatus.UNSUPPORTED_MEDIA_TYPE.value(), response.getStatus());
+	}
+
+	/** A multipart request that fails the test if any of its parameters is read. */
+	private static MockHttpServletRequest parameterlessMultipart(String method, String path) {
+		var request = new MockHttpServletRequest(method, path) {
+			@Override
+			public String getParameter(String name) {
+				throw new AssertionError("parameter '" + name + "' read from a multipart request");
+			}
+		};
+		request.setContentType("multipart/form-data; boundary=x");
+		return request;
+	}
+
 	private CheckUsernamePasswordFilter filter(PasswordLoginMode passwordLoginMode, Map<String, String> whitelist,
 			Map<String, String> blacklist) {
 		// A real writer, not a stub: the 401 assertions read the status it writes.

@@ -28,6 +28,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 import java.io.ByteArrayOutputStream;
+import java.net.URLEncoder;
 import java.util.Collections;
 import java.util.stream.Stream;
 
@@ -183,7 +184,7 @@ class JsonpCallbackFilterTest {
 	@Test
 	void postWithCallback_isNotWrapped() throws Exception {
 		var request = new MockHttpServletRequest("POST", "/90/entry/1");
-		request.setParameter("callback", "foo");
+		request.setQueryString("callback=foo");
 		var response = new MockHttpServletResponse();
 
 		filter.doFilter(request, response, chainWriting(200, "application/json", "{\"a\":1}".getBytes(UTF_8)));
@@ -345,8 +346,9 @@ class JsonpCallbackFilterTest {
 	}
 
 	private static MockHttpServletRequest getRequestWithCallback(String uri, String callback) {
+		// The filter reads the query string only, as 5.x did.
 		var request = new MockHttpServletRequest("GET", uri);
-		request.setParameter("callback", callback);
+		request.setQueryString("callback=" + URLEncoder.encode(callback, UTF_8));
 		return request;
 	}
 

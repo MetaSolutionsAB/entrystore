@@ -263,4 +263,31 @@ class HttpUtilTest {
 	void ifRangeMatches(String description, String ifRange, boolean expected) {
 		assertEquals(expected, HttpUtil.ifRangeMatches(ifRange, new Date(1_700_000_000_123L)));
 	}
+
+	@ParameterizedTest(name = "{0} -> {2}")
+	@CsvSource(nullValues = "NULL", value = {
+			"bare name,           ignoreAuth,               ''",
+			"empty value,         ignoreAuth=,              ''",
+			"decoded value,       a=1&ignoreAuth=x%20y,     x y",
+			"first of repeated,   ignoreAuth=1&ignoreAuth=2, 1",
+			"encoded name,        ignore%41uth=1,           1",
+			"other names only,    ignoreAuthX=1&a=2,        NULL",
+			"malformed other,     a=%&ignoreAuth=1,         1",
+			"malformed value,     ignoreAuth=%zz,           NULL"
+	})
+	void getQueryParameter_readsTheQueryString(String description, String query, String expected) {
+		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/x");
+		request.setQueryString(query);
+
+		assertEquals(expected, HttpUtil.getQueryParameter(request, "ignoreAuth"));
+	}
+
+	@Test
+	void getQueryParameter_ignoresBodyParameters() {
+		// getParameter would also return body fields, and parse a multipart body to find them.
+		MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/x");
+		request.addParameter("ignoreAuth", "from-body");
+
+		assertNull(HttpUtil.getQueryParameter(request, "ignoreAuth"));
+	}
 }

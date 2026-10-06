@@ -50,6 +50,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 
 import java.net.URI;
 import java.util.List;
@@ -110,6 +112,42 @@ class AppExceptionHandlerTest {
 				() -> handler.handleCustomResponseException(ex, req, committed));
 
 		assertSame(ex, thrown);
+	}
+
+	@Test
+	void handleMultipartException_sizeLimitBreach_returns413() {
+		MockHttpServletRequest req = new MockHttpServletRequest("PUT", "/1/resource/2");
+
+		ResponseEntity<ErrorResponse> response = handler.handleMultipartException(
+				new MaxUploadSizeExceededException(-1, new IllegalStateException("max file size exceeded: 2048")), req);
+
+		assertEquals(HttpStatus.CONTENT_TOO_LARGE, response.getStatusCode());
+		assertEquals("Multipart upload exceeds the maximum allowed size", response.getBody().error());
+	}
+
+	@Test
+	void handleMultipartException_requestLengthBreachWrappedByJetty_returns413() {
+		// A chunked body over max-request-size: Spring does not recognise Jetty's message as a size breach.
+		MockHttpServletRequest req = new MockHttpServletRequest("PUT", "/1/resource/2");
+		var jettyFailure = new jakarta.servlet.ServletException(
+				new IllegalStateException("bad multipart", new IllegalStateException("max length exceeded: 4096")));
+
+		ResponseEntity<ErrorResponse> response = handler.handleMultipartException(
+				new MultipartException("Failed to parse multipart servlet request", jettyFailure), req);
+
+		assertEquals(HttpStatus.CONTENT_TOO_LARGE, response.getStatusCode());
+	}
+
+	@Test
+	void handleMultipartException_malformedBody_returns400WithoutTheContainerMessage() {
+		MockHttpServletRequest req = new MockHttpServletRequest("PUT", "/1/resource/2");
+
+		ResponseEntity<ErrorResponse> response = handler.handleMultipartException(
+				new MultipartException("Failed to parse multipart servlet request",
+						new IllegalStateException("bad multipart: missing boundary")), req);
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		assertEquals("Malformed multipart request", response.getBody().error());
 	}
 
 	@Test

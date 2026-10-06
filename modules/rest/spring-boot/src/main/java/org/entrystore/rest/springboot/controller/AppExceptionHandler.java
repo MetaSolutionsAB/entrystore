@@ -39,6 +39,7 @@ import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException
 import org.entrystore.rest.springboot.model.exception.TextareaHtmlResponseException;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.ValidationErrorMessages;
+import org.entrystore.rest.springboot.util.MultipartUtil;
 import org.entrystore.rest.springboot.util.WebResourceUrls;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -58,6 +59,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.concurrent.RejectedExecutionException;
@@ -303,6 +305,26 @@ public class AppExceptionHandler {
 				.error(ex.getMessage())
 				.build();
 		return jsonResponse(responseBody);
+	}
+
+	/**
+	 * Multipart bodies are parsed lazily, when the controller first reads the upload after its access check, so parse
+	 * failures arrive here: a breached {@code spring.servlet.multipart.*} limit as 413, anything else as 400. The
+	 * container's message is not echoed.
+	 */
+	@ExceptionHandler(MultipartException.class)
+	public ResponseEntity<ErrorResponse> handleMultipartException(MultipartException ex, HttpServletRequest request) {
+		boolean tooLarge = MultipartUtil.isSizeLimitBreach(ex);
+		if (tooLarge) {
+			log.info("Multipart upload at endpoint '{}' exceeds a configured limit: {}", request.getRequestURI(), ex.getMessage());
+		} else {
+			log.debug("MultipartException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
+		}
+		return jsonResponse(ErrorResponse.builder()
+				.status(tooLarge ? HttpStatus.CONTENT_TOO_LARGE.value() : HttpStatus.BAD_REQUEST.value())
+				.path(request.getRequestURI())
+				.error(tooLarge ? "Multipart upload exceeds the maximum allowed size" : "Malformed multipart request")
+				.build());
 	}
 
 	@ExceptionHandler(RejectedExecutionException.class)

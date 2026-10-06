@@ -25,6 +25,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.api.ModifyListResourceResponse;
 import org.entrystore.rest.springboot.model.api.ResourceQuery;
@@ -56,7 +57,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.multipart.MultipartRequest;
+import org.springframework.web.multipart.MultipartHttpServletRequest;
 
 import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
@@ -178,20 +179,23 @@ public class ResourceController {
 							@SchemaProperty(
 									name = "mimeType",
 									schema = @Schema(type = "string"))}))
+	@AcceptsMultipart
 	@PutMapping(
 			path = "/{context-id}/resource/{entry-id}",
 			consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	public ResponseEntity<Void> setResourceMultipart(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
-			@RequestParam(required = false) String mimeType,
-			@Parameter(hidden = true) MultipartRequest request
+			@Parameter(hidden = true) MultipartHttpServletRequest request
 	) {
+
+		// Multipart resolution is lazy, so checking access first keeps unauthorized uploads from being parsed.
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		entryService.checkEntryUserAccess(entry, PrincipalManager.AccessProperty.WriteResource);
 
 		MultipartFile file = MultipartUtil.firstFilePart(request)
 				.orElseThrow(() -> new BadRequestException("Multipart request contains no file part"));
-
-		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		String mimeType = request.getParameter("mimeType");
 		CompletionState result = resourceService.setEntryResourceMultipart(entry, file, mimeType);
 
 		return buildSetResourceResponse(entry, result);

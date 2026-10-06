@@ -74,6 +74,15 @@ class ContextImportIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
+	def "POST /{context-id}/import multipart as guest is rejected with 401 before the upload is parsed"() {
+		when: 'the body is not valid multipart, so parsing it would fail with 400 instead'
+		def connection = EntryStoreClient.postRequest('/' + contextImportId + '/import', 'no boundary in here', '',
+			'multipart/form-data; boundary=never-sent')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
 	def "POST /{context-id}/import with empty body as guest should return Unauthorized 401"() {
 		when:
 		def connection = EntryStoreClient.postRequest('/' + contextImportId + '/import', '', '')

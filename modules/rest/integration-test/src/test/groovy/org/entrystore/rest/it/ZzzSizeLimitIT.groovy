@@ -20,7 +20,6 @@ import com.sun.net.httpserver.HttpServer
 import org.entrystore.rest.it.util.EntryStoreClient
 
 import static java.net.HttpURLConnection.HTTP_BAD_GATEWAY
-import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
@@ -31,15 +30,6 @@ import static java.net.HttpURLConnection.HTTP_OK
 class ZzzSizeLimitIT extends BaseSpec {
 
 	static final String contextId = '666'
-
-	// Body of the sanitized container-level error page (ENTRYSTORE-1098). Jetty's multipart
-	// parser rejects a part breaching max-file-size with BadMessageException ("400: bad
-	// multipart") before Spring sees it; the sanitized error handlers deliberately drop that
-	// internal message from the response, so the body carries only status and reason phrase.
-	// The rejection is pinned to the cap path by the size deltas between these tests: the same
-	// request shape succeeds below both caps and fails above exactly one cap at a time.
-	static final String SANITIZED_ERROR_MARKER = 'HTTP ERROR 400 Bad Request'
-	static final String JETTY_INTERNAL_MULTIPART_MESSAGE = 'bad multipart'
 
 	// Above Jetty's 32 KiB output buffer, so a body cut off at the cap has already been committed.
 	static final int PROXY_CAP = 64 * 1024
@@ -58,11 +48,11 @@ class ZzzSizeLimitIT extends BaseSpec {
 
 		stopPreexistingAppIfRunning()
 
-		// Caps are intentionally tiny so that the max-file-size request stays below EntryStoreClient's
-		// 8000-byte chunked-streaming threshold (otherwise Jetty's rejection mid-write closes the
-		// connection before the client can read the response code). max-file-size and
-		// max-request-size are deliberately *different* so a regression that wires only one of the
-		// two properties fails the cap it leaves unbound.
+		// Caps are intentionally tiny so that the max-file-size requests stay below EntryStoreClient's
+		// 8000-byte chunked-streaming threshold (otherwise the rejection mid-write closes the
+		// connection before the client can read the response code). The request shape succeeds below
+		// both caps and fails above exactly one, which pins each rejection to its cap; the two caps are
+		// deliberately *different* so a regression that wires only one property fails the cap it leaves unbound.
 		startOwnedApp([
 			'--spring.servlet.multipart.max-file-size=2KB',
 			'--spring.servlet.multipart.max-request-size=4KB',
@@ -70,6 +60,9 @@ class ZzzSizeLimitIT extends BaseSpec {
 		])
 	}
 
+	// Stops only the upstream mock. The app stays up until the next lifecycle-owning IT's
+	// stopPreexistingAppIfRunning() closes it; resetting appInstance or appStarted here would violate
+	// BaseSpec invariant #2 (see the invariant comment above appStarted in BaseSpec).
 	def cleanupSpec() {
 		upstream?.stop(0)
 	}
@@ -124,17 +117,9 @@ class ZzzSizeLimitIT extends BaseSpec {
 		received <= PROXY_CAP
 	}
 
-	// Intentionally no cleanupSpec — matches the canonical pattern of ZzzCasLoginIT and
-	// ZzzSamlLoginIT. The next lifecycle-owning IT's stopPreexistingAppIfRunning() closes
-	// our appInstance; resetting appInstance=null or appStarted=false here would violate
-	// BaseSpec invariant #2 (see the invariant comment above appStarted in BaseSpec).
-
-	// A Content-Length above max-request-size is answered 413 by MultipartRequestSizeFilter before
-	// the body is parsed. A part above max-file-size is only found while parsing, which Jetty does
-	// *before* Spring's DispatcherServlet sees the request, so it is rejected with
-	// BadMessageException ("400: bad multipart") and AppExceptionHandler cannot remap it. That test
-	// asserts the sanitized container error contract from ENTRYSTORE-1098 (status 400 + sanitized
-	// body, internal Jetty message absent).
+	// A Content-Length above max-request-size is answered 413 by MultipartRequestFilter before the
+	// body is read. A part above max-file-size is found while the controller parses the upload, after the
+	// access check, and AppExceptionHandler answers 413 as well.
 	private static String readErrorBody(HttpURLConnection conn) {
 		// Force the response to be read before grabbing the error stream — without first
 		// calling getResponseCode(), HttpURLConnection may return null for getErrorStream()
@@ -161,9 +146,8 @@ class ZzzSizeLimitIT extends BaseSpec {
 		def errorBody = readErrorBody(conn)
 
 		then:
-		conn.getResponseCode() == HTTP_BAD_REQUEST
-		errorBody.contains(SANITIZED_ERROR_MARKER)
-		!errorBody.contains(JETTY_INTERNAL_MULTIPART_MESSAGE)
+		conn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+		JSON_PARSER.parseText(errorBody).error == 'Multipart upload exceeds the maximum allowed size'
 
 		when: 'the resource is fetched afterwards'
 		def getConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
@@ -177,8 +161,8 @@ class ZzzSizeLimitIT extends BaseSpec {
 		getOrCreateContext([contextId: contextId])
 		def entryId = getOrCreateEntry(contextId, [id: 'contentLengthCapId'], [resource: [name: 'Content-Length cap entry']])
 
-		when: 'the body is far larger than the socket buffers, so it is still being sent when the server answers'
-		def conn = EntryStoreClient.putRequestMultiPartStreamed('/' + contextId + '/resource/' + entryId, 32L * 1024 * 1024)
+		when: 'the body is still being sent when the server answers, so the server must read it for the client to see the 413'
+		def conn = EntryStoreClient.putRequestMultiPartStreamed('/' + contextId + '/resource/' + entryId, 3L * 1024 * 1024)
 
 		then:
 		conn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
@@ -189,6 +173,31 @@ class ZzzSizeLimitIT extends BaseSpec {
 
 		then: 'nothing was stored'
 		getConn.getResponseCode() == HTTP_NO_CONTENT
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} chunked multipart upload above max-request-size is answered 413"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		def entryId = getOrCreateEntry(contextId, [id: 'chunkedCapId'], [resource: [name: 'Chunked cap entry']])
+
+		// 512 B file under max-file-size (2 KB), 4 KB of form-field padding over max-request-size (4 KB).
+		def boundary = 'chunked-boundary'
+		def body = ("--${boundary}\r\nContent-Disposition: form-data; name=\"padding\"\r\n\r\n${'x' * 4096}\r\n" +
+				"--${boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.bin\"\r\n" +
+				"Content-Type: application/octet-stream\r\n\r\n${'y' * 512}\r\n--${boundary}--\r\n").bytes
+
+		when: 'without Content-Length the limit is only found while the upload is parsed'
+		def conn = EntryStoreClient.createConnection('/' + contextId + '/resource/' + entryId)
+		conn.setRequestMethod('PUT')
+		conn.setRequestProperty('Cookie', EntryStoreClient.cookieHeader('admin'))
+		conn.setRequestProperty('Content-Type', 'multipart/form-data; boundary=' + boundary)
+		conn.setDoOutput(true)
+		conn.setChunkedStreamingMode(1024)
+		conn.outputStream.withStream { it.write(body) }
+
+		then:
+		conn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+		JSON_PARSER.parseText(readErrorBody(conn)).error == 'Multipart upload exceeds the maximum allowed size'
 	}
 
 	def "PUT /{context-id}/resource/{entry-id} multipart upload below both caps succeeds"() {
@@ -215,15 +224,40 @@ class ZzzSizeLimitIT extends BaseSpec {
 		getConn.getInputStream().readAllBytes() == payload
 	}
 
+	def "POST /echo multipart upload above max-file-size cap answers 413 in a textarea, as 5.x did"() {
+		given:
+		def overCapFile = createTempBinaryFile('echo-over-cap', '.bin', ('x' * (3 * 1024)).bytes)
+
+		when:
+		def conn = EntryStoreClient.postRequestMultiPart('/echo', overCapFile)
+
+		then:
+		conn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+		readErrorBody(conn).contains('<textarea>status:413\nMultipart upload exceeds the maximum allowed size</textarea>')
+	}
+
+	def "POST /echo multipart upload with a Content-Length above max-request-size answers 413 in a textarea, as 5.x did"() {
+		given: 'a 5 KB file: the request exceeds max-request-size (4 KB), which is checked before the body is parsed'
+		def overCapFile = createTempBinaryFile('echo-over-request-cap', '.bin', ('x' * (5 * 1024)).bytes)
+
+		when:
+		def conn = EntryStoreClient.postRequestMultiPart('/echo', overCapFile)
+
+		then:
+		conn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+		conn.getContentType().startsWith('text/html')
+		readErrorBody(conn).startsWith('<textarea>status:413\nRequest size of ')
+	}
+
 	def "POST /{context-id}/import multipart upload above max-file-size cap is rejected"() {
 		given:
 		getOrCreateContext([contextId: contextId])
 		// Snapshot the entry-id listing before the import so we can prove no entries were
-		// created by the rejected request (the controller never runs, but a future change
+		// created by the rejected request (the import never starts, but a future change
 		// to the rejection path that side-effects on storage would slip through otherwise).
 		def entriesBefore = listContextEntryIds(contextId)
 
-		// 3 KB payload — does not need to be a valid zip, the cap fires before the controller runs.
+		// 3 KB payload — does not need to be a valid zip, the cap fires while the upload is parsed.
 		def payload = new byte[3 * 1024]
 		new Random(42).nextBytes(payload)
 		def overCapZip = createTempBinaryFile('over-cap', '.zip', payload)
@@ -233,9 +267,8 @@ class ZzzSizeLimitIT extends BaseSpec {
 		def errorBody = readErrorBody(conn)
 
 		then:
-		conn.getResponseCode() == HTTP_BAD_REQUEST
-		errorBody.contains(SANITIZED_ERROR_MARKER)
-		!errorBody.contains(JETTY_INTERNAL_MULTIPART_MESSAGE)
+		conn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+		JSON_PARSER.parseText(errorBody).error == 'Multipart upload exceeds the maximum allowed size'
 
 		when: 'the entry listing is re-fetched afterwards'
 		def entriesAfter = listContextEntryIds(contextId)

@@ -42,6 +42,7 @@ import static java.net.HttpURLConnection.HTTP_NOT_IMPLEMENTED
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
+import static java.net.HttpURLConnection.HTTP_UNSUPPORTED_TYPE
 
 class ResourceIT extends BaseSpec {
 
@@ -561,6 +562,71 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getHeaderFieldLong('Content-Length', -1) == fileSize
 		resourceConn.getInputStream().transferTo(OutputStream.nullOutputStream()) == fileSize
+	}
+
+	// The body below is not valid multipart, so any request that gets it parsed fails with the parse error
+	// instead of the access error: the status shows whether the upload was parsed before the access check.
+	static final String UNPARSEABLE_MULTIPART_TYPE = 'multipart/form-data; boundary=never-sent'
+	static final String UNPARSEABLE_MULTIPART_BODY = 'no boundary in here'
+
+	def "PUT multipart /{context-id}/resource/{entry-id} as guest is rejected before the upload is parsed"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'unparsedUploadId'], [resource: [name: 'Unparsed upload entry']])
+
+		when:
+		def conn = EntryStoreClient.putRequest('/' + contextId + '/resource/' + entryId,
+				UNPARSEABLE_MULTIPART_BODY, '', UNPARSEABLE_MULTIPART_TYPE)
+
+		then: '401, as for any guest denied by an ACL, not the parse error'
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "PUT multipart /{context-id}/resource/{entry-id} as a user without write access is rejected before the upload is parsed"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'unparsedUploadId'], [resource: [name: 'Unparsed upload entry']])
+
+		when:
+		def conn = EntryStoreClient.putRequest('/' + contextId + '/resource/' + entryId,
+				UNPARSEABLE_MULTIPART_BODY, 'user', UNPARSEABLE_MULTIPART_TYPE)
+
+		then:
+		conn.getResponseCode() == HTTP_FORBIDDEN
+	}
+
+	def "POST multipart /{context-id}/resource/{entry-id} is answered 415 without parsing the upload"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'unparsedUploadId'], [resource: [name: 'Unparsed upload entry']])
+
+		when: 'reading any request parameter of this route would parse the body and fail with 400'
+		def conn = EntryStoreClient.postRequest('/' + contextId + '/resource/' + entryId,
+				UNPARSEABLE_MULTIPART_BODY, '', UNPARSEABLE_MULTIPART_TYPE)
+
+		then:
+		conn.getResponseCode() == HTTP_UNSUPPORTED_TYPE
+	}
+
+	def "PUT multipart /{context-id}/entry/{entry-id} is answered 415 without parsing the upload"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'unparsedUploadId'], [resource: [name: 'Unparsed upload entry']])
+
+		when:
+		def conn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId,
+				UNPARSEABLE_MULTIPART_BODY, '', UNPARSEABLE_MULTIPART_TYPE)
+
+		then:
+		conn.getResponseCode() == HTTP_UNSUPPORTED_TYPE
+	}
+
+	def "PUT multipart /{context-id}/resource/{entry-id} as a writer parses the upload, so an unparseable one is a bad request"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'unparsedUploadId'], [resource: [name: 'Unparsed upload entry']])
+
+		when:
+		def conn = EntryStoreClient.putRequest('/' + contextId + '/resource/' + entryId,
+				UNPARSEABLE_MULTIPART_BODY, 'admin', UNPARSEABLE_MULTIPART_TYPE)
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
 	def "PUT /{context-id}/resource/{entry-id} as guest should respond with Unauthorized 401"() {

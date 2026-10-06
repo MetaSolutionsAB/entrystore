@@ -30,7 +30,10 @@ import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -43,6 +46,9 @@ import java.util.List;
 @Slf4j
 @Component
 public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
+
+	private static final RequestMatcher LOGIN_REQUEST =
+			PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/auth/cookie");
 
 	private final LoginAttemptService loginAttemptService;
 	private final ErrorResponseWriter errorResponseWriter;
@@ -75,6 +81,22 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 	@Override
 	protected void doFilterInternal(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response, @NotNull FilterChain filterChain)
 			throws ServletException, IOException {
+
+		if (HttpUtil.isMultipart(request)) {
+			// Reading parameters would make Jetty parse the upload before any access check. The login form is
+			// form-urlencoded, as in 5.x, so a multipart login is refused rather than let past the checks below.
+			// Backstop: MultipartRequestFilter already answers 415 to multipart on every non-upload route.
+			if (LOGIN_REQUEST.matches(request)) {
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE.value())
+						.path(request.getRequestURI())
+						.error("Login expects an application/x-www-form-urlencoded body")
+						.build());
+				return;
+			}
+			filterChain.doFilter(request, response);
+			return;
+		}
 
 		String username = request.getParameter("auth_username");
 		String password = request.getParameter("auth_password");

@@ -438,11 +438,13 @@ entrystore.solr.extract-fulltext=off
 ## server.jetty.max-http-form-post-size only bounds form-urlencoded bodies)
 ## and should be fronted by a reverse-proxy body limit if exposed externally.
 ##
-## Rejection contract: a multipart request whose Content-Length exceeds max-request-size is answered
-## 413 before its body is read. A body without Content-Length that exceeds it, or a part above
-## max-file-size, is rejected by Jetty's multipart parser with status 400 ("bad multipart") BEFORE the
-## Spring DispatcherServlet sees the request, often while the client is still sending, so the client
-## may see a connection reset instead of the 400.
+## Rejection contract: a multipart body is parsed only after authentication and the access check, as in
+## 5.x (spring.servlet.multipart.resolve-lazily=true; do not turn it off). Only PUT
+## /{context-id}/resource/{entry-id}, POST /{context-id}/import and POST /echo take multipart bodies;
+## any other multipart request is answered 415. A multipart request whose
+## Content-Length exceeds max-request-size is answered 413 before its body is read. A part above
+## max-file-size, or a body without Content-Length above max-request-size, is rejected while it is
+## parsed, often while the client is still sending, so the client may see a connection reset instead.
 ##
 ## Uploaded parts are written to temporary files in spring.servlet.multipart.location (by default a
 ## directory under java.io.tmpdir), never held in memory. Where java.io.tmpdir is a tmpfs, which uses
@@ -453,6 +455,8 @@ entrystore.solr.extract-fulltext=off
 ## spooled to spring.servlet.multipart.location. entrystore.data.max-file-size defaults
 ## to -1 (no application backstop), so the servlet-layer cap here is the
 ## effective per-request ceiling unless an operator opts into a tighter cap.
+## Raw (non-multipart) PUT bodies on /{context-id}/resource/{entry-id} are still read into memory,
+## see ENTRYSTORE-1232.
 # spring.servlet.multipart.max-file-size=-1B
 # spring.servlet.multipart.max-request-size=-1B
 # spring.servlet.multipart.location=/srv/entrystore/upload-tmp

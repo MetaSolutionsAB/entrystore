@@ -25,6 +25,7 @@ spring:
   servlet.multipart:
     max-file-size: -1B
     max-request-size: -1B
+    resolve-lazily: true
   web:
     resources:
       cache:

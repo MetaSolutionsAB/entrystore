@@ -21,6 +21,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
@@ -35,6 +36,7 @@ import java.io.IOException;
  * When the {@code ignoreAuth} query parameter is present, this filter forces anonymous access
  * for the current request by replacing the SecurityContext with an anonymous authentication token.
  * The session is not invalidated, so subsequent requests without {@code ?ignoreAuth} remain authenticated.
+ * Only the query string is read, so a multipart body is not parsed before the access checks.
  */
 @Slf4j
 @Component
@@ -44,7 +46,7 @@ public class IgnoreAuthFilter extends OncePerRequestFilter {
 	protected void doFilterInternal(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response, @NotNull FilterChain filterChain)
 			throws ServletException, IOException {
 
-		if (request.getParameter("ignoreAuth") != null) {
+		if (HttpUtil.getQueryParameter(request, "ignoreAuth") != null) {
 			log.debug("Forcing anonymous access due to ignoreAuth request parameter");
 			SecurityContext originalContext = SecurityContextHolder.getContext();
 			SecurityContext anonymousContext = SecurityContextHolder.createEmptyContext();
