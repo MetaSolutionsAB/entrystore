@@ -27,6 +27,7 @@ class JsonpIT extends BaseSpec {
 	private static final String SPARQL_QUERY = 'SELECT * WHERE { ?s ?p ?o } LIMIT 1'
 
 	private static String entryUrl
+	private static Map<String, String> jsonpPaths
 
 	def setupSpec() {
 		getOrCreateContext([contextId: CONTEXT_ID])
@@ -35,6 +36,16 @@ class JsonpIT extends BaseSpec {
 		def body = createTitleMetadataBody(resourceIri, 'JSONP entry')
 		def entryId = createEntry(CONTEXT_ID, params, body)
 		entryUrl = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/entry/' + entryId
+
+		def listId = createEntry(CONTEXT_ID, [graphtype: 'list'], [resource: [entryId]])
+		def graphId = createEntry(CONTEXT_ID, [graphtype: 'graph'])
+		// Each value ends where the format and callback parameters are appended.
+		jsonpPaths = [
+			'entry'         : entryUrl + '?includeAll&',
+			'list resource' : '/' + CONTEXT_ID + '/resource/' + listId + '?',
+			'graph resource': '/' + CONTEXT_ID + '/resource/' + graphId + '?',
+			'user resource' : '/_principals/resource/_admin?'
+		]
 	}
 
 	def "GET entry with ?callback= should wrap the JSON body as JSONP"() {
@@ -53,6 +64,29 @@ class JsonpIT extends BaseSpec {
 		// The wrapped payload (between the first '(' and the last ')') must be the unmodified JSON object.
 		def innerJson = jsonpBody.substring(jsonpBody.indexOf('(') + 1, jsonpBody.lastIndexOf(')'))
 		JSON_PARSER.parseText(innerJson) instanceof Map
+	}
+
+	// entrystore.js loads cross-origin GETs by JSONP with format=application/json; a script tag accepts anything.
+	def "JSONP GET of #target with format=application/json and Accept */* should be wrapped as JSONP"() {
+		when:
+		def conn = EntryStoreClient.getRequest(jsonpPaths[target] + 'format=application/json&callback=cb', 'admin',
+				'*/*')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().startsWith('application/javascript')
+		def jsonpBody = conn.getInputStream().text
+		jsonpBody.startsWith('cb(')
+		jsonpBody.endsWith(')')
+		def innerJson = jsonpBody.substring(jsonpBody.indexOf('(') + 1, jsonpBody.lastIndexOf(')'))
+		expectedType.isInstance(JSON_PARSER.parseText(innerJson))
+
+		where:
+		target           | expectedType
+		'entry'          | Map
+		'list resource'  | List
+		'graph resource' | Map
+		'user resource'  | Map
 	}
 
 	def "GET entry without ?callback= should return plain JSON"() {

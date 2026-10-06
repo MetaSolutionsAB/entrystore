@@ -4,6 +4,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1222](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1222) JSONP loads of entries and of List and Graph resources \(format=application/json with a callback\) answer application/javascript cb\(\{...\}\) again, as in 5.x. They answered unwrapped RDF/XML, because the format parameter was ignored \(ENTRYSTORE-1216\), which broke cross-origin entrystore.js loads such as EntryScape Blocks. **Behaviour note:** a String resource is still answered as text/plain and ignores format, so a JSONP load of it is not wrapped; 5.x wrapped the unquoted text, which was not valid JavaScript for ordinary text.
+
 [ENTRYSTORE-1216](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1216) The format parameter selects the representation of entries and of Graph and List resources again and wins over the Accept header, as in 5.x, so EntryScape's Turtle, RDF/XML and JSON-LD links work. An entry requested with a wildcard Accept header, as browsers and script tags send, is RDF/XML again instead of JSON. **Behaviour note:** an unsupported format answers 406 \(400 on a resource if it does not parse\), and so does an entry Accept header that accepts none of its representations, such as application/json;q=0, where 5.x answered Turtle labelled with the requested type and RDF/XML respectively.
 
 [ENTRYSTORE-1229](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1229) After a context import, lists that survive it \(ids starting with \_\) show their current members. A list read during the import kept the pre-import members cached, so the next write to that list put entries the import had deleted back into it. A list whose members were cached also did not show members added by the import.
