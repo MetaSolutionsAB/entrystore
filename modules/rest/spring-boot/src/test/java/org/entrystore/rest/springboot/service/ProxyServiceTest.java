@@ -18,7 +18,6 @@ package org.entrystore.rest.springboot.service;
 
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
-import org.entrystore.rest.springboot.configuration.ProxyProperties;
 import org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
@@ -33,6 +32,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.util.unit.DataSize;
 
@@ -44,7 +44,6 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -88,21 +87,22 @@ class ProxyServiceTest {
 		// the actual redirect-following and error-mapping logic.
 		service = new ProxyService(principalManager, contextService, ssrfValidator,
 				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()),
-				ProxyPropertiesFixture.defaults());
+				ProxyPropertiesFixture.defaults(), new MockEnvironment());
 		service.setWhitelistAnon(Set.of());
 		target = validatedTarget("http://upstream.example.com/doc", "192.0.2.10");
 	}
 
 	@Test
 	void init_readsTheAnonymousWhitelistNotTheLocalOne() {
-		// The only place anonymousWhitelist() is consumed, and every other test here bypasses init() via
-		// setWhitelistAnon. Reading localWhitelist() instead would silently let guests proxy to every host
+		// The only place the anonymous whitelist is read, and every other test here bypasses init() via
+		// setWhitelistAnon. Reading the local whitelist instead would silently let guests proxy to every host
 		// exempted from the SSRF blacklist — localhost in the IT deployment — with nothing else failing.
-		var properties = ProxyPropertiesFixture.withWhitelists(
-				new ProxyProperties.Whitelist(Map.of("1", "local.example"), Map.of("1", "guest.example")),
-				null);
+		var environment = new MockEnvironment()
+				.withProperty("entrystore.proxy.whitelist.local.1", "local.example")
+				.withProperty("entrystore.proxy.whitelist.anonymous.1", "guest.example");
 		var withRealProperties = new ProxyService(principalManager, contextService, ssrfValidator,
-				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()), properties);
+				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()),
+				ProxyPropertiesFixture.defaults(), environment);
 		withRealProperties.init();
 
 		URI guestUri = URI.create("http://example.com/_principals/resource/_guest");
@@ -255,7 +255,7 @@ class ProxyServiceTest {
 
 	@Test
 	void proxy_streamsTheBodyToTheClientWithoutBufferingIt() throws Exception {
-		// 64 MiB through the default (unlimited) proxy. The upstream stream fails as soon as it is asked for
+		// 64 MiB, below the default cap of 100 MB. The upstream stream fails as soon as it is asked for
 		// more while the client is more than 64 KiB behind, so a service that collects the body before
 		// writing it fails here whatever the body size.
 		long bodySize = 64L * 1024 * 1024;
@@ -630,7 +630,7 @@ class ProxyServiceTest {
 	private ProxyService serviceWithMaxResponseSize(DataSize maxResponseSize) {
 		ProxyService capped = new ProxyService(principalManager, contextService, ssrfValidator,
 				new SsrfSafeHttpClient(ssrfValidator, ProxyPropertiesFixture.defaults()),
-				ProxyPropertiesFixture.withMaxResponseSize(maxResponseSize));
+				ProxyPropertiesFixture.withMaxResponseSize(maxResponseSize), new MockEnvironment());
 		capped.setWhitelistAnon(Set.of());
 		return capped;
 	}

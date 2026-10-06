@@ -22,7 +22,6 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.util.unit.DataSize;
 
 import java.time.Duration;
-import java.util.Set;
 
 import static org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture.withMaxRedirects;
 import static org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture.withMaxResponseSize;
@@ -33,11 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Binds through a real context rather than constructing the record, so the prefix and every component
- * name — including the relaxed {@code remote-resource} to {@code remoteResource} mapping and the two
- * levels of nesting below it — are part of what is asserted. Constructing the record directly, as
- * {@code SsrfValidatorTest} and {@code ProxyServiceTest} do, would keep passing with a mistyped prefix,
- * and the effect of that is an empty SSRF allowlist and the compiled-in outbound-fetch limits: silently
- * no whitelisted proxy hosts, no guest-reachable hosts, and no trusted DELETE origins.
+ * name are part of what is asserted. Constructing the record directly, as {@code SsrfValidatorTest} and
+ * {@code ProxyServiceTest} do, would keep passing with a mistyped prefix, whose effect is the compiled-in
+ * outbound-fetch limits.
  */
 class ProxyPropertiesTest {
 
@@ -80,17 +77,15 @@ class ProxyPropertiesTest {
 	}
 
 	@Test
-	void limitsAndWhitelistsBindUnderTheSamePrefixWithoutInterfering() {
+	void whitelistsUnderTheSamePrefix_doNotInterfereWithTheLimits() {
+		// The whitelists are read through IndexedListSettings; their 5.x shapes, a bare scalar included,
+		// must not break this record's binding.
 		runner().withPropertyValues(
 				"entrystore.proxy.max-redirects=4",
-				"entrystore.proxy.whitelist.local.1=cache.internal",
+				"entrystore.proxy.whitelist.local=cache.internal",
+				"entrystore.proxy.whitelist.anonymous.l=guest.example",
 				"entrystore.proxy.remote-resource.delete.whitelist.1=http://rowstore.internal:8282"
-		).run(context -> {
-			ProxyProperties proxy = context.getBean(ProxyProperties.class);
-			assertEquals(4, proxy.maxRedirects());
-			assertEquals(Set.of("cache.internal"), proxy.localWhitelist());
-			assertEquals(Set.of("http://rowstore.internal:8282"), Set.copyOf(proxy.deleteWhitelist()));
-		});
+		).run(context -> assertEquals(4, context.getBean(ProxyProperties.class).maxRedirects()));
 	}
 
 	@Test
@@ -138,8 +133,7 @@ class ProxyPropertiesTest {
 	@Test
 	void nonPositiveTimeout_failsFastNamingTheKebabCaseKey() {
 		IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-				() -> new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ZERO, Duration.ofSeconds(60),
-						null, null));
+				() -> new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ZERO, Duration.ofSeconds(60)));
 
 		assertEquals("entrystore.proxy.connect-timeout must be positive, got PT0S", e.getMessage());
 	}
@@ -149,67 +143,9 @@ class ProxyPropertiesTest {
 		// connectTimeoutMillis() returns int because URLConnection takes int; the ceiling is what keeps
 		// that cast safe.
 		assertThrows(IllegalArgumentException.class,
-				() -> new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ofDays(30), Duration.ofSeconds(60),
-						null, null));
+				() -> new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ofDays(30), Duration.ofSeconds(60)));
 		assertThrows(IllegalArgumentException.class,
-				() -> new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ofSeconds(30), Duration.ofDays(30),
-						null, null));
-	}
-
-	@Test
-	void localWhitelist_bindsIndexedHostsLowerCased() {
-		runner().withPropertyValues(
-						"entrystore.proxy.whitelist.local.1=Cache.Internal",
-						"entrystore.proxy.whitelist.local.2=metadata.internal")
-				.run(context -> assertEquals(Set.of("cache.internal", "metadata.internal"),
-						context.getBean(ProxyProperties.class).localWhitelist()));
-	}
-
-	@Test
-	void anonymousWhitelist_bindsSeparatelyFromTheLocalWhitelist() {
-		runner().withPropertyValues(
-						"entrystore.proxy.whitelist.local.1=local.example",
-						"entrystore.proxy.whitelist.anonymous.1=guest.example")
-				.run(context -> {
-					ProxyProperties properties = context.getBean(ProxyProperties.class);
-
-					assertEquals(Set.of("local.example"), properties.localWhitelist());
-					assertEquals(Set.of("guest.example"), properties.anonymousWhitelist());
-				});
-	}
-
-	@Test
-	void deleteWhitelist_bindsThroughTheDoublyNestedRemoteResourceKey() {
-		runner().withPropertyValues(
-						"entrystore.proxy.remote-resource.delete.whitelist.1=http://rowstore.internal:8282",
-						"entrystore.proxy.remote-resource.delete.whitelist.2=https://other.example")
-				// Compared as a set: Map.copyOf randomises iteration order per JVM, and SsrfValidator
-				// only ever tests membership of the parsed origins.
-				.run(context -> assertEquals(
-						Set.of("http://rowstore.internal:8282", "https://other.example"),
-						Set.copyOf(context.getBean(ProxyProperties.class).deleteWhitelist())));
-	}
-
-	@Test
-	void blankEntry_isSkippedRatherThanWhitelistingTheEmptyHost() {
-		runner().withPropertyValues(
-						"entrystore.proxy.whitelist.local.1=cache.internal",
-						"entrystore.proxy.whitelist.local.2=   ")
-				.run(context -> assertEquals(Set.of("cache.internal"),
-						context.getBean(ProxyProperties.class).localWhitelist()));
-	}
-
-	@Test
-	void noProxyKeysAtAll_bindsEmptyWhitelists() {
-		// The nested records are absent, not just their maps, so this also covers the compact
-		// constructors that instantiate them rather than leaving them null.
-		runner().run(context -> {
-			ProxyProperties properties = context.getBean(ProxyProperties.class);
-
-			assertTrue(properties.localWhitelist().isEmpty());
-			assertTrue(properties.anonymousWhitelist().isEmpty());
-			assertTrue(properties.deleteWhitelist().isEmpty());
-		});
+				() -> new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ofSeconds(30), Duration.ofDays(30)));
 	}
 
 	private static ApplicationContextRunner runner() {

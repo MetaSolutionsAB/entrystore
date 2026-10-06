@@ -19,7 +19,9 @@ package org.entrystore.rest.springboot.configuration;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 /**
@@ -35,10 +37,12 @@ public class PasswordRulesInitializer {
 	static final String BEAN_NAME = "passwordRulesInitializer";
 
 	private final PasswordRulesProperties properties;
+	private final Environment environment;
 
 	@PostConstruct
 	void applyRules() {
-		Password.Rules rules = properties.toRules();
+		Password.Rules rules = properties.toRules(
+				IndexedListSettings.read(environment, Settings.AUTH_PASSWORD_RULE_CUSTOM));
 		Password.setRules(rules);
 		log.info("Password rules: uppercase={}, lowercase={}, number={}, symbol={}, min-length={}, custom={}",
 				rules.isUppercase(), rules.isLowercase(), rules.isNumber(), rules.isSymbol(), rules.getMinLength(),

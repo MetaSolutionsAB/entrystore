@@ -16,23 +16,27 @@
 
 package org.entrystore.rest.springboot.service;
 
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.entrystore.PrincipalManager;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.backup.BackupScheduler;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.configuration.AppStartedListener;
 import org.entrystore.rest.springboot.configuration.AuthFeatureProperties;
 import org.entrystore.rest.springboot.configuration.CorsProperties;
 import org.entrystore.rest.springboot.configuration.EchoProperties;
+import org.entrystore.rest.springboot.configuration.IndexedListSettings;
 import org.entrystore.rest.springboot.configuration.InfoAppPropertiesConfiguration;
-import org.entrystore.rest.springboot.configuration.SignupWhitelistProperties;
 import org.entrystore.rest.springboot.configuration.StatusReportProperties;
 import org.entrystore.rest.springboot.model.api.StatusExtendedIncludeEnum;
 import org.entrystore.rest.springboot.model.api.StatusExtendedResponse;
 import org.entrystore.rest.springboot.model.api.StatusResponse;
+import org.entrystore.rest.springboot.util.CaseFolding;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
@@ -54,7 +58,7 @@ public class StatusService {
 	private final InfoAppPropertiesConfiguration appConfig;
 	private final StatusReportProperties statusProperties;
 	private final AuthFeatureProperties authFeatures;
-	private final SignupWhitelistProperties signupWhitelistProperties;
+	private final Environment environment;
 	private final CorsProperties corsProperties;
 	private final EchoProperties echoProperties;
 
@@ -63,6 +67,15 @@ public class StatusService {
 	private final RelationService relationService;
 	private final Optional<BackupScheduler> backupScheduler;
 
+	private List<String> signupWhitelist;
+
+	/** Read once rather than per request: the reader scans every property source. */
+	@PostConstruct
+	void readSignupWhitelist() {
+		signupWhitelist = IndexedListSettings.read(environment, Settings.SIGNUP_WHITELIST).stream()
+				.map(CaseFolding::toLowerCase)
+				.toList();
+	}
 
 	public boolean isUp() {
 		return repositoryManager != null &&
@@ -136,11 +149,7 @@ public class StatusService {
 	private Map<String, Object> buildAuthenticationInfo() {
 		return Map.of(
 			"signup", authFeatures.signup(),
-			// No null filter needed: SignupWhitelistProperties copies through Map.copyOf, which rejects nulls.
-			"signupWhitelist", signupWhitelistProperties.whitelist().values()
-				.stream()
-				.map(String::toLowerCase)
-				.collect(Collectors.toList()),
+			"signupWhitelist", signupWhitelist,
 			"passwordReset", authFeatures.passwordReset(),
 			"passwordMaxLength", Password.PASSWORD_MAX_LENGTH
 			//"authTokenCount", loginTokenCache.size() // not sure how to get this info in Spring-boot default in-memory session storage

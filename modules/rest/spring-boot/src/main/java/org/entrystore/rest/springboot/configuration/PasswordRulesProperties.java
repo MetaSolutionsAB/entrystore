@@ -19,7 +19,7 @@ package org.entrystore.rest.springboot.configuration;
 import org.entrystore.repository.security.Password;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-import java.util.Map;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -31,9 +31,9 @@ import static java.util.Objects.requireNonNullElse;
  * applies when a password is set. A rule left unset keeps its default from {@link Password#getDefaultRules()},
  * the same defaults as 5.x. The booleans accept true/on/yes/1 and false/off/no/0; any other value fails startup.
  *
- * <p>{@code custom} is an indexed list of regular expressions ({@code ...custom.1}, {@code ...custom.2}), each
- * of which must be found in the password; an invalid expression fails startup. {@link IndexedListConfigValidator}
- * aborts startup on the legacy shapes the map binding reads differently.
+ * <p>The custom rules ({@code ...custom.1}, {@code ...custom.2}) are an indexed list of regular expressions,
+ * each of which must be found in the password. They are read through {@link IndexedListSettings} and passed to
+ * {@link #toRules}, where an invalid expression fails startup.
  */
 @ConfigurationProperties(prefix = "entrystore.auth.password.rule")
 public record PasswordRulesProperties(
@@ -41,24 +41,23 @@ public record PasswordRulesProperties(
 		Boolean lowercase,
 		Boolean number,
 		Boolean symbol,
-		Integer minLength,
-		Map<String, String> custom) {
+		Integer minLength) {
 
-	public PasswordRulesProperties {
-		custom = (custom == null) ? Map.of() : Map.copyOf(custom);
-		// Compiled once here so a broken expression fails startup instead of every later password check. Not
-		// chained: the startup failure report prints only the root cause, which must name the key.
-		custom.forEach((index, expression) -> {
+	/**
+	 * The configured rules with {@code custom} as the custom rules. Each expression is compiled here so a broken
+	 * one fails startup instead of every later password check; it is named by its {@code .N} in the contiguous
+	 * form the list was read as.
+	 */
+	public Password.Rules toRules(List<String> custom) {
+		for (int i = 0; i < custom.size(); i++) {
 			try {
-				Pattern.compile(expression);
+				Pattern.compile(custom.get(i));
 			} catch (PatternSyntaxException e) {
-				throw new IllegalArgumentException("Invalid regular expression in entrystore.auth.password.rule.custom."
-						+ index + ": " + e.getMessage());
+				// Not chained: the startup failure report prints only the root cause, which must name the key.
+				throw new IllegalArgumentException("Invalid regular expression in "
+						+ "entrystore.auth.password.rule.custom." + (i + 1) + ": " + e.getMessage());
 			}
-		});
-	}
-
-	public Password.Rules toRules() {
+		}
 		Password.Rules defaults = Password.getDefaultRules();
 		return new Password.Rules(
 				requireNonNullElse(uppercase, defaults.isUppercase()),
@@ -66,6 +65,6 @@ public record PasswordRulesProperties(
 				requireNonNullElse(symbol, defaults.isSymbol()),
 				requireNonNullElse(number, defaults.isNumber()),
 				requireNonNullElse(minLength, defaults.getMinLength()),
-				Set.copyOf(custom.values()));
+				Set.copyOf(custom));
 	}
 }

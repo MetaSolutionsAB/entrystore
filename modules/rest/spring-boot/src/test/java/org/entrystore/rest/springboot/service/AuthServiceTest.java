@@ -23,7 +23,6 @@ import jakarta.validation.ValidatorFactory;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
-import org.entrystore.rest.springboot.configuration.SignupWhitelistProperties;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.springboot.model.auth.SignupInfo;
 import org.entrystore.rest.springboot.model.exception.BadRequestHtmlException;
@@ -40,6 +39,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.task.AsyncTaskExecutor;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -200,7 +200,9 @@ class AuthServiceTest {
 		// the comparison itself sits deep inside signup(), behind collaborators this test has no use for.
 		AuthService service = new AuthService(null, null, null, null, null, null, null, emailValidator,
 				null, null, null, null, meterRegistry,
-				new SignupWhitelistProperties(Map.of("1", "Example.COM", "2", "OTHER.example.org")), executor);
+				new MockEnvironment()
+						.withProperty("entrystore.auth.signup.whitelist.1", "Example.COM")
+						.withProperty("entrystore.auth.signup.whitelist.2", "OTHER.example.org"), executor);
 
 		var whitelist = (Set<String>) ReflectionTestUtils.getField(service, "domainWhitelist");
 
@@ -212,7 +214,7 @@ class AuthServiceTest {
 		SessionRegistry sessionRegistry = mock(SessionRegistry.class);
 		PrincipalManager principalManager = mock(PrincipalManager.class);
 		AuthService service = new AuthService(null, principalManager, null, null, null, null, null, emailValidator,
-				null, sessionRegistry, null, null, meterRegistry, new SignupWhitelistProperties(Map.of()), executor);
+				null, sessionRegistry, null, null, meterRegistry, new MockEnvironment(), executor);
 		URI userUri = URI.create("https://example.org/store/_principals/resource/7");
 		User user = mock(User.class);
 		when(user.getURI()).thenReturn(userUri);
@@ -249,7 +251,7 @@ class AuthServiceTest {
 		// Only the collaborators reached before pwReset's email check and by submitPasswordResetDispatch are real.
 		return new AuthService(null, null, null, null, null, null, null, emailValidator,
 				null, sessionRegistry, null, null, meterRegistry,
-				new SignupWhitelistProperties(Map.of()), executor);
+				new MockEnvironment(), executor);
 	}
 
 	private static UserDetails principalFor(String username) {

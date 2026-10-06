@@ -20,12 +20,13 @@ import com.github.benmanes.caffeine.cache.Ticker;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.CorsProperties;
 import org.entrystore.rest.springboot.configuration.HttpBasicAuthConfiguration;
+import org.entrystore.rest.springboot.configuration.IndexedListSettings;
 import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration;
-import org.entrystore.rest.springboot.configuration.PasswordLoginListProperties;
 import org.entrystore.rest.springboot.configuration.PasswordLoginMode;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.filter.CheckUsernamePasswordFilter;
@@ -139,7 +140,6 @@ public class SecurityConfig {
 
 	private final HttpBasicAuthConfiguration httpBasicConfig;
 	private final PasswordLoginMode passwordLoginMode;
-	private final PasswordLoginListProperties passwordLoginLists;
 
 	private final Environment environment;
 
@@ -293,7 +293,7 @@ public class SecurityConfig {
 			http.httpBasic(basic -> {
 				basic.authenticationEntryPoint(entryPoint);
 				if (passwordLoginMode == PasswordLoginMode.WHITELIST) {
-					var whitelist = List.copyOf(passwordLoginLists.whitelist().values());
+					var whitelist = IndexedListSettings.read(environment, Settings.AUTH_PASSWORD_WHITELIST);
 					// An anonymous class, not a lambda: see the SAML branch below.
 					basic.withObjectPostProcessor(new ObjectPostProcessor<BasicAuthenticationFilter>() {
 						@Override

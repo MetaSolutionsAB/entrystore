@@ -38,7 +38,7 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.NS;
-import org.entrystore.rest.springboot.configuration.SignupWhitelistProperties;
+import org.entrystore.rest.springboot.configuration.IndexedListSettings;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.springboot.model.auth.ConfirmAttemptResult;
@@ -64,6 +64,7 @@ import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.security.core.AuthenticatedPrincipal;
 import org.springframework.security.core.session.SessionInformation;
@@ -174,7 +175,7 @@ public class AuthService {
 					   SignupRateLimiter signupRateLimiter,
 					   PasswordResetRateLimiter passwordResetRateLimiter,
 					   MeterRegistry meterRegistry,
-					   SignupWhitelistProperties signupWhitelistProperties,
+					   Environment environment,
 					   @Qualifier("passwordResetTaskExecutor") AsyncTaskExecutor passwordResetExecutor) {
 		this.repositoryManager = repositoryManager;
 		this.principalManager = principalManager;
@@ -191,8 +192,8 @@ public class AuthService {
 		this.passwordResetExecutor = passwordResetExecutor;
 
 		// Lower-cased so the domain check matches regardless of how the config spelled it. No null
-		// filter needed: SignupWhitelistProperties copies through Map.copyOf, which rejects nulls.
-		this.domainWhitelist = signupWhitelistProperties.whitelist().values().stream()
+		// filter needed: the Environment never returns a null list entry.
+		this.domainWhitelist = IndexedListSettings.read(environment, Settings.SIGNUP_WHITELIST).stream()
 				.map(domain -> domain.toLowerCase(Locale.ROOT))
 				.collect(Collectors.toUnmodifiableSet());
 		if (!domainWhitelist.isEmpty()) {

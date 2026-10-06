@@ -22,11 +22,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Context;
 import org.entrystore.PrincipalManager;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.springboot.configuration.IndexedListSettings;
 import org.entrystore.rest.springboot.configuration.ProxyProperties;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.security.SsrfSafeHttpClient;
 import org.entrystore.rest.springboot.security.SsrfValidator;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -51,6 +54,7 @@ public class ProxyService {
 	private final SsrfValidator ssrfValidator;
 	private final SsrfSafeHttpClient ssrfSafeHttpClient;
 	private final ProxyProperties proxyProperties;
+	private final Environment environment;
 
 	/**
 	 * Entity headers copied from the upstream response besides Content-Type and Content-Length: those 5.x
@@ -64,7 +68,7 @@ public class ProxyService {
 
 	@PostConstruct
 	void init() {
-		whitelistAnon = proxyProperties.anonymousWhitelist();
+		whitelistAnon = IndexedListSettings.readHosts(environment, Settings.PROXY_WHITELIST_ANONYMOUS);
 		if (!whitelistAnon.isEmpty()) {
 			log.info("Proxy whitelist for guest users initialized with following domains: {}; Requests to other domains require authentication",
 					String.join(", ", whitelistAnon));

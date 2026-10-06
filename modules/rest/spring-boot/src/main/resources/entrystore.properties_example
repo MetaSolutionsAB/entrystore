@@ -224,7 +224,8 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.auth.signup.email.template=/path/to/template.html
 ## Whitelist of email-domains that are allowed to perform sign-up
 ## Any domain is allowed if no whitelist is provided here
-## Use the indexed form (.1, .2, ...); a bare "whitelist=domain" value is not supported.
+## An empty bare value ("whitelist=") is a one-entry list that admits no domain, as in 5.x.
+## Use contiguous indices from .1; a bare value, a gap, .0 or .01 is read as 5.x read it, and ignored entries are logged.
 # entrystore.auth.signup.whitelist.1=yourdomain.tld
 # entrystore.auth.signup.whitelist.2=ext.yourdomain.tld
 
@@ -259,7 +260,7 @@ entrystore.auth.temp.lockout.duration=0ms
 ## whitelist - only the usernames listed below may log in with a password, by form login or HTTP
 ##             Basic. An empty or missing whitelist in this mode denies every password login.
 ## true/yes/1 and false/no/0 also mean on and off; any other value fails startup.
-## Use the indexed form (.1, .2, ...); a bare "whitelist=user" value is not supported.
+## Use contiguous indices from .1; a bare value, a gap, .0 or .01 is read as 5.x read it, and ignored entries are logged.
 # entrystore.auth.password=on|off|whitelist
 # entrystore.auth.password.whitelist.1=admin
 # entrystore.auth.password.whitelist.2=user@yourdomain.tld
@@ -269,7 +270,8 @@ entrystore.auth.temp.lockout.duration=0ms
 
 ## Rules a new password must meet at sign-up and when set by a user or an admin.
 ## Defaults: upper case, lower case and a number required, no symbol required, at least 10 characters.
-## Each custom rule is a regular expression that must be found in the password; use the indexed form (.1, .2, ...).
+## Each custom rule is a regular expression that must be found in the password.
+## Use contiguous indices from .1; a bare value, a gap, .0 or .01 is read as 5.x read it, and ignored entries are logged.
 # entrystore.auth.password.rule.uppercase=true
 # entrystore.auth.password.rule.lowercase=true
 # entrystore.auth.password.rule.number=true
@@ -280,7 +282,7 @@ entrystore.auth.temp.lockout.duration=0ms
 ## Additional base URLs accepted as a post-login redirect target. The repository base URL
 ## is always permitted; anything else must be listed here or the redirect is dropped
 ## (open-redirect protection).
-## Use the indexed form (.1, .2, ...); a bare "redirects=url" value is not supported.
+## Use contiguous indices from .1; a bare value, a gap, .0 or .01 is read as 5.x read it, and ignored entries are logged.
 # entrystore.auth.permitted.redirects.1=https://app.yourdomain.tld/
 # entrystore.auth.permitted.redirects.2=https://portal.yourdomain.tld/
 
@@ -484,7 +486,7 @@ entrystore.solr.extract-fulltext=off
 ## http://x normalizes to http://x:80 and https://x to https://x:443. The origin of
 ## entrystore.rowstore.url above (when set) is implicitly trusted for the DELETE path,
 ## so single-host RowStore deployments need no additional configuration here.
-## Use the indexed form (.1, .2, ...); a bare "whitelist=origin" value is not supported.
+## Use contiguous indices from .1; a bare value is a one-element list, and .0, .01 or an entry after a gap is ignored and logged.
 # entrystore.proxy.remote-resource.delete.whitelist.1=http://rowstore.internal:8282
 # entrystore.proxy.remote-resource.delete.whitelist.2=https://other-rowstore.example.com
 
@@ -492,13 +494,13 @@ entrystore.solr.extract-fulltext=off
 ## A listed host is exempt from the SSRF hostname blacklist AND from the loopback,
 ## site-local and link-local checks on the address it resolves to, so list only hosts
 ## that are meant to be reachable from the server.
-## Use the indexed form (.1, .2, ...); a bare "local=host" value is not supported.
+## Use contiguous indices from .1; a bare value, a gap, .0 or .01 is read as 5.x read it, and ignored entries are logged.
 # entrystore.proxy.whitelist.local.1=cache.internal
 # entrystore.proxy.whitelist.local.2=metadata.internal
 
 ## Hosts that guest (unauthenticated) users may proxy to. Requests to any other host
 ## require authentication. Bare hostnames, matched case-insensitively.
-## Use the indexed form (.1, .2, ...); a bare "anonymous=host" value is not supported.
+## Use contiguous indices from .1; a bare value, a gap, .0 or .01 is read as 5.x read it, and ignored entries are logged.
 # entrystore.proxy.whitelist.anonymous.1=public.example.com
 
 ## Outbound-fetch limits, hardcoded before 6.1. The defaults below are the 5.x values, except
