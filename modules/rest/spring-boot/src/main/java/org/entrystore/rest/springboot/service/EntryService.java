@@ -267,10 +267,6 @@ public class EntryService {
 		if (graphType == GraphType.String) {
 			return resourceSerializationService.serializeResourceString(resource);
 		}
-		if (graphType == GraphType.Context || graphType == GraphType.SystemContext) {
-			return resourceSerializationService.serializeResourceContext(resource)
-					.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE);
-		}
 		JSONObject jsonObject = serializeResourceToJson(resource, graphType, rdfFormat, listFilter);
 
 		return jsonObject != null ?
@@ -291,9 +287,10 @@ public class EntryService {
 			case None -> resourceSerializationService.serializeResourceNone(resource);
 			case Graph -> resourceSerializationService.serializeResourceGraph(resource, rdfFormat);
 			case Pipeline -> resourceSerializationService.serializeResourcePipeline(resource, rdfFormat);
-			case String, Context, SystemContext -> null;
+			case String -> null;
 			// TODO: other types, for example PrincipalManager, etc
-			case ResultList, PipelineResult -> IMMUTABLE_EMPTY_JSONOBJECT;
+			// Not the context's entry IDs: listing them here would skip every ACL check, and 5.x returned {}.
+			case ResultList, PipelineResult, Context, SystemContext -> IMMUTABLE_EMPTY_JSONOBJECT;
 		};
 	}
 

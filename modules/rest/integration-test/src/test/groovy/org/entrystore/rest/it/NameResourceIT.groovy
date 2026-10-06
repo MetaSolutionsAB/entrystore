@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
@@ -10,6 +26,7 @@ import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class NameResourceIT extends BaseSpec {
 
@@ -57,7 +74,7 @@ class NameResourceIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_NOT_FOUND
 		connection.getContentType().contains('application/json')
 		def jsonResponse = JSON_PARSER.parseText(connection.errorStream.text)
-		jsonResponse['error'] == 'Not Found'
+		jsonResponse['error'] == "No entry with id 'randomEntryId' found in context '${contextIdWithName}'"
 	}
 
 	def "GET /{context-id}/entry/{entry-id}/name as admin on a String entry without name should return 404"() {
@@ -90,7 +107,7 @@ class NameResourceIT extends BaseSpec {
 		json['name'] == 'The Context Name'
 	}
 
-	def "PUT /{context-id}/entry/{entry-id}/name as guest on a Context entry should not edit the context name, respond with 404"() {
+	def "PUT /{context-id}/entry/{entry-id}/name as guest on a Context entry should not edit the context name, respond with 401"() {
 		given:
 		def newName = 'new Name / with slash symbol, and {, and }, and [ or ], plus < and >, ouh yeah'
 		def body = JsonOutput.toJson([name: newName])
@@ -99,8 +116,8 @@ class NameResourceIT extends BaseSpec {
 		def connection = EntryStoreClient.putRequest('/_contexts/entry/' + contextIdWithName + '/name', body, '')
 
 		then:
-		// Guests get 404 (not 401) for existing-private so they cannot enumerate entries
-		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(connection.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	def "PUT /_contexts/entry/{entry-id}/name as non-admin user on a Context entry should respond with Forbidden and not edit the context name"() {
@@ -189,8 +206,8 @@ class NameResourceIT extends BaseSpec {
 		def connection = EntryStoreClient.putRequest('/_principals/entry/' + entryId + '/name', body, '')
 
 		then:
-		// Guests get 404 (not 401) for existing-private so they cannot enumerate principals
-		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(connection.errorStream.text)['error'] == 'Not authorized'
 
 		def getConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId + '/name')
 		getConn.getResponseCode() == HTTP_OK

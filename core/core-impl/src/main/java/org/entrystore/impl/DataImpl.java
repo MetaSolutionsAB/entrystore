@@ -275,7 +275,15 @@ public class DataImpl extends ResourceImpl implements Data {
 		FileUtils.writeStringToFile(getDigestFile(), s, UTF_8);
 	}
 
+	/**
+	 * Returns the stored SHA-256 hex digest of the data, or null when there is no data or no readable digest.
+	 *
+	 * @throws org.entrystore.AuthorizationException if the current user may not read the resource, whether or not
+	 *                                               it has data, so serializing the resource reveals nothing to them
+	 */
 	public String readDigest() {
+		entry.getRepositoryManager().getPrincipalManager()
+				.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
 		File digestFile = getDigestFile();
 		if (digestFile == null) {
 			return null;

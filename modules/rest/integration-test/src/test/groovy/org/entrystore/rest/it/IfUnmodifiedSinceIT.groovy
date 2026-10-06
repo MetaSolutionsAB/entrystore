@@ -28,6 +28,7 @@ import java.time.format.DateTimeFormatter
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 /**
  * Writes with {@code If-Unmodified-Since}, as entrystore.js sends on every save: a date older than the entry's
@@ -195,7 +196,7 @@ class IfUnmodifiedSinceIT extends BaseSpec {
 		title(entryId) == 'original title'
 	}
 
-	def "a guest without read access sending an old If-Unmodified-Since should get 404, not 412"() {
+	def "a guest without read access sending an old If-Unmodified-Since should get 401, not 412"() {
 		given:
 		def entryId = createLinkEntry('original title')
 		def stale = httpDate(modified(entryId).minus(Duration.ofHours(1)))
@@ -206,7 +207,8 @@ class IfUnmodifiedSinceIT extends BaseSpec {
 			'application/json', ['If-Unmodified-Since': stale])
 
 		then:
-		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(connection.errorStream.text)['error'] == 'Not authorized'
 		title(entryId) == 'original title'
 	}
 

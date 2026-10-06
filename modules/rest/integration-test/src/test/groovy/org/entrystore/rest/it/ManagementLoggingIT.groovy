@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
@@ -58,7 +74,7 @@ class ManagementLoggingIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
-		conn.errorStream.text.contains('"error":"Unauthorized"')
+		conn.errorStream.text.contains('"error":"Not authorized"')
 	}
 
 	def "GET /management/loggers as a non-admin user should respond with FORBIDDEN"() {
@@ -67,7 +83,7 @@ class ManagementLoggingIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_FORBIDDEN
-		conn.errorStream.text.contains('"error":"Forbidden"')
+		conn.errorStream.text.contains('"error":"Not authorized"')
 	}
 
 	def "POST /management/loggers/{name} as Guest should respond with UNAUTHORIZED"() {
@@ -77,7 +93,7 @@ class ManagementLoggingIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
-		conn.errorStream.text.contains('"error":"Unauthorized"')
+		conn.errorStream.text.contains('"error":"Not authorized"')
 	}
 
 	def "POST /management/loggers/{name} as a non-admin user should respond with FORBIDDEN"() {
@@ -87,7 +103,7 @@ class ManagementLoggingIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_FORBIDDEN
-		conn.errorStream.text.contains('"error":"Forbidden"')
+		conn.errorStream.text.contains('"error":"Not authorized"')
 	}
 
 	def "GET /management/loggers as admin should return the logger list"() {

@@ -393,6 +393,8 @@ public class ResourceSerializationService {
 	/**
 	 * Returns the stored SHA-256 hex digest of a local binary entry's data, or null when the resource is not a
 	 * {@link DataImpl} or its digest file is missing or unreadable.
+	 *
+	 * @throws AuthorizationException if the resource is a {@link DataImpl} the current user may not read
 	 */
 	public String readDigest(Entry entry) {
 		String digest = entry.getResource() instanceof DataImpl data ? data.readDigest() : null;

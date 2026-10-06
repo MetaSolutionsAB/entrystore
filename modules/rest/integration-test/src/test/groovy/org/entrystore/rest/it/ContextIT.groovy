@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.it
 
+import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
@@ -407,13 +408,12 @@ class ContextIT extends BaseSpec {
 		responseJson['timestamp'] != null
 	}
 
-	def "GET /_contexts/entry/{entry-id}?includeAll as admin should return non-empty resource with entry IDs"() {
+	def "GET /_contexts/entry/{entry-id}?includeAll as admin should return an empty resource although the context has entries"() {
 		given:
 		def contextId = 'ctx-resource-test'
 		def contextName = 'contextResourceTest'
 		getOrCreateContext([contextId: contextId, name: contextName])
-		def childEntryId = createEntry(contextId, [entrytype: 'link', resource: 'https://example.com'])
-		assert childEntryId.length() > 0
+		createEntry(contextId, [entrytype: 'link', resource: 'https://example.com'])
 
 		when:
 		def conn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId + '?includeAll')
@@ -427,33 +427,41 @@ class ContextIT extends BaseSpec {
 		respJson['info'] != null
 		respJson['metadata'] != null
 		respJson['rights'] != null
-		respJson['resource'] != null
-		respJson['resource'] instanceof List
-		(respJson['resource'] as List).size() > 0
-		(respJson['resource'] as List).contains(childEntryId)
+		respJson['resource'] == [:]
 	}
 
-	def "GET /_contexts/entry/{entry-id}?includeAll as admin should return empty resource array for context with no entries"() {
+	def "GET /_contexts/entry/{entry-id}?includeAll as guest on a public context should not list its entries"() {
 		given:
-		def contextId = 'ctx-empty-resource-test'
-		def contextName = 'contextEmptyResourceTest'
-		getOrCreateContext([contextId: contextId, name: contextName])
+		def contextId = 'ctx-public-resource-test'
+		getOrCreateContext([contextId: contextId])
+		makeContextReadableByGuest(contextId)
+		createEntry(contextId, [entrytype: 'link', resource: 'https://example.com'])
 
 		when:
-		def conn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId + '?includeAll')
+		def conn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId + '?includeAll', '')
 
 		then:
 		conn.getResponseCode() == HTTP_OK
-		conn.getContentType().contains('application/json')
 		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
 		respJson['entryId'] == contextId
-		respJson['name'] == contextName
-		respJson['resource'] != null
-		respJson['resource'] instanceof List
-		(respJson['resource'] as List).size() == 0
+		respJson['resource'] == [:]
 	}
 
-	def "GET /_contexts/entry/_contexts?includeAll as admin should return resource with entry IDs for system context"() {
+	def "GET /{context-id} as guest on a public context should respond with UNAUTHORIZED 401"() {
+		given:
+		def contextId = 'ctx-public-resource-test'
+		getOrCreateContext([contextId: contextId])
+		makeContextReadableByGuest(contextId)
+
+		when:
+		def conn = EntryStoreClient.getRequest('/' + contextId, '')
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(conn.errorStream.text)['error'] == 'Not authorized'
+	}
+
+	def "GET /_contexts/entry/_contexts?includeAll as admin should return an empty resource for the system context"() {
 		when:
 		def conn = EntryStoreClient.getRequest('/_contexts/entry/_contexts?includeAll')
 
@@ -464,8 +472,14 @@ class ContextIT extends BaseSpec {
 		respJson['entryId'] == '_contexts'
 		respJson['info'] != null
 		respJson['rights'] != null
-		respJson['resource'] != null
-		respJson['resource'] instanceof List
-		(respJson['resource'] as List).size() > 0
+		respJson['resource'] == [:]
+	}
+
+	private static void makeContextReadableByGuest(String contextId) {
+		def contextUri = EntryStoreClient.baseUrl + '/' + contextId
+		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
+		def acl = [(contextUri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]]
+		def conn = EntryStoreClient.putRequest('/_contexts/entry/' + contextId, JsonOutput.toJson(acl))
+		assert conn.getResponseCode() == HTTP_NO_CONTENT
 	}
 }
