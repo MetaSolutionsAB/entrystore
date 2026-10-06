@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2025 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,18 +16,28 @@
 
 package org.entrystore.repository.security;
 
-import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import javax.crypto.SecretKeyFactory;
+import java.nio.charset.StandardCharsets;
+import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
 import java.util.HashSet;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PasswordTest {
+
+	@AfterEach
+	public void restoreDefaultRules() {
+		Password.setRules(Password.getDefaultRules());
+	}
 
 	@Test
 	public void check_exception() {
@@ -47,10 +57,45 @@ public class PasswordTest {
 		assertEquals("47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=", Password.sha256(""));
 	}
 
-	@Disabled
 	@Test
-	public void getSaltedHash_ok() {
-		// not idempotent
+	public void sha256_unavailableAlgorithm_throwsInsteadOfReturningNull() {
+		IllegalStateException e = assertThrows(IllegalStateException.class,
+				() -> Password.digest("NO-SUCH-DIGEST", "somePassword"));
+		assertInstanceOf(NoSuchAlgorithmException.class, e.getCause());
+	}
+
+	@Test
+	public void hash_keyFactoryFailure_throwsInsteadOfReturningNull() throws Exception {
+		// DESede cannot derive a key from a PBEKeySpec, so generateSecret throws InvalidKeySpecException.
+		SecretKeyFactory rejectingFactory = SecretKeyFactory.getInstance("DESede");
+		byte[] salt = "0123456789abcdef".getBytes(StandardCharsets.UTF_8);
+
+		IllegalStateException e = assertThrows(IllegalStateException.class,
+				() -> Password.hash(rejectingFactory, "somePassword", salt));
+		assertInstanceOf(InvalidKeySpecException.class, e.getCause());
+	}
+
+	@Test
+	public void getSaltedHash_verifiesWithCheck() {
+		String stored = Password.getSaltedHash("somePassword");
+
+		assertTrue(Password.check("somePassword", stored));
+		assertFalse(Password.check("otherPassword", stored));
+	}
+
+	@Test
+	public void setRules_null_isRejected() {
+		assertThrows(NullPointerException.class, () -> Password.setRules(null));
+	}
+
+	@Test
+	public void conformsToRules_defaultRules_areThe5xDefaults() {
+		// Defaults as in 5.x: upper case, lower case and a number, at least 10 characters, no symbol.
+		assertTrue(Password.conformsToRules("Abcdefghi1"));
+		assertFalse(Password.conformsToRules("Abcdefgh1"));
+		assertFalse(Password.conformsToRules("abcdefghi1"));
+		assertFalse(Password.conformsToRules("ABCDEFGHI1"));
+		assertFalse(Password.conformsToRules("Abcdefghij"));
 	}
 
 	@Test

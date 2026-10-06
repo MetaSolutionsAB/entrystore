@@ -37,7 +37,8 @@ import java.util.TreeSet;
 /**
  * Aborts startup on the config shapes whose meaning changed when the indexed list settings moved from
  * the legacy {@code Config.getStringList} to Spring's map binding. All of them are otherwise silent, and
- * every key below is an allowlist or denylist, so a changed value is a change in who gets in.
+ * every key below is an allowlist, a denylist or a password rule list, so a changed value changes who gets
+ * in or which passwords are accepted.
  *
  * <ul>
  * <li><b>Bare value alongside indexed entries.</b> {@code PropertiesConfiguration.getPropertyValueCount}
@@ -80,6 +81,7 @@ public final class IndexedListConfigValidator implements EnvironmentPostProcesso
 	private static final List<String> INDEXED_LIST_KEYS = List.of(
 			Settings.AUTH_PASSWORD_WHITELIST,
 			Settings.AUTH_PASSWORD_BLACKLIST,
+			Settings.AUTH_PASSWORD_RULE_CUSTOM,
 			Settings.AUTH_PERMITTED_REDIRECTS,
 			Settings.PROXY_WHITELIST_LOCAL,
 			Settings.PROXY_WHITELIST_ANONYMOUS,
@@ -150,8 +152,8 @@ public final class IndexedListConfigValidator implements EnvironmentPostProcesso
 	private static String buildFailFastMessage(List<String> findings) {
 		StringBuilder message = new StringBuilder(
 				"EntryStore startup aborted: indexed list settings are configured in shapes whose meaning "
-						+ "changed in 6.1. Every key below is an allowlist or denylist, and starting anyway "
-						+ "would apply lists that differ from what the previous release applied.\n");
+						+ "changed in 6.1. Every key below is an allowlist, a denylist or a password rule list, and "
+						+ "starting anyway would apply lists that differ from what the previous release applied.\n");
 		for (String finding : findings) {
 			message.append("  - ").append(finding).append('\n');
 		}
