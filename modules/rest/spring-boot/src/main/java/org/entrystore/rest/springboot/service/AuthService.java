@@ -90,7 +90,7 @@ import java.util.stream.Collectors;
 public class AuthService {
 
 	private static final int TTL = 24 * 3600 * 1000;
-	/** Shared by sign-up and password reset, so the policy cannot be raised on one path only. */
+	/** Password reset's only rule, as in 5.x; sign-up applies the configured password rules instead. */
 	private static final int MIN_PASSWORD_LENGTH = 8;
 
 	private static final String POST_SUCCESS_MESSAGE = "A confirmation message was sent to {}, if the user exists.";
@@ -649,26 +649,32 @@ public class AuthService {
 		return StringUtils.isNotEmpty(email) && ci.getEmail().equalsIgnoreCase(email.trim());
 	}
 
-	private String validatePasswordFormat(String password, String title) {
-		return validatePasswordFormat(password, SHORT_PASSWORD_MESSAGE, title);
-	}
-
 	/**
 	 * Returns the trimmed password, which is the value that gets hashed — so a password padded with
 	 * spaces is not accepted as long enough on the strength of the padding.
-	 *
-	 * @param tooShortMessage wording for the length failure; the two flows word it differently, and the
-	 *                        integration tests assert each string exactly
 	 */
-	private String validatePasswordFormat(String password, String tooShortMessage, String title) {
+	private String validatePasswordFormat(String password, String title) {
+		String trimmed = requirePassword(password, title);
+		if (trimmed.length() < MIN_PASSWORD_LENGTH) {
+			throw new BadRequestHtmlException(SHORT_PASSWORD_MESSAGE, title);
+		}
+		return trimmed;
+	}
+
+	/** Returns the trimmed password, which is the value that gets hashed and so the one the rules apply to. */
+	private String validatePasswordRules(String password, String title) {
+		String trimmed = requirePassword(password, title);
+		if (!Password.conformsToRules(trimmed)) {
+			throw new BadRequestHtmlException(BAD_PASSWORD_FORMAT_MESSAGE, title);
+		}
+		return trimmed;
+	}
+
+	private String requirePassword(String password, String title) {
 		if (StringUtils.isEmpty(password)) {
 			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
 		}
-		String trimmed = password.trim();
-		if (trimmed.length() < MIN_PASSWORD_LENGTH) {
-			throw new BadRequestHtmlException(tooShortMessage, title);
-		}
-		return trimmed;
+		return password.trim();
 	}
 
 	/**
@@ -693,7 +699,7 @@ public class AuthService {
 	 * answer 500 where a caller deserves 400.
 	 *
 	 * <p>What remains genuinely service-side are the rules that need more than one field's own value: the
-	 * password length applies to the trimmed value, and the name rules span both name fields.
+	 * password rules apply to the trimmed value, and the name rules span both name fields.
 	 */
 	public String signup(HttpServletRequest request, SignupRequestBody requestBody, String title) {
 		SignupInfo ci = new SignupInfo();
@@ -705,9 +711,9 @@ public class AuthService {
 		}
 		ci.setEmail(requestBody.email());
 
-		// Same rule as the password-reset path, so the minimum length lives in one place; only the message
-		// differs, since sign-up has always worded it in terms of the configured rules.
-		String password = validatePasswordFormat(requestBody.password(), BAD_PASSWORD_FORMAT_MESSAGE, title);
+		// Checked before the confirmation email goes out, in both confirmation modes: the account is later
+		// created from the stored hash, which no rule can be applied to.
+		String password = validatePasswordRules(requestBody.password(), title);
 
 		ci.setFirstName(requestBody.firstName());
 		ci.setLastName(requestBody.lastName());

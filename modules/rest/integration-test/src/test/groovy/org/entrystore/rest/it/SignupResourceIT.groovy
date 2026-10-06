@@ -155,6 +155,39 @@ class SignupResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 0
 	}
 
+	def "POST /auth/signup should not send an email when a long enough password breaks a configured rule"() {
+		given:
+		def username = 'userSignupRuleViolation@test.com'
+		// Long enough and meets the default rules, but entrystore-it.properties adds a custom rule that
+		// rejects whitespace
+		def requestBody = signupBody(username, [password: 'New pass1234'])
+
+		when:
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+
+		then:
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.errorStream.text.contains('The password must conform to the configured rules.')
+		greenMail.getReceivedMessages().size() == 0
+	}
+
+	def "POST /auth/signup as an html form should not send an email when a long enough password breaks a default rule"() {
+		given:
+		def username = 'userSignupFormRuleViolation@test.com'
+		def bodyParams = createFormBody([firstname: firstName, lastname: lastName, email: username,
+			password: 'noDigitsHere', 'g-recaptcha-response': grecaptcharesponse])
+
+		when:
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+
+		then:
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.errorStream.text.contains('The password must conform to the configured rules.')
+		greenMail.getReceivedMessages().size() == 0
+	}
+
 	def "POST /auth/signup should not send an email when the firstname does not meet requirements"() {
 		given:
 		def username = 'userResetBadFirstName@test.com'

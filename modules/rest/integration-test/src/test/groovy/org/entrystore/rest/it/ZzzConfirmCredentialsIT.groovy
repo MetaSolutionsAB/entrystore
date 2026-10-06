@@ -89,6 +89,25 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 
 	// ---------- sign-up ----------
 
+	def "POST /auth/signup rejects a long enough password that breaks a configured rule before sending the email"() {
+		given: "a password that meets the default rules but breaks the no-whitespace rule in entrystore-it.properties"
+		def body = JsonOutput.toJson([
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : 'newSignupRuleViolation@test.com',
+			password          : 'New pass1234',
+			grecaptcharesponse: grecaptcharesponse
+		])
+
+		when:
+		def conn = EntryStoreClient.postRequest('/auth/signup', body)
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.errorStream.text.contains('The password must conform to the configured rules.')
+		greenMail.getReceivedMessages().size() == 0
+	}
+
 	def "GET /auth/signup with a valid token renders the confirmation form"() {
 		given:
 		def token = startSignup('newSignupForm@test.com')

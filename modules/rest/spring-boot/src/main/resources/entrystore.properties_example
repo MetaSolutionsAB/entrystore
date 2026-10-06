@@ -267,7 +267,7 @@ entrystore.auth.temp.lockout.duration=0ms
 ## Require the current password when a user changes their own password (default: true)
 # entrystore.auth.password.require-current-password=false
 
-## Rules a new password must meet when set by a user or an admin.
+## Rules a new password must meet at sign-up and when set by a user or an admin.
 ## Defaults: upper case, lower case and a number required, no symbol required, at least 10 characters.
 ## Each custom rule is a regular expression that must be found in the password; use the indexed form (.1, .2, ...).
 # entrystore.auth.password.rule.uppercase=true
