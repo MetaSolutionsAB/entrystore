@@ -16,7 +16,9 @@
 
 package org.entrystore.rest.springboot.filter;
 
+import org.entrystore.rest.springboot.configuration.PasswordLoginConfiguration;
 import org.entrystore.rest.springboot.configuration.PasswordLoginListProperties;
+import org.entrystore.rest.springboot.configuration.PasswordLoginMode;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.junit.jupiter.api.Test;
@@ -40,13 +42,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.when;
 
 /**
- * Pins the whitelist/blacklist gate, including both halves of the fail-open path the constructor
- * comment concedes ("a typo in this value fails open"): the direct-construction tests pin the mode
- * logic, {@code whitelistMode_bindsFromTheConfiguredKey} pins that the {@code entrystore.auth.password}
- * placeholder actually resolves through a real {@code Environment}, and the {@code CookieLoginResourceIT}
- * case "POST /auth/cookie should not log in a user absent from the password login whitelist" asserts the
- * denial end to end — so a key that stops resolving (yielding {@code whitelistMode == false} and
- * enforcement silently off) no longer leaves the whole suite green.
+ * Pins the whitelist/blacklist gate: the direct-construction tests pin the mode logic, and
+ * {@code whitelistMode_bindsFromTheConfiguredKey} pins that {@code entrystore.auth.password} resolves
+ * from a real {@code Environment}.
  */
 @ExtendWith(MockitoExtension.class)
 class CheckUsernamePasswordFilterTest {
@@ -58,12 +56,10 @@ class CheckUsernamePasswordFilterTest {
 
 	@Test
 	void whitelistMode_bindsFromTheConfiguredKey() {
-		// The mode string is the sole switch that turns whitelist enforcement on. Every other test passes
-		// it into the constructor directly, so only this one pins that the @Value placeholder resolves
-		// 'entrystore.auth.password' from a real Environment — a renamed or mistyped key would yield a
-		// null mode and enforcement silently off, with the direct-construction tests still green.
+		// A key that stops resolving would leave whitelist enforcement silently off
 		new ApplicationContextRunner()
 				.withBean(PropertySourcesPlaceholderConfigurer.class)
+				.withUserConfiguration(PasswordLoginConfiguration.class)
 				.withBean(LoginAttemptService.class, () -> loginAttemptService)
 				.withBean(ErrorResponseWriter.class, () -> new ErrorResponseWriter(JsonMapper.builder().build()))
 				.withBean(PasswordLoginListProperties.class,
@@ -84,7 +80,7 @@ class CheckUsernamePasswordFilterTest {
 	@Test
 	void whitelistedUsername_reachesTheFilterChain() throws Exception {
 		when(loginAttemptService.isLockedOut("admin")).thenReturn(false);
-		var filter = filter("whitelist", Map.of("1", "admin"), Map.of());
+		var filter = filter(PasswordLoginMode.WHITELIST, Map.of("1", "admin"), Map.of());
 		var response = new MockHttpServletResponse();
 		var chain = new MockFilterChain();
 
@@ -96,7 +92,7 @@ class CheckUsernamePasswordFilterTest {
 	@Test
 	void usernameAbsentFromWhitelist_getsTheUnified401WithoutReachingTheChain() throws Exception {
 		when(loginAttemptService.isLockedOut("other@test.com")).thenReturn(false);
-		var filter = filter("whitelist", Map.of("1", "admin"), Map.of());
+		var filter = filter(PasswordLoginMode.WHITELIST, Map.of("1", "admin"), Map.of());
 		var response = new MockHttpServletResponse();
 		var chain = new MockFilterChain();
 
@@ -109,7 +105,7 @@ class CheckUsernamePasswordFilterTest {
 	@Test
 	void blacklistedUsername_getsTheUnified401WithoutReachingTheChain() throws Exception {
 		when(loginAttemptService.isLockedOut("blocked@test.com")).thenReturn(false);
-		var filter = filter(null, Map.of(), Map.of("1", "blocked@test.com"));
+		var filter = filter(PasswordLoginMode.ON, Map.of(), Map.of("1", "blocked@test.com"));
 		var response = new MockHttpServletResponse();
 		var chain = new MockFilterChain();
 
@@ -125,7 +121,7 @@ class CheckUsernamePasswordFilterTest {
 		// the only way this layer can express "no local password logins at all", so the constructor
 		// logs an ERROR and keeps the deny-all behaviour instead of aborting the boot.
 		when(loginAttemptService.isLockedOut("admin")).thenReturn(false);
-		var filter = assertDoesNotThrow(() -> filter("whitelist", Map.of(), Map.of()));
+		var filter = assertDoesNotThrow(() -> filter(PasswordLoginMode.WHITELIST, Map.of(), Map.of()));
 		var response = new MockHttpServletResponse();
 		var chain = new MockFilterChain();
 
@@ -135,11 +131,11 @@ class CheckUsernamePasswordFilterTest {
 		assertEquals(HttpStatus.UNAUTHORIZED.value(), response.getStatus());
 	}
 
-	private CheckUsernamePasswordFilter filter(String passwordAuthMode, Map<String, String> whitelist,
+	private CheckUsernamePasswordFilter filter(PasswordLoginMode passwordLoginMode, Map<String, String> whitelist,
 			Map<String, String> blacklist) {
 		// A real writer, not a stub: the 401 assertions read the status it writes.
 		return new CheckUsernamePasswordFilter(loginAttemptService,
-				new ErrorResponseWriter(JsonMapper.builder().build()), passwordAuthMode,
+				new ErrorResponseWriter(JsonMapper.builder().build()), passwordLoginMode,
 				new PasswordLoginListProperties(whitelist, blacklist));
 	}
 

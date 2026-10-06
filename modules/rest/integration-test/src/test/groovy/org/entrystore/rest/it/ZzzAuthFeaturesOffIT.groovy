@@ -18,15 +18,18 @@ package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.entrystore.rest.springboot.service.StatusService
 import org.springframework.http.HttpMethod
 
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static java.nio.charset.StandardCharsets.UTF_8
 
 /**
- * Switched-off authentication features answer 404 on all their routes, as 5.x left them unrouted. The
- * shared app runs with every feature on, so one owned app start covers the whole disabled matrix.
+ * Switched-off authentication features answer 404 on all their routes, as 5.x left them unrouted, and password
+ * login off also turns HTTP Basic off. The shared app runs with every feature on, so one owned app start covers
+ * the whole disabled matrix.
  */
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 class ZzzAuthFeaturesOffIT extends BaseSpec {
@@ -38,7 +41,11 @@ class ZzzAuthFeaturesOffIT extends BaseSpec {
 		stopPreexistingAppIfRunning()
 		startOwnedApp([
 			'--entrystore.auth.signup=off',
-			'--entrystore.auth.password-reset=off'
+			'--entrystore.auth.password-reset=off',
+			'--entrystore.auth.password=off',
+			'--entrystore.auth.http-basic.enabled=true',
+			// On, so that a cookie-bearing POST to a non-exempt route meets the CSRF check if the gate came too late
+			'--entrystore.csrf.enabled=true'
 		])
 	}
 
@@ -72,6 +79,11 @@ class ZzzAuthFeaturesOffIT extends BaseSpec {
 		// Answered before handler mapping and body parsing, so neither 400 nor 415
 		'POST' | '/auth/signup'           | JSON        | '{not json'
 		'POST' | '/auth/signup'           | 'text/plain'| 'hello'
+		'POST' | '/auth/cookie'           | FORM        | 'auth_username=admin&auth_password=adminpass'
+		'POST' | '/auth/cookie'           | FORM        | 'auth_username=admin'
+		'GET'  | '/auth/login'            | null        | null
+		// Answered before handler mapping, so not 405
+		'POST' | '/auth/login'            | FORM        | 'auth_username=admin&auth_password=adminpass'
 	}
 
 	def "a disabled route should answer 404 before the session cookie is checked"() {
@@ -83,13 +95,42 @@ class ZzzAuthFeaturesOffIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_NOT_FOUND
 	}
 
-	def "a disabled route should answer 404 before HTTP Basic credentials are checked"() {
-		when: 'the credentials are invalid, which the security chain would answer with 401'
-		def conn = EntryStoreClient.postRequest('/auth/pwreset', JsonOutput.toJson([email: 'admin@test.com']), '',
-			JSON, [Authorization: basic('nobody', 'wrong')])
+	def "a disabled route should answer 404 before the CSRF check"() {
+		when: 'a cookie-bearing POST without X-XSRF-TOKEN to a route the CSRF matcher does not exempt'
+		def conn = EntryStoreClient.postRequest('/auth/login', 'auth_username=admin&auth_password=adminpass', '',
+			FORM, [Cookie: 'auth_token=unknown'])
 
 		then:
 		conn.getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "POST /auth/cookie with valid credentials should not start a session when password login is off"() {
+		when:
+		def conn = EntryStoreClient.postRequest('/auth/cookie', 'auth_username=admin&auth_password=adminpass', '',
+			FORM)
+
+		then:
+		conn.getResponseCode() == HTTP_NOT_FOUND
+		EntryStoreClient.findSetCookies(conn, 'auth_token').isEmpty()
+	}
+
+	def "a request with valid HTTP Basic credentials should be served as guest when password login is off"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/auth/user', '', null, [Authorization: basic('admin', 'adminpass')])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['id'] == '_guest'
+	}
+
+	def "a protected page should answer 401 without a Basic challenge when password login is off"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/management/status/extended', '', null,
+			[Authorization: basic('admin', 'adminpass')])
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		conn.getHeaderField('WWW-Authenticate') == null
 	}
 
 	def "a cross-origin request to a disabled route should get the CORS headers with its 404"() {
@@ -120,13 +161,10 @@ class ZzzAuthFeaturesOffIT extends BaseSpec {
 	}
 
 	def "the extended status should report sign-up and password reset as off"() {
-		when:
-		def conn = EntryStoreClient.getRequest('/management/status/extended', '', JSON,
-			[Authorization: basic('admin', 'adminpass')])
+		when: 'read from the running app: with password login off there is no admin login to call the endpoint with'
+		def auth = appInstance.getBean(StatusService).getStatusExtended([]).auth()
 
 		then:
-		conn.getResponseCode() == HTTP_OK
-		def auth = JSON_PARSER.parseText(conn.inputStream.text)['auth']
 		auth['signup'] == false
 		auth['passwordReset'] == false
 	}

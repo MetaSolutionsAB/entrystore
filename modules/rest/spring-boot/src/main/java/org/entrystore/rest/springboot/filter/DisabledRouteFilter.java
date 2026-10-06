@@ -22,6 +22,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.entrystore.rest.springboot.configuration.AuthFeatureProperties;
 import org.entrystore.rest.springboot.configuration.CorsProperties;
 import org.entrystore.rest.springboot.configuration.EntryStoreCorsConfigurationSource;
+import org.entrystore.rest.springboot.configuration.PasswordLoginMode;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.jetbrains.annotations.NotNull;
@@ -64,9 +65,10 @@ public class DisabledRouteFilter extends OncePerRequestFilter {
 	private final EntryStoreCorsConfigurationSource corsConfigurationSource;
 	private final CorsProcessor corsProcessor = new DefaultCorsProcessor();
 
-	public DisabledRouteFilter(AuthFeatureProperties authFeatures, ErrorResponseWriter errorResponseWriter,
-							   CorsProperties corsProperties, EntryStoreCorsConfigurationSource corsConfigurationSource) {
-		this.disabledRoutes = disabledRoutes(authFeatures).stream()
+	public DisabledRouteFilter(AuthFeatureProperties authFeatures, PasswordLoginMode passwordLoginMode,
+							   ErrorResponseWriter errorResponseWriter, CorsProperties corsProperties,
+							   EntryStoreCorsConfigurationSource corsConfigurationSource) {
+		this.disabledRoutes = disabledRoutes(authFeatures, passwordLoginMode).stream()
 				.map(PathPatternParser.defaultInstance::parse)
 				.toList();
 		this.errorResponseWriter = errorResponseWriter;
@@ -75,13 +77,18 @@ public class DisabledRouteFilter extends OncePerRequestFilter {
 	}
 
 	/** Path patterns of the switched-off features; {@code /x/**} also matches {@code /x} itself. */
-	private static List<String> disabledRoutes(AuthFeatureProperties authFeatures) {
+	private static List<String> disabledRoutes(AuthFeatureProperties authFeatures,
+											   PasswordLoginMode passwordLoginMode) {
 		var routes = new ArrayList<String>();
 		if (!authFeatures.signup()) {
 			routes.add("/auth/signup/**");
 		}
 		if (!authFeatures.passwordReset()) {
 			routes.add("/auth/pwreset/**");
+		}
+		if (passwordLoginMode == PasswordLoginMode.OFF) {
+			routes.add("/auth/login");
+			routes.add("/auth/cookie");
 		}
 		return routes;
 	}

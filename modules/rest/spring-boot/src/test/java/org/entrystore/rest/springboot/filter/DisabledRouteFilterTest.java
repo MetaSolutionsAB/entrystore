@@ -20,6 +20,7 @@ import jakarta.servlet.http.MappingMatch;
 import org.entrystore.rest.springboot.configuration.AuthFeatureProperties;
 import org.entrystore.rest.springboot.configuration.CorsProperties;
 import org.entrystore.rest.springboot.configuration.EntryStoreCorsConfigurationSource;
+import org.entrystore.rest.springboot.configuration.PasswordLoginMode;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
@@ -41,7 +42,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DisabledRouteFilterTest {
 
 	private static final List<String> CANDIDATES = List.of("/auth/signup", "/auth/signup/confirm", "/auth/signupX",
-			"/auth/pwreset", "/auth/pwreset/confirm", "/auth/pwresets", "/auth/login", "/auth/cookie", "/auth/user");
+			"/auth/pwreset", "/auth/pwreset/confirm", "/auth/pwresets", "/auth/login", "/auth/login/x", "/auth/cookie",
+			"/auth/cookieX", "/auth/user", "/auth/logout");
 
 	private static final AuthFeatureProperties SIGNUP_OFF = new AuthFeatureProperties(false, true);
 
@@ -59,6 +61,17 @@ class DisabledRouteFilterTest {
 	void passwordResetOff_answersEveryPasswordResetRouteAndNoOther() throws Exception {
 		assertEquals(List.of("/auth/pwreset", "/auth/pwreset/confirm"),
 				answeredWith404(new AuthFeatureProperties(true, false)));
+	}
+
+	@Test
+	void passwordLoginOff_answersBothLoginRoutesAndNoOther() throws Exception {
+		assertEquals(List.of("/auth/login", "/auth/cookie"),
+				answeredWith404(new AuthFeatureProperties(true, true), PasswordLoginMode.OFF));
+	}
+
+	@Test
+	void passwordLoginWhitelist_answersNoRoute() throws Exception {
+		assertEquals(List.of(), answeredWith404(new AuthFeatureProperties(true, true), PasswordLoginMode.WHITELIST));
 	}
 
 	@Test
@@ -204,7 +217,14 @@ class DisabledRouteFilterTest {
 	}
 
 	private static List<String> answeredWith404(AuthFeatureProperties authFeatures) throws Exception {
-		var filter = filter(authFeatures, CORS_OFF);
+		return answeredWith404(authFeatures, PasswordLoginMode.ON);
+	}
+
+	private static List<String> answeredWith404(AuthFeatureProperties authFeatures, PasswordLoginMode passwordLoginMode)
+			throws Exception {
+		var filter = new DisabledRouteFilter(authFeatures, passwordLoginMode,
+				new ErrorResponseWriter(JsonMapper.builder().build()), CORS_OFF,
+				new EntryStoreCorsConfigurationSource(CORS_OFF));
 		var answered = Stream.<String>builder();
 		for (String path : CANDIDATES) {
 			var response = new MockHttpServletResponse();
@@ -221,7 +241,8 @@ class DisabledRouteFilterTest {
 	}
 
 	private static DisabledRouteFilter filter(AuthFeatureProperties authFeatures, CorsProperties cors) {
-		return new DisabledRouteFilter(authFeatures, new ErrorResponseWriter(JsonMapper.builder().build()), cors,
+		return new DisabledRouteFilter(authFeatures, PasswordLoginMode.ON,
+				new ErrorResponseWriter(JsonMapper.builder().build()), cors,
 				new EntryStoreCorsConfigurationSource(cors));
 	}
 }

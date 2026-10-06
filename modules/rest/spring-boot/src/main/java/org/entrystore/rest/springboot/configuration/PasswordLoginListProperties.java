@@ -35,7 +35,7 @@ import java.util.Map;
  * <p>The prefix key itself is a scalar ({@code entrystore.auth.password=on|off|whitelist}); the
  * binder tolerates a scalar at the record's own prefix — pinned by
  * {@code PasswordLoginListPropertiesTest}, because a scalar there takes a different path through the
- * binder than an absent prefix does — and it is read separately via {@code @Value} in the filter.
+ * binder than an absent prefix does — and it is read separately into {@link PasswordLoginMode}.
  * Other {@code entrystore.auth.password.*} keys (e.g. {@code .require-current-password}) are ignored
  * here as unknown fields.
  *

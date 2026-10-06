@@ -56,6 +56,9 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		log.info('Starting EntryStoreApp with OIDC')
 		startOwnedApp([
 			'--entrystore.auth.oidc.enabled=true',
+			// No spec here logs in with a password, so step 4 also shows SSO logins and their sessions work
+			// with password login off
+			'--entrystore.auth.password=off',
 			'--entrystore.auth.oidc.redirect-failure.url=' + failureLoginUrl,
 			// Second provider against the same realm with a non-default username claim; distinct
 			// domains so it does not compete with the primary provider's wildcard routing.

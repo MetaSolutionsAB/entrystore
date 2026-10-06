@@ -252,13 +252,13 @@ entrystore.auth.temp.lockout.max.attempts=0
 entrystore.auth.temp.lockout.duration=0ms
 
 ## Local password login (default: on)
-## on / off  - identical today: password login stays enabled and only the blacklist is applied.
-##             "off" is accepted for legacy compatibility but is NOT yet honoured — setting it
-##             does not disable local password login.
+## on        - every user with a password may log in with it, except those on the blacklist.
+## off       - no password login: /auth/cookie and /auth/login answer 404 and HTTP Basic is disabled,
+##             even with entrystore.auth.http-basic.enabled=true. SSO logins and existing sessions keep
+##             working. Users can still change their password and, if enabled, reset it.
 ## whitelist - only the usernames listed below may log in with a password. An empty or missing
-##             whitelist in this mode denies every password login, and is currently the only way
-##             to disable local password login entirely.
-## The blacklist is applied in all three modes.
+##             whitelist in this mode denies every password login.
+## true/yes/1 and false/no/0 also mean on and off; any other value fails startup.
 ## Use the indexed form (.1, .2, ...); a bare "whitelist=user" value is not supported.
 # entrystore.auth.password=on|off|whitelist
 # entrystore.auth.password.whitelist.1=admin
@@ -288,6 +288,7 @@ entrystore.auth.temp.lockout.duration=0ms
 ## Renamed in 6.0 — previously `entrystore.auth.http-basic`. The legacy key is still
 ## accepted: on/true enable it as in 5.x, and a WARN names the new key. Check the
 ## startup log for "Basic Auth Enabled" / "Basic Auth Disabled" to verify the state.
+## entrystore.auth.password=off disables HTTP Basic whatever this key says.
 # entrystore.auth.http-basic.enabled=true|false
 
 ## HTTP Basic credential cache — successful PBKDF2 verifications are memoised
