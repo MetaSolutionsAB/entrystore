@@ -694,29 +694,20 @@ public class EntryImpl implements Entry {
 	}
 
 	public void setResourceURI(URI resourceURI) {
-		if (resourceURI.toString().equals(this.resURI.toString())) {
-			return;
-		}
-
-		checkAdministerRights();
-
-		// a local resource URI is derived from the entry id and keys the resource's own graph
-		if (locType == EntryType.Local) {
-			throw new IllegalArgumentException("The resource URI of a local entry cannot be changed");
-		}
-		// a context's URI keys its index graph; a principal's URI is the object of every ACL naming it
-		GraphType graphType = getGraphType();
-		if (graphType == GraphType.Context || graphType == GraphType.SystemContext
-			|| graphType == GraphType.User || graphType == GraphType.Group) {
-			throw new IllegalArgumentException("The resource URI of a " + graphType + " cannot be changed");
-		}
-
 		ValueFactory vf = getRepositoryManager().getValueFactory();
-		IRI oldResourceURI = vf.createIRI(getResourceURI().toString());
 		IRI newResourceURI = vf.createIRI(resourceURI.toString());
+		IRI oldResourceURI;
 
 		try {
+			// the whole rename holds the monitor, so a concurrent one starts from the URI this one committed
 			synchronized (this.repository) {
+				oldResourceURI = this.resURI;
+				if (newResourceURI.equals(oldResourceURI)) {
+					return;
+				}
+				checkAdministerRights();
+				checkResourceURIChange(newResourceURI);
+
 				// before the transaction, not outside the monitor: MetadataImpl.setGraph maintains other entries'
 				// relation caches, and resURI is still the old one, so a failure below leaves the rename retryable
 				renameInMetadata(getLocalMetadata(), oldResourceURI, newResourceURI);
@@ -749,19 +740,49 @@ public class EntryImpl implements Entry {
 					}
 					loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, entryURI)));
 					initMetadataObjects();
+					// rebuilt, not nulled: it holds the URI it was built with, and remove() deletes the file through it
+					if (resource instanceof DataImpl) {
+						this.context.initResource(this);
+					}
 				}
+
+				// inside the monitor like every index writer, so concurrent renames reach the index in commit order;
+				// before the event, since a synchronous listener resolves related entries by resource URI
+				this.context.updateResource2EntryIndex(
+						URI.create(oldResourceURI.stringValue()),
+						URI.create(newResourceURI.stringValue()),
+						URI.create(this.entryURI.stringValue())
+				);
 			}
 		} catch (RepositoryException e) {
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 
-		// index first: a synchronous listener resolves related entries by resource URI
-		this.context.updateResource2EntryIndex(
-				URI.create(oldResourceURI.stringValue()),
-				URI.create(newResourceURI.stringValue()),
-				URI.create(this.entryURI.stringValue())
-		);
 		getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
+	}
+
+	/**
+	 * @throws IllegalArgumentException if this entry's resource URI cannot be changed, or not to {@code candidate}
+	 */
+	private void checkResourceURIChange(IRI candidate) {
+		// a context's URI keys its index graph; a principal's URI is the object of every ACL naming it
+		GraphType graphType = getGraphType();
+		if (graphType == GraphType.Context || graphType == GraphType.SystemContext
+			|| graphType == GraphType.User || graphType == GraphType.Group) {
+			throw new IllegalArgumentException("The resource URI of a " + graphType + " cannot be changed");
+		}
+		// a local builtin resource keys its own graph, and a list its children's membership, by its URI;
+		// a local file is stored by entry id
+		if (locType == EntryType.Local && graphType != GraphType.None) {
+			throw new IllegalArgumentException(
+					"The resource URI of a local entry of graph type " + graphType + " cannot be changed");
+		}
+		// these name the entry's own graphs, whose statements a later rename would move as the resource's
+		if (candidate.equals(entryURI) || candidate.equals(localMdURI) || candidate.equals(relationURI)
+				|| candidate.equals(cachedExternalMdURI)) {
+			throw new IllegalArgumentException(
+					"The resource URI must differ from the entry's own entry, metadata and relation URIs");
+		}
 	}
 
 	/**
@@ -1240,7 +1261,16 @@ public class EntryImpl implements Entry {
 
 	public void setGraph(Model submitted) {
 		checkAdministerRights();
+		synchronized (this.repository) {
+			setGraphSynchronized(submitted);
+		}
+	}
 
+	/**
+	 * Holds the repository monitor from reading the current resource URI to the final write, so a concurrent
+	 * rename cannot change the URI the submitted graph was rewritten to.
+	 */
+	private void setGraphSynchronized(Model submitted) {
 		Model oldGraph = getGraph();
 
 		// a client echoes the old resource URI as subject of the type and ACL triples it PUTs back

@@ -932,7 +932,7 @@ public class ContextImplTest extends AbstractCoreTest {
 	 * <p>The hook fires on the first two scans, so both the optimistic scan and the scan that follows it
 	 * under {@code entry.repository} lose the race. Against the previous revision the second one still
 	 * published, because it reset the overflow flag on the strength of holding that monitor — which does
-	 * not in fact exclude every index writer, since {@code EntryImpl.setResourceURI} commits and then
+	 * not in fact exclude every index writer, since {@code EntryImpl.setExternalMetadataURI} commits and then
 	 * calls in after releasing it.
 	 *
 	 * <p>A seam is intrusive and this is the only one in the class. It is here because a sequential test

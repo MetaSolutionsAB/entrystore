@@ -26,6 +26,7 @@ import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Context;
+import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
@@ -38,16 +39,23 @@ import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryListener;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.util.ModelUtil;
 import org.entrystore.repository.util.URISplit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.InputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -518,27 +526,164 @@ public class EntryImplTest extends AbstractCoreTest {
 		assertTrue(targetEntry.getRelations().isEmpty());
 	}
 
-	private static Stream<Arguments> localEntries() {
+	private static Stream<Arguments> unrenamableLocalEntries() {
 		return Stream.of(
-			local("list", t -> t.listEntry),
-			local("file", t -> t.resourceEntry),
-			local("context", t -> t.context.getEntry()),
-			local("principal", t -> t.pm.getPrincipalEntry("Daisy")));
+			local("list", "local entry of graph type List", t -> t.listEntry),
+			local("graph", "local entry of graph type Graph",
+				t -> t.context.createResource(null, GraphType.Graph, null, null)),
+			local("string", "local entry of graph type String",
+				t -> t.context.createResource(null, GraphType.String, null, null)),
+			local("context", "of a Context", t -> t.context.getEntry()),
+			local("user", "of a User", t -> t.pm.getPrincipalEntry("Daisy")),
+			local("group", "of a Group", t -> t.pm.createResource(null, GraphType.Group, null, null)));
 	}
 
-	private static Arguments local(String kind, Function<EntryImplTest, Entry> pick) {
-		return arguments(kind, pick);
+	private static Arguments local(String kind, String messagePart, Function<EntryImplTest, Entry> pick) {
+		return arguments(kind, messagePart, pick);
 	}
 
 	@ParameterizedTest(name = "{0}")
-	@MethodSource("localEntries")
-	public void setResourceURI_refusesALocalEntry(String kind, Function<EntryImplTest, Entry> pick) {
+	@MethodSource("unrenamableLocalEntries")
+	public void setResourceURI_refusesALocalEntryOfABuiltinGraphType(String kind, String messagePart,
+			Function<EntryImplTest, Entry> pick) {
 		Entry entry = pick.apply(this);
 		URI before = entry.getResourceURI();
 
-		assertThrows(IllegalArgumentException.class, () -> entry.setResourceURI(URI.create(before + "-renamed")));
+		IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class,
+				() -> entry.setResourceURI(URI.create(before + "-renamed")));
+
+		assertTrue(thrown.getMessage().contains(messagePart), thrown.getMessage());
+		assertEquals(before, entry.getResourceURI());
+	}
+
+	@Test
+	public void setResourceURI_onALocalNamedEntryKeepsTypeAclMetadataAndIndex() {
+		Entry named = context.createResource(null, GraphType.None, ResourceType.NamedResource, null);
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		named.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		ValueFactory vf = rm.getValueFactory();
+		URI oldResourceURI = named.getResourceURI();
+		IRI oldResourceIRI = vf.createIRI(oldResourceURI.toString());
+		Model metadata = new LinkedHashModel();
+		metadata.add(oldResourceIRI, DCTERMS.TITLE, vf.createLiteral("kept across the rename"));
+		named.getLocalMetadata().setGraph(metadata);
+		URI newResourceURI = URI.create("http://example.com/concepts/renamed");
+
+		named.setResourceURI(newResourceURI);
+
+		assertEquals(newResourceURI, named.getResourceURI());
+		assertEquals(EntryType.Local, named.getEntryType());
+		assertEquals(GraphType.None, named.getGraphType());
+		assertEquals(ResourceType.NamedResource, named.getResourceType());
+		assertTrue(named.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
+		Model renamedMetadata = named.getLocalMetadata().getGraph();
+		assertTrue(renamedMetadata.contains(vf.createIRI(newResourceURI.toString()), DCTERMS.TITLE, null));
+		assertFalse(renamedMetadata.contains(oldResourceIRI, null, null));
+		assertTrue(context.getByResourceURI(newResourceURI).contains(named));
+		assertTrue(context.getByResourceURI(oldResourceURI).isEmpty());
+	}
+
+	@Test
+	public void setResourceURI_onALocalNamedEntrySurvivesAReloadFromTheStore() {
+		EntryImpl named = (EntryImpl) context.createResource(null, GraphType.None, ResourceType.NamedResource, null);
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		named.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		URI oldResourceURI = named.getResourceURI();
+		URI newResourceURI = URI.create("http://example.com/concepts/reloaded");
+		named.setResourceURI(newResourceURI);
+
+		((ContextImpl) context).evictFromCaches(java.util.List.of(named));
+		Entry reloaded = context.get(named.getId());
+
+		assertNotSame(named, reloaded);
+		assertEquals(newResourceURI, reloaded.getResourceURI());
+		assertEquals(ResourceType.NamedResource, reloaded.getResourceType());
+		assertTrue(reloaded.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
+		assertTrue(context.getByResourceURI(newResourceURI).contains(reloaded));
+		assertTrue(context.getByResourceURI(oldResourceURI).isEmpty());
+	}
+
+	@Test
+	public void setResourceURI_onALocalFileKeepsItsDataAndDeletesItOnRemoval(@TempDir Path tempDataDir)
+			throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		((Data) resourceEntry.getResource()).setData(
+				new ByteArrayInputStream("file content".getBytes(StandardCharsets.UTF_8)));
+		File dataFile = new File(new File(tempDataDir.toFile(), context.getEntry().getId()), resourceEntry.getId());
+		URI newResourceURI = URI.create("http://example.com/files/renamed.xml");
+
+		resourceEntry.setResourceURI(newResourceURI);
+
+		assertEquals(newResourceURI, resourceEntry.getResourceURI());
+		assertEquals("pom.xml", resourceEntry.getFilename());
+		assertEquals("text/xml", resourceEntry.getMimetype());
+		Data data = (Data) resourceEntry.getResource();
+		assertEquals(newResourceURI, data.getURI());
+		try (InputStream in = data.getData()) {
+			assertEquals("file content", new String(in.readAllBytes(), StandardCharsets.UTF_8));
+		}
+		context.remove(resourceEntry.getEntryURI());
+		assertFalse(dataFile.exists());
+	}
+
+	@Test
+	public void setResourceURI_onALocalEntryLeavesTheListsContainingItUnchanged() {
+		List list = (List) listEntry.getResource();
+		Entry named = context.createResource(null, GraphType.None, ResourceType.NamedResource, null);
+		list.addChild(named.getEntryURI());
+
+		named.setResourceURI(URI.create("http://example.com/concepts/listed"));
+
+		assertTrue(list.getChildren().contains(named.getEntryURI()));
+		assertEquals(Set.of(listEntry.getResourceURI()), named.getReferringListsInSameContext());
+	}
+
+	@Test
+	public void setGraph_renamingALocalNamedEntryWithTheBodyEntrystoreJsSends() {
+		EntryImpl named = (EntryImpl) context.createResource(null, GraphType.None, ResourceType.NamedResource, null);
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		named.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		IRI oldResourceIRI = named.getSesameResourceURI();
+		IRI newResourceIRI = rm.getValueFactory().createIRI("http://example.com/concepts/put");
+		// EntryInfo.setResourceURI: es:resource replaced and the old URI's statements moved to the new subject
+		Model body = ModelUtil.replaceSubject(named.getGraph(), oldResourceIRI, newResourceIRI);
+		body.remove(named.getSesameEntryURI(), RepositoryProperties.resource, oldResourceIRI);
+		body.add(named.getSesameEntryURI(), RepositoryProperties.resource, newResourceIRI);
+
+		named.setGraph(body);
+
+		URI newResourceURI = URI.create(newResourceIRI.stringValue());
+		assertEquals(newResourceURI, named.getResourceURI());
+		assertEquals(ResourceType.NamedResource, named.getResourceType());
+		assertTrue(named.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
+		assertTrue(context.getByResourceURI(newResourceURI).contains(named));
+		assertFalse(named.getGraph().contains(oldResourceIRI, null, null));
+	}
+
+	private static Stream<Arguments> entrysOwnGraphURIs() {
+		return Stream.of(
+			ownGraph("entry URI", t -> t.linkEntry, Entry::getEntryURI),
+			ownGraph("local metadata URI", t -> t.linkEntry, Entry::getLocalMetadataURI),
+			ownGraph("relation URI", t -> t.linkEntry, Entry::getRelationURI),
+			ownGraph("cached external metadata URI", t -> t.refLinkEntry, Entry::getCachedExternalMetadataURI));
+	}
+
+	private static Arguments ownGraph(String name, Function<EntryImplTest, Entry> pick, Function<Entry, URI> uri) {
+		return arguments(name, pick, uri);
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("entrysOwnGraphURIs")
+	public void setResourceURI_refusesAURINamingOneOfTheEntrysOwnGraphs(String name,
+			Function<EntryImplTest, Entry> pick, Function<Entry, URI> uri) {
+		Entry entry = pick.apply(this);
+		URI before = entry.getResourceURI();
+		int statements = entry.getGraph().size();
+
+		assertThrows(IllegalArgumentException.class, () -> entry.setResourceURI(uri.apply(entry)));
 
 		assertEquals(before, entry.getResourceURI());
+		assertEquals(statements, entry.getGraph().size());
 	}
 
 	@Test

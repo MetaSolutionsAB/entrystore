@@ -24,6 +24,7 @@ import org.entrystore.rest.it.util.NameSpaceConst
 
 import java.text.SimpleDateFormat
 import java.time.Year
+import java.util.concurrent.TimeUnit
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CONFLICT
@@ -34,6 +35,7 @@ import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
+import static org.awaitility.Awaitility.await
 
 class EntryIT extends BaseSpec {
 
@@ -2124,27 +2126,158 @@ class EntryIT extends BaseSpec {
 		entryRespJson['relations'] as Map == [:]
 	}
 
-	def "PUT /{context-id}/entry/{entry-id} renaming a local entry's resource should return Bad-Request 400 and change nothing"() {
+	def "PUT /{context-id}/entry/{entry-id} renaming the resource of a #kind should return Bad-Request 400 and change nothing"() {
 		given:
-		def entryId = 'localListForRename'
-		getOrCreateEntry(contextId, [id: entryId, graphtype: 'list'])
-		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
-		def resourceUri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryId
+		def (String entryPath, String entryUri, String resourceUri) = entryRefusingRename(kind)
 		def putBody = [(entryUri): [(NameSpaceConst.TERM_RESOURCE): [[type: 'uri', value: resourceUri + '-renamed']]]]
 
 		when:
-		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId,
-			JsonOutput.toJson(putBody), 'admin', 'application/json')
+		def editEntryConn = EntryStoreClient.putRequest(entryPath, JsonOutput.toJson(putBody), 'admin',
+			'application/json')
 
 		then:
 		editEntryConn.getResponseCode() == HTTP_BAD_REQUEST
-		def errorJson = JSON_PARSER.parseText(editEntryConn.errorStream.text)
-		errorJson['error'].toString().contains('resource URI of a local entry cannot be changed')
+		JSON_PARSER.parseText(editEntryConn.errorStream.text)['error'].toString().contains(message)
 
-		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
+		def getEntryConn = EntryStoreClient.getRequest(entryPath)
 		getEntryConn.getResponseCode() == HTTP_OK
 		def info = JSON_PARSER.parseText(getEntryConn.inputStream.text)['info']
 		info[entryUri][NameSpaceConst.TERM_RESOURCE][0]['value'] == resourceUri
+
+		where:
+		kind         | message
+		'local list' | 'resource URI of a local entry of graph type List cannot be changed'
+		'context'    | 'resource URI of a Context cannot be changed'
+		'user'       | 'resource URI of a User cannot be changed'
+		'group'      | 'resource URI of a Group cannot be changed'
+	}
+
+	/** @return the entry path, entry URI and resource URI of an entry whose resource URI cannot be changed */
+	private List<String> entryRefusingRename(String kind) {
+		def base = EntryStoreClient.baseUrl
+		switch (kind) {
+			case 'local list':
+				def listId = getOrCreateEntry(contextId, [id: 'localListForRename', graphtype: 'list'])
+				return ['/' + contextId + '/entry/' + listId, base + '/' + contextId + '/entry/' + listId,
+						base + '/' + contextId + '/resource/' + listId]
+			case 'context':
+				return ['/_contexts/entry/' + contextId, base + '/_contexts/entry/' + contextId, base + '/' + contextId]
+			case 'user':
+				def userId = EntryStoreClient.createdEsUsers['user']['entryId']
+				return ['/_principals/entry/' + userId, base + '/_principals/entry/' + userId,
+						base + '/_principals/resource/' + userId]
+			case 'group':
+				def groupId = createEntry('_principals', [graphtype: 'group'],
+					[resource: [name: 'group-refusing-rename']])
+				return ['/_principals/entry/' + groupId, base + '/_principals/entry/' + groupId,
+						base + '/_principals/resource/' + groupId]
+		}
+		throw new IllegalArgumentException(kind)
+	}
+
+	/**
+	 * The entry graph entrystore.js's EntryInfo.setResourceURI PUTs: es:resource replaced and the statements about
+	 * the old resource URI moved to the new one; everything else, e.g. es:externalMetadata, is echoed unchanged.
+	 */
+	private static Map renamedEntryInfo(Map info, String entryUri, String newResourceUri) {
+		def oldResourceUri = info[entryUri][NameSpaceConst.TERM_RESOURCE][0]['value']
+		def renamed = new LinkedHashMap(info)
+		renamed[entryUri] = new LinkedHashMap(info[entryUri] as Map)
+		renamed[entryUri][NameSpaceConst.TERM_RESOURCE] = [[type: 'uri', value: newResourceUri]]
+		def aboutResource = renamed.remove(oldResourceUri)
+		if (aboutResource != null) {
+			renamed[newResourceUri] = aboutResource
+		}
+		return renamed
+	}
+
+	private static Map entryInfo(String contextAlias, String entryId) {
+		def conn = EntryStoreClient.getRequest('/' + contextAlias + '/entry/' + entryId)
+		assert conn.getResponseCode() == HTTP_OK
+		return JSON_PARSER.parseText(conn.inputStream.text)['info'] as Map
+	}
+
+	private static int solrHitsForResource(String resourceUri) {
+		def query = convertMapToQueryParams([type: 'solr', query: 'resource:"' + resourceUri + '"'])
+		def conn = EntryStoreClient.getRequest('/search' + query)
+		assert conn.getResponseCode() == HTTP_OK
+		return JSON_PARSER.parseText(conn.inputStream.text)['results'] as int
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} renaming a local named entry as EntryScape does should move its resource URI, metadata, ACL and index entry"() {
+		given:
+		def renameContextId = 'resourceRename'
+		getOrCreateContext([contextId: renameContextId])
+		def entryId = 'namedConcept'
+		def entryUri = EntryStoreClient.baseUrl + '/' + renameContextId + '/entry/' + entryId
+		def oldResourceUri = EntryStoreClient.baseUrl + '/' + renameContextId + '/resource/' + entryId
+		def newResourceUri = 'http://example.com/terminology/concept-renamed'
+		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
+		// entrystore.js's newNamedEntry(): a local entry of graph type None and resource type NamedResource
+		getOrCreateEntry(renameContextId, [id: entryId, informationresource: 'false'], [
+			metadata: [(oldResourceUri): [
+				(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: 'Renamed concept']]]],
+			info    : [(oldResourceUri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]]])
+		def putBody = renamedEntryInfo(entryInfo(renameContextId, entryId), entryUri, newResourceUri)
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + renameContextId + '/entry/' + entryId,
+			JsonOutput.toJson(putBody), 'admin', 'application/json')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_NO_CONTENT
+
+		def info = entryInfo(renameContextId, entryId)
+		info[entryUri][NameSpaceConst.TERM_RESOURCE].collect { it['value'] } == [newResourceUri]
+		info[newResourceUri][NameSpaceConst.RDF_TYPE].collect { it['value'] } == [NameSpaceConst.TERM_NAMED_RESOURCE]
+		info[newResourceUri][NameSpaceConst.TERM_READ].collect { it['value'] } == [guestUri]
+		info[oldResourceUri] == null
+
+		def metadataConn = EntryStoreClient.getRequest('/' + renameContextId + '/metadata/' + entryId)
+		metadataConn.getResponseCode() == HTTP_OK
+		(JSON_PARSER.parseText(metadataConn.inputStream.text) as Map).keySet() == [newResourceUri] as Set
+
+		EntryStoreClient.getRequest('/' + renameContextId + '/lookup' + convertMapToQueryParams([uri: newResourceUri]))
+			.getResponseCode() == HTTP_OK
+		EntryStoreClient.getRequest('/' + renameContextId + '/lookup' + convertMapToQueryParams([uri: oldResourceUri]))
+			.getResponseCode() == HTTP_NOT_FOUND
+
+		// commitWithin means the searcher can lag behind the drained post queue
+		waitForSolrProcessing()
+		await().pollInterval(200, TimeUnit.MILLISECONDS).atMost(15, TimeUnit.SECONDS)
+			.until { solrHitsForResource(newResourceUri) == 1 }
+		solrHitsForResource(oldResourceUri) == 0
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} renaming a local file entry should keep its file downloadable by those its ACL names"() {
+		given:
+		def renameContextId = 'resourceRename'
+		getOrCreateContext([contextId: renameContextId])
+		def entryId = 'renamedFile'
+		def entryUri = EntryStoreClient.baseUrl + '/' + renameContextId + '/entry/' + entryId
+		def oldResourceUri = EntryStoreClient.baseUrl + '/' + renameContextId + '/resource/' + entryId
+		def newResourceUri = 'http://example.com/files/renamed.bin'
+		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
+		getOrCreateEntry(renameContextId, [id: entryId], [
+			info: [(oldResourceUri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]]])
+		def file = createTempBinaryFile('renamed', '.bin', 'file content kept across the rename'.bytes)
+		assert EntryStoreClient.putRequestFile('/' + renameContextId + '/resource/' + entryId, file, 'admin',
+			'application/octet-stream').getResponseCode() == HTTP_CREATED
+		def putBody = renamedEntryInfo(entryInfo(renameContextId, entryId), entryUri, newResourceUri)
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + renameContextId + '/entry/' + entryId,
+			JsonOutput.toJson(putBody), 'admin', 'application/json')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_NO_CONTENT
+		def info = entryInfo(renameContextId, entryId)
+		info[entryUri][NameSpaceConst.TERM_RESOURCE].collect { it['value'] } == [newResourceUri]
+
+		// the resource-level ACL moved with the URI
+		def resourceConn = EntryStoreClient.getRequest('/' + renameContextId + '/resource/' + entryId, '')
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getInputStream().readAllBytes() == file.getBytes()
 	}
 
 	def "PUT /{context-id}/entry/{entry-id} renaming a link's resource should carry its ACL to the new resource URI"() {
