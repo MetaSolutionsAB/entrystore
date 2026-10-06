@@ -145,12 +145,33 @@ public class JsonpCallbackFilter extends OncePerRequestFilter {
 		ContentCachingResponseWrapper wrapper = new ContentCachingResponseWrapper(response);
 		filterChain.doFilter(request, wrapper);
 
-		if (isAsyncStarted(request) || response.isCommitted() || !shouldWrap(wrapper)) {
+		if (isAsyncStarted(request) || response.isCommitted()) {
+			wrapper.copyBodyToResponse();
+			return;
+		}
+		// Every callback response, wrapped or not (incl. a 304), so a validator of a wrapped body is never reused.
+		preventStorage(response);
+		if (!shouldWrap(wrapper)) {
 			wrapper.copyBodyToResponse();
 			return;
 		}
 
 		writeJsonpResponse(response, wrapper, callback);
+	}
+
+	/**
+	 * Applied to every {@code ?callback=} response, wrapped or not: a wrapped body no longer matches the controller's
+	 * strong ETag / Last-Modified, so caches and clients must not revalidate against a stale validator. Keeps the {@code private} that {@link CacheControlFilter} stamps on
+	 * authenticated responses, and any value a controller set other than the revalidation it asks of anonymous
+	 * clients.
+	 */
+	private static void preventStorage(HttpServletResponse response) {
+		String cacheControl = response.getHeader(HttpHeaders.CACHE_CONTROL);
+		if (cacheControl == null || CacheControlFilter.CACHE_CONTROL_ANONYMOUS.equals(cacheControl)) {
+			response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
+		} else if (CacheControlFilter.CACHE_CONTROL_AUTHENTICATED.equals(cacheControl)) {
+			response.setHeader(HttpHeaders.CACHE_CONTROL, "private, no-store");
+		}
 	}
 
 	private static boolean isStreamingPath(HttpServletRequest request) {
@@ -179,12 +200,6 @@ public class JsonpCallbackFilter extends OncePerRequestFilter {
 		response.setCharacterEncoding(charset.name());
 		response.setHeader("X-Content-Type-Options", "nosniff");
 		response.setContentLengthLong((long) prefix.length + body.length + suffix.length);
-		// The wrapped body no longer matches the controller's strong ETag / Last-Modified, so prevent
-		// caches and clients from revalidating against a stale validator. Only set when absent so the
-		// `private, no-store` that CacheControlFilter already stamps on authenticated responses wins.
-		if (response.getHeader(HttpHeaders.CACHE_CONTROL) == null) {
-			response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
-		}
 
 		// Three writes avoid allocating a fourth body-sized array just to concatenate.
 		ServletOutputStream out = response.getOutputStream();

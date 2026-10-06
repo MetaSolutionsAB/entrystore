@@ -21,6 +21,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.entrystore.rest.springboot.filter.CacheControlFilter;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.springframework.http.HttpStatus;
@@ -77,6 +78,8 @@ public class FormLoginAuthenticationSuccessHandler extends SimpleUrlAuthenticati
 		}
 
 		authTokenCookies.expireStale(request, response);
+		// The login filter ends the chain before CacheControlFilter runs, and this response sets the session cookie.
+		CacheControlFilter.markSessionCookieResponse(response);
 		response.setStatus(HttpStatus.OK.value());
 		response.setContentType("text/html");
 		response.getWriter().write("Login successful.");

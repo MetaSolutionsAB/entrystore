@@ -23,7 +23,7 @@ import spock.lang.Stepwise
 import static java.net.HttpURLConnection.HTTP_MOVED_TEMP
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
-import static org.entrystore.rest.springboot.filter.CacheControlFilter.CACHE_CONTROL_AUTHENTICATED
+import static org.entrystore.rest.springboot.filter.CacheControlFilter.CACHE_CONTROL_CREDENTIALS
 
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 @Stepwise
@@ -138,7 +138,7 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		// on URL alone must not cache the redirect and replay the session cookie to another
 		// client. CacheAwareRedirectStrategy stamps the header before sendRedirect commits the
 		// response — see CacheControlFilter Javadoc.
-		casCallbackConn.getHeaderField('Cache-Control') == CACHE_CONTROL_AUTHENTICATED
+		casCallbackConn.getHeaderField('Cache-Control') == CACHE_CONTROL_CREDENTIALS
 
 		when: 'Query EntryStore using the new cookie'
 		def currentlyLoggedInUserConn = EntryStoreClient.getRequest('/auth/user',

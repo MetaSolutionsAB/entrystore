@@ -36,7 +36,7 @@ class CacheControlFilterTest {
 	private final CacheControlFilter filter = new CacheControlFilter(DEFAULT_SESSION_COOKIE);
 
 	@Test
-	void sessionCookie_setsPrivateNoStore() throws Exception {
+	void sessionCookie_setsPrivateNoCache() throws Exception {
 		var request = new MockHttpServletRequest("GET", "/auth/user");
 		request.setCookies(new Cookie(DEFAULT_SESSION_COOKIE, "session-id-xyz"));
 		var response = new MockHttpServletResponse();
@@ -44,12 +44,13 @@ class CacheControlFilterTest {
 
 		filter.doFilter(request, response, chain);
 
-		assertEquals(CacheControlFilter.CACHE_CONTROL_AUTHENTICATED, response.getHeader(HttpHeaders.CACHE_CONTROL));
+		// Literal anchor: no shared cache may store it, and the browser must revalidate so 304s work.
+		assertEquals("private, no-cache", response.getHeader(HttpHeaders.CACHE_CONTROL));
 		assertNotNull(chain.getRequest(), "filter must always invoke the chain");
 	}
 
 	@Test
-	void basicAuthorizationHeader_setsPrivateNoStore() throws Exception {
+	void basicAuthorizationHeader_setsPrivateNoCache() throws Exception {
 		var request = new MockHttpServletRequest("GET", "/auth/user");
 		request.addHeader(HttpHeaders.AUTHORIZATION, "Basic dXNlcjpwYXNz");
 		var response = new MockHttpServletResponse();
@@ -62,7 +63,7 @@ class CacheControlFilterTest {
 	}
 
 	@Test
-	void basicAuthorizationHeader_mixedCaseScheme_setsPrivateNoStore() throws Exception {
+	void basicAuthorizationHeader_mixedCaseScheme_setsPrivateNoCache() throws Exception {
 		// RFC 7235: auth-scheme is case-insensitive. CacheControlFilter#isAuthenticatedRequest
 		// uses String#regionMatches(true, ...) to honour that — protect the behaviour.
 		var request = new MockHttpServletRequest("GET", "/auth/user");
@@ -165,7 +166,21 @@ class CacheControlFilterTest {
 
 		filter.doFilter(request, response, chain);
 
-		assertEquals(CacheControlFilter.CACHE_CONTROL_AUTHENTICATED, response.getHeader(HttpHeaders.CACHE_CONTROL));
+		assertEquals("private, no-store", response.getHeader(HttpHeaders.CACHE_CONTROL));
+	}
+
+	@Test
+	void loginCarryingAnOldSessionCookie_stampsPrivateNoStorePostChain() throws Exception {
+		// The old cookie gets the request the revalidatable value before the chain; the new session cookie in the
+		// response is a credential, so the response must not be stored.
+		var request = new MockHttpServletRequest("POST", "/auth/cookie");
+		request.setCookies(new Cookie(DEFAULT_SESSION_COOKIE, "expired-session"));
+		var response = new MockHttpServletResponse();
+		var chain = new FilterChainAddingSessionCookie(DEFAULT_SESSION_COOKIE, "freshly-minted");
+
+		filter.doFilter(request, response, chain);
+
+		assertEquals(CacheControlFilter.CACHE_CONTROL_CREDENTIALS, response.getHeader(HttpHeaders.CACHE_CONTROL));
 	}
 
 	@Test

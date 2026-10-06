@@ -157,6 +157,19 @@ class JsonpCallbackFilterTest {
 	}
 
 	@Test
+	void notModifiedResponse_isNotStoredEither() throws Exception {
+		// A conditional JSONP GET answered 304 keeps the controller's revalidating Cache-Control otherwise.
+		var request = getRequestWithCallback("/90/entry/1", "foo");
+		var response = new MockHttpServletResponse();
+		response.setHeader("Cache-Control", CacheControlFilter.CACHE_CONTROL_AUTHENTICATED);
+
+		filter.doFilter(request, response, chainWriting(304, "application/json", null));
+
+		assertEquals(304, response.getStatus());
+		assertEquals("private, no-store", response.getHeader("Cache-Control"));
+	}
+
+	@Test
 	void nonJsonResponse_isNotWrapped() throws Exception {
 		var request = getRequestWithCallback("/90/entry/1", "foo");
 		var response = new MockHttpServletResponse();
@@ -270,14 +283,39 @@ class JsonpCallbackFilterTest {
 
 	@Test
 	void existingCacheControl_isPreservedNotOverwritten() throws Exception {
-		// CacheControlFilter stamps `private, no-store` on authenticated responses before this filter
-		// writes the wrapped body. The no-store guard must leave that exactly as-is — overwriting it
-		// with a bare `no-store` would drop `private` and allow shared-cache storage of a per-user body.
-		// Pins the `if (getHeader(CACHE_CONTROL) == null)` guard (the absent-header path is asserted in
-		// getWithCallback_wrapsJsonAsJavascript).
+		// A Cache-Control a controller chose must survive; overwriting it with a bare `no-store` could drop
+		// `private` and allow shared-cache storage of a per-user body. The absent-header path is asserted in
+		// getWithCallback_wrapsJsonAsJavascript.
 		var request = getRequestWithCallback("/90/entry/1", "cb");
 		var response = new MockHttpServletResponse();
 		response.setHeader("Cache-Control", "private, no-store");
+
+		filter.doFilter(request, response, chainWriting(200, "application/json", "{\"a\":1}".getBytes(UTF_8)));
+
+		assertEquals("cb({\"a\":1})", response.getContentAsString());
+		assertEquals("private, no-store", response.getHeader("Cache-Control"));
+	}
+
+	@Test
+	void anonymousRevalidationCacheControl_becomesNoStore() throws Exception {
+		// The entry and resource controllers ask anonymous clients to revalidate; a JSONP body must not be.
+		var request = getRequestWithCallback("/90/entry/1", "cb");
+		var response = new MockHttpServletResponse();
+		response.setHeader("Cache-Control", CacheControlFilter.CACHE_CONTROL_ANONYMOUS);
+
+		filter.doFilter(request, response, chainWriting(200, "application/json", "{\"a\":1}".getBytes(UTF_8)));
+
+		assertEquals("cb({\"a\":1})", response.getContentAsString());
+		assertEquals("no-store", response.getHeader("Cache-Control"));
+	}
+
+	@Test
+	void authenticatedCacheControl_becomesPrivateNoStore() throws Exception {
+		// CacheControlFilter lets the browser revalidate authenticated responses, but a JSONP body must not be
+		// revalidated against the controller's validators, so it is not stored at all, still privately.
+		var request = getRequestWithCallback("/90/entry/1", "cb");
+		var response = new MockHttpServletResponse();
+		response.setHeader("Cache-Control", CacheControlFilter.CACHE_CONTROL_AUTHENTICATED);
 
 		filter.doFilter(request, response, chainWriting(200, "application/json", "{\"a\":1}".getBytes(UTF_8)));
 

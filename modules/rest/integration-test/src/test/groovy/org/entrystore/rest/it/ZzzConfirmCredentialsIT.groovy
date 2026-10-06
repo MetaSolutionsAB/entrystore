@@ -26,6 +26,7 @@ import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
+import static org.entrystore.rest.springboot.filter.CacheControlFilter.CACHE_CONTROL_CREDENTIALS
 
 // Exercises the new credential-confirmation flow (ENTRYSTORE-529). It boots its own app instance with
 // entrystore.auth.confirmation.legacy=false, because the shared BaseSpec app runs in the default
@@ -122,6 +123,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		body.contains('name="password"')
 		body.contains('name="confirm"')
 		body.contains(token)
+		conn.getHeaderField('Cache-Control') == CACHE_CONTROL_CREDENTIALS
 
 		and: 'the form posts back into the application, i.e. under the servlet context path'
 		body.contains('action="' + EntryStoreClient.contextPath + '/auth/signup/confirm"')
@@ -158,6 +160,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
 		conn.errorStream.text.contains('2 attempt(s) remaining')
+		conn.getHeaderField('Cache-Control') == CACHE_CONTROL_CREDENTIALS
 		def loginBody = createFormBody([auth_username: username, auth_password: newPassword])
 		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
 		loginConn.getResponseCode() == HTTP_UNAUTHORIZED
@@ -341,6 +344,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		body.contains('name="email"')
 		body.contains('name="password"')
 		body.contains(token)
+		conn.getHeaderField('Cache-Control') == CACHE_CONTROL_CREDENTIALS
 
 		and: 'the form posts back into the application, i.e. under the servlet context path'
 		body.contains('action="' + EntryStoreClient.contextPath + '/auth/pwreset/confirm"')
@@ -389,6 +393,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		then: "the attempt is rejected and no password-change confirmation email is sent"
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
 		conn.errorStream.text.contains('2 attempt(s) remaining')
+		conn.getHeaderField('Cache-Control') == CACHE_CONTROL_CREDENTIALS
 		!greenMail.waitForIncomingEmail(500, 2)
 
 		and: "the token survives, and the password is applied only once the correct username is supplied"

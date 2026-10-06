@@ -26,7 +26,7 @@ import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
-import static org.entrystore.rest.springboot.filter.CacheControlFilter.CACHE_CONTROL_AUTHENTICATED
+import static org.entrystore.rest.springboot.filter.CacheControlFilter.CACHE_CONTROL_CREDENTIALS
 
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 @Stepwise
@@ -216,7 +216,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		// on URL alone must not cache the redirect and replay the session cookie to another
 		// client. CacheAwareRedirectStrategy stamps the header before sendRedirect commits the
 		// response — see CacheControlFilter Javadoc.
-		spCallbackConn.getHeaderField('Cache-Control') == CACHE_CONTROL_AUTHENTICATED
+		spCallbackConn.getHeaderField('Cache-Control') == CACHE_CONTROL_CREDENTIALS
 
 		// Query Entrystore using the new cookie - should return info about the new testuser
 		def currentlyLoggedInUserConn = EntryStoreClient.getRequest('/auth/user',
@@ -283,7 +283,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		then: 'the rejected login is sent to the caller\'s failureurl, not to the default, and no session is issued'
 		spCallbackConn.getResponseCode() in [302, 303, 307]
 		spCallbackConn.getHeaderField('Location') == failureLoginUrl
-		spCallbackConn.getHeaderField('Cache-Control') == CACHE_CONTROL_AUTHENTICATED
+		spCallbackConn.getHeaderField('Cache-Control') == CACHE_CONTROL_CREDENTIALS
 		EntryStoreClient.findSetCookie(spCallbackConn, 'auth_token') == null
 	}
 

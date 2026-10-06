@@ -17,17 +17,23 @@
 package org.entrystore.rest.springboot.util;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.springboot.filter.CacheControlFilter;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Date;
+import java.util.List;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -119,6 +125,52 @@ public class HttpUtil {
 
 		responseBuilder.headers(headers -> setLastModifiedAndETag(headers, modifiedDate));
 		return responseBuilder;
+	}
+
+	/**
+	 * Sets the headers of an entry or resource representation that let a GET or HEAD be revalidated with 304:
+	 * Last-Modified and ETag from the entry's modification date, and {@code Vary} on the credentials, since the
+	 * representation depends on the user, plus on Accept where it selects the representation. A response that
+	 * {@code CacheControlFilter} did not mark as authenticated gets {@link CacheControlFilter#CACHE_CONTROL_ANONYMOUS},
+	 * so guests revalidate too. Spring adds these {@code Vary} values to those already on the response, such as the
+	 * CORS ones.
+	 */
+	public static void setRevalidationHeaders(HttpHeaders headers, HttpServletResponse response, Date modifiedDate,
+											  boolean variesWithAccept) {
+		setLastModifiedAndETag(headers, modifiedDate);
+		headers.setVary(variesWithAccept
+				? List.of(HttpHeaders.ACCEPT, HttpHeaders.COOKIE, HttpHeaders.AUTHORIZATION)
+				: List.of(HttpHeaders.COOKIE, HttpHeaders.AUTHORIZATION));
+		if (response.getHeader(HttpHeaders.CACHE_CONTROL) == null) {
+			headers.setCacheControl(CacheControlFilter.CACHE_CONTROL_ANONYMOUS);
+		}
+	}
+
+	/**
+	 * Whether a {@code Range} request may be answered from the current representation (RFC 9110, section 13.1.5):
+	 * without {@code If-Range}, or when it names the current strong ETag or exactly the second of Last-Modified.
+	 * Otherwise the full representation must be sent.
+	 *
+	 * @param ifRange      the {@code If-Range} header, or null
+	 * @param modifiedDate the date the response's validators are built from, see {@link #setLastModifiedAndETag}
+	 */
+	public static boolean ifRangeMatches(String ifRange, Date modifiedDate) {
+		if (ifRange == null) {
+			return true;
+		}
+		if (modifiedDate == null) {
+			return false;
+		}
+		String value = ifRange.trim();
+		if (value.startsWith("\"") || value.startsWith("W/")) {
+			return value.equals(createStrongETag(Long.toString(modifiedDate.getTime())));
+		}
+		try {
+			long date = ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli();
+			return date == modifiedDate.getTime() / 1000 * 1000;
+		} catch (DateTimeParseException e) {
+			return false;
+		}
 	}
 
 	public static boolean isLargerThan(HttpServletRequest request, long maxSize) {

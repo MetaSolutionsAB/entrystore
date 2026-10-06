@@ -19,6 +19,7 @@ package org.entrystore.rest.springboot.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Entry;
@@ -44,6 +45,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -63,16 +66,20 @@ public class EntryController {
 			description = "Returns an RDF graph unless application/json is requested in which case the JSON-structure " +
 					"as specified in the response body is used.")
 	@GetMapping(path = "/{context-id}/entry/{entry-id}", produces = MediaType.APPLICATION_JSON_VALUE)
-	public GetEntryResponse getEntryInJsonFormat(
+	public ResponseEntity<GetEntryResponse> getEntryInJsonFormat(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
 			@RequestParam(required = false) MediaType rdfFormat,
 			@RequestParam(required = false) String includeAll,
-			@ModelAttribute ListFilter listFilter
+			@ModelAttribute ListFilter listFilter,
+			@Parameter(hidden = true) HttpServletResponse response
 	) {
 		String mediaType = rdfFormat != null ? GraphUtil.validateRdfMediaType(rdfFormat.toString()) : null;
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		return entryService.getEntryInJsonFormat(entry, mediaType, includeAll != null, listFilter);
+		GetEntryResponse body = entryService.getEntryInJsonFormat(entry, mediaType, includeAll != null, listFilter);
+		return ResponseEntity.ok()
+				.headers(headers -> HttpUtil.setRevalidationHeaders(headers, response, entry.getModifiedDate(), true))
+				.body(body);
 	}
 
 	@Operation(
@@ -86,7 +93,8 @@ public class EntryController {
 	public ResponseEntity<String> getEntryInRdfFormat(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
-			@Parameter(hidden = true) HttpServletRequest request
+			@Parameter(hidden = true) HttpServletRequest request,
+			@Parameter(hidden = true) HttpServletResponse response
 	) throws HttpMediaTypeNotAcceptableException {
 		// Return ResponseEntity instead of String to control the response Content-Type. Spring MVC would otherwise
 		// echo back the client's Accept type (text/rdf+n3) as the response Content-Type, but we respond with
@@ -96,7 +104,31 @@ public class EntryController {
 		String body = entryService.getEntryInRdfFormat(entry, mediaType);
 		return ResponseEntity.ok()
 				.contentType(MediaType.parseMediaType(mediaType))
+				.headers(headers -> HttpUtil.setRevalidationHeaders(headers, response, entry.getModifiedDate(), true))
 				.body(body);
+	}
+
+	@Operation(
+			summary = "Returns the headers of the entry information.",
+			description = "Answers with the headers a GET would send, including Last-Modified and ETag, without " +
+					"serializing the entry.")
+	@RequestMapping(path = "/{context-id}/entry/{entry-id}", method = RequestMethod.HEAD)
+	public ResponseEntity<Void> headEntry(
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId,
+			@Parameter(hidden = true) HttpServletRequest request,
+			@Parameter(hidden = true) HttpServletResponse response
+	) throws HttpMediaTypeNotAcceptableException {
+		// The GET is served by the JSON handler for any application/json, parameters included, else by the RDF one.
+		MediaType negotiated = EntryMediaTypeResolver.resolve(request);
+		MediaType contentType = MediaType.APPLICATION_JSON.equalsTypeAndSubtype(negotiated)
+				? MediaType.APPLICATION_JSON
+				: MediaType.parseMediaType(GraphUtil.validateRdfMediaType(negotiated.toString()));
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		return ResponseEntity.ok()
+				.contentType(contentType)
+				.headers(headers -> HttpUtil.setRevalidationHeaders(headers, response, entry.getModifiedDate(), true))
+				.build();
 	}
 
 	@Operation(

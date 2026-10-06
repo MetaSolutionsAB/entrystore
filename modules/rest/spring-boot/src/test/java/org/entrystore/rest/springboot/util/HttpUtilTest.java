@@ -18,12 +18,16 @@ package org.entrystore.rest.springboot.util;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import org.entrystore.rest.springboot.filter.CacheControlFilter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -213,5 +217,50 @@ class HttpUtilTest {
 		HttpHeaders headers = builder.build().getHeaders();
 		assertEquals(-1, headers.getLastModified(), "absent Last-Modified reads as -1");
 		assertNull(headers.getETag());
+	}
+
+	@Test
+	void setRevalidationHeaders_anonymousResponse_getsNoCacheAndVariesOnAcceptAndCredentials() {
+		var headers = new HttpHeaders();
+
+		HttpUtil.setRevalidationHeaders(headers, new MockHttpServletResponse(), new Date(1_700_000_000_123L), true);
+
+		assertEquals("\"1700000000123\"", headers.getETag());
+		assertEquals(1_700_000_000_000L, headers.getLastModified());
+		assertEquals(List.of(HttpHeaders.ACCEPT, HttpHeaders.COOKIE, HttpHeaders.AUTHORIZATION), headers.getVary());
+		assertEquals("no-cache", headers.getCacheControl());
+	}
+
+	@Test
+	void setRevalidationHeaders_authenticatedResponse_keepsTheFiltersCacheControl() {
+		var headers = new HttpHeaders();
+		var response = new MockHttpServletResponse();
+		response.setHeader(HttpHeaders.CACHE_CONTROL, CacheControlFilter.CACHE_CONTROL_AUTHENTICATED);
+
+		HttpUtil.setRevalidationHeaders(headers, response, new Date(1_700_000_000_123L), true);
+
+		assertNull(headers.getCacheControl(), "an entity Cache-Control would replace the filter's private one");
+	}
+
+	@Test
+	void setRevalidationHeaders_notVaryingWithAccept_variesOnCredentialsOnly() {
+		var headers = new HttpHeaders();
+
+		HttpUtil.setRevalidationHeaders(headers, new MockHttpServletResponse(), new Date(1_700_000_000_123L), false);
+
+		assertEquals(List.of(HttpHeaders.COOKIE, HttpHeaders.AUTHORIZATION), headers.getVary());
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@CsvSource(delimiter = '|', value = {
+			"no If-Range                     |                                    | true",
+			"current strong ETag             | \"1700000000123\"                 | true",
+			"stale strong ETag               | \"1600000000000\"                 | false",
+			"weak form of the current ETag   | W/\"1700000000123\"               | false",
+			"Last-Modified second            | Tue, 14 Nov 2023 22:13:20 GMT      | true",
+			"earlier date                    | Tue, 14 Nov 2023 22:13:19 GMT      | false",
+			"unparsable value                | yesterday                          | false"})
+	void ifRangeMatches(String description, String ifRange, boolean expected) {
+		assertEquals(expected, HttpUtil.ifRangeMatches(ifRange, new Date(1_700_000_000_123L)));
 	}
 }

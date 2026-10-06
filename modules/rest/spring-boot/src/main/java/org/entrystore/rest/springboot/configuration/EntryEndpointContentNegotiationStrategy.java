@@ -42,7 +42,7 @@ public class EntryEndpointContentNegotiationStrategy implements ContentNegotiati
 	// Regex to match URLs like /abc123/entry/xyz456
 	private static final Pattern ENTRY_URL_PATTERN = Pattern.compile("^/[^/]+/entry/[^/]+$");
 
-	// HEAD is served by the GET handlers, so it must pick the same one.
+	// HEAD answers with the headers of the GET, so it must negotiate the same type.
 	private static final Set<String> READ_METHODS = Set.of(HttpMethod.GET.name(), HttpMethod.HEAD.name());
 
 	private final ContentNegotiationStrategy delegate;

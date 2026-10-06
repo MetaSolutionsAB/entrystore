@@ -64,7 +64,7 @@ class SamlLoginFailureHandlerTest {
 					appender.messagesAt(Level.WARN).toList(), appender::toString);
 		}
 		assertEquals(WHITELISTED_FAILURE_URL, response.getRedirectedUrl());
-		assertEquals(CacheControlFilter.CACHE_CONTROL_AUTHENTICATED, response.getHeader(HttpHeaders.CACHE_CONTROL));
+		assertEquals(CacheControlFilter.CACHE_CONTROL_CREDENTIALS, response.getHeader(HttpHeaders.CACHE_CONTROL));
 	}
 
 	// The resolver drops non-whitelisted URLs before storing, so this guards a whitelist change after the store.
@@ -76,7 +76,7 @@ class SamlLoginFailureHandlerTest {
 		handler.onAuthenticationFailure(acsPost(RELAY_STATE), response, invalidSignature());
 
 		assertEquals("/store/auth/failed", response.getRedirectedUrl());
-		assertEquals(CacheControlFilter.CACHE_CONTROL_AUTHENTICATED, response.getHeader(HttpHeaders.CACHE_CONTROL));
+		assertEquals(CacheControlFilter.CACHE_CONTROL_CREDENTIALS, response.getHeader(HttpHeaders.CACHE_CONTROL));
 	}
 
 	// An expired login (request-lifetime passed) has no entry left.
