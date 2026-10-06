@@ -143,6 +143,37 @@ class EntryStoreClient {
 		return sendRequestAsStream(HttpMethod.PUT, path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
 	}
 
+	/**
+	 * Sends a multipart PUT with one file part of {@code fileSize} zero bytes, generated while it is written so
+	 * that no buffer of that size exists on either side of the client. The request carries a Content-Length.
+	 */
+	def static putRequestMultiPartStreamed(String path, long fileSize, String asUser = 'admin') {
+		def boundary = '----FormBoundary' + System.currentTimeMillis()
+		def head = ("--${boundary}\r\n" +
+			"Content-Disposition: form-data; name=\"file\"; filename=\"large.bin\"\r\n" +
+			"Content-Type: application/octet-stream\r\n\r\n").bytes
+		def tail = "\r\n--${boundary}--\r\n".bytes
+
+		def connection = createConnection(path)
+		connection.setRequestMethod(HttpMethod.PUT.name())
+		connection.setRequestProperty('Cookie', cookieHeader(asUser))
+		if (csrfTokens[asUser] != null) {
+			connection.setRequestProperty('X-XSRF-TOKEN', csrfTokens[asUser].toString())
+		}
+		connection.setRequestProperty('Content-Type', 'multipart/form-data; boundary=' + boundary)
+		connection.setDoOutput(true)
+		connection.setFixedLengthStreamingMode(head.length + fileSize + tail.length)
+		connection.outputStream.withStream { output ->
+			output.write(head)
+			def chunk = new byte[64 * 1024]
+			for (long written = 0; written < fileSize; written += chunk.length) {
+				output.write(chunk, 0, (int) Math.min(chunk.length, fileSize - written))
+			}
+			output.write(tail)
+		}
+		return connection
+	}
+
 	/** Sends a multipart/form-data request carrying only form fields, i.e. without any file part. */
 	def static putRequestMultiPartWithoutFile(String path, Map<String, String> formData, String asUser = 'admin') {
 		return putRequestMultiPart(path, null, asUser, formData)

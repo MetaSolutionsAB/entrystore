@@ -23,8 +23,8 @@ spring:
     timeout-per-shutdown-phase: 5s
   mvc.problemdetails.enabled: false
   servlet.multipart:
-    max-file-size: 100MB
-    max-request-size: 100MB
+    max-file-size: -1B
+    max-request-size: -1B
   web:
     resources:
       cache:

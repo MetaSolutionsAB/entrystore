@@ -543,6 +543,26 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getInputStream().readAllBytes() == payload
 	}
 
+	def "PUT /{context-id}/resource/{entry-id} multipart upload of 150 MB succeeds with the default config, as in 5.x"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'hugeFileId'], [resource: [name: 'Huge file entry']])
+		long fileSize = 150L * 1024 * 1024
+
+		when:
+		def sendFileConn = EntryStoreClient.putRequestMultiPartStreamed('/' + contextId + '/resource/' + entryId, fileSize)
+
+		then:
+		sendFileConn.getResponseCode() == HTTP_CREATED
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getHeaderFieldLong('Content-Length', -1) == fileSize
+		resourceConn.getInputStream().transferTo(OutputStream.nullOutputStream()) == fileSize
+	}
+
 	def "PUT /{context-id}/resource/{entry-id} as guest should respond with Unauthorized 401"() {
 		given:
 		// create local String entry

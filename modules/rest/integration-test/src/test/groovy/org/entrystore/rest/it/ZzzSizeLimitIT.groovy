@@ -22,6 +22,7 @@ import org.entrystore.rest.it.util.EntryStoreClient
 import static java.net.HttpURLConnection.HTTP_BAD_GATEWAY
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
+import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 
@@ -32,11 +33,11 @@ class ZzzSizeLimitIT extends BaseSpec {
 	static final String contextId = '666'
 
 	// Body of the sanitized container-level error page (ENTRYSTORE-1098). Jetty's multipart
-	// parser rejects a request breaching the configured cap with BadMessageException ("400: bad
+	// parser rejects a part breaching max-file-size with BadMessageException ("400: bad
 	// multipart") before Spring sees it; the sanitized error handlers deliberately drop that
 	// internal message from the response, so the body carries only status and reason phrase.
 	// The rejection is pinned to the cap path by the size deltas between these tests: the same
-	// request shape succeeds below both caps and fails 400 above exactly one cap at a time.
+	// request shape succeeds below both caps and fails above exactly one cap at a time.
 	static final String SANITIZED_ERROR_MARKER = 'HTTP ERROR 400 Bad Request'
 	static final String JETTY_INTERNAL_MULTIPART_MESSAGE = 'bad multipart'
 
@@ -57,11 +58,11 @@ class ZzzSizeLimitIT extends BaseSpec {
 
 		stopPreexistingAppIfRunning()
 
-		// Caps are intentionally tiny so that all request bodies stay below EntryStoreClient's
-		// 8000-byte chunked-streaming threshold (otherwise a server-side rejection mid-write
-		// closes the connection before the client can read the response code). max-file-size
-		// and max-request-size are deliberately *different* so a regression that wires only
-		// one of the two properties fails the cap it leaves unbound.
+		// Caps are intentionally tiny so that the max-file-size request stays below EntryStoreClient's
+		// 8000-byte chunked-streaming threshold (otherwise Jetty's rejection mid-write closes the
+		// connection before the client can read the response code). max-file-size and
+		// max-request-size are deliberately *different* so a regression that wires only one of the
+		// two properties fails the cap it leaves unbound.
 		startOwnedApp([
 			'--spring.servlet.multipart.max-file-size=2KB',
 			'--spring.servlet.multipart.max-request-size=4KB',
@@ -128,13 +129,12 @@ class ZzzSizeLimitIT extends BaseSpec {
 	// our appInstance; resetting appInstance=null or appStarted=false here would violate
 	// BaseSpec invariant #2 (see the invariant comment above appStarted in BaseSpec).
 
-	// Jetty 12 enforces spring.servlet.multipart.max-file-size / max-request-size at the
-	// container layer and rejects oversize requests with BadMessageException ("400: bad
-	// multipart") *before* Spring's DispatcherServlet sees them, so AppExceptionHandler cannot
-	// remap to a more semantically-correct 413. Tests below assert the sanitized container
-	// error contract from ENTRYSTORE-1098 (status 400 + sanitized body, internal Jetty message
-	// absent); the rejection is pinned to the cap path by the under-cap/over-cap control
-	// pairing documented on SANITIZED_ERROR_MARKER.
+	// A Content-Length above max-request-size is answered 413 by MultipartRequestSizeFilter before
+	// the body is parsed. A part above max-file-size is only found while parsing, which Jetty does
+	// *before* Spring's DispatcherServlet sees the request, so it is rejected with
+	// BadMessageException ("400: bad multipart") and AppExceptionHandler cannot remap it. That test
+	// asserts the sanitized container error contract from ENTRYSTORE-1098 (status 400 + sanitized
+	// body, internal Jetty message absent).
 	private static String readErrorBody(HttpURLConnection conn) {
 		// Force the response to be read before grabbing the error stream — without first
 		// calling getResponseCode(), HttpURLConnection may return null for getErrorStream()
@@ -172,34 +172,22 @@ class ZzzSizeLimitIT extends BaseSpec {
 		getConn.getResponseCode() == HTTP_NO_CONTENT
 	}
 
-	def "PUT /{context-id}/resource/{entry-id} multipart upload above max-request-size cap is rejected"() {
+	def "PUT /{context-id}/resource/{entry-id} multipart upload with a Content-Length above max-request-size is answered 413"() {
 		given:
 		getOrCreateContext([contextId: contextId])
-		def entryId = getOrCreateEntry(contextId, [id: 'requestCapId'], [resource: [name: 'Request-cap entry']])
-		assert entryId.length() > 0
+		def entryId = getOrCreateEntry(contextId, [id: 'contentLengthCapId'], [resource: [name: 'Content-Length cap entry']])
 
-		// 512 B file is under max-file-size (2 KB); 4 KB of form-field padding pushes the
-		// total multipart body well over max-request-size (4 KB) but still under the 8000-byte
-		// chunked-streaming threshold, so only max-request-size can produce the rejection.
-		def payload = new byte[512]
-		new Random(7).nextBytes(payload)
-		def smallFile = createTempBinaryFile('under-file-cap', '.bin', payload)
-		def formData = [padding: 'x' * (4 * 1024)]
-
-		when:
-		def conn = EntryStoreClient.putRequestMultiPart(
-				'/' + contextId + '/resource/' + entryId, smallFile, 'admin', formData)
-		def errorBody = readErrorBody(conn)
+		when: 'the body is far larger than the socket buffers, so it is still being sent when the server answers'
+		def conn = EntryStoreClient.putRequestMultiPartStreamed('/' + contextId + '/resource/' + entryId, 32L * 1024 * 1024)
 
 		then:
-		conn.getResponseCode() == HTTP_BAD_REQUEST
-		errorBody.contains(SANITIZED_ERROR_MARKER)
-		!errorBody.contains(JETTY_INTERNAL_MULTIPART_MESSAGE)
+		conn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+		JSON_PARSER.parseText(readErrorBody(conn)).error.startsWith('Request size of ')
 
 		when: 'the resource is fetched afterwards'
 		def getConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
 
-		then: 'the rejected upload never persisted any bytes — the resource is still empty (204 No Content)'
+		then: 'nothing was stored'
 		getConn.getResponseCode() == HTTP_NO_CONTENT
 	}
 

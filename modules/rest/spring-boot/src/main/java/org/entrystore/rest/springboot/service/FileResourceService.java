@@ -134,7 +134,7 @@ public class FileResourceService {
 	private void rejectIfAboveMaximum(long size) {
 		long maxFileSize = repositoryManager.getMaximumFileSize();
 		if (maxFileSize != -1 && size > maxFileSize) {
-			throw new BadRequestException("Received file size (of " + size + "b) exceeds maximum allowed size of: "
+			throw new EntityTooLargeException("Received file size (of " + size + "b) exceeds maximum allowed size of: "
 					+ maxFileSize + "b");
 		}
 	}

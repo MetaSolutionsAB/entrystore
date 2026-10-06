@@ -22,6 +22,7 @@ import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.util.FileUtil;
 import org.junit.jupiter.api.BeforeEach;
@@ -102,11 +103,11 @@ class FileResourceServiceTest {
 	}
 
 	@Test
-	void setData_bodyAboveMaximum_throwsBadRequest() {
+	void setData_bodyAboveMaximum_throwsEntityTooLarge() {
 		// The raw-body PUT used to skip the maximum-file-size check that the multipart path enforced.
 		when(repositoryManager.getMaximumFileSize()).thenReturn(1L);
 
-		assertThrows(BadRequestException.class,
+		assertThrows(EntityTooLargeException.class,
 				() -> service.setData(entry, new byte[]{1, 2}, "application/octet-stream", null, null));
 
 		verify(entry, never()).getResource();
@@ -154,13 +155,13 @@ class FileResourceServiceTest {
 	}
 
 	@Test
-	void setDataMultipart_fileAboveMaximum_throwsBadRequest() {
+	void setDataMultipart_fileAboveMaximum_throwsEntityTooLargeAs5xDid() {
 		when(entry.getGraphType()).thenReturn(GraphType.None);
 		when(repositoryManager.getMaximumFileSize()).thenReturn(1L);
 		MultipartFile file = mock(MultipartFile.class);
 		when(file.getSize()).thenReturn(2L);
 
-		assertThrows(BadRequestException.class, () -> service.setDataMultipart(entry, file, null));
+		assertThrows(EntityTooLargeException.class, () -> service.setDataMultipart(entry, file, null));
 
 		// Rejected before anything is written or recorded on the entry.
 		verify(entry, never()).getResource();
