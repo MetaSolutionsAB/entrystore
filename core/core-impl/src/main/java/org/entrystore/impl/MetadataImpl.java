@@ -101,17 +101,31 @@ public class MetadataImpl implements Metadata {
 	}
 
 	public void setGraph(Model graph) {
+		setGraph(graph, this.resourceUri);
+	}
+
+	/**
+	 * Replaces the graph of a resource being renamed to {@code newResourceUri}. Inverse relations are removed
+	 * under the old resource URI and added under the new one, since only a repository resource has them.
+	 */
+	void setGraphOfRenamedResource(Model graph, IRI newResourceUri) {
+		setGraph(graph, newResourceUri);
+	}
+
+	private void setGraph(Model graph, IRI newResourceUri) {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
 		if (pm != null) {
 			pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteMetadata);
 		}
-		
+
 		try {
 			synchronized (this.entry.repository) {
 				RepositoryConnection rc = this.entry.repository.getConnection();
 				rc.begin();
+				IRI oldResourceUri = this.resourceUri;
 				try {
 					Model oldGraph = removeGraphSynchronized(rc);
+					this.resourceUri = newResourceUri;
 					addGraphSynchronized(rc, graph);
 					ProvenanceImpl provenance = (ProvenanceImpl) this.entry.getProvenance();
 					if (provenance != null && !cached) {
@@ -125,10 +139,12 @@ public class MetadataImpl implements Metadata {
 					}
 				} catch (AuthorizationException ae) {
 					rc.rollback();
+					this.resourceUri = oldResourceUri;
 					log.warn(ae.getMessage());
 					throw ae;
 				} catch (Exception e) {
 					rc.rollback();
+					this.resourceUri = oldResourceUri;
 					throw new org.entrystore.repository.RepositoryException(
 							"Unable to set metadata graph " + uri + " of entry " + entry.getEntryURI(), e);
 				} finally {

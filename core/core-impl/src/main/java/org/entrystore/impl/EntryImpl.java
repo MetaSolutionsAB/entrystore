@@ -803,16 +803,17 @@ public class EntryImpl implements Entry {
 	}
 
 	/**
-	 * Writes only when the graph names {@code from}, so an unrelated rename bumps no modified date and
-	 * records no revision. A LocalMetadataWrapper is another entry's metadata and is left alone.
+	 * Rewrites {@code from} as subject only, matching 5.x. Writes only when {@code from} is a subject, so an
+	 * unrelated rename bumps no modified date and records no revision. A LocalMetadataWrapper is another entry's
+	 * metadata and is left alone.
 	 */
 	private static void renameInMetadata(Metadata metadata, IRI from, IRI to) {
-		if (metadata == null || metadata instanceof LocalMetadataWrapper) {
+		if (!(metadata instanceof MetadataImpl metadataImpl)) {
 			return;
 		}
-		Model graph = metadata.getGraph();
-		if (graph != null && (graph.contains(from, null, null) || graph.contains(null, null, from))) {
-			metadata.setGraph(ModelUtil.replaceIRI(graph, from, to));
+		Model graph = metadataImpl.getGraph();
+		if (graph != null && graph.contains(from, null, null)) {
+			metadataImpl.setGraphOfRenamedResource(ModelUtil.replaceSubject(graph, from, to), to);
 		}
 	}
 

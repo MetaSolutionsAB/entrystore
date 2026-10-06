@@ -584,6 +584,68 @@ public class EntryImplTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void setResourceURI_fromAnExternalToARepositoryURIAddsTheMetadataRelationsToTheTarget() {
+		EntryImpl named = (EntryImpl) context.createResource(null, GraphType.None, ResourceType.NamedResource, null);
+		EntryImpl target = (EntryImpl) context.createResource(null, GraphType.None, null, null);
+		ValueFactory vf = rm.getValueFactory();
+		IRI related = vf.createIRI("http://example.com/related");
+		IRI repositoryIRI = named.getSesameResourceURI();
+		IRI externalIRI = vf.createIRI("http://example.com/concepts/external");
+		named.setResourceURI(URI.create(externalIRI.stringValue()));
+		Model metadata = new LinkedHashModel();
+		metadata.add(externalIRI, related, target.getSesameResourceURI());
+		named.getLocalMetadata().setGraph(metadata);
+		// only a statement between two repository resources is cached as an inverse relation
+		assertTrue(target.getRelations().isEmpty());
+
+		named.setResourceURI(URI.create(repositoryIRI.stringValue()));
+
+		assertTrue(target.getRelations().contains(repositoryIRI, related, target.getSesameResourceURI()));
+	}
+
+	@Test
+	public void setResourceURI_fromARepositoryToAnExternalURIRemovesTheMetadataRelationsFromTheTarget() {
+		EntryImpl named = (EntryImpl) context.createResource(null, GraphType.None, ResourceType.NamedResource, null);
+		EntryImpl target = (EntryImpl) context.createResource(null, GraphType.None, null, null);
+		IRI related = rm.getValueFactory().createIRI("http://example.com/related");
+		Model metadata = new LinkedHashModel();
+		metadata.add(named.getSesameResourceURI(), related, target.getSesameResourceURI());
+		named.getLocalMetadata().setGraph(metadata);
+		assertFalse(target.getRelations().isEmpty());
+
+		named.setResourceURI(URI.create("http://example.com/concepts/external"));
+
+		assertTrue(target.getRelations().isEmpty());
+	}
+
+	@Test
+	public void setResourceURI_onALinkRewritesTheResourceURIInItsMetadataAsSubjectOnly() {
+		assertMetadataRenamedAsSubjectOnly(linkEntry);
+	}
+
+	@Test
+	public void setResourceURI_onALocalNamedEntryRewritesTheResourceURIInItsMetadataAsSubjectOnly() {
+		assertMetadataRenamedAsSubjectOnly(
+				context.createResource(null, GraphType.None, ResourceType.NamedResource, null));
+	}
+
+	/** Renames the entry's resource and asserts that a self-reference keeps the old URI as object, as in 5.x. */
+	private void assertMetadataRenamedAsSubjectOnly(Entry entry) {
+		ValueFactory vf = rm.getValueFactory();
+		IRI oldResourceIRI = vf.createIRI(entry.getResourceURI().toString());
+		IRI newResourceIRI = vf.createIRI("http://example.com/renamed-subject-only");
+		Model metadata = new LinkedHashModel();
+		metadata.add(oldResourceIRI, DCTERMS.REPLACES, oldResourceIRI);
+		entry.getLocalMetadata().setGraph(metadata);
+
+		entry.setResourceURI(URI.create(newResourceIRI.stringValue()));
+
+		Model renamed = entry.getLocalMetadata().getGraph();
+		assertEquals(1, renamed.size());
+		assertTrue(renamed.contains(newResourceIRI, DCTERMS.REPLACES, oldResourceIRI));
+	}
+
+	@Test
 	public void setResourceURI_onALocalNamedEntrySurvivesAReloadFromTheStore() {
 		EntryImpl named = (EntryImpl) context.createResource(null, GraphType.None, ResourceType.NamedResource, null);
 		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
