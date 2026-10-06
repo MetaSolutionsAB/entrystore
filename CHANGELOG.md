@@ -4,6 +4,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1226](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1226) The entry JSON writes the text of a String entry as a JSON string again, as in 5.x. Text that started and ended with brackets or braces was embedded unquoted, so \[draft\] a \[b\] made the response invalid JSON and \{"a":1\} came back as an object.
+
 [ENTRYSTORE-1222](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1222) JSONP loads of entries and of List and Graph resources \(format=application/json with a callback\) answer application/javascript cb\(\{...\}\) again, as in 5.x. They answered unwrapped RDF/XML, because the format parameter was ignored \(ENTRYSTORE-1216\), which broke cross-origin entrystore.js loads such as EntryScape Blocks. **Behaviour note:** a String resource is still answered as text/plain and ignores format, so a JSONP load of it is not wrapped; 5.x wrapped the unquoted text, which was not valid JavaScript for ordinary text.
 
 [ENTRYSTORE-1216](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1216) The format parameter selects the representation of entries and of Graph and List resources again and wins over the Accept header, as in 5.x, so EntryScape's Turtle, RDF/XML and JSON-LD links work. An entry requested with a wildcard Accept header, as browsers and script tags send, is RDF/XML again instead of JSON. **Behaviour note:** an unsupported format answers 406 \(400 on a resource if it does not parse\), and so does an entry Accept header that accepts none of its representations, such as application/json;q=0, where 5.x answered Turtle labelled with the requested type and RDF/XML respectively.
