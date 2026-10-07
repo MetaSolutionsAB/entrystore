@@ -21,12 +21,15 @@ import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.ResourceType;
 import org.entrystore.impl.RDFResource;
+import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.StringResource;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.api.ResourceQuery;
@@ -34,6 +37,7 @@ import org.entrystore.rest.springboot.model.dto.CompletionState;
 import org.entrystore.rest.springboot.model.dto.RenderedFeed;
 import org.entrystore.rest.springboot.model.dto.ResourceRepresentation;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.util.RDFJSON;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -84,14 +88,21 @@ class ResourceServiceTest {
 	private ProxyService proxyService;
 
 	@Mock
+	private RepositoryManagerImpl repositoryManager;
+
+	@Mock
+	private ReservedNamesService reservedNamesService;
+
+	@Mock
 	private Entry entry;
 
 	private ResourceService service;
 
 	@BeforeEach
 	void setUp() {
+		var contextService = new ContextService(repositoryManager, reservedNamesService, principalManager);
 		service = new ResourceService(resourceSerializationService, principalManager, syndicationService,
-				listResourceService, fileResourceService, userService, proxyService);
+				listResourceService, fileResourceService, userService, proxyService, contextService);
 	}
 
 	@Test
@@ -241,6 +252,34 @@ class ResourceServiceTest {
 				"Expected the predicate IRI in the RDF/JSON output");
 		assertTrue(result.contains("Sample"), "Expected the literal value in the RDF/JSON output");
 		verifyNoInteractions(listResourceService);
+	}
+
+	@Test
+	void getResourceRepresentation_contextAsNonAdmin_throwsForbiddenWithoutListingEntries() {
+		Context context = mock(Context.class);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.Context);
+		when(entry.getResourceType()).thenReturn(ResourceType.InformationResource);
+		when(entry.getResource()).thenReturn(context);
+		when(principalManager.currentUserIsAdminOrAdminGroup()).thenReturn(false);
+
+		assertThrows(ForbiddenException.class, () -> service.getResourceRepresentation(entry, plainQuery()));
+
+		verifyNoInteractions(resourceSerializationService);
+	}
+
+	@Test
+	void getResourceRepresentation_systemContextAsNonAdmin_throwsForbiddenWithoutListingEntries() {
+		Context context = mock(Context.class);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.SystemContext);
+		when(entry.getResourceType()).thenReturn(ResourceType.InformationResource);
+		when(entry.getResource()).thenReturn(context);
+		when(principalManager.currentUserIsAdminOrAdminGroup()).thenReturn(false);
+
+		assertThrows(ForbiddenException.class, () -> service.getResourceRepresentation(entry, plainQuery()));
+
+		verifyNoInteractions(resourceSerializationService);
 	}
 
 	@Test
