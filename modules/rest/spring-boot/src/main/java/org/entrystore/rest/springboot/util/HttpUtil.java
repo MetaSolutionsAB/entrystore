@@ -28,6 +28,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.DigestUtils;
 
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -144,6 +145,18 @@ public class HttpUtil {
 		if (response.getHeader(HttpHeaders.CACHE_CONTROL) == null) {
 			headers.setCacheControl(CacheControlFilter.CACHE_CONTROL_ANONYMOUS);
 		}
+	}
+
+	/**
+	 * Like {@link #setRevalidationHeaders}, but with an ETag computed from {@code content}, for a representation that
+	 * embeds other entries or the caller's rights and so can change while the entry's modification date does not.
+	 * Last-Modified stays the entry's date: a client revalidating with If-Modified-Since alone can still get a 304
+	 * for changed content, as in 5.x, while browsers send If-None-Match, which takes precedence.
+	 */
+	public static void setContentRevalidationHeaders(HttpHeaders headers, HttpServletResponse response,
+													 Date modifiedDate, byte[] content, boolean variesWithAccept) {
+		setRevalidationHeaders(headers, response, modifiedDate, variesWithAccept);
+		headers.setETag(createStrongETag(DigestUtils.md5DigestAsHex(content)));
 	}
 
 	/**

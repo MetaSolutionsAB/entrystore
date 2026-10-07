@@ -27,16 +27,23 @@ import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_PARTIAL
 import static java.net.HttpURLConnection.HTTP_PRECON_FAILED
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static java.nio.charset.StandardCharsets.UTF_8
 import static org.entrystore.rest.springboot.filter.CacheControlFilter.CACHE_CONTROL_AUTHENTICATED
 
 /**
- * Entry and resource GETs carry Last-Modified and ETag from the entry's modification date and answer conditional
- * requests with 304, and HEAD on an entry answers with those headers, as in 5.x.
+ * Entry and resource GETs carry Last-Modified from the entry's modification date and an ETag, and answer conditional
+ * requests with 304, and HEAD on an entry answers with those headers, as in 5.x. The ETag is that date where the
+ * representation depends on the entry alone, and a hash of the body where it embeds other entries or the caller's
+ * rights.
  */
 class ConditionalGetIT extends BaseSpec {
 
 	private static final String CONTEXT_ID = 'conditional-get-it-ctx'
+
+	private static final String DATE_ETAG = /"\d+"/
+
+	private static final String CONTENT_ETAG = /"[0-9a-f]{32}"/
 
 	private static String entryPath
 	private static String emptyResourcePath
@@ -75,18 +82,18 @@ class ConditionalGetIT extends BaseSpec {
 		def conn = EntryStoreClient.getRequest(entryPath + query, 'admin', accept, ['If-None-Match': etag])
 
 		then:
-		etag ==~ /"\d+"/
+		etag ==~ etagForm
 		first.getHeaderField('Last-Modified') != null
 		varyOf(first).containsAll(['Accept', 'Cookie', 'Authorization'])
 		conn.getResponseCode() == HTTP_NOT_MODIFIED
 		conn.getHeaderField('ETag') == etag
 
 		where:
-		representation         | query         | accept
-		'JSON'                 | ''            | 'application/json'
-		'JSON with includeAll' | '?includeAll' | 'application/json'
-		'RDF/XML'              | ''            | 'application/rdf+xml'
-		'Turtle'               | ''            | 'text/turtle'
+		representation         | query         | accept                | etagForm
+		'JSON'                 | ''            | 'application/json'    | DATE_ETAG
+		'JSON with includeAll' | '?includeAll' | 'application/json'    | CONTENT_ETAG
+		'RDF/XML'              | ''            | 'application/rdf+xml' | DATE_ETAG
+		'Turtle'               | ''            | 'text/turtle'         | DATE_ETAG
 	}
 
 	def "GET entry should answer 304 to If-Modified-Since with its Last-Modified"() {
@@ -129,12 +136,37 @@ class ConditionalGetIT extends BaseSpec {
 				['If-None-Match': etag])
 
 		then:
-		etag ==~ /"\d+"/
+		etag ==~ (type == 'file' ? DATE_ETAG : CONTENT_ETAG)
 		first.getHeaderField('Last-Modified') != null
 		conn.getResponseCode() == HTTP_NOT_MODIFIED
 
 		where:
 		type << ['file', 'graph', 'list', 'string', 'user']
+	}
+
+	def "GET list entry with includeAll should answer 200 with a new ETag after a member's metadata changes"() {
+		given: 'a list whose member is edited, which leaves the list entry itself unchanged'
+		def resourceIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/resource/_newId'
+		def memberId = createEntry(CONTEXT_ID, [:], createTitleMetadataBody(resourceIri, 'Member before'))
+		def listId = createEntry(CONTEXT_ID, [graphtype: 'list'], [resource: [memberId]])
+		def path = '/' + CONTEXT_ID + '/entry/' + listId + '?includeAll'
+		def before = EntryStoreClient.getRequest(path)
+		// read now: the connection sends its request only when its response is first read
+		def beforeEtag = before.getHeaderField('ETag')
+		def beforeLastModified = before.getHeaderField('Last-Modified')
+		def memberIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/resource/' + memberId
+		def metadata = JsonOutput.toJson(createTitleMetadataBody(memberIri, 'Member after')['metadata'])
+		assert EntryStoreClient.putRequest('/' + CONTEXT_ID + '/metadata/' + memberId, metadata)
+				.getResponseCode() == HTTP_NO_CONTENT
+
+		when:
+		def conn = EntryStoreClient.getRequest(path, 'admin', 'application/json', ['If-None-Match': beforeEtag])
+
+		then:
+		conn.getHeaderField('Last-Modified') == beforeLastModified
+		conn.getResponseCode() == HTTP_OK
+		conn.getHeaderField('ETag') != beforeEtag
+		conn.getInputStream().text.contains('Member after')
 	}
 
 	def "GET #type resource should answer 304 to If-Modified-Since with its Last-Modified"() {
@@ -231,6 +263,21 @@ class ConditionalGetIT extends BaseSpec {
 		head.getResponseCode() == HTTP_OK
 		head.getContentType().startsWith('application/rdf+xml')
 		head.getHeaderField('Content-Length') in [null, '0']
+	}
+
+	def "HEAD entry with includeAll as JSON should omit the ETag that the GET computes from the JSON"() {
+		given:
+		def get = EntryStoreClient.getRequest(entryPath + '?includeAll')
+
+		when:
+		def head = EntryStoreClient.sendRequestAsStream(HttpMethod.HEAD, entryPath + '?includeAll', null, 'admin',
+				null, [Accept: 'application/json'])
+
+		then:
+		get.getHeaderField('ETag') ==~ CONTENT_ETAG
+		head.getResponseCode() == HTTP_OK
+		head.getHeaderField('ETag') == null
+		head.getHeaderField('Last-Modified') == get.getHeaderField('Last-Modified')
 	}
 
 	def "HEAD entry should answer 304 to If-None-Match with its ETag"() {
@@ -373,9 +420,9 @@ class ConditionalGetIT extends BaseSpec {
 
 		where:
 		target     | user    | status
-		'resource' | ''      | HTTP_NOT_FOUND
+		'resource' | ''      | HTTP_UNAUTHORIZED
 		'resource' | 'admin' | HTTP_OK
-		'metadata' | ''      | HTTP_NOT_FOUND
+		'metadata' | ''      | HTTP_UNAUTHORIZED
 		'metadata' | 'admin' | HTTP_OK
 	}
 

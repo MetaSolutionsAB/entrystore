@@ -59,6 +59,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartRequest;
 
 import java.io.FileInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 import static org.entrystore.rest.springboot.util.HttpUtil.normalizeMediaType;
@@ -115,8 +116,10 @@ public class ResourceController {
 			case ResourceRepresentation.TextBody text -> ResponseEntity
 					.ok()
 					.contentType(text.mediaType())
-					// Graph and List resources follow the Accept header.
-					.headers(headers -> HttpUtil.setRevalidationHeaders(headers, response, modified, true))
+					// Graph and List resources follow the Accept header. The ETag is computed from the body, since
+					// lists, groups, users, contexts and feeds embed other entries, which change without this one.
+					.headers(headers -> HttpUtil.setContentRevalidationHeaders(headers, response, modified,
+							text.body().getBytes(StandardCharsets.UTF_8), true))
 					.body(text.body());
 		};
 	}
