@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.security;
 
+import org.entrystore.rest.springboot.filter.CacheControlFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -59,6 +60,19 @@ class CacheAwareRedirectStrategyTest {
 
 		assertEquals("no-store, max-age=0", response.getHeader(HttpHeaders.CACHE_CONTROL));
 		assertEquals(SC_MOVED_TEMPORARILY, response.getStatus());
+	}
+
+	@Test
+	void sendRedirect_replacesTheAuthenticatedRequestValue() throws Exception {
+		// An SSO callback that carries the pre-login session cookie got the revalidatable value from
+		// CacheControlFilter; the 302 may set the session cookie, so it must not be stored.
+		var request = new MockHttpServletRequest("GET", "/login/oauth2/code/keycloak");
+		var response = new MockHttpServletResponse();
+		response.setHeader(HttpHeaders.CACHE_CONTROL, CacheControlFilter.CACHE_CONTROL_AUTHENTICATED);
+
+		strategy.sendRedirect(request, response, "/store/dashboard");
+
+		assertEquals("private, no-store", response.getHeader(HttpHeaders.CACHE_CONTROL));
 	}
 
 	@Test

@@ -18,10 +18,15 @@ package org.entrystore.rest.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.rest.springboot.model.api.GetEntryNameResponse;
 import org.entrystore.rest.springboot.model.api.GetEntryResponse;
@@ -33,6 +38,7 @@ import org.entrystore.rest.springboot.service.EntryService;
 import org.entrystore.rest.springboot.util.EntryMediaTypeResolver;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.HttpUtil;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -44,8 +50,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.Map;
 
@@ -57,22 +66,47 @@ import static org.entrystore.rest.springboot.util.HttpUtil.determineMediaType;
 public class EntryController {
 
 	private final EntryService entryService;
+	private final ObjectMapper objectMapper;
 
 	@Operation(
 			summary = "Returns the entry information.",
 			description = "Returns an RDF graph unless application/json is requested in which case the JSON-structure " +
 					"as specified in the response body is used.")
+	@ApiResponse(responseCode = "200", content = @Content(schema = @Schema(implementation = GetEntryResponse.class)))
 	@GetMapping(path = "/{context-id}/entry/{entry-id}", produces = MediaType.APPLICATION_JSON_VALUE)
-	public GetEntryResponse getEntryInJsonFormat(
+	public ResponseEntity<byte[]> getEntryInJsonFormat(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
 			@RequestParam(required = false) MediaType rdfFormat,
 			@RequestParam(required = false) String includeAll,
-			@ModelAttribute ListFilter listFilter
+			@ModelAttribute ListFilter listFilter,
+			@Parameter(hidden = true) HttpServletResponse response
 	) {
 		String mediaType = rdfFormat != null ? GraphUtil.validateRdfMediaType(rdfFormat.toString()) : null;
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		return entryService.getEntryInJsonFormat(entry, mediaType, includeAll != null, listFilter);
+		GetEntryResponse body = entryService.getEntryInJsonFormat(entry, mediaType, includeAll != null, listFilter);
+		// Serialized here rather than by the message converter, so that the ETag can be computed from the bytes sent
+		byte[] json = objectMapper.writeValueAsBytes(body);
+		return ResponseEntity.ok()
+				.contentType(MediaType.APPLICATION_JSON)
+				.headers(headers -> {
+					if (jsonEmbedsOtherData(entry, includeAll != null)) {
+						HttpUtil.setContentRevalidationHeaders(headers, response, entry.getModifiedDate(), json, true);
+					} else {
+						HttpUtil.setRevalidationHeaders(headers, response, entry.getModifiedDate(), true);
+					}
+				})
+				.body(json);
+	}
+
+	/**
+	 * Whether the entry JSON carries data that can change while the entry's modification date does not: with
+	 * {@code includeAll} the caller's rights, the relations and the members of a list, group or user, and for a
+	 * context its quota fill level. Its ETag is then computed from the JSON instead of that date.
+	 */
+	private static boolean jsonEmbedsOtherData(Entry entry, boolean includeAll) {
+		GraphType graphType = entry.getGraphType();
+		return includeAll || graphType == GraphType.Context || graphType == GraphType.SystemContext;
 	}
 
 	@Operation(
@@ -86,7 +120,8 @@ public class EntryController {
 	public ResponseEntity<String> getEntryInRdfFormat(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
-			@Parameter(hidden = true) HttpServletRequest request
+			@Parameter(hidden = true) HttpServletRequest request,
+			@Parameter(hidden = true) HttpServletResponse response
 	) throws HttpMediaTypeNotAcceptableException {
 		// Return ResponseEntity instead of String to control the response Content-Type. Spring MVC would otherwise
 		// echo back the client's Accept type (text/rdf+n3) as the response Content-Type, but we respond with
@@ -96,7 +131,39 @@ public class EntryController {
 		String body = entryService.getEntryInRdfFormat(entry, mediaType);
 		return ResponseEntity.ok()
 				.contentType(MediaType.parseMediaType(mediaType))
+				.headers(headers -> HttpUtil.setRevalidationHeaders(headers, response, entry.getModifiedDate(), true))
 				.body(body);
+	}
+
+	@Operation(
+			summary = "Returns the headers of the entry information.",
+			description = "Answers with the headers a GET would send, including Last-Modified, without serializing " +
+					"the entry. The ETag is omitted where the GET computes it from the JSON: with includeAll, and " +
+					"for contexts.")
+	@RequestMapping(path = "/{context-id}/entry/{entry-id}", method = RequestMethod.HEAD)
+	public ResponseEntity<Void> headEntry(
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId,
+			@Parameter(hidden = true) HttpServletRequest request,
+			@Parameter(hidden = true) HttpServletResponse response
+	) throws HttpMediaTypeNotAcceptableException {
+		// The GET is served by the JSON handler for any application/json, parameters included, else by the RDF one.
+		MediaType negotiated = EntryMediaTypeResolver.resolve(request);
+		boolean json = MediaType.APPLICATION_JSON.equalsTypeAndSubtype(negotiated);
+		MediaType contentType = json
+				? MediaType.APPLICATION_JSON
+				: MediaType.parseMediaType(GraphUtil.validateRdfMediaType(negotiated.toString()));
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		return ResponseEntity.ok()
+				.contentType(contentType)
+				.headers(headers -> {
+					HttpUtil.setRevalidationHeaders(headers, response, entry.getModifiedDate(), true);
+					if (json && jsonEmbedsOtherData(entry, request.getParameter("includeAll") != null)) {
+						// the GET's ETag is computed from the JSON, which HEAD does not build
+						headers.remove(HttpHeaders.ETAG);
+					}
+				})
+				.build();
 	}
 
 	@Operation(

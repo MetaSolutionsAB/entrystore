@@ -22,10 +22,13 @@ import org.entrystore.rest.it.util.EntryStoreClient
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
 import static org.entrystore.rest.springboot.filter.CacheControlFilter.CACHE_CONTROL_AUTHENTICATED
+import static org.entrystore.rest.springboot.filter.CacheControlFilter.CACHE_CONTROL_CREDENTIALS
 
 class CacheControlIT extends BaseSpec {
 
-	def "GET /auth/user as authenticated user returns Cache-Control: private, no-store"() {
+	private static final String ADMIN_LOGIN = 'auth_username=admin&auth_password=adminpass'
+
+	def "GET /auth/user as authenticated user returns Cache-Control: private, no-cache"() {
 		when:
 		def conn = EntryStoreClient.getRequest('/auth/user', 'admin', null)
 
@@ -34,7 +37,7 @@ class CacheControlIT extends BaseSpec {
 		conn.getHeaderField('Cache-Control') == CACHE_CONTROL_AUTHENTICATED
 	}
 
-	def "authenticated GET against a non-/auth API endpoint returns Cache-Control: private, no-store"() {
+	def "authenticated GET against a non-/auth API endpoint returns Cache-Control: private, no-cache"() {
 		when:
 		def conn = EntryStoreClient.getRequest('/60/entry/randomEntryId/index', 'admin')
 
@@ -61,7 +64,7 @@ class CacheControlIT extends BaseSpec {
 		conn.getHeaderField('Cache-Control') == null
 	}
 
-	def "GET with Authorization: Basic and no session cookie returns Cache-Control: private, no-store"() {
+	def "GET with Authorization: Basic and no session cookie returns Cache-Control: private, no-cache"() {
 		when:
 		def basicAuth = 'Basic ' + Base64.getEncoder().encodeToString('admin:adminpass'.getBytes())
 		def conn = EntryStoreClient.getRequest('/auth/user', '', null, ['Authorization': basicAuth])
@@ -69,6 +72,36 @@ class CacheControlIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getHeaderField('Cache-Control') == CACHE_CONTROL_AUTHENTICATED
+	}
+
+	def "GET /auth/tokens, which lists session ids, returns Cache-Control: private, no-store"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/auth/tokens', 'admin')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getHeaderField('Cache-Control') == CACHE_CONTROL_CREDENTIALS
+	}
+
+	def "POST /auth/cookie login returns Cache-Control: private, no-store"() {
+		when:
+		def conn = EntryStoreClient.postRequest('/auth/cookie', ADMIN_LOGIN, '', 'application/x-www-form-urlencoded')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		EntryStoreClient.findSetCookie(conn, 'auth_token') != null
+		conn.getHeaderField('Cache-Control') == CACHE_CONTROL_CREDENTIALS
+	}
+
+	def "POST /auth/cookie login carrying an old session cookie returns Cache-Control: private, no-store"() {
+		when:
+		def conn = EntryStoreClient.postRequest('/auth/cookie', ADMIN_LOGIN, '', 'application/x-www-form-urlencoded',
+				[Cookie: 'auth_token=stale-session'])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		EntryStoreClient.findSetCookie(conn, 'auth_token') != null
+		conn.getHeaderField('Cache-Control') == CACHE_CONTROL_CREDENTIALS
 	}
 
 	def "anonymous GET against permit-all controller endpoint /management/status does not receive aggressive cache headers"() {

@@ -22,6 +22,7 @@ import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.springboot.filter.CacheControlFilter;
 import org.entrystore.rest.springboot.model.api.DeleteAuthTokenRequestBody;
 import org.entrystore.rest.springboot.model.api.GetAuthUserResponse;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
@@ -62,8 +63,11 @@ public class AuthUserController {
 
 	@Operation(summary = "Provides list of active tokens of a currently logged-in user.")
 	@GetMapping(path = "/auth/tokens", produces = MediaType.APPLICATION_JSON_VALUE)
-	public Map<String, SessionInfo> tokensInfo() {
-		return tokenService.getTokens();
+	public ResponseEntity<Map<String, SessionInfo>> tokensInfo() {
+		// The keys are live session ids.
+		return ResponseEntity.ok()
+				.header(HttpHeaders.CACHE_CONTROL, CacheControlFilter.CACHE_CONTROL_CREDENTIALS)
+				.body(tokenService.getTokens());
 	}
 
 	@Operation(summary = "Deletes the session of provided cookie token.")

@@ -21,6 +21,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import lombok.Getter;
 import org.entrystore.repository.RepositoryManager;
+import org.entrystore.rest.springboot.filter.CacheControlFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.convert.DurationStyle;
 import org.springframework.boot.web.server.Cookie;
@@ -195,6 +196,8 @@ public class AuthTokenCookies implements LogoutHandler {
 					.sameSite(sameSite);
 			response.addHeader(HttpHeaders.SET_COOKIE, cookie.build().toString());
 		}
+		// A guest request continues to a handler that may commit before CacheControlFilter's post-chain check.
+		CacheControlFilter.markSessionCookieResponse(response);
 	}
 
 	/**

@@ -30,10 +30,11 @@ import org.springframework.web.util.WebUtils;
 import java.io.IOException;
 
 /**
- * Marks responses to authenticated requests as uncacheable by shared infrastructure
- * (CDNs, forward proxies) unless a prior filter or controller has already set
- * {@code Cache-Control} — defensive hardening against shared-cache poisoning when
- * {@code X-Forwarded-Prefix} is spoofable upstream.
+ * Marks responses to authenticated requests {@link #CACHE_CONTROL_AUTHENTICATED} unless a prior filter or
+ * controller has already set {@code Cache-Control}: {@code private} keeps them out of shared caches (CDNs, forward
+ * proxies), which guards against shared-cache poisoning when {@code X-Forwarded-Prefix} is spoofable upstream, and
+ * {@code no-cache} makes the browser revalidate each time, so a conditional GET can answer 304 and an edit is never
+ * shown stale.
  * <p>
  * A request is treated as authenticated when it carries the session cookie or an
  * {@code Authorization: Basic} header. The filter yields to any {@code Cache-Control}
@@ -42,29 +43,36 @@ import java.io.IOException;
  * wins. A controller running after this filter can still override with
  * {@code setHeader}.
  * <p>
- * After the chain runs, the filter also stamps {@link #CACHE_CONTROL_AUTHENTICATED}
- * on responses that establish the session cookie via {@code Set-Cookie} when the
- * response has not yet committed. The form-login {@code /auth/cookie} handler
- * buffers a small body before commit, so its 200 response is covered here.
+ * After the chain runs, the filter marks a response that sets the session cookie via {@code Set-Cookie}
+ * {@link #CACHE_CONTROL_CREDENTIALS} when the response has not yet committed, since it carries a credential that
+ * no cache may store.
  * <p>
- * The SAML and CAS success-redirect paths commit the response inside
- * {@code sendRedirect}, so this post-chain check would otherwise be too late.
- * {@code SamlLoginSuccessHandler} and {@code CasLoginSuccessHandler} are wired
- * to use {@code CacheAwareRedirectStrategy} (see {@code SecurityConfig}) which
- * stamps the same {@code Cache-Control} value before {@code sendRedirect}
- * commits — closing the same gap on the 302 + {@code Set-Cookie} path.
+ * Responses that never reach this filter or commit inside the chain call {@link #markSessionCookieResponse}
+ * themselves: the form-login {@code /auth/cookie} response, whose Spring Security filter ends the chain, through
+ * {@code FormLoginAuthenticationSuccessHandler}; the SAML, CAS and OIDC success redirects, which commit inside
+ * {@code sendRedirect}, through {@code CacheAwareRedirectStrategy} (see {@code SecurityConfig}); and any response
+ * that expires the session cookie, through {@code AuthTokenCookies}.
  */
 @Component
 public class CacheControlFilter extends OncePerRequestFilter {
 
 	/**
-	 * Single source of truth for the {@code Cache-Control} value stamped on authenticated
-	 * and session-establishing responses. Referenced by {@code CacheAwareRedirectStrategy}
-	 * and by the unit + integration tests that assert on it, so a future change here
-	 * (e.g. adding {@code must-revalidate}) cannot drift between filter, strategy, and
-	 * test expectations.
+	 * {@code Cache-Control} of responses to authenticated requests. Referenced by the unit and integration tests that
+	 * assert on it, so filter and test expectations cannot drift.
 	 */
-	public static final String CACHE_CONTROL_AUTHENTICATED = "private, no-store";
+	public static final String CACHE_CONTROL_AUTHENTICATED = "private, no-cache";
+
+	/**
+	 * {@code Cache-Control} of responses that carry a credential, so no cache may store them: those that set or expire
+	 * the session cookie, the SSO redirects that may do so, and bodies with session ids or confirmation tokens.
+	 */
+	public static final String CACHE_CONTROL_CREDENTIALS = "private, no-store";
+
+	/**
+	 * {@code Cache-Control} the entry and resource controllers set on responses to anonymous requests, so guests
+	 * revalidate as authenticated users do. This filter leaves other anonymous responses without one.
+	 */
+	public static final String CACHE_CONTROL_ANONYMOUS = "no-cache";
 
 	private static final String BASIC_AUTH_SCHEME_PREFIX = "Basic ";
 
@@ -86,10 +94,21 @@ public class CacheControlFilter extends OncePerRequestFilter {
 			response.setHeader(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL_AUTHENTICATED);
 		}
 		filterChain.doFilter(request, response);
-		if (!response.isCommitted()
-				&& response.getHeader(HttpHeaders.CACHE_CONTROL) == null
-				&& responseEstablishesSession(response)) {
-			response.setHeader(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL_AUTHENTICATED);
+		if (responseEstablishesSession(response)) {
+			markSessionCookieResponse(response);
+		}
+	}
+
+	/**
+	 * Sets {@link #CACHE_CONTROL_CREDENTIALS} on a response that has not committed. It replaces only
+	 * {@link #CACHE_CONTROL_AUTHENTICATED}, which this filter stamps on a request carrying an old session cookie, so
+	 * the result does not depend on whether this filter ran first; any other {@code Cache-Control} was set deliberately
+	 * and is kept.
+	 */
+	public static void markSessionCookieResponse(HttpServletResponse response) {
+		String cacheControl = response.getHeader(HttpHeaders.CACHE_CONTROL);
+		if (!response.isCommitted() && (cacheControl == null || CACHE_CONTROL_AUTHENTICATED.equals(cacheControl))) {
+			response.setHeader(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL_CREDENTIALS);
 		}
 	}
 

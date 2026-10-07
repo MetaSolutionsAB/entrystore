@@ -19,6 +19,7 @@ package org.entrystore.rest.it
 import org.entrystore.rest.it.util.EntryStoreClient
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_NOT_MODIFIED
 import static java.net.HttpURLConnection.HTTP_OK
 
 class JsonpIT extends BaseSpec {
@@ -56,14 +57,38 @@ class JsonpIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/javascript')
 		// The wrapped body no longer matches the controller's ETag/Last-Modified, so it must be
-		// non-cacheable end-to-end (here 'private, no-store' from CacheControlFilter on this admin request).
-		conn.getHeaderField('Cache-Control').contains('no-store')
+		// non-cacheable end-to-end, and still private on this admin request.
+		conn.getHeaderField('Cache-Control') == 'private, no-store'
 		def jsonpBody = conn.getInputStream().text
 		jsonpBody.startsWith('cb(')
 		jsonpBody.endsWith(')')
 		// The wrapped payload (between the first '(' and the last ')') must be the unmodified JSON object.
 		def innerJson = jsonpBody.substring(jsonpBody.indexOf('(') + 1, jsonpBody.lastIndexOf(')'))
 		JSON_PARSER.parseText(innerJson) instanceof Map
+	}
+
+	def "anonymous GET entry with ?callback= should be wrapped and not stored"() {
+		when:
+		def conn = EntryStoreClient.getRequest(entryUrl + '?callback=cb', '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/javascript')
+		conn.getHeaderField('Cache-Control') == 'no-store'
+	}
+
+	def "conditional JSONP GET of an entry answered 304 should not be stored either"() {
+		given:
+		def path = entryUrl + '?format=application/json&callback=cb'
+		def etag = EntryStoreClient.getRequest(path, 'admin').getHeaderField('ETag')
+
+		when:
+		def conn = EntryStoreClient.getRequest(path, 'admin', 'application/json', ['If-None-Match': etag])
+
+		then:
+		etag != null
+		conn.getResponseCode() == HTTP_NOT_MODIFIED
+		conn.getHeaderField('Cache-Control') == 'private, no-store'
 	}
 
 	// entrystore.js loads cross-origin GETs by JSONP with format=application/json; a script tag accepts anything.

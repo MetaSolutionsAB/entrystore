@@ -200,7 +200,7 @@ public class SecurityConfig {
 				// governs the Cache-Control / Pragma / Expires headers end-to-end. The default writer would
 				// otherwise stamp "no-cache, no-store, max-age=0, must-revalidate" on every response,
 				// including permit-all public endpoints — which contradicts the per-request policy this app
-				// needs (private,no-store for authenticated; no header for anonymous so static and
+				// needs (private,no-cache for authenticated; no header for anonymous so static and
 				// controller-set values can pass through unchanged).
 				.headers(headers -> headers.cacheControl(HeadersConfigurer.CacheControlConfig::disable))
 				// Spring's default repositories, set explicitly so SessionManagementFilter also sees the request-scoped

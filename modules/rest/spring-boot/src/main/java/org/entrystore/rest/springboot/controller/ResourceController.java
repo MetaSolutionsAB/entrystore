@@ -21,6 +21,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.media.SchemaProperty;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.entrystore.Entry;
@@ -33,9 +34,11 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.EntryService;
 import org.entrystore.rest.springboot.service.ResourceService;
 import org.entrystore.rest.springboot.util.GraphUtil;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.MultipartUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -51,8 +54,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartRequest;
+
+import java.io.FileInputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
 
 import static org.entrystore.rest.springboot.util.HttpUtil.normalizeMediaType;
 
@@ -80,24 +88,38 @@ public class ResourceController {
 			@RequestParam(name = "lang", required = false, defaultValue = "en") String language,
 			@RequestParam(required = false) String download,
 			@ModelAttribute ListFilter listFilter,
-			@RequestHeader(value = "Accept", required = false, defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
+			@RequestHeader(value = "Accept", required = false, defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader,
+			@RequestHeader(value = HttpHeaders.IF_RANGE, required = false) String ifRange,
+			@Parameter(hidden = true) HttpServletResponse response,
+			@Parameter(hidden = true) WebRequest webRequest
 	) {
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 		ResourceQuery query = new ResourceQuery(format, rdfFormat, acceptHeader, syndication, language, feedSize,
 				listFilter);
+		Date modified = entry.getModifiedDate();
 
 		return switch (resourceService.getResourceRepresentation(entry, query)) {
+			// Spring evaluates conditional requests only for 200; 5.x answered 304 for the empty representation too.
 			case ResourceRepresentation.Empty _ -> ResponseEntity
-					.noContent()
+					.status(conditionalStatus(webRequest, response, modified, HttpStatus.NO_CONTENT.value()))
+					.headers(headers -> HttpUtil.setRevalidationHeaders(headers, response, modified, false))
 					.build();
 			case ResourceRepresentation.FileDownload file -> ResponseEntity
 					.ok()
 					.headers(buildFileDownloadResponseHeaders(file, download != null))
+					.headers(headers -> HttpUtil.setRevalidationHeaders(headers, response, modified, false))
 					.contentLength(file.file().length())
-					.body(new FileSystemResource(file.file()));
+					// Spring answers Range for any Resource but InputStreamResource, without checking If-Range.
+					.body(HttpUtil.ifRangeMatches(ifRange, modified)
+							? new FileSystemResource(file.file())
+							: new InputStreamResource(() -> new FileInputStream(file.file())));
 			case ResourceRepresentation.TextBody text -> ResponseEntity
 					.ok()
 					.contentType(text.mediaType())
+					// Graph and List resources follow the Accept header. The ETag is computed from the body, since
+					// lists, groups, users, contexts and feeds embed other entries, which change without this one.
+					.headers(headers -> HttpUtil.setContentRevalidationHeaders(headers, response, modified,
+							text.body().getBytes(StandardCharsets.UTF_8), true))
 					.body(text.body());
 		};
 	}
@@ -227,6 +249,8 @@ public class ResourceController {
 	private HttpHeaders buildFileDownloadResponseHeaders(ResourceRepresentation.FileDownload file, boolean isDownload) {
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(file.mediaType());
+		// Spring adds it only when it handles Range itself, not on the full answer to a mismatched If-Range.
+		headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
 
 		ContentDisposition.Builder disposition = !allowContentDispositionInline || isDownload
 				? ContentDisposition.attachment()
@@ -237,6 +261,19 @@ public class ResourceController {
 			headers.set("Digest", "sha-256=" + file.sha256Digest());
 		}
 		return headers;
+	}
+
+	/**
+	 * Evaluates the conditional headers as Spring does for a 200, and returns the status it chose (304, or 412 for
+	 * a failed If-Unmodified-Since), else {@code status}.
+	 */
+	private static int conditionalStatus(WebRequest webRequest, HttpServletResponse response, Date modified,
+										 int status) {
+		if (modified != null && webRequest.checkNotModified(
+				HttpUtil.createStrongETag(Long.toString(modified.getTime())), modified.getTime())) {
+			return response.getStatus();
+		}
+		return status;
 	}
 
 	private static ResponseEntity<Void> buildSetResourceResponse(Entry entry, CompletionState result) {

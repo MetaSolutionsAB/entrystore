@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apereo.cas.client.util.CommonUtils;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
+import org.entrystore.rest.springboot.filter.CacheControlFilter;
 import org.entrystore.rest.springboot.model.api.ConfirmRequestBody;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.springboot.model.api.SignupRequestBody;
@@ -38,6 +39,7 @@ import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.RequestBodyValidator;
 import org.entrystore.rest.springboot.util.WebResourceUrls;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.cas.ServiceProperties;
@@ -273,6 +275,7 @@ public class AuthController {
 	@GetMapping(path = "/auth/pwreset")
 	public String confirmPasswordReset(
 			Model model,
+			HttpServletResponse response,
 			@RequestParam(required = false) String confirm
 	) {
 		if (confirm == null || confirm.isEmpty()) {
@@ -287,7 +290,7 @@ public class AuthController {
 		}
 
 		authService.assertPasswordResetTokenValid(confirm, PASSWORD_RESET_TITLE);
-		addConfirmFormAttributes(model, PWRESET_FORM, confirm, null);
+		addConfirmFormAttributes(model, response, PWRESET_FORM, confirm, null);
 		return "confirm_form";
 	}
 
@@ -383,7 +386,7 @@ public class AuthController {
 		}
 
 		authService.assertSignupTokenValid(confirm, SIGNUP_TITLE);
-		addConfirmFormAttributes(model, SIGNUP_FORM, confirm, null);
+		addConfirmFormAttributes(model, response, SIGNUP_FORM, confirm, null);
 		return "confirm_form";
 	}
 
@@ -433,12 +436,15 @@ public class AuthController {
 			return "auth";
 		}
 		String error = "The information you entered is incorrect. " + result.remainingAttempts() + " attempt(s) remaining.";
-		addConfirmFormAttributes(model, form, token, error);
+		addConfirmFormAttributes(model, response, form, token, error);
 		response.setStatus(HttpStatus.UNAUTHORIZED.value());
 		return "confirm_form";
 	}
 
-	private void addConfirmFormAttributes(Model model, ConfirmForm form, String token, String error) {
+	/** Renders the token into the form, so no cache may store the response. */
+	private void addConfirmFormAttributes(Model model, HttpServletResponse response, ConfirmForm form, String token,
+										  String error) {
+		response.setHeader(HttpHeaders.CACHE_CONTROL, CacheControlFilter.CACHE_CONTROL_CREDENTIALS);
 		model.addAttribute("title", form.title());
 		model.addAttribute("action", form.action());
 		model.addAttribute("passwordLabel", form.passwordLabel());

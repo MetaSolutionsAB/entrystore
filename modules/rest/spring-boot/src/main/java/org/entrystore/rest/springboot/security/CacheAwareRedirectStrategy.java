@@ -19,29 +19,27 @@ package org.entrystore.rest.springboot.security;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.entrystore.rest.springboot.filter.CacheControlFilter;
-import org.springframework.http.HttpHeaders;
 import org.springframework.security.web.DefaultRedirectStrategy;
 
 import java.io.IOException;
 
 /**
  * Redirect strategy that stamps {@code Cache-Control: private, no-store} on the
- * response before delegating to {@link DefaultRedirectStrategy#sendRedirect}.
+ * response before delegating to {@link DefaultRedirectStrategy#sendRedirect}, through
+ * {@link CacheControlFilter#markSessionCookieResponse}.
  * <p>
  * Used by the SAML, CAS and OIDC login-success handlers and the SAML login-failure
  * handler, where the 302 would otherwise commit the response before {@code CacheControlFilter}'s
  * post-chain check can run, leaving the response with no {@code Cache-Control}. For the
  * success handlers, that 302 carries the session {@code Set-Cookie} header, which a
  * misconfigured intermediary could then cache (CWE-525). Yields to any {@code Cache-Control}
- * an earlier filter or handler has already set, matching the filter's contract.
+ * an earlier filter or handler has already set, except the filter's own value for authenticated requests.
  */
 public final class CacheAwareRedirectStrategy extends DefaultRedirectStrategy {
 
 	@Override
 	public void sendRedirect(HttpServletRequest request, HttpServletResponse response, String url) throws IOException {
-		if (!response.isCommitted() && response.getHeader(HttpHeaders.CACHE_CONTROL) == null) {
-			response.setHeader(HttpHeaders.CACHE_CONTROL, CacheControlFilter.CACHE_CONTROL_AUTHENTICATED);
-		}
+		CacheControlFilter.markSessionCookieResponse(response);
 		super.sendRedirect(request, response, url);
 	}
 }
