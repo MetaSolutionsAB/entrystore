@@ -42,15 +42,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProxyPropertiesTest {
 
 	@Test
-	void defaults_matchThe5xBehaviour() {
-		// The constants these keys replaced, and no response-size limit, as 5.x had none.
+	void defaults_matchThe5xBehaviourAndCapTheResponseAt100Megabytes() {
+		// The constants these keys replaced; the response size is capped, where 5.x had no limit.
 		runner().run(context -> {
 			ProxyProperties proxy = context.getBean(ProxyProperties.class);
-			assertFalse(proxy.isResponseSizeLimited());
+			assertTrue(proxy.isResponseSizeLimited());
+			assertEquals(DataSize.ofMegabytes(100), proxy.maxResponseSize());
 			assertEquals(15, proxy.maxRedirects());
 			assertEquals(Duration.ofSeconds(30), proxy.connectTimeout());
 			assertEquals(Duration.ofSeconds(60), proxy.readTimeout());
 		});
+	}
+
+	@Test
+	void negativeMaxResponseSize_removesTheDefaultCap() {
+		runner().withPropertyValues("entrystore.proxy.max-response-size=-1B").run(context ->
+				assertFalse(context.getBean(ProxyProperties.class).isResponseSizeLimited()));
 	}
 
 	@Test

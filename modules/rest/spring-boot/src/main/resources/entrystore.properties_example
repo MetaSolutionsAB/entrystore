@@ -496,7 +496,8 @@ entrystore.solr.extract-fulltext=off
 ## Use the indexed form (.1, .2, ...); a bare "anonymous=host" value is not supported.
 # entrystore.proxy.whitelist.anonymous.1=public.example.com
 
-## Outbound-fetch limits, hardcoded before 6.1. The defaults below are the 5.x values.
+## Outbound-fetch limits, hardcoded before 6.1. The defaults below are the 5.x values, except
+## max-response-size, which 5.x did not limit.
 ## max-redirects, connect-timeout and read-timeout apply to BOTH outbound
 ## paths: GET /proxy (and its context-scoped form) and the resource-DELETE proxy path above.
 ## max-response-size applies to GET /proxy only — the resource-DELETE path never reads a response body.
@@ -509,13 +510,14 @@ entrystore.solr.extract-fulltext=off
 ## every successful read, NOT a deadline for the response, so it does not bound total wall time: an
 ## upstream that trickles bytes just under the timeout holds a request thread for as long as it keeps
 ## sending, or until max-response-size is reached. DNS resolution is covered by no timeout here at all.
-## The proxy streams on the request thread, so if the concern is threads held by a slow upstream, set
+## The proxy streams on the request thread, so if the concern is threads held by a slow upstream, lower
 ## max-response-size — lowering the timeouts alone does not create a bound.
 ##
-## max-response-size optionally caps the upstream body that GET /proxy passes through; negative (the
-## default) means no limit, as in 5.x. The body is streamed, not held in memory. A larger Content-Length
-## is answered 502; a body without Content-Length is cut off once it exceeds the cap.
-# entrystore.proxy.max-response-size=-1B
+## max-response-size caps the upstream body that GET /proxy passes through (default 100MB); negative
+## means no limit, as in 5.x. The body is streamed, not held in memory, except for JSONP, which is
+## buffered to be wrapped. A larger Content-Length is answered 502; a body without Content-Length is cut
+## off once it exceeds the cap.
+# entrystore.proxy.max-response-size=100MB
 # entrystore.proxy.max-redirects=15
 # entrystore.proxy.connect-timeout=30s
 # entrystore.proxy.read-timeout=60s

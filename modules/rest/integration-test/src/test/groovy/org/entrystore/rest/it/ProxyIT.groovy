@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
+import static java.net.HttpURLConnection.HTTP_BAD_GATEWAY
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
@@ -110,6 +111,19 @@ class ProxyIT extends BaseSpec {
 			exchange.sendResponseHeaders(200, target.bytes.length)
 			exchange.responseBody.write(target.bytes)
 			exchange.responseBody.close()
+		}
+
+		// Announces one byte more than the default cap; the proxy must refuse it before reading any body.
+		mockServer.createContext('/over-default-cap') { exchange ->
+			exchange.responseHeaders.set('Content-Type', 'application/octet-stream')
+			try {
+				exchange.sendResponseHeaders(200, LARGE_BODY_SIZE + 1)
+				exchange.responseBody.write(new byte[FIRST_PART_SIZE])
+			} catch (IOException e) {
+				log.info('/over-default-cap: client went away: {}', e.message)
+			} finally {
+				exchange.close()
+			}
 		}
 
 		// Sends the first MiB, then holds the rest back until the client has received that MiB through the
@@ -332,7 +346,7 @@ class ProxyIT extends BaseSpec {
 		conn.inputStream.text == '{"key":"value"}'
 	}
 
-	def 'GET /proxy streams a 100 MB upstream body to the client'() {
+	def 'GET /proxy streams a 100 MB upstream body, the size of the default cap, to the client'() {
 		given:
 		firstPartReceived = new CountDownLatch(1)
 
@@ -357,6 +371,15 @@ class ProxyIT extends BaseSpec {
 		status == HTTP_OK
 		contentLength == LARGE_BODY_SIZE
 		received == LARGE_BODY_SIZE
+	}
+
+	def 'GET /proxy answers 502 to an upstream announcing more than the default cap of 100 MB'() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy' + convertMapToQueryParams([url: mockOrigin + '/over-default-cap']),
+				'admin', '*/*')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_GATEWAY
 	}
 
 	def 'HEAD /proxy answers with the upstream headers and no body'() {

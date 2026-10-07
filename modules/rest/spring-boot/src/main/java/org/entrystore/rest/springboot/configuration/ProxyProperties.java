@@ -33,18 +33,19 @@ import java.util.Set;
 
 /**
  * Bindings for {@code entrystore.proxy.*}: the outbound-fetch limits, consumed by
- * {@code ProxyService} (optional response-size cap), {@code SsrfSafeHttpClient} (redirect cap) and
+ * {@code ProxyService} (response-size cap), {@code SsrfSafeHttpClient} (redirect cap) and
  * {@code SsrfValidator} (socket timeouts), and the proxy/SSRF whitelists.
  *
- * <p><b>Outbound-fetch limits.</b> The defaults are the 5.x values: the constants these keys replaced,
- * and no response-size limit. The timeouts apply per hop on <b>both</b> outbound paths that go through
+ * <p><b>Outbound-fetch limits.</b> The defaults are the 5.x values, the constants these keys replaced, except
+ * that the response size is capped at 100 MB, where 5.x had no limit. The timeouts apply per hop on <b>both</b> outbound paths that go through
  * {@code SsrfValidator.openPinnedConnection}: {@code GET /proxy} (and its context-scoped form) and
  * {@code DELETE /{context-id}/resource/{entry-id}?proxy=true}. Establishing all hops costs at worst
  * roughly {@code (maxRedirects + 1) × connectTimeout}; {@code readTimeout} bounds each socket read
  * rather than the exchange, so total wall time is <b>not</b> bounded by it — a slow-drip upstream can
- * hold a request thread for as long as it keeps sending, or until {@code maxResponseSize} is reached if
- * one is set. Plus DNS resolution, which no timeout here covers. {@code maxResponseSize} is unlimited
- * when negative (the default, as in 5.x); the body is streamed, so the cap bounds transfer size, not heap.
+ * hold a request thread for as long as it keeps sending, or until {@code maxResponseSize} is reached.
+ * Plus DNS resolution, which no timeout here covers. {@code maxResponseSize} is unlimited when negative;
+ * the body is streamed, so the cap bounds transfer size and thread time, not heap. A JSONP response is the
+ * exception: it is buffered to be wrapped, so there the cap also bounds heap.
  * It applies to {@code GET /proxy} only — the resource-DELETE path never reads a response body.
  *
  * <p><b>Whitelists.</b> EntryStore expresses lists in the legacy indexed form
@@ -64,7 +65,7 @@ import java.util.Set;
 @Slf4j
 @ConfigurationProperties(prefix = "entrystore.proxy")
 public record ProxyProperties(
-		@DefaultValue("-1B") DataSize maxResponseSize,
+		@DefaultValue("100MB") DataSize maxResponseSize,
 		@DefaultValue("15") int maxRedirects,
 		@DurationUnit(ChronoUnit.SECONDS) @DefaultValue("30s") Duration connectTimeout,
 		@DurationUnit(ChronoUnit.SECONDS) @DefaultValue("60s") Duration readTimeout,
