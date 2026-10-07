@@ -152,6 +152,19 @@ public class HttpUtil {
 	}
 
 	/**
+	 * Like {@link #setRevalidationHeaders}, for an entry representation reduced to what a caller who may read neither
+	 * the entry's metadata nor its resource may see. Its ETag is the date ETag with {@code -r} appended, so a caller
+	 * who gains or loses read access while the entry's modification date stays is not answered with 304.
+	 */
+	public static void setReducedRevalidationHeaders(HttpHeaders headers, HttpServletResponse response,
+													 Date modifiedDate, boolean variesWithAccept) {
+		setRevalidationHeaders(headers, response, modifiedDate, variesWithAccept);
+		if (modifiedDate != null) {
+			headers.setETag(createStrongETag(modifiedDate.getTime() + "-r"));
+		}
+	}
+
+	/**
 	 * Like {@link #setRevalidationHeaders}, but with an ETag computed from {@code content}, for a representation that
 	 * embeds other entries or the caller's rights and so can change while the entry's modification date does not.
 	 * Last-Modified stays the entry's date: a client revalidating with If-Modified-Since alone can still get a 304

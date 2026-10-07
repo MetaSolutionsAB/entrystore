@@ -28,6 +28,7 @@ import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.Resource;
 import org.entrystore.User;
 import org.entrystore.impl.DataImpl;
@@ -40,6 +41,7 @@ import org.entrystore.repository.util.URISplit;
 import org.entrystore.rest.springboot.model.dto.ListParams;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
+import org.entrystore.rest.springboot.util.EntryInfoUtil;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -92,11 +94,10 @@ public class ResourceSerializationService {
 						log.debug("Not allowed to read disabled status of [{}]", u.getEntry().getEntryURI());
 					}
 
-					JSONObject childInfo = GraphUtil.serializeGraphToJson(u.getEntry().getGraph(), rdfFormat);
-					childJSON.accumulate("info", childInfo);
-
-					JSONArray rights = this.serializeRights(u.getEntry());
-					childJSON.put("rights", rights);
+					Set<AccessProperty> rights = pm.getRights(u.getEntry());
+					Model info = getEntryInfo(u.getEntry(), mayReadNothing(u.getEntry(), rights));
+					childJSON.accumulate("info", GraphUtil.serializeGraphToJson(info, rdfFormat));
+					childJSON.put("rights", serializeRights(rights));
 					try {
 						JSONObject childMd = GraphUtil.serializeGraphToJson(u.getEntry().getLocalMetadata().getGraph(), rdfFormat);
 						childJSON.accumulate(RepositoryProperties.MD_PATH, childMd);
@@ -209,8 +210,8 @@ public class ResourceSerializationService {
 					/*
 					 * Children-rights
 					 */
-					JSONArray rights = this.serializeRights(childEntry);
-					childJSON.put("rights", rights);
+					Set<AccessProperty> rights = pm.getRights(childEntry);
+					childJSON.put("rights", serializeRights(rights));
 
 					String entryId = URISplit.getLastSegment(childEntry.getEntryURI().toString());
 					childJSON.put("entryId", entryId);
@@ -235,7 +236,8 @@ public class ResourceSerializationService {
 						childJSON.put("name", ((Group) childEntry.getResource()).getName());
 					}
 
-					appendMetadataInfoAndRelations(childEntry, childJSON, rdfFormat, false);
+					appendMetadataInfoAndRelations(childEntry, childJSON, rdfFormat, false,
+							mayReadNothing(childEntry, rights));
 
 					childrenArray.put(childJSON);
 				}
@@ -267,10 +269,22 @@ public class ResourceSerializationService {
 	 * {@link AuthorizationException} on external metadata also skips local metadata), while the
 	 * entry-info and relations sections each record {@code noAccessToEntryInfo} /
 	 * {@code noAccessToRelations}. With {@code flagNoAccess=false} (list behavior) a metadata
-	 * {@link AuthorizationException} is swallowed silently and the info/relations sections are left
-	 * unguarded so the exception propagates to the caller.
+	 * {@link AuthorizationException} is swallowed silently, the entry info is reduced for a caller who
+	 * {@linkplain #mayReadNothing may read nothing} of the entry, and the info/relations sections are left unguarded
+	 * so the exception propagates to the caller. Search hits keep the full entry info, since a hit already requires
+	 * ReadMetadata.
 	 */
 	public void appendMetadataInfoAndRelations(Entry entry, JSONObject childJSON, String rdfFormat, boolean flagNoAccess) {
+		appendMetadataInfoAndRelations(entry, childJSON, rdfFormat, flagNoAccess,
+				!flagNoAccess && mayReadNothing(entry));
+	}
+
+	/**
+	 * See {@link #appendMetadataInfoAndRelations(Entry, JSONObject, String, boolean)}, with the decision whether to
+	 * reduce the entry info already made; it is ignored with {@code flagNoAccess}.
+	 */
+	private void appendMetadataInfoAndRelations(Entry entry, JSONObject childJSON, String rdfFormat,
+												boolean flagNoAccess, boolean reduceInfo) {
 		try {
 			EntryType entryType = entry.getEntryType();
 			if (entryType == Reference || entryType == LinkReference) {
@@ -318,7 +332,7 @@ public class ResourceSerializationService {
 				childJSON.accumulate("noAccessToRelations", true);
 			}
 		} else {
-			childJSON.accumulate("info", GraphUtil.serializeGraphToJson(entry.getGraph(), rdfFormat));
+			childJSON.accumulate("info", GraphUtil.serializeGraphToJson(getEntryInfo(entry, reduceInfo), rdfFormat));
 
 			Model relationsGraph = entry.getRelations();
 			if (relationsGraph != null) {
@@ -421,9 +435,47 @@ public class ResourceSerializationService {
 		return serializeResourceContext(resource);
 	}
 
+	/**
+	 * Returns the entry information graph, or, if {@code mayReadNothing}, the part of it that
+	 * {@link EntryInfoUtil#reduceForNonReader} keeps.
+	 */
+	public Model getEntryInfo(Entry entry, boolean mayReadNothing) {
+		Model graph = entry.getGraph();
+		if (!mayReadNothing) {
+			return graph;
+		}
+		return EntryInfoUtil.reduceForNonReader(graph, entry.getEntryURI(), entry.getResourceURI(),
+				entry.getCachedExternalMetadataURI());
+	}
+
+	/**
+	 * Whether the current user may read neither the entry's metadata nor its resource. Follows
+	 * {@link PrincipalManager#checkAuthenticatedUserAuthorized}: admins, context owners, users reading their own
+	 * principal entry and write access all count as read access.
+	 */
+	public boolean mayReadNothing(Entry entry) {
+		return mayReadNothing(entry, pm.getRights(entry));
+	}
+
+	/**
+	 * Like {@link #mayReadNothing(Entry)}, from the rights {@link PrincipalManager#getRights} returned for the entry.
+	 * Every right implies read access to the metadata or the resource, so only an empty set reads nothing, except
+	 * for a user's own principal entry, which {@code getRights} does not consider.
+	 */
+	public boolean mayReadNothing(Entry entry, Set<AccessProperty> rights) {
+		if (!rights.isEmpty()) {
+			return false;
+		}
+		URI currentUser = pm.getAuthenticatedUserURI();
+		return currentUser == null || !currentUser.equals(entry.getResourceURI());
+	}
+
 	public JSONArray serializeRights(Entry entry) throws JSONException {
+		return serializeRights(pm.getRights(entry));
+	}
+
+	public JSONArray serializeRights(Set<AccessProperty> rights) throws JSONException {
 		JSONArray resourceObj = new JSONArray();
-		Set<PrincipalManager.AccessProperty> rights = pm.getRights(entry);
 		rights.forEach(ap -> {
 			switch (ap) {
 				case Administer -> resourceObj.put("administer");

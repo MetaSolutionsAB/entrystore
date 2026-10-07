@@ -17,7 +17,9 @@
 package org.entrystore.rest.springboot.service;
 
 import tools.jackson.databind.json.JsonMapper;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.Context;
+import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
@@ -28,7 +30,9 @@ import org.entrystore.impl.ContextImpl;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.rest.springboot.model.api.CreateEntryRequestBody;
+import org.entrystore.rest.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -228,5 +233,41 @@ class EntryServiceTest {
 		verify(localMetadata).setGraph(any());
 		verify(entry, never()).getCachedExternalMetadata();
 		verify(entry).setGraph(any());
+	}
+
+	@Test
+	void getEntryInJsonFormat_contextTheCallerMayReadNothingOf_keepsTheNameAndOmitsTheQuota() {
+		mockContextEntryWithQuota(true);
+
+		GetEntryResponse response = service.getEntryInJsonFormat(entry, null, false, null, true);
+
+		assertEquals("ctx-name", response.name());
+		assertNull(response.quota());
+	}
+
+	@Test
+	void getEntryInJsonFormat_contextTheCallerMayRead_includesTheQuota() {
+		mockContextEntryWithQuota(false);
+
+		GetEntryResponse response = service.getEntryInJsonFormat(entry, null, false, null, false);
+
+		assertEquals("ctx-name", response.name());
+		assertEquals(4711L, new JSONObject(response.quota()).getLong("quota"));
+	}
+
+	private void mockContextEntryWithQuota(boolean mayReadNothing) {
+		ContextManager contextManager = mock(ContextManager.class);
+		URI resourceUri = URI.create("http://example.org/ctx");
+		when(repositoryManager.getContextManager()).thenReturn(contextManager);
+		when(repositoryManager.hasQuotas()).thenReturn(true);
+		when(entry.getRepositoryManager()).thenReturn(repositoryManager);
+		when(entry.getGraphType()).thenReturn(GraphType.Context);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getId()).thenReturn("ctx");
+		when(entry.getResourceURI()).thenReturn(resourceUri);
+		when(contextManager.getName(resourceUri)).thenReturn("ctx-name");
+		lenient().when(contextManager.getContext("ctx")).thenReturn(context);
+		lenient().when(context.getQuota()).thenReturn(4711L);
+		when(resourceSerializationService.getEntryInfo(entry, mayReadNothing)).thenReturn(new LinkedHashModel());
 	}
 }

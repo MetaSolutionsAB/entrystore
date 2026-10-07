@@ -65,13 +65,16 @@ import static org.entrystore.rest.springboot.util.HttpUtil.determineMediaType;
 @RequiredArgsConstructor
 public class EntryController {
 
+	private static final String REDUCED_INFO_DESCRIPTION = "Callers who may read neither the entry's metadata nor " +
+			"its resource get only the types, the URIs of the entry's parts, the dates and the home context.";
+
 	private final EntryService entryService;
 	private final ObjectMapper objectMapper;
 
 	@Operation(
 			summary = "Returns the entry information.",
 			description = "Returns an RDF graph unless application/json is requested in which case the JSON-structure " +
-					"as specified in the response body is used.")
+					"as specified in the response body is used. " + REDUCED_INFO_DESCRIPTION)
 	@ApiResponse(responseCode = "200", content = @Content(schema = @Schema(implementation = GetEntryResponse.class)))
 	@GetMapping(path = "/{context-id}/entry/{entry-id}", produces = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<byte[]> getEntryInJsonFormat(
@@ -84,7 +87,9 @@ public class EntryController {
 	) {
 		String mediaType = rdfFormat != null ? GraphUtil.validateRdfMediaType(rdfFormat.toString()) : null;
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		GetEntryResponse body = entryService.getEntryInJsonFormat(entry, mediaType, includeAll != null, listFilter);
+		boolean mayReadNothing = entryService.mayReadNothing(entry);
+		GetEntryResponse body = entryService.getEntryInJsonFormat(entry, mediaType, includeAll != null, listFilter,
+				mayReadNothing);
 		// Serialized here rather than by the message converter, so that the ETag can be computed from the bytes sent
 		byte[] json = objectMapper.writeValueAsBytes(body);
 		return ResponseEntity.ok()
@@ -93,10 +98,23 @@ public class EntryController {
 					if (jsonEmbedsOtherData(entry, includeAll != null)) {
 						HttpUtil.setContentRevalidationHeaders(headers, response, entry.getModifiedDate(), json, true);
 					} else {
-						HttpUtil.setRevalidationHeaders(headers, response, entry.getModifiedDate(), true);
+						setDateRevalidationHeaders(headers, response, entry, mayReadNothing);
 					}
 				})
 				.body(json);
+	}
+
+	/**
+	 * Sets the revalidation headers with the ETag from the entry's modification date, which differs for a caller who
+	 * gets the reduced entry information, see {@link HttpUtil#setReducedRevalidationHeaders}.
+	 */
+	private static void setDateRevalidationHeaders(HttpHeaders headers, HttpServletResponse response, Entry entry,
+												   boolean mayReadNothing) {
+		if (mayReadNothing) {
+			HttpUtil.setReducedRevalidationHeaders(headers, response, entry.getModifiedDate(), true);
+		} else {
+			HttpUtil.setRevalidationHeaders(headers, response, entry.getModifiedDate(), true);
+		}
 	}
 
 	/**
@@ -113,7 +131,8 @@ public class EntryController {
 			summary = "Returns the entry information.",
 			description = "Returns an RDF graph unless application/json is requested in which case the JSON-structure " +
 					"as specified in the response body is used. The 'format' parameter takes precedence over the " +
-					"Accept header; without either, or for a wildcard Accept header, the graph is RDF/XML.")
+					"Accept header; without either, or for a wildcard Accept header, the graph is RDF/XML. " +
+					REDUCED_INFO_DESCRIPTION)
 	@GetMapping(path = "/{context-id}/entry/{entry-id}", produces = {"application/rdf+xml", "text/n3", "text/rdf+n3",
 			"text/turtle", "application/trix", "application/n-triples", "application/trig", "application/ld+json",
 			"application/rdf+json"})
@@ -128,10 +147,11 @@ public class EntryController {
 		// the normalized form (text/n3) since text/rdf+n3 is a non-standard legacy N3 MIME type.
 		String mediaType = GraphUtil.validateRdfMediaType(EntryMediaTypeResolver.resolve(request).toString());
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		String body = entryService.getEntryInRdfFormat(entry, mediaType);
+		boolean mayReadNothing = entryService.mayReadNothing(entry);
+		String body = entryService.getEntryInRdfFormat(entry, mediaType, mayReadNothing);
 		return ResponseEntity.ok()
 				.contentType(MediaType.parseMediaType(mediaType))
-				.headers(headers -> HttpUtil.setRevalidationHeaders(headers, response, entry.getModifiedDate(), true))
+				.headers(headers -> setDateRevalidationHeaders(headers, response, entry, mayReadNothing))
 				.body(body);
 	}
 
@@ -157,10 +177,12 @@ public class EntryController {
 		return ResponseEntity.ok()
 				.contentType(contentType)
 				.headers(headers -> {
-					HttpUtil.setRevalidationHeaders(headers, response, entry.getModifiedDate(), true);
 					if (json && jsonEmbedsOtherData(entry, request.getParameter("includeAll") != null)) {
+						HttpUtil.setRevalidationHeaders(headers, response, entry.getModifiedDate(), true);
 						// the GET's ETag is computed from the JSON, which HEAD does not build
 						headers.remove(HttpHeaders.ETAG);
+					} else {
+						setDateRevalidationHeaders(headers, response, entry, entryService.mayReadNothing(entry));
 					}
 				})
 				.build();

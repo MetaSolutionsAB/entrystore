@@ -1987,7 +1987,6 @@ class EntryIT extends BaseSpec {
 		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>;')
 	}
 
-	// TODO: verify below test - should a guest be able to access (read) an Entry created by Admin - by default
 	def "GET /{context-id}/entry/{entry-id} as guest in application/trig format, should return information about the entry in application/trig format"() {
 		given:
 		def entryId = 'entryForGetTests'
@@ -2007,14 +2006,16 @@ class EntryIT extends BaseSpec {
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/trig')
 		def response = entryConn.inputStream.text
-		response.contains('/' + contextId + '/entry/' + entryId + '> a es:LinkReference;')
-		response.contains('es:resource <' + resourceUrl + '>;')
-		response.contains('es:metadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId + '>;')
-		response.contains('es:externalMetadata <' + metadataUrl + '>;')
-		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>;')
+		response.contains('/' + contextId + '/entry/' + entryId + '>')
+		response.contains(' a es:LinkReference')
+		response.contains('es:resource <' + resourceUrl + '>')
+		response.contains('es:metadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId + '>')
+		response.contains('es:externalMetadata <' + metadataUrl + '>')
+		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>')
+		// the caller may read nothing of the entry, so it gets the reduced info graph
+		!response.contains('dcterms:creator')
 	}
 
-	// TODO: verify below test - should a non-admin user be able to access (read) an Entry created by Admin - by default
 	def "GET /{context-id}/entry/{entry-id} as non-admin user in application/trig format, should return information about the entry in application/trig format"() {
 		given:
 		def entryId = 'entryForGetTests'
@@ -2034,11 +2035,14 @@ class EntryIT extends BaseSpec {
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/trig')
 		def response = entryConn.inputStream.text
-		response.contains('/' + contextId + '/entry/' + entryId + '> a es:LinkReference;')
-		response.contains('es:resource <' + resourceUrl + '>;')
-		response.contains('es:metadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId + '>;')
-		response.contains('es:externalMetadata <' + metadataUrl + '>;')
-		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>;')
+		response.contains('/' + contextId + '/entry/' + entryId + '>')
+		response.contains(' a es:LinkReference')
+		response.contains('es:resource <' + resourceUrl + '>')
+		response.contains('es:metadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId + '>')
+		response.contains('es:externalMetadata <' + metadataUrl + '>')
+		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>')
+		// the caller may read nothing of the entry, so it gets the reduced info graph
+		!response.contains('dcterms:creator')
 	}
 
 	def "GET /_contexts/entry/{entry-id} as guest in application/trig format, should return information about the entry in application/trig format"() {
@@ -2051,7 +2055,10 @@ class EntryIT extends BaseSpec {
 		def response = entryConn.inputStream.text
 		response.contains('/_contexts/entry/' + contextId + '>')
 		response.contains('store:' + contextId + ' a es:Context')
-		response.contains('es:metadata <' + EntryStoreClient.baseUrl + '/_contexts/metadata/' + contextId + '>;')
+		// the last statement of a subject ends with '.', and which one that is depends on the statement order
+		response.contains('es:metadata <' + EntryStoreClient.baseUrl + '/_contexts/metadata/' + contextId + '>')
+		// the guest may not read the context entry, so it gets the reduced info graph
+		!response.contains('dcterms:creator')
 	}
 
 	def "PUT /{context-id}/entry/{entry-id} with body in rdf/json format, should edit the information about the entry"() {

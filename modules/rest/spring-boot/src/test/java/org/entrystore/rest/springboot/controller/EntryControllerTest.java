@@ -69,7 +69,45 @@ class EntryControllerTest {
 		assertEquals(List.of(HttpHeaders.ACCEPT, HttpHeaders.COOKIE, HttpHeaders.AUTHORIZATION),
 				response.getHeaders().getVary());
 		verify(entryService).getEntryByContextIdAndEntryId("1", "2");
+		verify(entryService).mayReadNothing(entry);
 		verifyNoMoreInteractions(entryService);
+	}
+
+	@Test
+	void headEntry_forACallerWhoMayReadNothing_answersWithTheETagOfTheReducedGet() throws Exception {
+		Entry entry = mock(Entry.class);
+		when(entry.getModifiedDate()).thenReturn(MODIFIED);
+		when(entryService.getEntryByContextIdAndEntryId("1", "2")).thenReturn(entry);
+		when(entryService.mayReadNothing(entry)).thenReturn(true);
+		when(entryService.getEntryInJsonFormat(entry, null, false, null, true))
+				.thenReturn(GetEntryResponse.builder().entryId("2").build());
+		var request = new MockHttpServletRequest("HEAD", "/1/entry/2");
+		request.addHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE);
+
+		ResponseEntity<Void> head = controller.headEntry("1", "2", request, new MockHttpServletResponse());
+		ResponseEntity<byte[]> get = controller.getEntryInJsonFormat("1", "2", null, null, null,
+				new MockHttpServletResponse());
+
+		assertEquals("\"1700000000123-r\"", head.getHeaders().getETag());
+		assertEquals(get.getHeaders().getETag(), head.getHeaders().getETag());
+		assertEquals(1_700_000_000_000L, head.getHeaders().getLastModified());
+	}
+
+	@Test
+	void getEntryInRdfFormat_forACallerWhoMayReadNothing_usesTheReducedETag() throws Exception {
+		Entry entry = mock(Entry.class);
+		when(entry.getModifiedDate()).thenReturn(MODIFIED);
+		when(entryService.getEntryByContextIdAndEntryId("1", "2")).thenReturn(entry);
+		when(entryService.mayReadNothing(entry)).thenReturn(true);
+		when(entryService.getEntryInRdfFormat(entry, "text/turtle", true)).thenReturn("");
+		var request = new MockHttpServletRequest("GET", "/1/entry/2");
+		request.addHeader(HttpHeaders.ACCEPT, "text/turtle");
+
+		ResponseEntity<String> response = controller.getEntryInRdfFormat("1", "2", request,
+				new MockHttpServletResponse());
+
+		assertEquals("\"1700000000123-r\"", response.getHeaders().getETag());
+		assertEquals(1_700_000_000_000L, response.getHeaders().getLastModified());
 	}
 
 	@Test
@@ -103,7 +141,7 @@ class EntryControllerTest {
 		Entry entry = mock(Entry.class);
 		when(entry.getModifiedDate()).thenReturn(MODIFIED);
 		when(entryService.getEntryByContextIdAndEntryId("1", "2")).thenReturn(entry);
-		when(entryService.getEntryInJsonFormat(entry, null, true, null))
+		when(entryService.getEntryInJsonFormat(entry, null, true, null, false))
 				.thenReturn(GetEntryResponse.builder().entryId("2").build());
 
 		ResponseEntity<byte[]> response = controller.getEntryInJsonFormat("1", "2", null, "", null,
@@ -121,7 +159,7 @@ class EntryControllerTest {
 		when(entry.getModifiedDate()).thenReturn(MODIFIED);
 		when(entry.getGraphType()).thenReturn(GraphType.Context);
 		when(entryService.getEntryByContextIdAndEntryId("_contexts", "2")).thenReturn(entry);
-		when(entryService.getEntryInJsonFormat(entry, null, false, null))
+		when(entryService.getEntryInJsonFormat(entry, null, false, null, false))
 				.thenReturn(GetEntryResponse.builder().entryId("2").build());
 
 		ResponseEntity<byte[]> response = controller.getEntryInJsonFormat("_contexts", "2", null, null, null,
@@ -135,13 +173,43 @@ class EntryControllerTest {
 		Entry entry = mock(Entry.class);
 		when(entry.getModifiedDate()).thenReturn(MODIFIED);
 		when(entryService.getEntryByContextIdAndEntryId("1", "2")).thenReturn(entry);
-		when(entryService.getEntryInJsonFormat(entry, null, false, null))
+		when(entryService.getEntryInJsonFormat(entry, null, false, null, false))
 				.thenReturn(GetEntryResponse.builder().entryId("2").build());
 
 		ResponseEntity<byte[]> response = controller.getEntryInJsonFormat("1", "2", null, null, null,
 				new MockHttpServletResponse());
 
 		assertEquals("\"1700000000123\"", response.getHeaders().getETag());
+	}
+
+	@Test
+	void getEntryInJsonFormat_withoutIncludeAllForACallerWhoMayReadNothing_usesTheReducedETag() {
+		Entry entry = mock(Entry.class);
+		when(entry.getModifiedDate()).thenReturn(MODIFIED);
+		when(entryService.getEntryByContextIdAndEntryId("1", "2")).thenReturn(entry);
+		when(entryService.mayReadNothing(entry)).thenReturn(true);
+		when(entryService.getEntryInJsonFormat(entry, null, false, null, true))
+				.thenReturn(GetEntryResponse.builder().entryId("2").build());
+
+		ResponseEntity<byte[]> response = controller.getEntryInJsonFormat("1", "2", null, null, null,
+				new MockHttpServletResponse());
+
+		assertEquals("\"1700000000123-r\"", response.getHeaders().getETag());
+	}
+
+	@Test
+	void getEntryInJsonFormat_withIncludeAllForACallerWhoMayReadNothing_computesTheETagFromTheJsonSent() {
+		Entry entry = mock(Entry.class);
+		when(entry.getModifiedDate()).thenReturn(MODIFIED);
+		when(entryService.getEntryByContextIdAndEntryId("1", "2")).thenReturn(entry);
+		when(entryService.mayReadNothing(entry)).thenReturn(true);
+		when(entryService.getEntryInJsonFormat(entry, null, true, null, true))
+				.thenReturn(GetEntryResponse.builder().entryId("2").build());
+
+		ResponseEntity<byte[]> response = controller.getEntryInJsonFormat("1", "2", null, "", null,
+				new MockHttpServletResponse());
+
+		assertEquals("\"" + DigestUtils.md5DigestAsHex(response.getBody()) + "\"", response.getHeaders().getETag());
 	}
 
 	@Test
