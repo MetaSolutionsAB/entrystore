@@ -218,8 +218,8 @@ entrystore.data.folder=/srv/entrystore/files/
 # as guest. The cookie is expired in both cases. (default: on)
 # entrystore.auth.cookie.invalid-token-error=on|off
 
-## User-initiated sign-up (default: off)
-# entrystore.auth.signup=off
+## User-initiated sign-up (default: off). When off, /auth/signup and /auth/signup/confirm answer 404.
+# entrystore.auth.signup=on|off
 # entrystore.auth.signup.email.subject=User sign-up request
 # entrystore.auth.signup.email.template=/path/to/template.html
 ## Whitelist of email-domains that are allowed to perform sign-up
@@ -228,8 +228,8 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.auth.signup.whitelist.1=yourdomain.tld
 # entrystore.auth.signup.whitelist.2=ext.yourdomain.tld
 
-## User-initiated password reset (default: off)
-# entrystore.auth.password-reset=off
+## User-initiated password reset (default: off). When off, /auth/pwreset and /auth/pwreset/confirm answer 404.
+# entrystore.auth.password-reset=on|off
 # entrystore.auth.password-reset.email.subject=Password reset request
 # entrystore.auth.password-reset.email.template=/path/to/template.html
 
@@ -252,13 +252,13 @@ entrystore.auth.temp.lockout.max.attempts=0
 entrystore.auth.temp.lockout.duration=0ms
 
 ## Local password login (default: on)
-## on / off  - identical today: password login stays enabled and only the blacklist is applied.
-##             "off" is accepted for legacy compatibility but is NOT yet honoured — setting it
-##             does not disable local password login.
-## whitelist - only the usernames listed below may log in with a password. An empty or missing
-##             whitelist in this mode denies every password login, and is currently the only way
-##             to disable local password login entirely.
-## The blacklist is applied in all three modes.
+## on        - every user with a password may log in with it, except those on the blacklist.
+## off       - no password login: /auth/cookie and /auth/login answer 404 and HTTP Basic is disabled,
+##             even with entrystore.auth.http-basic.enabled=true. SSO logins and existing sessions keep
+##             working. Users can still change their password and, if enabled, reset it.
+## whitelist - only the usernames listed below may log in with a password, by form login or HTTP
+##             Basic. An empty or missing whitelist in this mode denies every password login.
+## true/yes/1 and false/no/0 also mean on and off; any other value fails startup.
 ## Use the indexed form (.1, .2, ...); a bare "whitelist=user" value is not supported.
 # entrystore.auth.password=on|off|whitelist
 # entrystore.auth.password.whitelist.1=admin
@@ -288,6 +288,7 @@ entrystore.auth.temp.lockout.duration=0ms
 ## Renamed in 6.0 — previously `entrystore.auth.http-basic`. The legacy key is still
 ## accepted: on/true enable it as in 5.x, and a WARN names the new key. Check the
 ## startup log for "Basic Auth Enabled" / "Basic Auth Disabled" to verify the state.
+## entrystore.auth.password=off disables HTTP Basic whatever this key says.
 # entrystore.auth.http-basic.enabled=true|false
 
 ## HTTP Basic credential cache — successful PBKDF2 verifications are memoised

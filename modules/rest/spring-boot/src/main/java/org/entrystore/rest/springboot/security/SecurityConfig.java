@@ -25,6 +25,8 @@ import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.CorsProperties;
 import org.entrystore.rest.springboot.configuration.HttpBasicAuthConfiguration;
 import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration;
+import org.entrystore.rest.springboot.configuration.PasswordLoginListProperties;
+import org.entrystore.rest.springboot.configuration.PasswordLoginMode;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.filter.CheckUsernamePasswordFilter;
 import org.entrystore.rest.springboot.filter.CsrfCookieFilter;
@@ -72,6 +74,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.context.DelegatingSecurityContextRepository;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
@@ -87,6 +90,7 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -134,6 +138,8 @@ public class SecurityConfig {
 	private final CacheOAuth2AuthorizationRequestRepository oauth2AuthorizationRequestRepository;
 
 	private final HttpBasicAuthConfiguration httpBasicConfig;
+	private final PasswordLoginMode passwordLoginMode;
+	private final PasswordLoginListProperties passwordLoginLists;
 
 	private final Environment environment;
 
@@ -187,7 +193,7 @@ public class SecurityConfig {
 			http.csrf(AbstractHttpConfigurer::disable);
 		}
 
-		var entryPoint = httpBasicConfig.enabled() ? authChallengeAwareEntryPoint(customEntryPoint) : customEntryPoint;
+		var entryPoint = isHttpBasicEnabled() ? authChallengeAwareEntryPoint(customEntryPoint) : customEntryPoint;
 
 		http
 				// Disable Spring Security's default CacheControlHeadersWriter so that CacheControlFilter
@@ -237,15 +243,6 @@ public class SecurityConfig {
 						.requestMatchers("/auth/tokens").hasAnyRole(UserAuthRole.USER.name(), UserAuthRole.ADMIN.name())
 						.anyRequest().permitAll()
 				)
-				.formLogin(login -> login
-						.loginPage("/auth/login")
-						.loginProcessingUrl("/auth/cookie")
-						.successHandler(formLoginAuthenticationSuccessHandler)
-						.failureHandler(formLoginAuthenticationFailureHandler)
-						.usernameParameter("auth_username")
-						.passwordParameter("auth_password")
-						.permitAll()
-				)
 				.logout(logout -> logout
 						// Pin logout to POST so a same-site `<a href="/auth/logout">` or `<img src=…>`
 						// from a relaxed-SameSite cookie context cannot force-log-out the user.
@@ -256,7 +253,6 @@ public class SecurityConfig {
 								response.setStatus(HttpStatus.NO_CONTENT.value())
 						)
 						.permitAll())
-				.addFilterBefore(checkUsernamePasswordFilter, UsernamePasswordAuthenticationFilter.class)
 				.addFilterAfter(setUserURIAfterAuthenticationFilter, AnonymousAuthenticationFilter.class)
 				.addFilterBefore(ignoreAuthFilter, SetUserURIAfterAuthenticationFilter.class)
 				.addFilterAfter(reloadUserPropertiesFilter, SetUserURIAfterAuthenticationFilter.class)
@@ -274,10 +270,43 @@ public class SecurityConfig {
 			http.addFilterBefore(new SessionLifetimeFilter(authTokenCookies), SecurityContextHolderFilter.class);
 		}
 
-		if (httpBasicConfig.enabled()) {
+		if (passwordLoginMode == PasswordLoginMode.OFF) {
+			// DisabledRouteFilter answers /auth/cookie and /auth/login with 404 before this chain runs
+			log.info("Password login disabled");
+		} else {
+			http
+					.formLogin(login -> login
+							.loginPage("/auth/login")
+							.loginProcessingUrl("/auth/cookie")
+							.successHandler(formLoginAuthenticationSuccessHandler)
+							.failureHandler(formLoginAuthenticationFailureHandler)
+							.usernameParameter("auth_username")
+							.passwordParameter("auth_password")
+							.permitAll()
+					)
+					.addFilterBefore(checkUsernamePasswordFilter, UsernamePasswordAuthenticationFilter.class);
+		}
+
+		if (isHttpBasicEnabled()) {
 			log.info("Basic Auth Enabled (credential cache TTL={}, max entries={})",
 					httpBasicConfig.cache().ttl(), httpBasicConfig.cache().maxSize());
-			http.httpBasic(basic -> basic.authenticationEntryPoint(entryPoint));
+			http.httpBasic(basic -> {
+				basic.authenticationEntryPoint(entryPoint);
+				if (passwordLoginMode == PasswordLoginMode.WHITELIST) {
+					var whitelist = List.copyOf(passwordLoginLists.whitelist().values());
+					// An anonymous class, not a lambda: see the SAML branch below.
+					basic.withObjectPostProcessor(new ObjectPostProcessor<BasicAuthenticationFilter>() {
+						@Override
+						public <O extends BasicAuthenticationFilter> O postProcess(O filter) {
+							filter.setAuthenticationConverter(new WhitelistBasicAuthenticationConverter(whitelist));
+							return filter;
+						}
+					});
+				}
+			});
+		} else if (httpBasicConfig.enabled()) {
+			log.warn("Basic Auth Disabled: entrystore.auth.password=off overrides "
+					+ "entrystore.auth.http-basic.enabled=true");
 		} else {
 			log.info("Basic Auth Disabled");
 		}
@@ -433,6 +462,11 @@ public class SecurityConfig {
 		};
 	}
 
+	/** HTTP Basic carries a password, so password login off disables it too, as in 5.x. */
+	private boolean isHttpBasicEnabled() {
+		return httpBasicConfig.enabled() && passwordLoginMode != PasswordLoginMode.OFF;
+	}
+
 	private AuthenticationEntryPoint authChallengeAwareEntryPoint(AuthenticationEntryPoint delegate) {
 		return (request, response, authException) -> {
 			if (!"false".equalsIgnoreCase(request.getParameter("auth_challenge"))) {
@@ -446,7 +480,7 @@ public class SecurityConfig {
 	@Bean
 	public PasswordEncoder passwordEncoder(Ticker ticker) {
 		return buildPasswordEncoder(
-				httpBasicConfig.enabled(),
+				isHttpBasicEnabled(),
 				httpBasicConfig.cache().ttl(),
 				httpBasicConfig.cache().maxSize(),
 				ticker);

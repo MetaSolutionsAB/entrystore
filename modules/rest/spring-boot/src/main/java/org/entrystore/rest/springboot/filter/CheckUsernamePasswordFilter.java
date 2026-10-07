@@ -24,12 +24,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.springboot.configuration.PasswordLoginListProperties;
+import org.entrystore.rest.springboot.configuration.PasswordLoginMode;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -52,19 +52,11 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 
 	public CheckUsernamePasswordFilter(LoginAttemptService loginAttemptService,
 									   ErrorResponseWriter errorResponseWriter,
-									   @Value("${entrystore.auth.password:#{null}}") String passwordAuthMode,
+									   PasswordLoginMode passwordLoginMode,
 									   PasswordLoginListProperties passwordLoginLists) {
 		this.loginAttemptService = loginAttemptService;
 		this.errorResponseWriter = errorResponseWriter;
-		this.whitelistMode = "whitelist".equalsIgnoreCase(passwordAuthMode);
-		if (passwordAuthMode != null && !passwordAuthMode.isEmpty() && !whitelistMode
-				&& !"on".equalsIgnoreCase(passwordAuthMode) && !"off".equalsIgnoreCase(passwordAuthMode)) {
-			// A typo in this value fails open — whitelist enforcement silently off. 'on' and 'off'
-			// are exempt: both are legitimate values from the legacy layer ('off' is not honoured
-			// here yet) and must not trip the warning.
-			log.warn("Unrecognised value '{}' for {}: expected 'on', 'off' or 'whitelist'; "
-					+ "whitelist enforcement is off", passwordAuthMode, Settings.AUTH_PASSWORD);
-		}
+		this.whitelistMode = passwordLoginMode == PasswordLoginMode.WHITELIST;
 		this.passwordLoginWhitelist = whitelistMode
 				? List.copyOf(passwordLoginLists.whitelist().values())
 				: List.of();

@@ -109,6 +109,9 @@ class ManagementStatusIT extends BaseSpec {
 		// Reported from the same EchoProperties bean EchoService enforces, so this pins both the wiring
 		// and the unit: bytes, not megabytes, and no longer the -1 placeholder.
 		responseJson['echoMaxEntitySize'] == 10 * 1024 * 1024
+		// entrystore-it.properties enables both with "on", so this pins the relaxed binding that gates them
+		responseJson['auth']['signup'] == true
+		responseJson['auth']['passwordReset'] == true
 	}
 
 	def "GET /management/status/extended?include=countStats as admin should reply with detailed status and stats for admin user"() {

@@ -23,6 +23,7 @@ import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.configuration.AppStartedListener;
+import org.entrystore.rest.springboot.configuration.AuthFeatureProperties;
 import org.entrystore.rest.springboot.configuration.CorsProperties;
 import org.entrystore.rest.springboot.configuration.EchoProperties;
 import org.entrystore.rest.springboot.configuration.InfoAppPropertiesConfiguration;
@@ -52,6 +53,7 @@ public class StatusService {
 
 	private final InfoAppPropertiesConfiguration appConfig;
 	private final StatusReportProperties statusProperties;
+	private final AuthFeatureProperties authFeatures;
 	private final SignupWhitelistProperties signupWhitelistProperties;
 	private final CorsProperties corsProperties;
 	private final EchoProperties echoProperties;
@@ -133,13 +135,13 @@ public class StatusService {
 
 	private Map<String, Object> buildAuthenticationInfo() {
 		return Map.of(
-			"signup", statusProperties.signup(),
+			"signup", authFeatures.signup(),
 			// No null filter needed: SignupWhitelistProperties copies through Map.copyOf, which rejects nulls.
 			"signupWhitelist", signupWhitelistProperties.whitelist().values()
 				.stream()
 				.map(String::toLowerCase)
 				.collect(Collectors.toList()),
-			"passwordReset", statusProperties.passwordReset(),
+			"passwordReset", authFeatures.passwordReset(),
 			"passwordMaxLength", Password.PASSWORD_MAX_LENGTH
 			//"authTokenCount", loginTokenCache.size() // not sure how to get this info in Spring-boot default in-memory session storage
 		);
