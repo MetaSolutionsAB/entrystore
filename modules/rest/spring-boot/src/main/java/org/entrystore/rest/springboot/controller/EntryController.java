@@ -17,6 +17,8 @@
 package org.entrystore.rest.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Entry;
@@ -28,11 +30,13 @@ import org.entrystore.rest.springboot.model.api.SetEntryNameRequestBody;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.service.EntryService;
+import org.entrystore.rest.springboot.util.EntryMediaTypeResolver;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -74,19 +78,20 @@ public class EntryController {
 	@Operation(
 			summary = "Returns the entry information.",
 			description = "Returns an RDF graph unless application/json is requested in which case the JSON-structure " +
-					"as specified in the response body is used.")
+					"as specified in the response body is used. The 'format' parameter takes precedence over the " +
+					"Accept header; without either, or for a wildcard Accept header, the graph is RDF/XML.")
 	@GetMapping(path = "/{context-id}/entry/{entry-id}", produces = {"application/rdf+xml", "text/n3", "text/rdf+n3",
 			"text/turtle", "application/trix", "application/n-triples", "application/trig", "application/ld+json",
 			"application/rdf+json"})
 	public ResponseEntity<String> getEntryInRdfFormat(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
-			@RequestHeader(value = "Accept", required = false, defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
-	) {
+			@Parameter(hidden = true) HttpServletRequest request
+	) throws HttpMediaTypeNotAcceptableException {
 		// Return ResponseEntity instead of String to control the response Content-Type. Spring MVC would otherwise
 		// echo back the client's Accept type (text/rdf+n3) as the response Content-Type, but we respond with
 		// the normalized form (text/n3) since text/rdf+n3 is a non-standard legacy N3 MIME type.
-		String mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, GraphUtil.DEFAULT_RDF_MEDIA_TYPE);
+		String mediaType = GraphUtil.validateRdfMediaType(EntryMediaTypeResolver.resolve(request).toString());
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 		String body = entryService.getEntryInRdfFormat(entry, mediaType);
 		return ResponseEntity.ok()

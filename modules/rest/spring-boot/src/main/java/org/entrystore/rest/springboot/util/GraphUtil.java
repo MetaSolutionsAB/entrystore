@@ -70,7 +70,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * Utility methods to serialize and deserialize graphs.
@@ -94,6 +96,21 @@ public class GraphUtil {
 			RDFFormat.TRIG.getDefaultMIMEType(), TriGWriter.class,
 			RDFFormat.JSONLD.getDefaultMIMEType(), JSONLDWriter.class
 	);
+
+	/** Types an entry URI is served in, in the order that breaks ties within one Accept range. */
+	private static final List<MediaType> ENTRY_MEDIA_TYPES = Stream.of(
+					DEFAULT_RDF_MEDIA_TYPE,
+					MediaType.APPLICATION_JSON_VALUE,
+					LEGACY_N3_MEDIA_TYPE,
+					RDFFormat.N3.getDefaultMIMEType(),
+					RDFFormat.TURTLE.getDefaultMIMEType(),
+					RDFFormat.TRIX.getDefaultMIMEType(),
+					RDFFormat.NTRIPLES.getDefaultMIMEType(),
+					RDFFormat.TRIG.getDefaultMIMEType(),
+					RDFFormat.JSONLD.getDefaultMIMEType(),
+					RDFFormat.RDFJSON.getDefaultMIMEType())
+			.map(MediaType::valueOf)
+			.toList();
 
 	private static final Set<String> ALLOWED_RDF_MEDIA_TYPES;
 
@@ -353,6 +370,33 @@ public class GraphUtil {
 			return validateRdfMediaType(format.toString());
 		}
 		return resolveAcceptedMediaType(acceptHeader, DEFAULT_RDF_MEDIA_TYPE);
+	}
+
+	/**
+	 * Picks the type a GET on an entry URI answers with when it has no {@code format} parameter. Mirrors the loop of
+	 * Restlet's {@code ClientInfo.getPreferredMetadata}, which 5.x used: Accept ranges in header order, and within
+	 * each range the types in {@link #ENTRY_MEDIA_TYPES} order; a type is taken only if its range's quality is
+	 * strictly higher than the best so far, which starts at 0. A wildcard thus gets {@code application/rdf+xml}, as
+	 * does a missing or blank header, and a range with q=0 is never taken.
+	 *
+	 * @return empty if the header accepts none of the types
+	 * @throws InvalidMediaTypeException if the header does not parse
+	 */
+	public static Optional<MediaType> resolveEntryMediaType(String acceptHeader) {
+		if (acceptHeader == null || acceptHeader.isBlank()) {
+			return Optional.of(ENTRY_MEDIA_TYPES.getFirst());
+		}
+		MediaType preferred = null;
+		double preferredQuality = 0;
+		for (MediaType range : MediaType.parseMediaTypes(acceptHeader)) {
+			for (MediaType type : ENTRY_MEDIA_TYPES) {
+				if (range.getQualityValue() > preferredQuality && range.includes(type)) {
+					preferred = type;
+					preferredQuality = range.getQualityValue();
+				}
+			}
+		}
+		return Optional.ofNullable(preferred);
 	}
 
 	/**

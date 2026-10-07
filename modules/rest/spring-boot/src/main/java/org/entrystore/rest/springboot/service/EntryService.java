@@ -56,6 +56,7 @@ import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.repository.util.URISplit;
 import org.entrystore.rest.springboot.model.api.CreateEntryRequestBody;
+import org.entrystore.rest.springboot.model.api.EntryResourceJson;
 import org.entrystore.rest.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.dto.ListParams;
@@ -252,7 +253,9 @@ public class EntryService {
 				try {
 					String resourceString = serializeResourceToRawJsonString(resource, graphType, rdfFormat, listFilter);
 					if (resourceString != null) {
-						responseBuilder.resource(resourceString);
+						responseBuilder.resource(graphType == GraphType.String
+								? new EntryResourceJson.Text(resourceString)
+								: new EntryResourceJson.Json(resourceString));
 					}
 				} catch (IllegalArgumentException | RepositoryException | JSONException e) {
 					log.error("Failed to serialize resource for Context '{}', EntryId '{}', GraphType '{}'. Error: {}",

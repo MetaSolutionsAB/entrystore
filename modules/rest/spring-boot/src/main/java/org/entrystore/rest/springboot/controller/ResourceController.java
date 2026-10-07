@@ -73,6 +73,7 @@ public class ResourceController {
 	public ResponseEntity<Object> getResource(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
+			@RequestParam(required = false) MediaType format,
 			@RequestParam(required = false) MediaType rdfFormat,
 			@RequestParam(required = false) String syndication,
 			@RequestParam(required = false, defaultValue = "50") int feedSize,
@@ -82,7 +83,8 @@ public class ResourceController {
 			@RequestHeader(value = "Accept", required = false, defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
 	) {
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		ResourceQuery query = new ResourceQuery(rdfFormat, acceptHeader, syndication, language, feedSize, listFilter);
+		ResourceQuery query = new ResourceQuery(format, rdfFormat, acceptHeader, syndication, language, feedSize,
+				listFilter);
 
 		return switch (resourceService.getResourceRepresentation(entry, query)) {
 			case ResourceRepresentation.Empty _ -> ResponseEntity

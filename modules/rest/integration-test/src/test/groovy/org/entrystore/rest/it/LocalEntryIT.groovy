@@ -142,6 +142,23 @@ class LocalEntryIT extends BaseSpec {
 		resourceTypes[0]['value'] == NameSpaceConst.TERM_STRING
 	}
 
+	def "GET /{context-id}/entry/{entry-id}?includeAll for a string entry with the text #text should return it as a JSON string"() {
+		given:
+		def entryId = createEntry(contextId, [graphtype: 'string'])
+		def put = EntryStoreClient.putRequest('/' + contextId + '/resource/' + entryId, text, 'admin', 'text/plain')
+		assert put.getResponseCode() == HTTP_NO_CONTENT
+
+		when:
+		def conn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['resource'] == text
+
+		where:
+		text << ['[draft] a [b]', '{"a":1}', '[1,2]', 'plain']
+	}
+
 	def "POST /{context-id}?graphtype=list should create by default a local entry of type List"() {
 		given:
 		// create minimal entry to be used in the list

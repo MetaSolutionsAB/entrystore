@@ -96,7 +96,8 @@ public class ResourceService {
 		}
 
 		if (graphType == GraphType.Graph || graphType == GraphType.List) {
-			String rdfMediaType = GraphUtil.resolveRdfMediaType(query.rdfFormat(), query.acceptHeader());
+			MediaType requested = query.format() != null ? query.format() : query.rdfFormat();
+			String rdfMediaType = GraphUtil.resolveRdfMediaType(requested, query.acceptHeader());
 			return new ResourceRepresentation.TextBody(serializeResourceAsJson(entry, rdfMediaType, query.listFilter()),
 					MediaType.parseMediaType(rdfMediaType));
 		}

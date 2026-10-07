@@ -28,14 +28,17 @@ import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.StringWriter;
 import java.io.Writer;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -230,6 +233,40 @@ class GraphUtilTest {
 		assertEquals("text/turtle",
 				GraphUtil.resolveAcceptedMediaType(
 						"text/turtle;q=0.8, application/rdf+xml;q=0.8", "application/json"));
+	}
+
+	@ParameterizedTest(name = "Accept \"{0}\" -> {1}")
+	@CsvSource(delimiter = '|', nullValues = "NULL", value = {
+			"NULL | application/rdf+xml",
+			"'' | application/rdf+xml",
+			"*/* | application/rdf+xml",
+			"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8 | application/rdf+xml",
+			"text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2 | application/rdf+xml",
+			"application/json, text/javascript, */*; q=0.01 | application/json",
+			"text/turtle | text/turtle",
+			"application/ld+json, text/turtle | application/ld+json",
+			"application/json, application/rdf+xml | application/json",
+			"text/turtle, application/rdf+xml | text/turtle",
+			"text/turtle;q=0.5, application/ld+json | application/ld+json",
+			"*/*;q=0.1, text/turtle;q=0.9 | text/turtle",
+			"*/*, application/rdf+xml;q=0 | application/rdf+xml",
+			"text/* | text/rdf+n3",
+			"text/n3 | text/n3"
+	})
+	void resolveEntryMediaType_shouldPickTheHighestRatedRangeAndBreakTiesInFiveXOrder(String accept, String expected) {
+		assertEquals(Optional.of(MediaType.parseMediaType(expected)), GraphUtil.resolveEntryMediaType(accept));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"application/rdf+soup", "text/html", "*/*;q=0", "text/turtle;q=0, image/*",
+			"application/json;q=0"})
+	void resolveEntryMediaType_shouldBeEmptyWhenNoEntryTypeIsAccepted(String accept) {
+		assertEquals(Optional.empty(), GraphUtil.resolveEntryMediaType(accept));
+	}
+
+	@Test
+	void resolveEntryMediaType_shouldRejectMalformedAcceptHeader() {
+		assertThrows(InvalidMediaTypeException.class, () -> GraphUtil.resolveEntryMediaType("not a valid header!!!"));
 	}
 
 	@Test

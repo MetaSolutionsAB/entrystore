@@ -18,8 +18,7 @@ package org.entrystore.rest.springboot.configuration;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.apache.commons.lang3.StringUtils;
-import org.entrystore.rest.springboot.util.GraphUtil;
+import org.entrystore.rest.springboot.util.EntryMediaTypeResolver;
 import org.jspecify.annotations.NonNull;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -28,12 +27,14 @@ import org.springframework.web.accept.ContentNegotiationStrategy;
 import org.springframework.web.context.request.NativeWebRequest;
 
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * This class overrides the default response media type to "application/rdf+xml", when no Accept header is defined
- * Applies only for the entry endpoint. Other endpoints default reply format is set to JSON by MvcConfiguration.
- * The value produced by this Strategy is used to match with the correct endpoint in the controller.
+ * Selects the representation of a GET or HEAD on an entry URI with {@link EntryMediaTypeResolver}, as 5.x did: the
+ * {@code format} parameter wins over the Accept header, and a wildcard gets {@code application/rdf+xml}. The
+ * selected type picks the {@code EntryController} handler, JSON or RDF. Every other request is negotiated by the
+ * delegate on the Accept header alone; endpoints that honour {@code format} read it themselves.
  */
 @RequiredArgsConstructor
 public class EntryEndpointContentNegotiationStrategy implements ContentNegotiationStrategy {
@@ -41,20 +42,19 @@ public class EntryEndpointContentNegotiationStrategy implements ContentNegotiati
 	// Regex to match URLs like /abc123/entry/xyz456
 	private static final Pattern ENTRY_URL_PATTERN = Pattern.compile("^/[^/]+/entry/[^/]+$");
 
-	private final ContentNegotiationStrategy springBootDefaultStrategy;
+	// HEAD is served by the GET handlers, so it must pick the same one.
+	private static final Set<String> READ_METHODS = Set.of(HttpMethod.GET.name(), HttpMethod.HEAD.name());
+
+	private final ContentNegotiationStrategy delegate;
 
 	@Override
 	public @NonNull List<MediaType> resolveMediaTypes(NativeWebRequest webRequest) throws HttpMediaTypeNotAcceptableException {
 		HttpServletRequest servletRequest = webRequest.getNativeRequest(HttpServletRequest.class);
 		// Servlet path excludes the context path (server.servlet.context-path), which getRequestURI() includes.
-		if (servletRequest != null && HttpMethod.GET.name().equals(servletRequest.getMethod()) && ENTRY_URL_PATTERN.matcher(servletRequest.getServletPath()).matches()) {
-			String accept = servletRequest.getHeader("Accept");
-			if (StringUtils.isEmpty(accept) || MediaType.ALL_VALUE.equals(accept)) {
-				return List.of(MediaType.valueOf(GraphUtil.DEFAULT_RDF_MEDIA_TYPE));
-			}
+		if (servletRequest != null && READ_METHODS.contains(servletRequest.getMethod())
+				&& ENTRY_URL_PATTERN.matcher(servletRequest.getServletPath()).matches()) {
+			return List.of(EntryMediaTypeResolver.resolve(servletRequest));
 		}
-
-		// fallback to default strategy
-		return springBootDefaultStrategy.resolveMediaTypes(webRequest);
+		return delegate.resolveMediaTypes(webRequest);
 	}
 }

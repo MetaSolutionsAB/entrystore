@@ -158,7 +158,7 @@ class ResourceServiceTest {
 	void getResourceRepresentation_syndicationRequested_delegatesBeforeInspectingEntry() {
 		when(syndicationService.renderFeed(entry, "rss_2.0", "sv", 7))
 				.thenReturn(new RenderedFeed("<rss/>", MediaType.APPLICATION_RSS_XML));
-		var query = new ResourceQuery(null, "application/rdf+xml", "rss_2.0", "sv", 7, emptyListFilter());
+		var query = new ResourceQuery(null, null, "application/rdf+xml", "rss_2.0", "sv", 7, emptyListFilter());
 
 		ResourceRepresentation result = service.getResourceRepresentation(entry, query);
 
@@ -176,13 +176,29 @@ class ResourceServiceTest {
 		when(entry.getGraphType()).thenReturn(GraphType.List);
 		when(entry.getResource()).thenReturn(list);
 		when(list.getGraph()).thenReturn(new LinkedHashModel());
-		var query = new ResourceQuery(MediaType.parseMediaType("text/turtle"), "application/rdf+xml", null, "en", 50,
-				emptyListFilter());
+		var query = new ResourceQuery(null, MediaType.parseMediaType("text/turtle"), "application/rdf+xml", null, "en",
+				50, emptyListFilter());
 
 		ResourceRepresentation result = service.getResourceRepresentation(entry, query);
 
 		ResourceRepresentation.TextBody body = assertInstanceOf(ResourceRepresentation.TextBody.class, result);
 		assertEquals(MediaType.parseMediaType("text/turtle"), body.mediaType());
+	}
+
+	@Test
+	void getResourceRepresentation_graphWithFormatAndRdfFormat_followsFormat() {
+		RDFResource graph = mock(RDFResource.class);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.Graph);
+		when(entry.getResource()).thenReturn(graph);
+		when(graph.getGraph()).thenReturn(new LinkedHashModel());
+		var query = new ResourceQuery(MediaType.parseMediaType("application/n-triples"),
+				MediaType.parseMediaType("text/turtle"), "application/rdf+xml", null, "en", 50, emptyListFilter());
+
+		ResourceRepresentation result = service.getResourceRepresentation(entry, query);
+
+		ResourceRepresentation.TextBody body = assertInstanceOf(ResourceRepresentation.TextBody.class, result);
+		assertEquals(MediaType.parseMediaType("application/n-triples"), body.mediaType());
 	}
 
 	@Test
@@ -397,7 +413,7 @@ class ResourceServiceTest {
 	}
 
 	private static ResourceQuery plainQuery() {
-		return new ResourceQuery(null, "application/rdf+xml", null, "en", 50, emptyListFilter());
+		return new ResourceQuery(null, null, "application/rdf+xml", null, "en", 50, emptyListFilter());
 	}
 
 	private static ListFilter emptyListFilter() {
