@@ -1355,15 +1355,17 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * <p>The three accumulators are filled as the removal runs, so they reflect the progress made even if
 	 * this method throws: {@code removedEntries} every entry whose removal has started,
 	 * {@code deferredFileDeletions} the file resources whose disk files must be deleted after a successful
-	 * commit, and {@code prunedSurvivingLists} the entries of surviving lists whose membership was pruned.
-	 * After a commit the caller must invoke {@link #evictFromCaches(List)} with the removed entries, fire
-	 * {@link RepositoryEvent#EntryDeleted} for each of them and delete the deferred files; after a rollback
-	 * it must invoke {@link #recoverFromFailedRemoval(List)} instead and refresh this context's entry and the
-	 * pruned list entries from the repository, whose modification dates (and the lists' contributors) are
-	 * updated in memory as part of the removal.
+	 * commit, and {@code survivingLists} the entries of all lists the removal keeps, whether pruned or not.
+	 * After a commit the caller must, still holding the repository monitor, invoke
+	 * {@link ListImpl#invalidateChildren()} on the surviving lists, since a reader that takes no monitor may
+	 * have cached their pre-commit members meanwhile; it must then invoke {@link #evictFromCaches(List)} with
+	 * the removed entries, fire {@link RepositoryEvent#EntryDeleted} for each of them and delete the deferred
+	 * files. After a rollback it must invoke {@link #recoverFromFailedRemoval(List)} instead and refresh this
+	 * context's entry and the surviving list entries from the repository, since the modification dates (and
+	 * the pruned lists' contributors) are updated in memory as part of the removal.
 	 */
 	protected void removeNonSystemEntries(RepositoryConnection rc, List<EntryImpl> removedEntries,
-			List<DataImpl> deferredFileDeletions, List<EntryImpl> prunedSurvivingLists) throws Exception {
+			List<DataImpl> deferredFileDeletions, List<EntryImpl> survivingLists) throws Exception {
 		synchronized (this.entry.repository) {
 			Map<URI, SurvivingListPrune> survivingListPrunes = new LinkedHashMap<>();
 			// Collected and then discarded: both required follow-ups unpublish the two indexes, so the
@@ -1380,6 +1382,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 					continue;
 				}
 				if (removeEntry.getId().startsWith("_") || systemEntries.contains(entryURI)) {
+					if (removeEntry.getGraphType() == GraphType.List && !survivingLists.contains(removeEntry)) {
+						survivingLists.add(removeEntry);
+					}
 					continue;
 				}
 				checkAccess(removeEntry, AccessProperty.Administer);
@@ -1393,8 +1398,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 			// per list instead of one per member
 			for (SurvivingListPrune prune : survivingListPrunes.values()) {
 				EntryImpl listEntry = (EntryImpl) prune.list().getEntry();
-				if (!prunedSurvivingLists.contains(listEntry)) {
-					prunedSurvivingLists.add(listEntry);
+				if (!survivingLists.contains(listEntry)) {
+					survivingLists.add(listEntry);
 				}
 				prune.list().removeChildrenInTransaction(prune.memberURIsToRemove(), rc);
 			}

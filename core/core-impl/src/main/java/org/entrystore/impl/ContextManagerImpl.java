@@ -399,7 +399,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		ContextImpl cont = (ContextImpl) getContext(contextEntry.getId());
 		List<EntryImpl> removedEntries = new ArrayList<>();
 		List<DataImpl> deferredFileDeletions = new ArrayList<>();
-		List<EntryImpl> prunedSurvivingLists = new ArrayList<>();
+		List<EntryImpl> survivingLists = new ArrayList<>();
 
 		synchronized (this.entry.repository) {
 			log.info("Importing context from stream");
@@ -409,7 +409,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				rc.begin();
 
 				log.info("Removing old entries from context...");
-				cont.removeNonSystemEntries(rc, removedEntries, deferredFileDeletions, prunedSurvivingLists);
+				cont.removeNonSystemEntries(rc, removedEntries, deferredFileDeletions, survivingLists);
 
 				String oldBaseURI = srcBaseURI;
 				if (!oldBaseURI.endsWith("/")) {
@@ -552,6 +552,13 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				}
 
 				rc.commit();
+				// under the monitor, so no list write computes from members a reader cached during the import;
+				// the field, not getResource(), so nothing here can throw and send a committed import to the rollback
+				for (EntryImpl survivingList : survivingLists) {
+					if (survivingList.resource instanceof ListImpl list) {
+						list.invalidateChildren();
+					}
+				}
 			} catch (Exception e) {
 				if (rc != null) {
 					try {
@@ -564,12 +571,12 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					} catch (Exception refreshEx) {
 						log.error("Failed to refresh context entry after rollback, in-memory modification date may be stale", refreshEx);
 					}
-					for (EntryImpl prunedList : prunedSurvivingLists) {
+					for (EntryImpl survivingList : survivingLists) {
 						try {
-							prunedList.refreshFromRepository(rc);
+							survivingList.refreshFromRepository(rc);
 						} catch (Exception refreshEx) {
-							log.error("Failed to refresh pruned list entry {} after rollback, in-memory state may be stale",
-									prunedList.getEntryURI(), refreshEx);
+							log.error("Failed to refresh surviving list entry {} after rollback, in-memory state may be stale",
+									survivingList.getEntryURI(), refreshEx);
 						}
 					}
 				}

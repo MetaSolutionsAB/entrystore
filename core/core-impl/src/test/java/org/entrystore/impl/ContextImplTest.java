@@ -1178,15 +1178,15 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		ArrayList<EntryImpl> removedEntries = new ArrayList<>();
 		ArrayList<DataImpl> deferredFileDeletions = new ArrayList<>();
-		ArrayList<EntryImpl> prunedSurvivingLists = new ArrayList<>();
+		ArrayList<EntryImpl> survivingLists = new ArrayList<>();
 		try (RepositoryConnection rc = context.entry.repository.getConnection()) {
 			rc.begin();
-			context.removeNonSystemEntries(rc, removedEntries, deferredFileDeletions, prunedSurvivingLists);
+			context.removeNonSystemEntries(rc, removedEntries, deferredFileDeletions, survivingLists);
 			rc.rollback();
 			// mirrors the production rollback path in ContextManagerImpl.importContextFromUnzippedDir
 			((EntryImpl) context.getEntry()).refreshFromRepository(rc);
-			for (EntryImpl prunedList : prunedSurvivingLists) {
-				prunedList.refreshFromRepository(rc);
+			for (EntryImpl survivingList : survivingLists) {
+				survivingList.refreshFromRepository(rc);
 			}
 		}
 		context.recoverFromFailedRemoval(removedEntries);
@@ -1224,10 +1224,10 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		ArrayList<EntryImpl> removedEntries = new ArrayList<>();
 		ArrayList<DataImpl> deferredFileDeletions = new ArrayList<>();
-		ArrayList<EntryImpl> prunedSurvivingLists = new ArrayList<>();
+		ArrayList<EntryImpl> survivingLists = new ArrayList<>();
 		try (RepositoryConnection rc = context.entry.repository.getConnection()) {
 			rc.begin();
-			context.removeNonSystemEntries(rc, removedEntries, deferredFileDeletions, prunedSurvivingLists);
+			context.removeNonSystemEntries(rc, removedEntries, deferredFileDeletions, survivingLists);
 			rc.commit();
 		}
 		context.evictFromCaches(removedEntries);
