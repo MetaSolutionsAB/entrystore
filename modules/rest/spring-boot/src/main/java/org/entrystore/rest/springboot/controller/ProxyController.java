@@ -17,14 +17,12 @@
 package org.entrystore.rest.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.entrystore.rest.springboot.model.dto.ProxyResponse;
 import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.entrystore.rest.springboot.service.ProxyService;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatusCode;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -44,43 +42,41 @@ public class ProxyController {
 
 	@Operation(summary = "Proxy a request to an external URL", description = "Fetches the content of the given URL and returns it to the client. Guest users can only access whitelisted hosts.")
 	@GetMapping("/proxy")
-	public ResponseEntity<byte[]> proxyGlobal(
+	public void proxyGlobal(
 			@RequestParam("url") String url,
-			@RequestHeader(value = "Accept", required = false, defaultValue = "*/*") String acceptHeader) {
+			@RequestHeader(value = "Accept", required = false, defaultValue = "*/*") String acceptHeader,
+			HttpMethod method,
+			HttpServletResponse response) {
 
 		// Order matches ENTRYSTORE-949: cheap URL parse + scheme/userinfo check before auth,
 		// then guest-whitelist auth, then DNS resolution.
 		URI uri = ssrfValidator.parseAndValidateUrl(url);
 		proxyService.validateGlobalAccess(uri.getHost().toLowerCase(Locale.ROOT));
 		SsrfValidator.ValidatedTarget target = ssrfValidator.resolveForProxy(uri);
-		return doProxy(target, acceptHeader, true);
+		doProxy(target, acceptHeader, method, response);
 	}
 
-	@Operation(summary = "Proxy a request to an external URL within a context scope", description = "Fetches the content of the given URL, scoped to the given context. Requires ReadResource access on the context.")
+	@Operation(summary = "Proxy a request to an external URL within a context scope", description = "Fetches the content of the given URL, scoped to the given context. Requires ReadResource access on the context; guest users can only access whitelisted hosts.")
 	@GetMapping("/{context-id}/proxy")
-	public ResponseEntity<byte[]> proxyContext(
+	public void proxyContext(
 			@PathVariable("context-id") String contextId,
 			@RequestParam("url") String url,
-			@RequestHeader(value = "Accept", required = false, defaultValue = "*/*") String acceptHeader) {
+			@RequestHeader(value = "Accept", required = false, defaultValue = "*/*") String acceptHeader,
+			HttpMethod method,
+			HttpServletResponse response) {
 
+		// As in 5.x, the context ACL check comes on top of the guest whitelist, it does not replace it.
 		URI uri = ssrfValidator.parseAndValidateUrl(url);
 		proxyService.validateContextAccess(contextId);
+		proxyService.validateGlobalAccess(uri.getHost().toLowerCase(Locale.ROOT));
 		SsrfValidator.ValidatedTarget target = ssrfValidator.resolveForProxy(uri);
-		// Context-scoped proxy is gated by the context ACL check above, not the guest anon-whitelist,
-		// so redirect hops must not re-apply validateGlobalAccess.
-		return doProxy(target, acceptHeader, false);
+		doProxy(target, acceptHeader, method, response);
 	}
 
-	private ResponseEntity<byte[]> doProxy(SsrfValidator.ValidatedTarget target, String acceptHeader, boolean enforceAnonWhitelist) {
+	/** HEAD reaches these GET handlers too; it gets the upstream's headers without its body being read. */
+	private void doProxy(SsrfValidator.ValidatedTarget target, String acceptHeader, HttpMethod method,
+						 HttpServletResponse response) {
 		log.debug("Received proxy request for {}", target.uri());
-		ProxyResponse response = proxyService.fetchUrl(target, acceptHeader, enforceAnonWhitelist);
-
-		HttpHeaders headers = new HttpHeaders();
-		headers.set("Content-Security-Policy", "script-src 'none'; form-action 'none';"); // XSS and SSRF protection
-		if (response.contentType() != null) {
-			headers.set(HttpHeaders.CONTENT_TYPE, response.contentType());
-		}
-
-		return new ResponseEntity<>(response.body(), headers, HttpStatusCode.valueOf(response.statusCode()));
+		proxyService.proxy(target, acceptHeader, HttpMethod.HEAD.equals(method), response);
 	}
 }

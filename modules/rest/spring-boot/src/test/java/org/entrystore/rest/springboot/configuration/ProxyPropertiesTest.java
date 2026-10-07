@@ -27,6 +27,7 @@ import java.util.Set;
 import static org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture.withMaxRedirects;
 import static org.entrystore.rest.springboot.configuration.ProxyPropertiesFixture.withMaxResponseSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,16 +42,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProxyPropertiesTest {
 
 	@Test
-	void defaults_matchTheConstantsTheseKeysReplaced() {
-		// These are the numbers the constants held before they became configurable, so an existing
-		// deployment that sets none of these keys must see no behaviour change.
+	void defaults_matchThe5xBehaviourAndCapTheResponseAt100Megabytes() {
+		// The constants these keys replaced; the response size is capped, where 5.x had no limit.
 		runner().run(context -> {
 			ProxyProperties proxy = context.getBean(ProxyProperties.class);
-			assertEquals(10 * 1024 * 1024, proxy.maxResponseSize().toBytes());
+			assertTrue(proxy.isResponseSizeLimited());
+			assertEquals(DataSize.ofMegabytes(100), proxy.maxResponseSize());
 			assertEquals(15, proxy.maxRedirects());
 			assertEquals(Duration.ofSeconds(30), proxy.connectTimeout());
 			assertEquals(Duration.ofSeconds(60), proxy.readTimeout());
 		});
+	}
+
+	@Test
+	void negativeMaxResponseSize_removesTheDefaultCap() {
+		runner().withPropertyValues("entrystore.proxy.max-response-size=-1B").run(context ->
+				assertFalse(context.getBean(ProxyProperties.class).isResponseSizeLimited()));
 	}
 
 	@Test
@@ -65,6 +72,7 @@ class ProxyPropertiesTest {
 		).run(context -> {
 			ProxyProperties proxy = context.getBean(ProxyProperties.class);
 			assertEquals(DataSize.ofMegabytes(2), proxy.maxResponseSize());
+			assertTrue(proxy.isResponseSizeLimited());
 			assertEquals(4, proxy.maxRedirects());
 			assertEquals(7_000, proxy.connectTimeoutMillis());
 			assertEquals(11_000, proxy.readTimeoutMillis());
@@ -86,26 +94,21 @@ class ProxyPropertiesTest {
 	}
 
 	@Test
-	void nonPositiveResponseSize_failsFastNamingTheKey() {
+	void zeroResponseSize_failsFastNamingTheKey() {
 		IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-				() -> new ProxyProperties(DataSize.ofBytes(0), 15, Duration.ofSeconds(30), Duration.ofSeconds(60),
-						null, null));
+				() -> withMaxResponseSize(DataSize.ofBytes(0)));
 
-		assertEquals("entrystore.proxy.max-response-size must be positive, got 0B", e.getMessage());
+		assertEquals("entrystore.proxy.max-response-size must be positive, or negative for no limit, got 0B",
+				e.getMessage());
 	}
 
 	@Test
-	void responseSizeBeyondTheCeiling_failsFastRatherThanExhaustingTheHeap() {
-		// The body is accumulated in an int-indexed ByteArrayOutputStream, so a cap large enough to
-		// outrun the heap would throw OutOfMemoryError out of out.write before the size check could
-		// fire — an unmapped 500 instead of the 502 the cap exists to produce.
-		IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-				() -> withMaxResponseSize(DataSize.ofGigabytes(3)));
+	void responseSizeAbove2GB_isAccepted() {
+		// The body is streamed, so the cap no longer has to fit an int-indexed buffer.
+		ProxyProperties proxy = withMaxResponseSize(DataSize.ofGigabytes(3));
 
-		assertEquals("entrystore.proxy.max-response-size must not exceed 512MB — the response is "
-				+ "buffered in memory per request, got 3221225472B", e.getMessage());
-		// The ceiling itself is legal.
-		assertEquals(DataSize.ofMegabytes(512), withMaxResponseSize(DataSize.ofMegabytes(512)).maxResponseSize());
+		assertTrue(proxy.isResponseSizeLimited());
+		assertEquals(DataSize.ofGigabytes(3), proxy.maxResponseSize());
 	}
 
 	@Test

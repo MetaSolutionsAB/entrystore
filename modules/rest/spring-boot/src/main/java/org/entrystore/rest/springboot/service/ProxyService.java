@@ -17,24 +17,29 @@
 package org.entrystore.rest.springboot.service;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Context;
 import org.entrystore.PrincipalManager;
 import org.entrystore.rest.springboot.configuration.ProxyProperties;
-import org.entrystore.rest.springboot.model.dto.ProxyResponse;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.security.SsrfSafeHttpClient;
 import org.entrystore.rest.springboot.security.SsrfValidator;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 @Slf4j
 @Service
@@ -46,6 +51,14 @@ public class ProxyService {
 	private final SsrfValidator ssrfValidator;
 	private final SsrfSafeHttpClient ssrfSafeHttpClient;
 	private final ProxyProperties proxyProperties;
+
+	/**
+	 * Entity headers copied from the upstream response besides Content-Type and Content-Length: those 5.x
+	 * passed through with the upstream entity, except Content-Location and Content-MD5.
+	 */
+	private static final List<String> PASSED_THROUGH_HEADERS = List.of(HttpHeaders.CONTENT_ENCODING,
+			HttpHeaders.CONTENT_LANGUAGE, HttpHeaders.CONTENT_DISPOSITION, HttpHeaders.LAST_MODIFIED,
+			HttpHeaders.ETAG, HttpHeaders.EXPIRES);
 
 	private Set<String> whitelistAnon;
 
@@ -78,62 +91,147 @@ public class ProxyService {
 		this.whitelistAnon = whitelistAnon;
 	}
 
-	public ProxyResponse fetchUrl(SsrfValidator.ValidatedTarget target, String acceptHeader, boolean enforceAnonWhitelist) {
+	/**
+	 * Fetches {@code target} and streams the upstream status, Content-Type, Content-Length, the headers in
+	 * {@link #PASSED_THROUGH_HEADERS} and the body to {@code response}, so heap use does not grow with the
+	 * body size. The request thread is held for the whole transfer, as it was while the body was buffered.
+	 *
+	 * <p>With {@code entrystore.proxy.max-response-size} set, an upstream announcing a larger Content-Length
+	 * is answered 502 before anything is sent. A body without Content-Length that grows past the cap is cut
+	 * off: before the response is committed it is answered 502, afterwards the connection is aborted.
+	 *
+	 * <p>With {@code headersOnly}, for a HEAD request, the upstream is still fetched with GET, as in 5.x, but its
+	 * body is never read.
+	 */
+	public void proxy(SsrfValidator.ValidatedTarget target, String acceptHeader, boolean headersOnly,
+					  HttpServletResponse response) {
 		Map<String, String> requestHeaders = acceptHeader != null ? Map.of("Accept", acceptHeader) : Map.of();
-		return ssrfSafeHttpClient.execute(target, "GET", requestHeaders,
-				location -> validateRedirectTarget(location, enforceAnonWhitelist),
+		ssrfSafeHttpClient.execute(target, "GET", requestHeaders,
+				this::validateRedirectTarget,
 				(status, conn) -> {
-					String contentType = conn.getContentType();
-					byte[] body;
-					try (InputStream is = (status >= 400) ? conn.getErrorStream() : conn.getInputStream()) {
-						body = (is != null) ? readWithLimit(is) : new byte[0];
-					}
-					return new ProxyResponse(status, contentType, body);
+					streamResponse(status, conn, headersOnly, response);
+					return null;
 				});
 	}
 
-	/**
-	 * Re-validates a resolved redirect location. SSRF re-validation
-	 * ({@link SsrfValidator#validateForProxy(String)}) runs on every hop because the redirect
-	 * target may differ from the origin. When {@code enforceAnonWhitelist} is set (global
-	 * {@code /proxy} path), the guest anon-whitelist check is re-applied to the redirect host as
-	 * well, so a whitelisted upstream cannot redirect a guest to a non-whitelisted host. The
-	 * context-scoped path passes {@code false} — it is gated by a one-time context ACL check, not
-	 * the anon whitelist.
-	 */
-	SsrfValidator.ValidatedTarget validateRedirectTarget(String resolvedLocation, boolean enforceAnonWhitelist) {
-		log.debug("Request redirected to {}", resolvedLocation);
-		SsrfValidator.ValidatedTarget next = ssrfValidator.validateForProxy(resolvedLocation);
-		if (enforceAnonWhitelist) {
-			validateGlobalAccess(next.host());
+	private void streamResponse(int status, HttpURLConnection conn, boolean headersOnly, HttpServletResponse response)
+			throws IOException {
+		if (status < 100) {
+			// HttpURLConnection reports -1 for a response that is not valid HTTP.
+			throw new CustomResponseException("Proxy request failed", HttpStatus.BAD_GATEWAY);
 		}
-		return next;
+		// With Transfer-Encoding, Content-Length must be ignored (RFC 9112, section 6.3).
+		HttpHeaders upstream = upstreamHeaders(conn);
+		long contentLength = upstream.getOrEmpty(HttpHeaders.TRANSFER_ENCODING).isEmpty() ? conn.getContentLengthLong() : -1;
+		if (proxyProperties.isResponseSizeLimited() && contentLength > proxyProperties.maxResponseSize().toBytes()) {
+			throw responseTooLarge();
+		}
+		Set<String> hopByHop = connectionNominatedHeaders(upstream);
+		response.setStatus(status);
+		response.setHeader("Content-Security-Policy", "script-src 'none'; form-action 'none';"); // XSS and SSRF protection
+		if (conn.getContentType() != null && !hopByHop.contains(HttpHeaders.CONTENT_TYPE)) {
+			response.setContentType(conn.getContentType());
+		}
+		if (contentLength >= 0 && !hopByHop.contains(HttpHeaders.CONTENT_LENGTH)) {
+			response.setContentLengthLong(contentLength);
+		}
+		for (String name : PASSED_THROUGH_HEADERS) {
+			if (!hopByHop.contains(name)) {
+				upstream.getOrEmpty(name).forEach(value -> response.addHeader(name, value));
+			}
+		}
+		if (headersOnly) {
+			return;
+		}
+		try (InputStream in = (status >= 400) ? conn.getErrorStream() : conn.getInputStream()) {
+			if (in != null) {
+				copyWithLimit(in, response.getOutputStream());
+			}
+		} catch (IOException | RuntimeException e) {
+			if (!response.isCommitted()) {
+				// The error response that follows must carry neither the upstream's entity headers nor its bytes.
+				response.resetBuffer();
+				response.setContentLengthLong(-1);
+				PASSED_THROUGH_HEADERS.forEach(name -> response.setHeader(name, null));
+			}
+			throw e;
+		}
 	}
 
-	private byte[] readWithLimit(InputStream is) throws IOException {
-		// long rather than int to match DataSize.toBytes(), and as defence in depth: an int accumulator
-		// would overflow negative and stop enforcing the limit at all. ProxyProperties caps the setting
-		// well below that point, since this buffers into an int-indexed array — see MAX_RESPONSE_SIZE_CEILING.
-		long maxResponseBytes = proxyProperties.maxResponseSize().toBytes();
-		byte[] buf = new byte[8192];
-		long totalRead = 0;
-		ByteArrayOutputStream out = new ByteArrayOutputStream();
-		int bytesRead;
-		while ((bytesRead = is.read(buf)) != -1) {
-			totalRead += bytesRead;
-			if (totalRead > maxResponseBytes) {
-				throw new CustomResponseException("Upstream response exceeds maximum allowed size of " + maxResponseBytes + " bytes",
-						HttpStatus.BAD_GATEWAY);
+	/**
+	 * The header names the upstream's Connection headers nominate as hop-by-hop (RFC 9110, section 7.6.1), which
+	 * must not be forwarded, whichever header they name.
+	 */
+	private static Set<String> connectionNominatedHeaders(HttpHeaders upstream) {
+		Set<String> names = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+		upstream.getOrEmpty(HttpHeaders.CONNECTION).stream()
+				.flatMap(value -> Arrays.stream(value.split(",")))
+				.map(String::trim)
+				.filter(token -> !token.isEmpty())
+				.forEach(names::add);
+		return names;
+	}
+
+	/**
+	 * The upstream's header fields in the order received, with names matched case-insensitively. Repeated fields
+	 * keep their wire order whatever their spelling, which {@code getHeaderFields()} does not: it groups values by
+	 * the exact spelling of the name. Index 0 is the status line, which has no name.
+	 */
+	private static HttpHeaders upstreamHeaders(HttpURLConnection conn) {
+		HttpHeaders headers = new HttpHeaders();
+		for (int i = 0; ; i++) {
+			String name = conn.getHeaderFieldKey(i);
+			String value = conn.getHeaderField(i);
+			if (name == null && value == null) {
+				return headers;
 			}
-			out.write(buf, 0, bytesRead);
+			if (name != null && value != null) {
+				headers.add(name, value);
+			}
 		}
-		return out.toByteArray();
+	}
+
+	private void copyWithLimit(InputStream in, OutputStream out) throws IOException {
+		boolean limited = proxyProperties.isResponseSizeLimited();
+		long maxBytes = proxyProperties.maxResponseSize().toBytes();
+		byte[] buf = new byte[8192];
+		long total = 0;
+		int read;
+		while ((read = in.read(buf)) != -1) {
+			total += read;
+			if (limited && total > maxBytes) {
+				throw responseTooLarge();
+			}
+			try {
+				out.write(buf, 0, read);
+			} catch (IOException e) {
+				// Unchecked, so SsrfSafeHttpClient does not report the client's disconnect as an upstream failure.
+				throw new CustomResponseException("Proxy client went away", HttpStatus.BAD_GATEWAY, e);
+			}
+		}
+	}
+
+	private CustomResponseException responseTooLarge() {
+		return new CustomResponseException("Upstream response exceeds maximum allowed size of "
+				+ proxyProperties.maxResponseSize().toBytes() + " bytes", HttpStatus.BAD_GATEWAY);
+	}
+
+	/**
+	 * Re-validates a resolved redirect location: SSRF validation
+	 * ({@link SsrfValidator#validateForProxy(String)}) and the guest anon-whitelist, on every hop, so that a
+	 * whitelisted upstream cannot redirect a guest elsewhere. Both proxy routes enforce the whitelist, as 5.x did.
+	 */
+	SsrfValidator.ValidatedTarget validateRedirectTarget(String resolvedLocation) {
+		log.debug("Request redirected to {}", resolvedLocation);
+		SsrfValidator.ValidatedTarget next = ssrfValidator.validateForProxy(resolvedLocation);
+		validateGlobalAccess(next.host());
+		return next;
 	}
 
 	/**
 	 * Sends an SSRF-guarded DELETE to a remote resource, re-validating every redirect hop. Used for
 	 * {@code DELETE /{ctx}/resource/{id}?proxy=true} on link entries; the caller performs the ACL check. Unlike
-	 * {@link #fetchUrl}, the URL is validated here because the caller holds a stored resource URI, not a
+	 * {@link #proxy}, the URL is validated here because the caller holds a stored resource URI, not a
 	 * client-supplied one already resolved by the controller. A non-2xx upstream answer is reported as 502 without
 	 * echoing the upstream body.
 	 */

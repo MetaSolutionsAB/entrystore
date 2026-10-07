@@ -27,6 +27,45 @@ import static java.net.HttpURLConnection.HTTP_UNSUPPORTED_TYPE
 
 class EchoIT extends BaseSpec {
 
+	// Not valid multipart: a handler that parses it answers 400, so any other status shows it was not parsed.
+	static final String UNPARSEABLE_MULTIPART_TYPE = 'multipart/form-data; boundary=never-sent'
+	static final String UNPARSEABLE_MULTIPART_BODY = 'no boundary in here'
+
+	def 'POST /echo multipart as guest asking for JSON is rejected without parsing the upload'() {
+		when: 'Accept: application/json routes the request to POST /{context-id}, which takes no upload'
+		def echoConn = EntryStoreClient.postRequest('/echo', UNPARSEABLE_MULTIPART_BODY, '',
+			UNPARSEABLE_MULTIPART_TYPE, ['Accept': 'application/json'])
+
+		then:
+		echoConn.getResponseCode() == HTTP_UNSUPPORTED_TYPE
+	}
+
+	def 'POST /echo multipart as guest asking for XML is rejected without parsing the upload'() {
+		when:
+		def echoConn = EntryStoreClient.postRequest('/echo', UNPARSEABLE_MULTIPART_BODY, '',
+			UNPARSEABLE_MULTIPART_TYPE, ['Accept': 'application/xml'])
+
+		then:
+		echoConn.getResponseCode() == HTTP_UNSUPPORTED_TYPE
+	}
+
+	def 'POST /echo with a malformed multipart body answers 400 in a textarea, as 5.x did'() {
+		when:
+		def echoConn = EntryStoreClient.postRequest('/echo', UNPARSEABLE_MULTIPART_BODY, 'admin', UNPARSEABLE_MULTIPART_TYPE)
+
+		then:
+		echoConn.getResponseCode() == HTTP_BAD_REQUEST
+		echoConn.errorStream.text.contains('<textarea>status:400\nMalformed multipart request</textarea>')
+	}
+
+	def 'POST /echo multipart as guest is refused before the upload is parsed'() {
+		when:
+		def echoConn = EntryStoreClient.postRequest('/echo', UNPARSEABLE_MULTIPART_BODY, '', UNPARSEABLE_MULTIPART_TYPE)
+
+		then:
+		echoConn.getResponseCode() == HTTP_FORBIDDEN
+	}
+
 	def 'POST /echo as guest should respond with FORBIDDEN 403'() {
 		given:
 		// create a test binary file with some data

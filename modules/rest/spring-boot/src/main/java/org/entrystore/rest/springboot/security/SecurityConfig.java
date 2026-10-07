@@ -38,6 +38,7 @@ import org.entrystore.rest.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.springboot.service.OidcAuthService;
 import org.entrystore.rest.springboot.service.auth.OidcAuthStateCache;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.boot.context.properties.bind.BindException;
@@ -82,7 +83,6 @@ import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
-import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.session.SessionManagementFilter;
 import org.springframework.security.web.util.matcher.AndRequestMatcher;
@@ -180,7 +180,7 @@ public class SecurityConfig {
 			http
 					.csrf(csrf -> csrf
 							.csrfTokenRepository(csrfTokenRepository())
-							.csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+							.csrfTokenRequestHandler(new HeaderOnlyForMultipartCsrfTokenRequestHandler())
 							.requireCsrfProtectionMatcher(csrfRequestMatcher))
 					.addFilterAfter(csrfCookieFilter, CsrfFilter.class);
 		} else {
@@ -469,7 +469,7 @@ public class SecurityConfig {
 
 	private AuthenticationEntryPoint authChallengeAwareEntryPoint(AuthenticationEntryPoint delegate) {
 		return (request, response, authException) -> {
-			if (!"false".equalsIgnoreCase(request.getParameter("auth_challenge"))) {
+			if (!"false".equalsIgnoreCase(HttpUtil.getQueryParameter(request, "auth_challenge"))) {
 				response.setHeader("Cache-Control", "no-store");
 				response.setHeader("WWW-Authenticate", "Basic realm=\"EntryStore\"");
 			}

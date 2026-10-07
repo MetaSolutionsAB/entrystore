@@ -18,6 +18,7 @@ package org.entrystore.rest.springboot.configuration;
 
 import lombok.RequiredArgsConstructor;
 import org.entrystore.rest.springboot.filter.IfUnmodifiedSinceInterceptor;
+import org.entrystore.rest.springboot.filter.MultipartHandlerInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -38,6 +39,8 @@ public class MvcConfiguration implements WebMvcConfigurer {
 
 	private final IfUnmodifiedSinceInterceptor ifUnmodifiedSinceInterceptor;
 
+	private final MultipartHandlerInterceptor multipartHandlerInterceptor;
+
 	/**
 	 * Negotiates on the Accept header, and on entry URIs also on the {@code format} parameter. Other handlers
 	 * that honour {@code format} read it themselves: setting strategies disables the configurer's parameter
@@ -51,6 +54,7 @@ public class MvcConfiguration implements WebMvcConfigurer {
 
 	@Override
 	public void addInterceptors(InterceptorRegistry registry) {
+		registry.addInterceptor(multipartHandlerInterceptor);
 		registry.addInterceptor(ifUnmodifiedSinceInterceptor)
 				.addPathPatterns(IfUnmodifiedSinceInterceptor.PATH_PATTERNS);
 	}

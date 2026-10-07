@@ -38,7 +38,7 @@ class ZzzSearchRateLimitIT extends BaseSpec {
 	}
 
 	// Intentionally no cleanupSpec — matches the canonical pattern of ZzzCasLoginIT,
-	// ZzzSamlLoginIT, ZzzMultipartSizeLimitIT, and ZzzServerHeader*IT. The next
+	// ZzzSamlLoginIT and ZzzServerHeader*IT. The next
 	// lifecycle-owning IT's stopPreexistingAppIfRunning() closes our appInstance;
 	// resetting appInstance=null or appStarted=false here would violate BaseSpec
 	// invariant #2 (see the invariant comment above appStarted in BaseSpec) and force an unnecessary re-init of

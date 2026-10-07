@@ -22,6 +22,7 @@ import org.entrystore.Entry;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
+import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
@@ -33,6 +34,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -47,6 +50,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 
 import java.net.URI;
 import java.util.List;
@@ -55,6 +60,8 @@ import java.util.concurrent.RejectedExecutionException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class AppExceptionHandlerTest {
 
@@ -79,6 +86,68 @@ class AppExceptionHandlerTest {
 		assertEquals(503, body.status());
 		assertEquals("/sparql", body.path());
 		assertEquals("Server temporarily overloaded; retry later", body.error());
+	}
+
+	@Test
+	void handleCustomResponseException_uncommittedResponse_returnsTheStatusAndMessage() {
+		MockHttpServletRequest req = new MockHttpServletRequest("GET", "/proxy");
+
+		ResponseEntity<ErrorResponse> response = handler.handleCustomResponseException(
+				new CustomResponseException("Upstream too large", HttpStatus.BAD_GATEWAY), req,
+				new MockHttpServletResponse());
+
+		assertEquals(HttpStatus.BAD_GATEWAY, response.getStatusCode());
+		assertEquals("Upstream too large", response.getBody().error());
+	}
+
+	@Test
+	void handleCustomResponseException_committedResponse_rethrowsSoTheContainerAbortsTheConnection() {
+		// Rendering the error would append a JSON body to the partial one and end the response normally.
+		MockHttpServletRequest req = new MockHttpServletRequest("GET", "/proxy");
+		MockHttpServletResponse committed = new MockHttpServletResponse();
+		committed.setCommitted(true);
+		CustomResponseException ex = new CustomResponseException("Upstream too large", HttpStatus.BAD_GATEWAY);
+
+		CustomResponseException thrown = assertThrows(CustomResponseException.class,
+				() -> handler.handleCustomResponseException(ex, req, committed));
+
+		assertSame(ex, thrown);
+	}
+
+	@Test
+	void handleMultipartException_sizeLimitBreach_returns413() {
+		MockHttpServletRequest req = new MockHttpServletRequest("PUT", "/1/resource/2");
+
+		ResponseEntity<ErrorResponse> response = handler.handleMultipartException(
+				new MaxUploadSizeExceededException(-1, new IllegalStateException("max file size exceeded: 2048")), req);
+
+		assertEquals(HttpStatus.CONTENT_TOO_LARGE, response.getStatusCode());
+		assertEquals("Multipart upload exceeds the maximum allowed size", response.getBody().error());
+	}
+
+	@Test
+	void handleMultipartException_requestLengthBreachWrappedByJetty_returns413() {
+		// A chunked body over max-request-size: Spring does not recognise Jetty's message as a size breach.
+		MockHttpServletRequest req = new MockHttpServletRequest("PUT", "/1/resource/2");
+		var jettyFailure = new jakarta.servlet.ServletException(
+				new IllegalStateException("bad multipart", new IllegalStateException("max length exceeded: 4096")));
+
+		ResponseEntity<ErrorResponse> response = handler.handleMultipartException(
+				new MultipartException("Failed to parse multipart servlet request", jettyFailure), req);
+
+		assertEquals(HttpStatus.CONTENT_TOO_LARGE, response.getStatusCode());
+	}
+
+	@Test
+	void handleMultipartException_malformedBody_returns400WithoutTheContainerMessage() {
+		MockHttpServletRequest req = new MockHttpServletRequest("PUT", "/1/resource/2");
+
+		ResponseEntity<ErrorResponse> response = handler.handleMultipartException(
+				new MultipartException("Failed to parse multipart servlet request",
+						new IllegalStateException("bad multipart: missing boundary")), req);
+
+		assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+		assertEquals("Malformed multipart request", response.getBody().error());
 	}
 
 	@Test

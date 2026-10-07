@@ -44,9 +44,12 @@ spring:
     mapper:
       sort-properties-alphabetically: false
   mvc.problemdetails.enabled: false
+  # No upload size limit, as in 5.x; see entrystore.properties_example for setting one. Lazy resolution
+  # parses an upload only when the controller reads it, after the access check.
   servlet.multipart:
-    max-file-size: 100MB
-    max-request-size: 100MB
+    max-file-size: -1B
+    max-request-size: -1B
+    resolve-lazily: true
   web:
     resources:
       cache:

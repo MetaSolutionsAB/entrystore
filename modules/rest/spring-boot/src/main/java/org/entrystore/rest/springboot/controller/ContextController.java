@@ -162,6 +162,7 @@ public class ContextController {
 					schemaProperties = @SchemaProperty(
 							name = "file",
 							schema = @Schema(type = "string", format = "binary"))))
+	@AcceptsMultipart
 	@PostMapping(
 			path = "/{context-id}/import",
 			consumes = MediaType.MULTIPART_FORM_DATA_VALUE,

@@ -33,6 +33,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartRequest;
 import org.springframework.web.util.WebUtils;
@@ -57,6 +58,7 @@ public class EchoController {
 					schemaProperties = @SchemaProperty(
 							name = "file",
 							schema = @Schema(type = "string", format = "binary"))))
+	@AcceptsMultipart
 	@PostMapping(
 			path = "/echo",
 			produces = MediaType.TEXT_HTML_VALUE)
@@ -80,6 +82,12 @@ public class EchoController {
 			throw new TextareaHtmlResponseException("/echo endpoint accepts only 'multipart/form-data' requests", HttpStatus.UNSUPPORTED_MEDIA_TYPE);
 		}
 
+		// Checked before the body is touched: multipart resolution is lazy, so a guest's upload is never parsed.
+		// TODO this part should be taken out of here and implemented inside Spring Security
+		if (principalManager.getGuestUser().getURI().equals(principalManager.getAuthenticatedUserURI())) {
+			throw new TextareaHtmlResponseException("Guest account is not allowed to use /echo endpoint.", HttpStatus.FORBIDDEN);
+		}
+
 		// Resolved by hand instead of through a MultipartRequest method parameter: this endpoint has no
 		// "consumes" on purpose (see above), so the argument resolver would fail on non-multipart requests
 		// before the content-type check above could answer them with a textarea response.
@@ -91,12 +99,17 @@ public class EchoController {
 			throw new TextareaHtmlResponseException("Could not read the multipart request", HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 
-		MultipartFile file = MultipartUtil.firstFilePart(multipartRequest)
-				.orElseThrow(() -> new TextareaHtmlResponseException("Missing file part in the request", HttpStatus.BAD_REQUEST));
-
-		// TODO this part should be taken out of here and implemented inside Spring Security
-		if (principalManager.getGuestUser().getURI().equals(principalManager.getAuthenticatedUserURI())) {
-			throw new TextareaHtmlResponseException("Guest account is not allowed to use /echo endpoint.", HttpStatus.FORBIDDEN);
+		MultipartFile file;
+		try {
+			file = MultipartUtil.firstFilePart(multipartRequest)
+					.orElseThrow(() -> new TextareaHtmlResponseException("Missing file part in the request", HttpStatus.BAD_REQUEST));
+		} catch (MultipartException e) {
+			// Answered in a textarea like every other /echo failure, as 5.x did: EntryScape reads it from an iframe.
+			if (MultipartUtil.isSizeLimitBreach(e)) {
+				throw new TextareaHtmlResponseException("Multipart upload exceeds the maximum allowed size",
+						HttpStatus.CONTENT_TOO_LARGE, e);
+			}
+			throw new TextareaHtmlResponseException("Malformed multipart request", HttpStatus.BAD_REQUEST, e);
 		}
 
 		String payload = echoService.readFileContentsAsString(file);

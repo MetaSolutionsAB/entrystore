@@ -428,7 +428,7 @@ entrystore.solr.extract-fulltext=off
 # entrystore.data.quota=on|off (default: off)
 # entrystore.data.quota.default=100k
 
-## Multipart upload limits at the Spring servlet layer (defaults: 100MB).
+## Multipart upload limits at the Spring servlet layer. -1B (the default) means no limit, as in 5.x.
 ## Application-level caps that DO exist: entrystore.data.max-file-size
 ## (resource uploads), entrystore.echo.max-file-size for /echo. POST /{context-id}/import
 ## (multipart variant) has NO application-level cap, so its upper bound is
@@ -438,21 +438,28 @@ entrystore.solr.extract-fulltext=off
 ## server.jetty.max-http-form-post-size only bounds form-urlencoded bodies)
 ## and should be fronted by a reverse-proxy body limit if exposed externally.
 ##
-## Rejection contract: Jetty 12 enforces these caps at the container layer
-## and rejects oversize multipart requests with status 400 ("bad multipart")
-## BEFORE the Spring DispatcherServlet sees the request, so callers should
-## treat a 400 on a multipart upload as a possible cap violation rather than
-## necessarily a malformed body.
+## Rejection contract: a multipart body is parsed only after authentication and the access check, as in
+## 5.x (spring.servlet.multipart.resolve-lazily=true; do not turn it off). Only PUT
+## /{context-id}/resource/{entry-id}, POST /{context-id}/import and POST /echo take multipart bodies;
+## any other multipart request is answered 415. A multipart request whose
+## Content-Length exceeds max-request-size is answered 413 before its body is read. A part above
+## max-file-size, or a body without Content-Length above max-request-size, is rejected while it is
+## parsed, often while the client is still sending, so the client may see a connection reset instead.
 ##
-## DoS surface to consider before raising these: any authenticated user with
+## Uploaded parts are written to temporary files in spring.servlet.multipart.location (by default a
+## directory under java.io.tmpdir), never held in memory. Where java.io.tmpdir is a tmpfs, which uses
+## RAM, point the location at a disk-backed directory with enough space for concurrent uploads.
+##
+## DoS surface to consider before leaving these unlimited: any authenticated user with
 ## WriteResource ACL on a target entry can open parallel slow PUTs, each
-## spooled to spring.servlet.multipart.location (java.io.tmpdir by default,
-## often tmpfs/RAM on modern distros). entrystore.data.max-file-size defaults
+## spooled to spring.servlet.multipart.location. entrystore.data.max-file-size defaults
 ## to -1 (no application backstop), so the servlet-layer cap here is the
 ## effective per-request ceiling unless an operator opts into a tighter cap.
-## Use -1B to disable the servlet-layer cap entirely (unlimited).
-# spring.servlet.multipart.max-file-size=100MB
-# spring.servlet.multipart.max-request-size=100MB
+## Raw (non-multipart) PUT bodies on /{context-id}/resource/{entry-id} are still read into memory,
+## see ENTRYSTORE-1232.
+# spring.servlet.multipart.max-file-size=-1B
+# spring.servlet.multipart.max-request-size=-1B
+# spring.servlet.multipart.location=/srv/entrystore/upload-tmp
 
 ## SPARQL endpoint with public metadata in all contexts
 # entrystore.repository.public=on|off (default: off)
@@ -489,8 +496,9 @@ entrystore.solr.extract-fulltext=off
 ## Use the indexed form (.1, .2, ...); a bare "anonymous=host" value is not supported.
 # entrystore.proxy.whitelist.anonymous.1=public.example.com
 
-## Outbound-fetch limits, hardcoded before 6.1. The defaults below are the values that were
-## previously compiled in. max-redirects, connect-timeout and read-timeout apply to BOTH outbound
+## Outbound-fetch limits, hardcoded before 6.1. The defaults below are the 5.x values, except
+## max-response-size, which 5.x did not limit.
+## max-redirects, connect-timeout and read-timeout apply to BOTH outbound
 ## paths: GET /proxy (and its context-scoped form) and the resource-DELETE proxy path above.
 ## max-response-size applies to GET /proxy only — the resource-DELETE path never reads a response body.
 ##
@@ -500,16 +508,16 @@ entrystore.solr.extract-fulltext=off
 ## The timeouts apply per hop. Establishing all hops costs at worst roughly
 ## (max-redirects + 1) x connect-timeout. read-timeout is a per-socket-read deadline that resets on
 ## every successful read, NOT a deadline for the response, so it does not bound total wall time: an
-## upstream that trickles bytes just under the timeout holds a request thread until max-response-size
-## is reached. DNS resolution is covered by no timeout here at all. The proxy runs on the request
-## thread, so if the concern is threads held by a slow upstream, lower max-response-size — lowering
-## the timeouts alone does not create a bound.
+## upstream that trickles bytes just under the timeout holds a request thread for as long as it keeps
+## sending, or until max-response-size is reached. DNS resolution is covered by no timeout here at all.
+## The proxy streams on the request thread, so if the concern is threads held by a slow upstream, lower
+## max-response-size — lowering the timeouts alone does not create a bound.
 ##
-## max-response-size caps the upstream body that GET /proxy will buffer; exceeding it is answered 502.
-## The body is accumulated in memory, so this bounds heap per concurrent proxy request. Capped at
-## 512MB, because the buffer is an int-indexed array: without that ceiling a large enough value would
-## exhaust the heap before the size check could fire.
-# entrystore.proxy.max-response-size=10MB
+## max-response-size caps the upstream body that GET /proxy passes through (default 100MB); negative
+## means no limit, as in 5.x. The body is streamed, not held in memory, except for JSONP, which is
+## buffered to be wrapped. A larger Content-Length is answered 502; a body without Content-Length is cut
+## off once it exceeds the cap.
+# entrystore.proxy.max-response-size=100MB
 # entrystore.proxy.max-redirects=15
 # entrystore.proxy.connect-timeout=30s
 # entrystore.proxy.read-timeout=60s

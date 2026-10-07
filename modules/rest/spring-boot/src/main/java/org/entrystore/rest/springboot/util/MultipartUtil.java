@@ -18,16 +18,39 @@ package org.entrystore.rest.springboot.util;
 
 import lombok.NoArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartRequest;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 @NoArgsConstructor(access = lombok.AccessLevel.PRIVATE)
 public class MultipartUtil {
 
 	private static final String CONVENTIONAL_PART_NAME = "file";
+
+	private static final Pattern LIMIT_MESSAGE = Pattern.compile("^max (file size|length) exceeded");
+
+	/**
+	 * Whether parsing a multipart body failed on a {@code spring.servlet.multipart.*} limit. Jetty reports some
+	 * limits, such as "max length exceeded: 4096", as an {@code IllegalStateException} inside its generic
+	 * "bad multipart" failure, which Spring does not turn into {@link MaxUploadSizeExceededException}.
+	 */
+	public static boolean isSizeLimitBreach(MultipartException ex) {
+		if (ex instanceof MaxUploadSizeExceededException) {
+			return true;
+		}
+		for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+			if (cause instanceof IllegalStateException && cause.getMessage() != null
+					&& LIMIT_MESSAGE.matcher(cause.getMessage()).find()) {
+				return true;
+			}
+		}
+		return false;
+	}
 
 	/**
 	 * Returns the file part of a multipart request that carries a single upload, regardless of the

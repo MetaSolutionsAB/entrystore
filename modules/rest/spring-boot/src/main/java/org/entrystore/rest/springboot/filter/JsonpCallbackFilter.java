@@ -123,7 +123,8 @@ public class JsonpCallbackFilter extends OncePerRequestFilter {
 			return;
 		}
 
-		String rawCallback = request.getParameter(CALLBACK_PARAM);
+		// Query string only, as 5.x read it: getParameter would parse a form or multipart body.
+		String rawCallback = HttpUtil.getQueryParameter(request, CALLBACK_PARAM);
 		// No JSONP requested, or a streaming endpoint (e.g. /sparql) that must not be buffered:
 		// pass straight through. isStreamingPath is only evaluated for the rare ?callback= request.
 		if (rawCallback == null || isStreamingPath(request)) {

@@ -30,6 +30,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.DigestUtils;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -203,6 +205,38 @@ public class HttpUtil {
 		if (HttpUtil.isLargerThan(request, maxRequestSize)) {
 			throw new EntityTooLargeException("The size of the representation is larger than " + maxRequestSize + "bytes or unknown, request blocked.");
 		}
+	}
+
+	/** Whether the request declares a {@code multipart/form-data} body. */
+	public static boolean isMultipart(HttpServletRequest request) {
+		String contentType = request.getContentType();
+		return contentType != null && contentType.regionMatches(true, 0, MediaType.MULTIPART_FORM_DATA_VALUE, 0,
+				MediaType.MULTIPART_FORM_DATA_VALUE.length());
+	}
+
+	/**
+	 * The first value of query parameter {@code name}, an empty string for a bare {@code ?name}, or null.
+	 * Unlike {@code getParameter} it never reads the body, which for a multipart request would make Jetty
+	 * parse the whole upload to temporary files before any access check. A pair with malformed
+	 * percent-encoding is skipped, so it neither fails the request nor hides the other pairs.
+	 */
+	public static String getQueryParameter(HttpServletRequest request, String name) {
+		String query = request.getQueryString();
+		if (query == null) {
+			return null;
+		}
+		for (String pair : query.split("&")) {
+			int eq = pair.indexOf('=');
+			try {
+				String key = URLDecoder.decode(eq < 0 ? pair : pair.substring(0, eq), StandardCharsets.UTF_8);
+				if (key.equals(name)) {
+					return eq < 0 ? "" : URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8);
+				}
+			} catch (IllegalArgumentException e) {
+				log.debug("Skipping query parameter with malformed encoding: {}", sanitizeForLog(pair));
+			}
+		}
+		return null;
 	}
 
 	private static final int LOG_VALUE_MAX_LENGTH = 128;

@@ -17,8 +17,11 @@
 package org.entrystore.rest.springboot.util;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.mock.web.MockMultipartHttpServletRequest;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -184,5 +187,21 @@ class MultipartUtilTest {
 		request.addParameter("mimeType", "text/html");
 
 		assertTrue(MultipartUtil.firstFilePart(request).isEmpty());
+	}
+
+	@ParameterizedTest(name = "{0} -> {1}")
+	@CsvSource({
+			"'max file size exceeded: 2048',        true",
+			"'max length exceeded: 4096',           true",
+			"'max parts exceeded: 1000',            false",
+			"'headers max length exceeded: 8192',   false",
+			"'missing boundary',                    false"
+	})
+	void isSizeLimitBreach_recognisesJettysSizeLimitMessagesOnly(String jettyMessage, boolean breach) {
+		// Jetty wraps the limit failure in its generic "bad multipart" one, which Spring wraps again.
+		var jettyFailure = new IllegalStateException("bad multipart", new IllegalStateException(jettyMessage));
+
+		assertEquals(breach, MultipartUtil.isSizeLimitBreach(
+				new MultipartException("Failed to parse multipart servlet request", jettyFailure)));
 	}
 }

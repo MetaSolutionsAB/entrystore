@@ -39,6 +39,7 @@ import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException
 import org.entrystore.rest.springboot.model.exception.TextareaHtmlResponseException;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.ValidationErrorMessages;
+import org.entrystore.rest.springboot.util.MultipartUtil;
 import org.entrystore.rest.springboot.util.WebResourceUrls;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -58,6 +59,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.concurrent.RejectedExecutionException;
@@ -284,9 +286,20 @@ public class AppExceptionHandler {
 		return jsonResponse(responseBody);
 	}
 
+	/**
+	 * Rethrows when the response is already committed, e.g. a {@code /proxy} transfer that fails or exceeds
+	 * its cap mid-stream: the status can no longer change, and an error body appended to the partial one would
+	 * end a truncated response normally. Escaping to Jetty instead makes it abort the connection.
+	 */
 	@ExceptionHandler(CustomResponseException.class)
 	public ResponseEntity<ErrorResponse> handleCustomResponseException(CustomResponseException ex,
-																	   HttpServletRequest request) {
+																	   HttpServletRequest request,
+																	   HttpServletResponse response) {
+		if (response.isCommitted()) {
+			// Jetty logs the escaping exception again, so no stack trace here.
+			log.info("Aborting the already committed response of '{}': {}", request.getRequestURI(), ex.getMessage());
+			throw ex;
+		}
 		log.info("CustomResponseException ({}) at endpoint '{}': {}", ex.getStatus().value(), request.getRequestURI(), ex.getMessage(), ex);
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(ex.getStatus().value())
@@ -294,6 +307,26 @@ public class AppExceptionHandler {
 				.error(ex.getMessage())
 				.build();
 		return jsonResponse(responseBody);
+	}
+
+	/**
+	 * Multipart bodies are parsed lazily, when the controller first reads the upload after its access check, so parse
+	 * failures arrive here: a breached {@code spring.servlet.multipart.*} limit as 413, anything else as 400. The
+	 * container's message is not echoed.
+	 */
+	@ExceptionHandler(MultipartException.class)
+	public ResponseEntity<ErrorResponse> handleMultipartException(MultipartException ex, HttpServletRequest request) {
+		boolean tooLarge = MultipartUtil.isSizeLimitBreach(ex);
+		if (tooLarge) {
+			log.info("Multipart upload at endpoint '{}' exceeds a configured limit: {}", request.getRequestURI(), ex.getMessage());
+		} else {
+			log.debug("MultipartException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
+		}
+		return jsonResponse(ErrorResponse.builder()
+				.status(tooLarge ? HttpStatus.CONTENT_TOO_LARGE.value() : HttpStatus.BAD_REQUEST.value())
+				.path(request.getRequestURI())
+				.error(tooLarge ? "Multipart upload exceeds the maximum allowed size" : "Malformed multipart request")
+				.build());
 	}
 
 	@ExceptionHandler(RejectedExecutionException.class)
