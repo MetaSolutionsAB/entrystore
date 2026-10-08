@@ -167,13 +167,26 @@ public class AuthTokenCookies implements LogoutHandler {
 		expire(request, response, staleTargets);
 	}
 
+	/**
+	 * Expires the cookie on all paths it may have been issued on, also if the request does not carry it: for a login
+	 * that failed after the container issued the new session's cookie in this response.
+	 */
+	public void expireAfterFailedLogin(HttpServletRequest request, HttpServletResponse response) {
+		expire(request, response, allTargets, true);
+	}
+
 	@Override
 	public void logout(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
 		expireAll(request, response);
 	}
 
 	private void expire(HttpServletRequest request, HttpServletResponse response, List<Target> targets) {
-		if (WebUtils.getCookie(request, cookieName) == null) {
+		expire(request, response, targets, false);
+	}
+
+	private void expire(HttpServletRequest request, HttpServletResponse response, List<Target> targets,
+						boolean evenIfNotSent) {
+		if (!evenIfNotSent && WebUtils.getCookie(request, cookieName) == null) {
 			return;
 		}
 		// With invalid-token-error off, ConcurrentSessionFilter's logout and InvalidSessionCookieFilter both expire it

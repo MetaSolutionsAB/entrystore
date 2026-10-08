@@ -217,6 +217,10 @@ entrystore.data.folder=/srv/entrystore/files/
 # Whether an unknown or expired auth_token is answered with 401; with off the request is served
 # as guest. The cookie is expired in both cases. (default: on)
 # entrystore.auth.cookie.invalid-token-error=on|off
+# Seconds a cookie session uses its loaded user before reloading it from the repository; 0 reloads on every request.
+# A change of the user's admin role reaches an open session up to this late. Disabling or deleting a user, a
+# password change and a deleted token still end the session on its next request. (default: 10)
+# entrystore.auth.session.reload-interval=10
 
 ## User-initiated sign-up (default: off). When off, /auth/signup and /auth/signup/confirm answer 404.
 # entrystore.auth.signup=on|off

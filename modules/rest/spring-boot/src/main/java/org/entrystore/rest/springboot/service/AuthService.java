@@ -246,7 +246,15 @@ public class AuthService {
 	 * the change stays alive.
 	 */
 	public void expireUserSessions(User user, String exceptSessionId) {
-		String username = user.getEntry().getResourceURI().toString();
+		expireUserSessions(user.getEntry().getResourceURI(), exceptSessionId);
+	}
+
+	/**
+	 * Expires all registered form-login sessions of the user with the given resource URI, which also works for a
+	 * user that was just deleted. A non-null {@code exceptSessionId} is spared.
+	 */
+	public void expireUserSessions(URI userResourceURI, String exceptSessionId) {
+		String username = userResourceURI.toString();
 		for (Object principal : sessionRegistry.getAllPrincipals()) {
 			if (principal instanceof UserDetails userDetails && userDetails.getUsername().equals(username)) {
 				for (SessionInformation session : sessionRegistry.getAllSessions(userDetails, false)) {

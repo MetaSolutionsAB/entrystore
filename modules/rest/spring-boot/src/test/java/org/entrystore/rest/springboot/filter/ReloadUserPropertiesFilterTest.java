@@ -41,27 +41,33 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ReloadUserPropertiesFilterTest {
 
 	private static final String USERNAME = "https://example.org/store/_principals/resource/7";
+	private static final String LAST_RELOAD = ReloadUserPropertiesFilter.LAST_RELOAD_ATTRIBUTE;
 
 	private final ESUserDetailsService userDetailsService = mock(ESUserDetailsService.class);
 	private final SessionRegistryImpl sessionRegistry = new SessionRegistryImpl();
 	private final AuthTokenCookies authTokenCookies = mock(AuthTokenCookies.class);
-	private final ReloadUserPropertiesFilter filter = new ReloadUserPropertiesFilter(userDetailsService,
-			sessionRegistry, new ErrorResponseWriter(JsonMapper.builder().build()), authTokenCookies);
+	private final ReloadUserPropertiesFilter filter = filterWithReloadInterval(10);
 	private MockHttpServletRequest request;
 	private String sessionId;
 
@@ -123,7 +129,7 @@ class ReloadUserPropertiesFilterTest {
 	}
 
 	@Test
-	void sessionEndedByAConcurrentRequest_continuesWithoutTheSession() throws Exception {
+	void sessionEndedByAConcurrentRequest_isServedWithoutTheSession() throws Exception {
 		var session = new MockHttpSession();
 		session.invalidate();
 		// the session was looked up before the concurrent request invalidated it
@@ -133,8 +139,6 @@ class ReloadUserPropertiesFilterTest {
 				return session;
 			}
 		};
-		// as AuthTokenCookies reads a fixed login expiry from the session
-		when(authTokenCookies.expiry(session)).thenThrow(new IllegalStateException("Session invalid"));
 		when(userDetailsService.loadUserByUsername(USERNAME)).thenReturn(sessionDetails());
 		var response = new MockHttpServletResponse();
 		var chain = new MockFilterChain();
@@ -146,9 +150,223 @@ class ReloadUserPropertiesFilterTest {
 		assertNull(sessionRegistry.getSessionInformation(session.getId()));
 	}
 
+	@Test
+	void requestWithinTheReloadInterval_keepsTheSessionsUserAndUpdatesTheSessionInfo() throws Exception {
+		var loggedIn = SecurityContextHolder.getContext().getAuthentication();
+		reloadedAt(Instant.now().minusSeconds(5));
+		var chain = new MockFilterChain();
+
+		filter.doFilter(request, new MockHttpServletResponse(), chain);
+
+		verify(userDetailsService, never()).loadUserByUsername(any());
+		assertSame(loggedIn, SecurityContextHolder.getContext().getAuthentication());
+		var registeredUser = (ESUserSessionDetails) sessionRegistry.getSessionInformation(sessionId).getPrincipal();
+		assertNotNull(registeredUser.getSessionInfo().lastAccessTime());
+		assertNotNull(chain.getRequest());
+	}
+
+	@Test
+	void requestAfterTheReloadInterval_reloadsTheUser() throws Exception {
+		Instant lastReload = Instant.now().minusSeconds(10);
+		var reloadClock = reloadedAt(lastReload);
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenReturn(sessionDetails("ROLE_ADMIN"));
+
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+		var authorities = SecurityContextHolder.getContext().getAuthentication().getAuthorities();
+		assertEquals(List.of(new SimpleGrantedAuthority("ROLE_ADMIN")), List.copyOf(authorities));
+		assertTrue(reloadClock.get().isAfter(lastReload));
+	}
+
+	@Test
+	void reloadedUser_isNotReloadedByTheNextRequestOfTheSession() throws Exception {
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenReturn(sessionDetails());
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+		var nextRequest = new MockHttpServletRequest();
+		nextRequest.setSession(request.getSession());
+
+		filter.doFilter(nextRequest, new MockHttpServletResponse(), new MockFilterChain());
+
+		verify(userDetailsService, times(1)).loadUserByUsername(USERNAME);
+	}
+
+	@Test
+	void requestArrivingWhileTheSessionsUserIsReloaded_skipsTheReload() throws Exception {
+		var parallelRequest = new MockHttpServletRequest();
+		parallelRequest.setSession(request.getSession());
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenAnswer(invocation -> {
+			filter.doFilter(parallelRequest, new MockHttpServletResponse(), new MockFilterChain());
+			return sessionDetails();
+		});
+
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+		verify(userDetailsService, times(1)).loadUserByUsername(USERNAME);
+	}
+
+	@Test
+	void requestReachingTheClaimAfterAnotherReadTheReloadTime_doesNotReloadAgain() throws Exception {
+		var reloadClock = reloadedAt(Instant.now().minusSeconds(10));
+		var parallelRequest = new MockHttpServletRequest();
+		var parallelClaim = new AtomicReference<Instant>();
+		var parallelRequestRan = new AtomicBoolean();
+		var session = new MockHttpSession() {
+			// read right after the reload time, before the claim
+			@Override
+			public int getMaxInactiveInterval() {
+				if (!parallelRequestRan.getAndSet(true)) {
+					runParallel(filter, parallelRequest);
+					parallelClaim.set(reloadClock.get());
+				}
+				return super.getMaxInactiveInterval();
+			}
+		};
+		session.setAttribute(LAST_RELOAD, reloadClock);
+		request.setSession(session);
+		parallelRequest.setSession(session);
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenReturn(sessionDetails());
+
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+		verify(userDetailsService, times(1)).loadUserByUsername(USERNAME);
+		assertSame(parallelClaim.get(), reloadClock.get());
+	}
+
+	@Test
+	void reloadClaimedJustBeforeTheReloadTimeIsRead_isNotTakenForAClockSetBack() throws Exception {
+		var reloadClock = reloadedAt(Instant.now().minusSeconds(10));
+		var parallelRequest = new MockHttpServletRequest();
+		var parallelClaim = new AtomicReference<Instant>();
+		var parallelRequestRan = new AtomicBoolean();
+		var session = new MockHttpSession() {
+			@Override
+			public Object getAttribute(String name) {
+				if (LAST_RELOAD.equals(name) && !parallelRequestRan.getAndSet(true)) {
+					runParallel(filter, parallelRequest);
+					parallelClaim.set(reloadClock.get());
+				}
+				return super.getAttribute(name);
+			}
+		};
+		session.setAttribute(LAST_RELOAD, reloadClock);
+		request.setSession(session);
+		parallelRequest.setSession(session);
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenReturn(sessionDetails());
+
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+		verify(userDetailsService, times(1)).loadUserByUsername(USERNAME);
+		assertSame(parallelClaim.get(), reloadClock.get());
+	}
+
+	@Test
+	void failedReload_isRetriedByTheNextRequest() throws Exception {
+		Instant lastReload = Instant.now().minusSeconds(10);
+		var reloadClock = reloadedAt(lastReload);
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenThrow(new IllegalStateException("store down"));
+		var response = new MockHttpServletResponse();
+
+		filter.doFilter(request, response, new MockFilterChain());
+
+		assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.value(), response.getStatus());
+		assertSame(lastReload, reloadClock.get());
+	}
+
+	@Test
+	void failedReload_keepsANewerClaim() throws Exception {
+		var reloadClock = reloadedAt(Instant.now().minusSeconds(10));
+		Instant newerClaim = Instant.now().plusSeconds(1);
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenAnswer(invocation -> {
+			reloadClock.set(newerClaim);
+			throw new IllegalStateException("store down");
+		});
+
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+		assertSame(newerClaim, reloadClock.get());
+	}
+
+	@Test
+	void failedFirstReload_leavesNoReloadTime() throws Exception {
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenThrow(new IllegalStateException("store down"));
+
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+		assertNull(((AtomicReference<?>) request.getSession().getAttribute(LAST_RELOAD)).get());
+	}
+
+	@Test
+	void reloadIntervalZero_reloadsOnEveryRequestAlsoWhenTheyOverlap() throws Exception {
+		var reloadClock = reloadedAt(Instant.now());
+		var reloadOnEveryRequest = filterWithReloadInterval(0);
+		var parallelRequest = new MockHttpServletRequest();
+		var parallelRequestRan = new AtomicBoolean();
+		var session = new MockHttpSession() {
+			// read right after the reload time, before the claim
+			@Override
+			public int getMaxInactiveInterval() {
+				if (!parallelRequestRan.getAndSet(true)) {
+					runParallel(reloadOnEveryRequest, parallelRequest);
+				}
+				return super.getMaxInactiveInterval();
+			}
+		};
+		session.setAttribute(LAST_RELOAD, reloadClock);
+		request.setSession(session);
+		parallelRequest.setSession(session);
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenReturn(sessionDetails());
+
+		reloadOnEveryRequest.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+		verify(userDetailsService, times(2)).loadUserByUsername(USERNAME);
+	}
+
+	@Test
+	void requestWithoutSession_reloadsTheUserWithoutCreatingASession() throws Exception {
+		// HTTP Basic
+		var basicRequest = new MockHttpServletRequest();
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenReturn(sessionDetails());
+
+		filter.doFilter(basicRequest, new MockHttpServletResponse(), new MockFilterChain());
+
+		verify(userDetailsService).loadUserByUsername(USERNAME);
+		assertNull(basicRequest.getSession(false));
+	}
+
+	@Test
+	void negativeReloadInterval_isRejected() {
+		var e = assertThrows(IllegalArgumentException.class, () -> filterWithReloadInterval(-1));
+		assertTrue(e.getMessage().contains("entrystore.auth.session.reload-interval"));
+	}
+
+	/** Runs a request of the same session while the test's request is in the filter. */
+	private static void runParallel(ReloadUserPropertiesFilter filter, MockHttpServletRequest parallelRequest) {
+		try {
+			filter.doFilter(parallelRequest, new MockHttpServletResponse(), new MockFilterChain());
+		} catch (Exception e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	/** Gives the session the reload clock a login creates, set to the given time. */
+	private AtomicReference<Instant> reloadedAt(Instant lastReload) {
+		var reloadClock = new AtomicReference<>(lastReload);
+		request.getSession().setAttribute(LAST_RELOAD, reloadClock);
+		return reloadClock;
+	}
+
+	private ReloadUserPropertiesFilter filterWithReloadInterval(int seconds) {
+		return new ReloadUserPropertiesFilter(userDetailsService, sessionRegistry,
+				new ErrorResponseWriter(JsonMapper.builder().build()), authTokenCookies, seconds);
+	}
+
 	private static ESUserSessionDetails sessionDetails() {
+		return sessionDetails("ROLE_USER");
+	}
+
+	private static ESUserSessionDetails sessionDetails(String role) {
 		var springUser = new org.springframework.security.core.userdetails.User(
-				USERNAME, "", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+				USERNAME, "", List.of(new SimpleGrantedAuthority(role)));
 		return new ESUserSessionDetails(springUser, mock(User.class), SessionInfo.builder().userName("alice").build());
 	}
 }
