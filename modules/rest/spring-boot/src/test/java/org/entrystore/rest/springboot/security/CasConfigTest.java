@@ -18,6 +18,7 @@ package org.entrystore.rest.springboot.security;
 
 import org.apereo.cas.client.ssl.HttpURLConnectionFactory;
 import org.apereo.cas.client.validation.AbstractUrlBasedTicketValidator;
+import org.apereo.cas.client.validation.AssertionImpl;
 import org.apereo.cas.client.validation.Cas10TicketValidator;
 import org.apereo.cas.client.validation.Cas20ServiceTicketValidator;
 import org.apereo.cas.client.validation.Cas30ServiceTicketValidator;
@@ -34,11 +35,17 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.cas.authentication.CasAuthenticationProvider;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.cas.ServiceProperties;
+import org.springframework.security.cas.authentication.CasAuthenticationToken;
+import org.springframework.security.cas.authentication.CasServiceTicketAuthenticationToken;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.userdetails.User;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import javax.net.ssl.HttpsURLConnection;
 import java.net.URI;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -66,7 +73,7 @@ class CasConfigTest {
 	private AuthTokenCookies authTokenCookies;
 
 	@Test
-	void relaxedEnabledSettingCreatesTheProviderAndSuccessHandler() throws Exception {
+	void relaxedEnabledSettingCreatesTheCasBeansButNoAuthenticationProviderBean() throws Exception {
 		when(repositoryManager.getRepositoryURL()).thenReturn(URI.create("https://sp.entrystore.example/").toURL());
 
 		new ApplicationContextRunner()
@@ -81,9 +88,30 @@ class CasConfigTest {
 				.run(context -> {
 					assertNull(context.getStartupFailure());
 					assertTrue(context.getBean(CasCustomConfiguration.class).enabled());
-					assertNotNull(context.getBean(CasAuthenticationProvider.class));
+					assertNotNull(context.getBean(ServiceProperties.class));
+					assertNotNull(context.getBean(TicketValidator.class));
 					assertNotNull(context.getBean(CasLoginSuccessHandler.class));
+					// A single AuthenticationProvider bean would become the global AuthenticationManager's only
+					// provider and break password and HTTP Basic login
+					assertTrue(context.getBeansOfType(AuthenticationProvider.class).isEmpty());
 				});
+	}
+
+	@Test
+	void casProviderAuthenticatesAValidTicketAsAUserNamedByTheCasLogin() throws Exception {
+		var serviceProperties = new ServiceProperties();
+		serviceProperties.setService("https://sp.entrystore.example/auth/cas");
+		TicketValidator ticketValidator = mock(TicketValidator.class);
+		when(ticketValidator.validate("ST-1", "https://sp.entrystore.example/auth/cas"))
+				.thenReturn(new AssertionImpl("casuser"));
+
+		var authentication = CasConfig.casAuthenticationProvider(serviceProperties, ticketValidator)
+				.authenticate(CasServiceTicketAuthenticationToken.stateful("ST-1"));
+
+		var principal = assertInstanceOf(User.class, assertInstanceOf(CasAuthenticationToken.class, authentication)
+				.getPrincipal());
+		assertEquals("casuser", principal.getUsername());
+		assertEquals(Set.of("ROLE_USER"), AuthorityUtils.authorityListToSet(principal.getAuthorities()));
 	}
 
 	@Configuration(proxyBeanMethods = false)

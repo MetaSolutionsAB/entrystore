@@ -20,6 +20,7 @@ import com.github.benmanes.caffeine.cache.Ticker;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apereo.cas.client.validation.TicketValidator;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
@@ -53,10 +54,11 @@ import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.ProviderManager;
-import org.springframework.security.cas.authentication.CasAuthenticationProvider;
+import org.springframework.security.cas.ServiceProperties;
 import org.springframework.security.cas.web.CasAuthenticationFilter;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.ObjectPostProcessor;
+import org.springframework.security.config.annotation.SecurityConfigurerAdapter;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -72,10 +74,12 @@ import org.springframework.security.saml2.provider.service.web.authentication.Op
 import org.springframework.security.saml2.provider.service.web.authentication.Saml2AuthenticationRequestResolver;
 import org.springframework.security.saml2.provider.service.web.authentication.Saml2WebSsoAuthenticationFilter;
 import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.DefaultSecurityFilterChain;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.context.DelegatingSecurityContextRepository;
 import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
@@ -126,7 +130,8 @@ public class SecurityConfig {
 
 	// CAS-auth related beans (optional — only present when entrystore.auth.cas.enabled=true)
 	private final CasCustomConfiguration casConfiguration;
-	private final Optional<CasAuthenticationProvider> casAuthenticationProvider;
+	private final Optional<ServiceProperties> casServiceProperties;
+	private final Optional<TicketValidator> casTicketValidator;
 	private final Optional<CasLoginSuccessHandler> casLoginSuccessHandler;
 
 	// OIDC-auth related beans (success handler optional — only present when entrystore.auth.oidc.enabled=true)
@@ -366,9 +371,11 @@ public class SecurityConfig {
 			casFilter.setRequiresAuthenticationRequestMatcher(new AndRequestMatcher(
 					PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/auth/cas"),
 					ticketRequired));
-			casFilter.setAuthenticationManager(new ProviderManager(
-					casAuthenticationProvider.orElseThrow(() -> new IllegalStateException(
-							"CAS is enabled but CasAuthenticationProvider bean is missing — check CasConfig."))));
+			casFilter.setAuthenticationManager(new ProviderManager(CasConfig.casAuthenticationProvider(
+					casServiceProperties.orElseThrow(() -> new IllegalStateException(
+							"CAS is enabled but the ServiceProperties bean is missing — check CasConfig.")),
+					casTicketValidator.orElseThrow(() -> new IllegalStateException(
+							"CAS is enabled but the TicketValidator bean is missing — check CasConfig.")))));
 
 			var handler = casLoginSuccessHandler.orElseThrow(() -> new IllegalStateException(
 					"CAS is enabled but CasLoginSuccessHandler bean is missing — check CasConfig."));
@@ -380,6 +387,16 @@ public class SecurityConfig {
 					new SsoLoginFailureHandler("CAS", casConfiguration.redirectFailure().url()));
 
 			http.addFilterBefore(casFilter, UsernamePasswordAuthenticationFilter.class);
+			// The session strategy and context repository the form, SAML and OIDC logins get, so a CAS login changes
+			// the session id and registers the session; set in configure, as the strategy is shared only from init on
+			http.with(new SecurityConfigurerAdapter<DefaultSecurityFilterChain, HttpSecurity>() {
+				@Override
+				public void configure(HttpSecurity builder) {
+					casFilter.setSessionAuthenticationStrategy(Objects.requireNonNull(
+							builder.getSharedObject(SessionAuthenticationStrategy.class)));
+					casFilter.setSecurityContextRepository(builder.getSharedObject(SecurityContextRepository.class));
+				}
+			});
 		} else {
 			log.info("CAS Auth Disabled");
 		}

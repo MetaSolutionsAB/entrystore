@@ -130,8 +130,12 @@ public class CasConfig {
 		}
 	}
 
-	@Bean
-	public CasAuthenticationProvider casAuthenticationProvider(ServiceProperties serviceProperties,
+	/**
+	 * Builds the provider for the CAS filter alone. It must not be a bean: Spring Security makes a single
+	 * {@code AuthenticationProvider} bean the only provider of the global AuthenticationManager, which then no
+	 * longer authenticates password and HTTP Basic logins against {@link ESUserDetailsService}.
+	 */
+	static CasAuthenticationProvider casAuthenticationProvider(ServiceProperties serviceProperties,
 															   TicketValidator ticketValidator) {
 		CasAuthenticationProvider provider = new CasAuthenticationProvider();
 		provider.setServiceProperties(serviceProperties);
@@ -143,6 +147,7 @@ public class CasConfig {
 						List.of(new SimpleGrantedAuthority("ROLE_USER"))));
 		// Random key per JVM — used by CasAuthenticationToken for internal hash-based integrity checks
 		provider.setKey(UUID.randomUUID().toString());
+		provider.afterPropertiesSet();
 		return provider;
 	}
 
