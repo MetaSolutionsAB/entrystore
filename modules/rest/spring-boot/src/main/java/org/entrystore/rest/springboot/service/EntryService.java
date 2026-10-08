@@ -112,8 +112,20 @@ public class EntryService {
 		return ENTRY_ID_PATTERN.matcher(id).matches();
 	}
 
-	public String getEntryInRdfFormat(Entry entry, String mediaType) {
-		return GraphUtil.serializeGraph(entry.getGraph(), mediaType);
+	/**
+	 * @param mayReadNothing whether the caller {@linkplain #mayReadNothing may read nothing} of the entry, which
+	 *                       reduces the entry information
+	 */
+	public String getEntryInRdfFormat(Entry entry, String mediaType, boolean mayReadNothing) {
+		return GraphUtil.serializeGraph(resourceSerializationService.getEntryInfo(entry, mayReadNothing), mediaType);
+	}
+
+	/**
+	 * Whether the current user may read neither the metadata nor the resource of the entry, so that it gets the
+	 * reduced entry information, see {@link ResourceSerializationService#mayReadNothing(Entry)}.
+	 */
+	public boolean mayReadNothing(Entry entry) {
+		return resourceSerializationService.mayReadNothing(entry);
 	}
 
 	public Entry getEntryByContextIdAndEntryId(String contextId, String entryId) {
@@ -142,8 +154,12 @@ public class EntryService {
 		principalManager.checkAuthenticatedUserAuthorized(entry, accessProperty);
 	}
 
+	/**
+	 * @param mayReadNothing whether the caller {@linkplain #mayReadNothing may read nothing} of the entry, which
+	 *                       reduces the entry information and omits a context's quota
+	 */
 	public GetEntryResponse getEntryInJsonFormat(Entry entry, String rdfFormat, boolean includeAll,
-												 ListFilter listFilter) {
+												 ListFilter listFilter, boolean mayReadNothing) {
 
 		ContextManager cm = repositoryManager.getContextManager();
 
@@ -162,7 +178,7 @@ public class EntryService {
 		 */
 		if ((graphType == GraphType.Context || graphType == GraphType.SystemContext) && entryType == Local) {
 			responseBuilder.name(cm.getName(entry.getResourceURI()));
-			if (entry.getRepositoryManager().hasQuotas()) {
+			if (entry.getRepositoryManager().hasQuotas() && !mayReadNothing) {
 				JSONObject quotaObj = new JSONObject();
 				Context c = cm.getContext(entry.getId());
 				if (c != null) {
@@ -177,7 +193,7 @@ public class EntryService {
 		/*
 		 * Entry information
 		 */
-		Model entryGraph = entry.getGraph();
+		Model entryGraph = resourceSerializationService.getEntryInfo(entry, mayReadNothing);
 		JSONObject entryObj = GraphUtil.serializeGraphToJson(entryGraph, rdfFormat);
 		responseBuilder.info(entryObj.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE));
 

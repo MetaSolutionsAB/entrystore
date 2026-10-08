@@ -16,7 +16,11 @@
 
 package org.entrystore.rest.springboot.service;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
@@ -24,7 +28,9 @@ import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.Metadata;
+import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.RepositoryProperties;
@@ -37,6 +43,8 @@ import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -60,6 +68,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ResourceSerializationServiceTest {
 
+	private static final ValueFactory VF = SimpleValueFactory.getInstance();
+	private static final String CREATOR_URI = "http://example.com/_principals/resource/creator";
+
 	@Mock
 	private PrincipalManager pm;
 
@@ -79,6 +90,8 @@ class ResourceSerializationServiceTest {
 		serializer = new ResourceSerializationService(pm, repositoryManager, loginAttemptService);
 		// only the serializeResourceUser tests reach this stub
 		lenient().when(user.getCustomProperties()).thenReturn(Map.of());
+		// callers have no rights unless a test grants them
+		lenient().when(pm.getRights(any(Entry.class))).thenReturn(Set.of());
 	}
 
 	@Test
@@ -284,6 +297,88 @@ class ResourceSerializationServiceTest {
 	}
 
 	@Test
+	void mayReadNothing_withoutRights_isTrue() {
+		Entry entry = mockEntryWithCreator("a");
+
+		assertTrue(serializer.mayReadNothing(entry, Set.of()));
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@EnumSource(AccessProperty.class)
+	void mayReadNothing_withAnyRight_isFalse(AccessProperty right) {
+		Entry entry = mockEntryWithCreator("a");
+
+		assertFalse(serializer.mayReadNothing(entry, Set.of(right)));
+	}
+
+	@Test
+	void mayReadNothing_withoutRightsOnTheCallersOwnPrincipalEntry_isFalse() {
+		Entry entry = mockEntryWithCreator("a");
+		URI ownPrincipalUri = entry.getResourceURI();
+		when(pm.getAuthenticatedUserURI()).thenReturn(ownPrincipalUri);
+
+		assertFalse(serializer.mayReadNothing(entry, Set.of()));
+	}
+
+	@Test
+	void mayReadNothing_ofAnEntry_usesTheRightsThePrincipalManagerGrants() {
+		Entry entry = mockEntryWithCreator("a");
+		when(pm.getRights(entry)).thenReturn(Set.of(AccessProperty.ReadResource));
+
+		assertFalse(serializer.mayReadNothing(entry));
+	}
+
+	@Test
+	void getEntryInfo_forACallerWhoMayReadNothing_dropsTheCreator() {
+		Entry entry = mockEntryWithCreator("a");
+
+		Model info = serializer.getEntryInfo(entry, true);
+
+		assertTrue(info.filter(null, RepositoryProperties.Creator, null).isEmpty());
+		assertFalse(info.filter(null, RepositoryProperties.resource, null).isEmpty());
+	}
+
+	@Test
+	void getEntryInfo_forACallerWhoMayRead_keepsTheCreator() {
+		Entry entry = mockEntryWithCreator("a");
+
+		Model info = serializer.getEntryInfo(entry, false);
+
+		assertFalse(info.filter(null, RepositoryProperties.Creator, null).isEmpty());
+	}
+
+	@Test
+	void serializeResourceList_childTheCallerMayNotRead_hasInfoWithoutTheCreator() {
+		Entry readable = mockEntryWithCreator("readable");
+		Entry unreadable = mockEntryWithCreator("unreadable");
+		when(pm.getRights(readable)).thenReturn(Set.of(AccessProperty.ReadMetadata));
+		var params = new ListParams(null, null, null, null, true, 0, 0);
+
+		JSONObject result = serializeList(List.of(readable, unreadable), params);
+
+		JSONArray children = result.getJSONArray("children");
+		assertTrue(children.getJSONObject(0).getJSONObject("info").toString().contains(CREATOR_URI));
+		JSONObject unreadableJson = children.getJSONObject(1);
+		assertFalse(unreadableJson.getJSONObject("info").toString().contains(CREATOR_URI));
+		assertEquals(0, unreadableJson.getJSONArray("rights").length());
+	}
+
+	@Test
+	void serializeResourceGroup_memberTheCallerMayNotRead_hasInfoWithoutTheCreator() {
+		Entry memberEntry = mockEntryWithCreator("member");
+		User member = mock(User.class);
+		when(member.getEntry()).thenReturn(memberEntry);
+		Group group = mock(Group.class);
+		when(group.members()).thenReturn(List.of(member));
+
+		JSONObject result = serializer.serializeResourceGroup(group, null);
+
+		JSONObject memberJson = result.getJSONArray("children").getJSONObject(0);
+		assertFalse(memberJson.getJSONObject("info").toString().contains(CREATOR_URI));
+		assertTrue(memberJson.getJSONObject("info").toString().contains(memberEntry.getEntryURI().toString()));
+	}
+
+	@Test
 	void sortChildrenEntries_unknownSortValue_leavesOrderUnchanged() {
 		Entry a = mockListChild("a", new Date(3000));
 		Entry b = mockListChild("b", new Date(1000));
@@ -311,7 +406,6 @@ class ResourceSerializationServiceTest {
 	 */
 	private JSONObject serializeList(List<Entry> children, ListParams params) {
 		when(repositoryManager.getContextManager()).thenReturn(mock(ContextManager.class));
-		lenient().when(pm.getRights(any(Entry.class))).thenReturn(Set.of());
 
 		org.entrystore.List list = mock(org.entrystore.List.class);
 		Entry listEntry = mock(Entry.class);
@@ -334,6 +428,7 @@ class ResourceSerializationServiceTest {
 	private static Entry mockListChild(String id, Date modified) {
 		Entry child = mock(Entry.class);
 		lenient().when(child.getEntryURI()).thenReturn(URI.create("http://example.com/ctx/entry/" + id));
+		lenient().when(child.getResourceURI()).thenReturn(URI.create("http://example.com/ctx/resource/" + id));
 		lenient().when(child.getModifiedDate()).thenReturn(modified);
 		lenient().when(child.getGraphType()).thenReturn(GraphType.None);
 		lenient().when(child.getEntryType()).thenReturn(EntryType.Local);
@@ -343,6 +438,16 @@ class ResourceSerializationServiceTest {
 		lenient().when(localMetadata.getGraph()).thenReturn(new LinkedHashModel());
 		lenient().when(child.getLocalMetadata()).thenReturn(localMetadata);
 		return child;
+	}
+
+	private static Entry mockEntryWithCreator(String id) {
+		Entry entry = mockListChild(id, new Date(1000));
+		IRI entryIri = VF.createIRI(entry.getEntryURI().toString());
+		Model graph = new LinkedHashModel();
+		graph.add(entryIri, RepositoryProperties.resource, VF.createIRI(entry.getResourceURI().toString()));
+		graph.add(entryIri, RepositoryProperties.Creator, VF.createIRI(CREATOR_URI));
+		lenient().when(entry.getGraph()).thenReturn(graph);
+		return entry;
 	}
 
 	private static List<String> childEntryIds(JSONObject result) {
