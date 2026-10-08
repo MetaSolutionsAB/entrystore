@@ -326,4 +326,22 @@ public class PrincipalManagerImplTest extends AbstractCoreTest {
 		assertTrue(created.getAllowedPrincipalsFor(AccessProperty.Administer).contains(daisy.getResourceURI()));
 		assertEquals(listAdmins, listEntry.getAllowedPrincipalsFor(AccessProperty.Administer));
 	}
+
+	@Test
+	public void getRights_readResourceOnAReferenceWithoutLocalMetadataDoesNotGrantReadMetadata() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
+		Context mouse = cm.getContext("mouse");
+		Entry daisy = pm.getPrincipalEntry("Daisy");
+		Entry reference = mouse.createReference(null, URI.create("http://example.com/resource"),
+				URI.create("http://example.com/metadata"), null);
+		reference.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy.getResourceURI());
+		// loaded from the store, a Reference created without an entry graph has no es:metadata
+		evictFromSoftCache(reference);
+		Entry reloaded = mouse.get(reference.getId());
+		assertNull(reloaded.getLocalMetadataURI());
+
+		pm.setAuthenticatedUserURI(daisy.getResourceURI());
+
+		assertEquals(Set.of(AccessProperty.ReadResource), pm.getRights(reloaded));
+	}
 }
