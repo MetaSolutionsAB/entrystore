@@ -29,6 +29,7 @@ import java.time.LocalDateTime
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
+import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
@@ -55,6 +56,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		EntryStoreClient.creds.put('userForLoginWithCookieChangedOwnPasswordOldCookie@test.com', password)
 		EntryStoreClient.creds.put('userForLoginTemporaryLockout@test.com', password)
 		EntryStoreClient.creds.put('userForDisabledUntilOnEntry@test.com', password)
+		EntryStoreClient.creds.put('userForAdminRoleReload@test.com', password)
 	}
 
 	def cleanup() {
@@ -505,6 +507,47 @@ class CookieLoginResourceIT extends BaseSpec {
 		request.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
+	def "A logged-in user who is then deleted should lose the session and the cookie on the next request"() {
+		given:
+		def username = 'userForDeletedWhileLoggedIn@test.com'
+		def user = UserUtil.createUserWithPassword(username, password)
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie',
+			'auth_username=' + username + '&auth_password=' + password, '', 'application/x-www-form-urlencoded')
+		assert loginConnection.getResponseCode() == HTTP_OK
+		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
+		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
+		def deletion = EntryStoreClient.deleteRequest('/_principals/entry/' + user['entryId'])
+		assert deletion.getResponseCode() == HTTP_NO_CONTENT
+
+		when: 'within the session reload interval'
+		def request = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
+
+		then:
+		request.getResponseCode() == HTTP_UNAUTHORIZED
+		!EntryStoreClient.findSetCookies(request, 'auth_token').isEmpty()
+		EntryStoreClient.findSetCookies(request, 'auth_token').every { it.contains('Max-Age=0') }
+	}
+
+	def "A logged-in user removed from the admin group keeps the admin role until the reload interval has passed"() {
+		given: 'the default entrystore.auth.session.reload-interval of 10 seconds'
+		def username = 'userForAdminRoleReload@test.com'
+		def user = UserUtil.createUserWithPassword(username, password, null, true)
+		def cookie = EntryStoreClient.loginIsolated(username).authCookie
+		assert adminOnlyStatus(cookie) == HTTP_OK
+		removeFromAdminGroup(user['entryId'].toString())
+
+		when:
+		def withinTheInterval = adminOnlyStatus(cookie)
+		Thread.sleep(10_500)
+		def afterTheInterval = adminOnlyStatus(cookie)
+		def nextAfterTheInterval = adminOnlyStatus(cookie)
+
+		then: 'unlike disabling the user, changing the password or deleting the token, which take effect at once'
+		withinTheInterval == HTTP_OK
+		afterTheInterval == HTTP_FORBIDDEN
+		nextAfterTheInterval == HTTP_FORBIDDEN
+	}
+
 	def "GET /auth/user with HTTP Basic should not issue an auth_token cookie"() {
 		given:
 		def username = 'userForBasicWithoutCookie@test.com'
@@ -746,6 +789,22 @@ class CookieLoginResourceIT extends BaseSpec {
 		}
 		assert code == HTTP_OK: "Expected 200 OK but got ${code} — body: ${body}"
 		return JSON_PARSER.parseText(body) as Map
+	}
+
+	private static int adminOnlyStatus(String cookie) {
+		def connection = EntryStoreClient.getRequest('/management/status/extended', null, null, [Cookie: cookie])
+		return connection.getResponseCode()
+	}
+
+	private static void removeFromAdminGroup(String userEntryId) {
+		def adminsConn = EntryStoreClient.getRequest('/_principals/resource/_admins')
+		assert adminsConn.getResponseCode() == HTTP_OK
+		def memberIds = (JSON_PARSER.parseText(adminsConn.inputStream.text)['children'] as List)
+			.collect { it['entryId'].toString() }
+		assert memberIds.contains(userEntryId)
+		def remaining = JsonOutput.toJson(memberIds - userEntryId)
+		def update = EntryStoreClient.putRequest('/_principals/resource/_admins', remaining)
+		assert update.getResponseCode() == HTTP_NO_CONTENT
 	}
 
 	/**

@@ -108,6 +108,19 @@ class AuthTokenCookiesTest {
 	}
 
 	@Test
+	void expireAfterFailedLogin_requestWithoutCookie_expiresEveryPath() {
+		var cookies = authTokenCookies("none", false, "");
+		var response = new MockHttpServletResponse();
+
+		cookies.expireAfterFailedLogin(new MockHttpServletRequest(), response);
+
+		assertEquals(List.of(
+				"auth_token=; Path=/store; Max-Age=0; " + EPOCH + "; Secure; SameSite=None",
+				"auth_token=; Path=/store/; Max-Age=0; " + EPOCH + "; Secure; SameSite=None"),
+				response.getHeaders("Set-Cookie"));
+	}
+
+	@Test
 	void expireStale_configuredDomain_expiresHostOnlyCookieOnIssuingPath() {
 		var cookies = authTokenCookies("strict", true, "example.org");
 		var response = new MockHttpServletResponse();

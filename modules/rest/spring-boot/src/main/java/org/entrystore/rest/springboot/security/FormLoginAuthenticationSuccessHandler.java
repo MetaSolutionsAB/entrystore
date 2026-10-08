@@ -22,8 +22,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.springboot.filter.CacheControlFilter;
+import org.entrystore.rest.springboot.filter.ReloadUserPropertiesFilter;
+import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -35,7 +39,13 @@ import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.concurrent.atomic.AtomicReference;
 
+/**
+ * Completes a form login: session lifetime, the session info that /auth/tokens reports, and stale cookies. A login
+ * whose session info cannot be recorded fails with 500 and leaves no session, since later requests of the session
+ * rely on that info.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -43,6 +53,7 @@ public class FormLoginAuthenticationSuccessHandler extends SimpleUrlAuthenticati
 
 	private final LoginAttemptService loginAttemptService;
 	private final AuthTokenCookies authTokenCookies;
+	private final ErrorResponseWriter errorResponseWriter;
 
 	@Override
 	public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication auth) throws IOException {
@@ -69,11 +80,22 @@ public class FormLoginAuthenticationSuccessHandler extends SimpleUrlAuthenticati
 						.loginTokenMaxAge(request.getSession().getMaxInactiveInterval());
 
 				esUserDetails.setSessionInfo(sessionInfo.build());
+				// the login has just loaded the user
+				request.getSession().setAttribute(ReloadUserPropertiesFilter.LAST_RELOAD_ATTRIBUTE,
+						new AtomicReference<>(now));
 
 				UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(esUserDetails, esUserDetails.getPassword(), esUserDetails.getAuthorities());
 				SecurityContextHolder.getContext().setAuthentication(newAuth);
-			} catch (Exception e) {
-				log.error("Failed to build session metadata on login success, login will proceed without session info", e);
+			} catch (RuntimeException e) {
+				log.error("Failed to record the session info of a login, ending the new session", e);
+				HttpUtil.clearAuthenticatedSession(request);
+				authTokenCookies.expireAfterFailedLogin(request, response);
+				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+						.path(request.getRequestURI())
+						.error("Login failed.")
+						.build());
+				return;
 			}
 		}
 
