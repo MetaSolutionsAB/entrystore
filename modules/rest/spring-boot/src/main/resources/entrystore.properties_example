@@ -428,6 +428,10 @@ entrystore.solr.extract-fulltext=off
 # entrystore.data.quota=on|off (default: off)
 # entrystore.data.quota.default=100k
 
+## Maximum size of an uploaded file (default: 1G); larger uploads are answered 413. Files already stored
+## are not affected. -1 removes the limit, as in 5.x. Units: k, M, G, T (powers of 1024).
+# entrystore.data.max-file-size=1G
+
 ## Multipart upload limits at the Spring servlet layer. -1B (the default) means no limit, as in 5.x.
 ## Application-level caps that DO exist: entrystore.data.max-file-size
 ## (resource uploads), entrystore.echo.max-file-size for /echo. POST /{context-id}/import
@@ -452,9 +456,9 @@ entrystore.solr.extract-fulltext=off
 ##
 ## DoS surface to consider before leaving these unlimited: any authenticated user with
 ## WriteResource ACL on a target entry can open parallel slow PUTs, each
-## spooled to spring.servlet.multipart.location. entrystore.data.max-file-size defaults
-## to -1 (no application backstop), so the servlet-layer cap here is the
-## effective per-request ceiling unless an operator opts into a tighter cap.
+## spooled to spring.servlet.multipart.location. entrystore.data.max-file-size (default 1G) rejects
+## a larger file only after the upload has been received, so the servlet-layer cap here is what bounds
+## the temporary space a single request can take.
 ## Raw (non-multipart) PUT bodies on /{context-id}/resource/{entry-id} are not subject to these limits:
 ## a file body is streamed into the data folder after the access check, capped only by
 ## entrystore.data.max-file-size.
