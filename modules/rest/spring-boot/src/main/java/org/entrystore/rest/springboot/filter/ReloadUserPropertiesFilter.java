@@ -71,18 +71,17 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 				// Get fresh User details
 				ESUserSessionDetails updatedUser = (ESUserSessionDetails) userDetailsService.loadUserByUsername(esUserDetails.getUsername());
 				Instant now = Instant.now();
-				// HTTP Basic requests have no session and must not get one
-				HttpSession session = request.getSession(false);
+				SessionState session = readSession(request);
 				SessionInfo.SessionInfoBuilder sessionInfo = SessionInfo.builder()
 						.userName(esUserDetails.getSessionInfo().userName())
 						.loginTime(esUserDetails.getSessionInfo().loginTime())
 						.loginExpiration(session != null
-								? LocalDateTime.ofInstant(authTokenCookies.expiry(session), ZoneId.systemDefault())
+								? LocalDateTime.ofInstant(session.loginExpiry(), ZoneId.systemDefault())
 								: null)
 						.lastAccessTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
 						.lastUsedIpAddress(request.getRemoteAddr())
 						.lastUsedUserAgent(request.getHeader("User-Agent"))
-						.loginTokenMaxAge(session != null ? session.getMaxInactiveInterval() : 0);
+						.loginTokenMaxAge(session != null ? session.maxInactiveInterval() : 0);
 
 				if (!updatedUser.isEnabled()) {
 					HttpUtil.clearAuthenticatedSession(request);
@@ -100,7 +99,7 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 				UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(updatedUser, updatedUser.getPassword(), updatedUser.getAuthorities());
 				SecurityContextHolder.getContext().setAuthentication(newAuth);
 				if (session != null) {
-					updateRegisteredSession(session.getId(), updatedUser);
+					updateRegisteredSession(session.id(), updatedUser);
 				}
 			} catch (UsernameNotFoundException e) {
 				log.warn("User no longer found during session reload: {}", e.getMessage());
@@ -134,6 +133,25 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 		}
 
 		filterChain.doFilter(request, response);
+	}
+
+	/** The session values this filter uses, read together so that a concurrent invalidation cannot interrupt it. */
+	private record SessionState(String id, Instant loginExpiry, int maxInactiveInterval) {}
+
+	/**
+	 * @return the request's session values, or null if it has no session (HTTP Basic, which must not get one) or a
+	 * concurrent request (logout, a revocation, the session lifetime) has just ended it
+	 */
+	private SessionState readSession(HttpServletRequest request) {
+		HttpSession session = request.getSession(false);
+		if (session == null) {
+			return null;
+		}
+		try {
+			return new SessionState(session.getId(), authTokenCookies.expiry(session), session.getMaxInactiveInterval());
+		} catch (IllegalStateException endedByAConcurrentRequest) {
+			return null;
+		}
 	}
 
 	/**

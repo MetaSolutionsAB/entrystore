@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.filter;
 
+import jakarta.servlet.http.HttpSession;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.springboot.security.AuthTokenCookies;
@@ -25,9 +26,11 @@ import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -39,8 +42,10 @@ import tools.jackson.databind.json.JsonMapper;
 import java.time.Instant;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -115,6 +120,30 @@ class ReloadUserPropertiesFilterTest {
 		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
 
 		assertSame(reloaded, sessionRegistry.getSessionInformation(sessionId).getPrincipal());
+	}
+
+	@Test
+	void sessionEndedByAConcurrentRequest_continuesWithoutTheSession() throws Exception {
+		var session = new MockHttpSession();
+		session.invalidate();
+		// the session was looked up before the concurrent request invalidated it
+		var racingRequest = new MockHttpServletRequest() {
+			@Override
+			public HttpSession getSession(boolean create) {
+				return session;
+			}
+		};
+		// as AuthTokenCookies reads a fixed login expiry from the session
+		when(authTokenCookies.expiry(session)).thenThrow(new IllegalStateException("Session invalid"));
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenReturn(sessionDetails());
+		var response = new MockHttpServletResponse();
+		var chain = new MockFilterChain();
+
+		filter.doFilter(racingRequest, response, chain);
+
+		assertEquals(HttpStatus.OK.value(), response.getStatus());
+		assertNotNull(chain.getRequest());
+		assertNull(sessionRegistry.getSessionInformation(session.getId()));
 	}
 
 	private static ESUserSessionDetails sessionDetails() {

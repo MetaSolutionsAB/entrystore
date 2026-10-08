@@ -78,7 +78,6 @@ import org.springframework.security.web.authentication.AnonymousAuthenticationFi
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.context.DelegatingSecurityContextRepository;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -203,8 +202,9 @@ public class SecurityConfig {
 				// needs (private,no-cache for authenticated; no header for anonymous so static and
 				// controller-set values can pass through unchanged).
 				.headers(headers -> headers.cacheControl(HeadersConfigurer.CacheControlConfig::disable))
-				// Spring's default repositories, set explicitly so SessionManagementFilter also sees the request-scoped
-				// HTTP Basic context and does not start a session (and auth_token cookie) for it, as in 5.x
+				// Set explicitly so SessionManagementFilter also sees the request-scoped HTTP Basic context and
+				// starts no session (and auth_token cookie) for it, as in 5.x, nor for a session that a concurrent
+				// request ended; see SessionContextRepository
 				.securityContext(context -> context.securityContextRepository(sessionAndRequestContextRepository()))
 				// Nothing resumes a request after login (the entry point answers 401), and saving one would start a
 				// session, and thus an auth_token cookie, for a guest's browser request to a protected page
@@ -614,8 +614,8 @@ public class SecurityConfig {
 		}
 	}
 
-	private static SecurityContextRepository sessionAndRequestContextRepository() {
-		var sessionRepository = new HttpSessionSecurityContextRepository();
+	static SecurityContextRepository sessionAndRequestContextRepository() {
+		var sessionRepository = new SessionContextRepository();
 		sessionRepository.setDisableUrlRewriting(true);
 		return new DelegatingSecurityContextRepository(sessionRepository, new RequestAttributeSecurityContextRepository());
 	}
