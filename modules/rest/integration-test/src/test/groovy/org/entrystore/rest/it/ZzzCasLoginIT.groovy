@@ -16,13 +16,16 @@
 
 package org.entrystore.rest.it
 
+import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import spock.lang.Shared
 import spock.lang.Stepwise
 
 import static java.net.HttpURLConnection.HTTP_MOVED_TEMP
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
+import static java.nio.charset.StandardCharsets.UTF_8
 import static org.entrystore.rest.springboot.filter.CacheControlFilter.CACHE_CONTROL_CREDENTIALS
 
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
@@ -41,6 +44,9 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 	def idpCookieHeaderSaved = ''
 	@Shared
 	def ticketRedirectUrlSaved = ''
+
+	static String casCookie
+	static String casUserResourceUri
 
 	def setupSpec() {
 		stopPreexistingAppIfRunning()
@@ -154,6 +160,10 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 
 		and: 'the session idle timeout is the auth_token cookie max-age (IT 3700 s), not 30 minutes'
 		hoursUntilAuthTokenExpires(userJson) == 1
+
+		cleanup: 'store the session for the later steps'
+		casCookie = EntryStoreClient.findSetCookie(casCallbackConn, 'auth_token').split(';')[0]
+		casUserResourceUri = (userJson['uri'] as String).replace('/_principals/entry/', '/_principals/resource/')
 	}
 
 	def '4. Reserved admin username is blocked and does not leak authenticated session'() {
@@ -205,8 +215,8 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		}
 
 		then: 'Caller is not authenticated as admin (401, or 200 resolving to any non-admin user)'
-		// Note: a Set-Cookie for auth_token may still appear on the response (Jetty issues it when
-		// SessionFixationProtectionStrategy changes the session ID, before our success handler
+		// Note: a Set-Cookie for auth_token may still appear on the response (Jetty issues it when the
+		// login creates the session, to register it and store the context, before our success handler
 		// rejects admin). That cookie points to an invalidated session server-side, so reusing it
 		// yields 401/guest (see CookieLoginResourceIT). The bypass signal is the session contents,
 		// not the presence of the cookie header.
@@ -214,5 +224,86 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		def responseUser = responseCode == HTTP_OK ? JSON_PARSER.parseText(userConn.inputStream.text)['user'] : null
 		responseCode == HTTP_UNAUTHORIZED ||
 			(responseCode == HTTP_OK && responseUser != null && !responseUser.toString().equalsIgnoreCase('admin'))
+	}
+
+	def '5. Password login works with CAS enabled, as in 5.x'() {
+		when:
+		def loginConn = EntryStoreClient.postRequest('/auth/cookie', 'auth_username=admin&auth_password=adminpass', '',
+			'application/x-www-form-urlencoded')
+
+		then:
+		loginConn.getResponseCode() == HTTP_OK
+		EntryStoreClient.findCookieValue(loginConn, 'auth_token') != null
+	}
+
+	def '6. HTTP Basic works with CAS enabled, as in 5.x'() {
+		when:
+		def userConn = EntryStoreClient.getRequest('/auth/user', '', 'application/json',
+			[Authorization: 'Basic ' + Base64.getEncoder().encodeToString('admin:adminpass'.getBytes(UTF_8))])
+
+		then:
+		userConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(userConn.inputStream.text)['user'] == 'admin'
+	}
+
+	def '7. A CAS login with an existing session cookie gets a new session id'() {
+		given: 'a new CAS ticket for the user logged in at step 3'
+		def ticketUrl = casTicketUrl(testUsername, testUserPassword)
+
+		when: 'the browser returns with the ticket and the session cookie from step 3'
+		def callbackConn = EntryStoreClient.getRequest(ticketUrl, '', null, [Cookie: casCookie])
+
+		then: 'the login succeeds with a new session id'
+		callbackConn.getResponseCode() in [302, 303, 307]
+		callbackConn.getHeaderField('Location') == successLoginUrl
+		// The response also expires the cookie on its stale paths; the new session's cookie is the one not expired
+		def newCookieLine = EntryStoreClient.findSetCookies(callbackConn, 'auth_token')
+			.find { EntryStoreClient.parseSetCookieAttributes(it)['max-age'] != '0' }
+		newCookieLine != null
+		def newCasCookie = newCookieLine.split(';')[0]
+		newCasCookie != casCookie
+
+		and: 'the new session is the user\'s, and the old session id is no longer valid'
+		def userConn = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: newCasCookie])
+		userConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(userConn.inputStream.text)['user'] == testUsername
+		EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: casCookie]).getResponseCode() == HTTP_UNAUTHORIZED
+
+		cleanup:
+		casCookie = newCasCookie
+	}
+
+	def '8. Disabling the CAS-authenticated user should end the session, even if re-enabled before the next request'() {
+		given: 'the session from the login is still valid'
+		assert EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: casCookie]).getResponseCode() == HTTP_OK
+
+		and: 'an admin disables the user and enables them again'
+		def adminLogin = EntryStoreClient.postRequest('/auth/cookie', 'auth_username=admin&auth_password=adminpass', '',
+			'application/x-www-form-urlencoded')
+		assert adminLogin.getResponseCode() == HTTP_OK
+		def adminCookie = 'auth_token=' + EntryStoreClient.findCookieValue(adminLogin, 'auth_token')
+		[true, false].each { disabled ->
+			assert EntryStoreClient.putRequest(casUserResourceUri, JsonOutput.toJson([disabled: disabled]), '',
+				'application/json', [Cookie: adminCookie]).getResponseCode() == HTTP_NO_CONTENT
+		}
+
+		when: 'the user makes the next request with the session cookie from the login'
+		def userConn = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: casCookie])
+
+		then: 'the session has ended, as 5.x removed a disabled user\'s tokens'
+		userConn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	/** Plays the browser and Keycloak side of a CAS login and returns the EntryStore callback URL with the ticket. */
+	private static String casTicketUrl(String username, String password) {
+		def startConn = EntryStoreClient.getRequest('/auth/cas', '')
+		def loginPageConn = EntryStoreClient.getRequest(startConn.getHeaderField('Location'), '', '')
+		def idpCookieHeader = EntryStoreClient.toCookieHeader(loginPageConn.getHeaderFields()['Set-Cookie'])
+		def submitConn = EntryStoreClient.postRequest(extractFormActionUrl(loginPageConn.inputStream.text),
+			createFormBody([username: username, password: password]), '', 'application/x-www-form-urlencoded',
+			[Cookie: idpCookieHeader])
+		def ticketUrl = submitConn.getHeaderField('Location')
+		assert ticketUrl?.contains('/auth/cas') && ticketUrl.contains('ticket='): 'Keycloak issued no CAS ticket'
+		return ticketUrl
 	}
 }
