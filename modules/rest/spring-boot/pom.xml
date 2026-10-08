@@ -147,13 +147,12 @@
 			<artifactId>json</artifactId>
 		</dependency>
 
-		<!-- Held at 3.0.3: 3.1.0 pulls swagger-core-jakarta 2.2.52+, which requires the Jackson 2
-		     line at 2.22.x while the Boot 4.1 BOM manages 2.21.4 — requireUpperBoundDeps fails.
-		     Upgrade together with the Jackson 2 bump tracked in ENTRYSTORE-1068. -->
+		<!-- Bump together with swagger.version in the root pom, which must match the
+		     swagger-core-jakarta version this release pulls in. -->
 		<dependency>
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
-			<version>3.0.3</version>
+			<version>3.1.1</version>
 		</dependency>
 
 		<dependency>
