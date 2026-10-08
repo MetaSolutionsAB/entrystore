@@ -20,6 +20,7 @@ import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.apache.commons.io.function.IOSupplier;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -47,7 +48,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 
@@ -56,6 +59,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.AdditionalMatchers.aryEq;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -288,8 +293,8 @@ class ResourceServiceTest {
 		when(entry.getGraphType()).thenReturn(GraphType.String);
 		when(entry.getResource()).thenReturn(resource);
 
-		CompletionState state = service.setEntryResource(entry, "text".getBytes(StandardCharsets.UTF_8),
-				"text/plain", null, null, "session-1");
+		CompletionState state = service.setEntryResource(entry, body("text"), -1, "text/plain", null, null,
+				"session-1");
 
 		assertEquals(CompletionState.UPDATED, state);
 		verify(resource).setString("text");
@@ -298,50 +303,63 @@ class ResourceServiceTest {
 
 	@Test
 	void setEntryResource_listAsJson_delegatesToListResourceServiceAndUpdatesModificationDate() {
-		byte[] body = "[\"a\"]".getBytes(StandardCharsets.UTF_8);
 		when(entry.getGraphType()).thenReturn(GraphType.List);
 
-		CompletionState state = service.setEntryResource(entry, body, "application/json", null, null, "session-1");
+		CompletionState state = service.setEntryResource(entry, body("[\"a\"]"), -1, "application/json", null, null,
+				"session-1");
 
 		assertEquals(CompletionState.UPDATED, state);
-		verify(listResourceService).setChildrenFromJson(entry, body);
+		verify(listResourceService).setChildrenFromJson(eq(entry), aryEq(bytes("[\"a\"]")));
 		verify(entry).updateModificationDate();
 	}
 
 	@Test
 	void setEntryResource_groupAsTurtle_delegatesToGraphUpdate() {
-		byte[] body = "<a> <b> <c> .".getBytes(StandardCharsets.UTF_8);
 		when(entry.getGraphType()).thenReturn(GraphType.Group);
 
-		CompletionState state = service.setEntryResource(entry, body, "text/turtle", null, null, "session-1");
+		CompletionState state = service.setEntryResource(entry, body("<a> <b> <c> ."), -1, "text/turtle", null, null,
+				"session-1");
 
 		assertEquals(CompletionState.UPDATED, state);
-		verify(listResourceService).setGraph(entry, body, "text/turtle");
+		verify(listResourceService).setGraph(eq(entry), aryEq(bytes("<a> <b> <c> .")), eq("text/turtle"));
 		verify(entry).updateModificationDate();
 	}
 
 	@Test
-	void setEntryResource_binaryBody_delegatesToFileResourceServiceAndAnswersCreated() {
-		byte[] body = {1, 2, 3};
+	void setEntryResource_binaryBody_streamsToFileResourceServiceAndAnswersCreated() {
+		IOSupplier<InputStream> body = () -> new ByteArrayInputStream(new byte[]{1, 2, 3});
 		when(entry.getGraphType()).thenReturn(GraphType.None);
 
-		CompletionState state = service.setEntryResource(entry, body, "image/png", null, "a.png", "session-1");
+		CompletionState state = service.setEntryResource(entry, body, 3, "image/png", null, "a.png", "session-1");
 
 		// A binary upload is the one PUT that answers 201.
 		assertEquals(CompletionState.CREATED, state);
-		verify(fileResourceService).setData(entry, body, "image/png", null, "a.png");
+		verify(fileResourceService).setData(entry, body, 3, "image/png", null, "a.png");
 		verify(entry).updateModificationDate();
+	}
+
+	@Test
+	void setEntryResource_binaryBodyWithoutWriteAccess_isDeniedBeforeTheBodyIsOpened() {
+		when(entry.getGraphType()).thenReturn(GraphType.None);
+		doThrow(new AuthorizationException(null, null, AccessProperty.WriteResource))
+				.when(principalManager).checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
+
+		assertThrows(AuthorizationException.class, () -> service.setEntryResource(entry, unopenableBody(), 3,
+				"image/png", null, null, "session-1"));
+
+		verifyNoInteractions(fileResourceService);
+		verify(entry, never()).updateModificationDate();
 	}
 
 	@Test
 	void setEntryResource_user_delegatesToUserServiceWithSessionId() {
-		byte[] body = "{\"language\":\"sv\"}".getBytes(StandardCharsets.UTF_8);
 		when(entry.getGraphType()).thenReturn(GraphType.User);
 
-		CompletionState state = service.setEntryResource(entry, body, "application/json", null, null, "session-1");
+		CompletionState state = service.setEntryResource(entry, body("{\"language\":\"sv\"}"), -1,
+				"application/json", null, null, "session-1");
 
 		assertEquals(CompletionState.UPDATED, state);
-		verify(userService).updateSettings(entry, body, "session-1");
+		verify(userService).updateSettings(eq(entry), aryEq(bytes("{\"language\":\"sv\"}")), eq("session-1"));
 		verify(entry).updateModificationDate();
 	}
 
@@ -350,11 +368,26 @@ class ResourceServiceTest {
 		// Context has no branch in the resource update, so it falls through to ERROR and must not look modified.
 		when(entry.getGraphType()).thenReturn(GraphType.Context);
 
-		CompletionState state = service.setEntryResource(entry, new byte[0], "application/json", null, null,
+		CompletionState state = service.setEntryResource(entry, body(""), -1, "application/json", null, null,
 				"session-1");
 
 		assertEquals(CompletionState.ERROR, state);
 		verify(entry, never()).updateModificationDate();
+	}
+
+	private static byte[] bytes(String text) {
+		return text.getBytes(StandardCharsets.UTF_8);
+	}
+
+	private static IOSupplier<InputStream> body(String text) {
+		return () -> new ByteArrayInputStream(bytes(text));
+	}
+
+	/** A request body that fails the test if it is opened, which makes Jetty ask the client to send it. */
+	private static IOSupplier<InputStream> unopenableBody() {
+		return () -> {
+			throw new AssertionError("the request body was opened");
+		};
 	}
 
 	@Test

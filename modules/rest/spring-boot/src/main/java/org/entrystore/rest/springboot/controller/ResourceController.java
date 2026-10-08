@@ -21,6 +21,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.media.SchemaProperty;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ import org.entrystore.rest.springboot.model.api.ResourceQuery;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
 import org.entrystore.rest.springboot.model.dto.ResourceRepresentation;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.springboot.service.EntryService;
 import org.entrystore.rest.springboot.service.ResourceService;
 import org.entrystore.rest.springboot.util.GraphUtil;
@@ -129,6 +131,10 @@ public class ResourceController {
 			summary = "Sets a resource.",
 			description = "Resource should be sent in the request body. Depending on the entry’s character the resource may be binary, " +
 					"JSON or RDF. See Knowledge Base for details.")
+	@io.swagger.v3.oas.annotations.parameters.RequestBody(
+			content = @Content(
+					mediaType = MediaType.ALL_VALUE,
+					schema = @Schema(type = "string", format = "binary")))
 	@PutMapping(
 			path = "/{context-id}/resource/{entry-id}",
 			consumes = "!multipart/form-data")
@@ -139,7 +145,7 @@ public class ResourceController {
 			@RequestParam(required = false) String textarea,
 			@RequestHeader(value = "Content-Type", required = false) String contentType,
 			@RequestHeader(value = HttpHeaders.CONTENT_DISPOSITION, required = false) String contentDisposition,
-			@RequestBody(required = false) byte[] body,
+			@Parameter(hidden = true) HttpServletRequest request,
 			HttpSession session
 	) {
 
@@ -151,13 +157,16 @@ public class ResourceController {
 			filename = disposition.getFilename();
 		}
 
-		if (body == null) {
-			body = new byte[0];
-		}
-
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		CompletionState result = resourceService.setEntryResource(entry, body, mediaType, mimeType, filename,
-				session.getId());
+		CompletionState result;
+		try {
+			// Not request.getInputStream() here: Jetty answers Expect: 100-continue as soon as it is called.
+			result = resourceService.setEntryResource(entry, request::getInputStream, request.getContentLengthLong(),
+					mediaType, mimeType, filename, session.getId());
+		} catch (EntityTooLargeException e) {
+			HttpUtil.discardRejectedBody(request);
+			throw e;
+		}
 
 		return buildSetResourceResponse(entry, result);
 	}

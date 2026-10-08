@@ -34,6 +34,13 @@ class ZzzSizeLimitIT extends BaseSpec {
 	// Above Jetty's 32 KiB output buffer, so a body cut off at the cap has already been committed.
 	static final int PROXY_CAP = 64 * 1024
 
+	// Applies to raw PUT bodies; above the 1 KB multipart upload below, which must still succeed.
+	static final int DATA_CAP = 1536
+
+	// Far above DATA_CAP, but within the 4 MB the server reads and discards so that a client that reads the
+	// response only after sending its whole body sees the 413 rather than a connection reset.
+	static final int OVERSIZED_BODY = 3 * 1024 * 1024
+
 	static HttpServer upstream
 	static String upstreamOrigin
 
@@ -56,6 +63,7 @@ class ZzzSizeLimitIT extends BaseSpec {
 		startOwnedApp([
 			'--spring.servlet.multipart.max-file-size=2KB',
 			'--spring.servlet.multipart.max-request-size=4KB',
+			'--entrystore.data.max-file-size=' + DATA_CAP,
 			'--entrystore.proxy.max-response-size=' + PROXY_CAP + 'B'
 		])
 	}
@@ -222,6 +230,76 @@ class ZzzSizeLimitIT extends BaseSpec {
 		then: 'the bytes round-trip identically — proves the success path is not silently truncating'
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getInputStream().readAllBytes() == payload
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} raw upload exactly at entrystore.data.max-file-size succeeds without Content-Length"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		def entryId = getOrCreateEntry(contextId, [id: 'rawAtCapId'], [resource: [name: 'Raw at-cap entry']])
+
+		when:
+		def conn = EntryStoreClient.putRequestStreamed('/' + contextId + '/resource/' + entryId, DATA_CAP, true)
+
+		then:
+		conn.getResponseCode() == HTTP_CREATED
+		storedSize(entryId) == DATA_CAP
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} raw upload with a Content-Length above entrystore.data.max-file-size is answered 413 and keeps the previous file"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		def entryId = getOrCreateEntry(contextId, [id: 'rawOverCapId'], [resource: [name: 'Raw over-cap entry']])
+		assert EntryStoreClient.putRequestStreamed('/' + contextId + '/resource/' + entryId, 1024).getResponseCode() == HTTP_CREATED
+
+		when: 'the client sends all of a body far above the cap before it reads the response'
+		def conn = EntryStoreClient.putRequestStreamed('/' + contextId + '/resource/' + entryId, OVERSIZED_BODY)
+
+		then:
+		conn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+		JSON_PARSER.parseText(readErrorBody(conn)).error ==
+				"Received file size (of ${OVERSIZED_BODY}b) exceeds maximum allowed size of: ${DATA_CAP}b"
+		storedSize(entryId) == 1024
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} chunked raw upload above entrystore.data.max-file-size is answered 413 and keeps the previous file"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		def entryId = getOrCreateEntry(contextId, [id: 'rawChunkedOverCapId'], [resource: [name: 'Raw chunked over-cap entry']])
+		assert EntryStoreClient.putRequestStreamed('/' + contextId + '/resource/' + entryId, 1024).getResponseCode() == HTTP_CREATED
+
+		when: 'without Content-Length the limit is only found while the body is stored, and the client sends on'
+		def conn = EntryStoreClient.putRequestStreamed('/' + contextId + '/resource/' + entryId, OVERSIZED_BODY, true)
+
+		then:
+		conn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+		JSON_PARSER.parseText(readErrorBody(conn)).error == "Received file exceeds maximum allowed size of: ${DATA_CAP}b"
+		storedSize(entryId) == 1024
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} raw upload with Expect: 100-continue and a Content-Length above entrystore.data.max-file-size is answered 413 instead of 100 Continue"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		def entryId = getOrCreateEntry(contextId, [id: 'rawExpectOverCapId'], [resource: [name: 'Raw expect over-cap entry']])
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/resource/' + entryId, 'admin',
+				DATA_CAP + 1) == HTTP_ENTITY_TOO_LARGE
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} form-urlencoded raw upload with Expect: 100-continue and a Content-Length above entrystore.data.max-file-size is answered 413 instead of 100 Continue"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		def entryId = getOrCreateEntry(contextId, [id: 'rawFormOverCapId'], [resource: [name: 'Raw form over-cap entry']])
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/resource/' + entryId, 'admin',
+				DATA_CAP + 1, 'application/x-www-form-urlencoded') == HTTP_ENTITY_TOO_LARGE
+	}
+
+	private static long storedSize(String entryId) {
+		def conn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+		assert conn.getResponseCode() == HTTP_OK
+		return conn.inputStream.bytes.length
 	}
 
 	def "POST /echo multipart upload above max-file-size cap answers 413 in a textarea, as 5.x did"() {

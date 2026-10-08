@@ -20,6 +20,7 @@ import jakarta.servlet.MultipartConfigElement;
 import org.entrystore.rest.springboot.configuration.CorsProperties;
 import org.entrystore.rest.springboot.configuration.EntryStoreCorsConfigurationSource;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -125,7 +126,7 @@ class MultipartRequestFilterTest {
 	@Test
 	void discardingAnOversizedBody_stopsAfterTheDrainLimit() throws Exception {
 		MockHttpServletRequest request = request("PUT", "/1/resource/2", MULTIPART,
-				(int) MultipartRequestFilter.MAX_DRAIN_BYTES + 100_000);
+				(int) HttpUtil.MAX_DRAIN_BYTES + 100_000);
 
 		filter(4096).doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
 

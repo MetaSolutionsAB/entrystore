@@ -130,8 +130,14 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	@Getter
 	private long defaultQuota = Quota.VALUE_UNLIMITED;
 
+	/**
+	 * Default of {@link Settings#DATA_MAX_FILE_SIZE}, so that a mistaken upload cannot fill the data folder. It
+	 * applies to uploads only; files already stored stay as they are. -1 removes the limit, as in 5.x.
+	 */
+	static final long DEFAULT_MAXIMUM_FILE_SIZE = 1024L * 1024 * 1024;
+
 	@Getter
-	private long maximumFileSize = Quota.VALUE_UNLIMITED;
+	private long maximumFileSize = DEFAULT_MAXIMUM_FILE_SIZE;
 
 	//ThreadPoolExecutor listenerExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(15);
 
@@ -256,11 +262,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 
 		String maxFileSizeValue = configuration.getString(Settings.DATA_MAX_FILE_SIZE);
-		if (maxFileSizeValue == null) {
+		if (maxFileSizeValue != null) {
+			maximumFileSize = StringUtils.convertUnitStringToByteSize(maxFileSizeValue);
+		}
+		if (maximumFileSize == Quota.VALUE_UNLIMITED) {
 			log.info("Maximum file size set to UNLIMITED");
 		} else {
-			maximumFileSize = StringUtils.convertUnitStringToByteSize(maxFileSizeValue);
-			log.info("Maximum file size set to {} bytes", maxFileSizeValue);
+			log.info("Maximum file size set to {} bytes", maximumFileSize);
 		}
 
 		setCheckForAuthorization(false);
@@ -280,6 +288,12 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 			try {
 				repository.init();
+				// Only once the store is ours: a second instance fails on its lock instead of deleting the
+				// staging files of uploads the running instance has in progress.
+				String dataFolderValue = configuration.getString(Settings.DATA_FOLDER);
+				if (dataFolderValue != null) {
+					DataImpl.deleteStaleStagingFiles(dataFolderValue);
+				}
 			} catch (RepositoryException e) {
 				log.error(e.getMessage());
 			}

@@ -629,6 +629,117 @@ class ResourceIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
+	def "PUT /{context-id}/resource/{entry-id} raw upload of 150 MB with Content-Length is streamed to disk, as in 5.x"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'hugeRawFileId'], [resource: [name: 'Huge raw file entry']])
+		long fileSize = 150L * 1024 * 1024
+
+		when:
+		def sendFileConn = EntryStoreClient.putRequestStreamed('/' + contextId + '/resource/' + entryId, fileSize)
+
+		then:
+		sendFileConn.getResponseCode() == HTTP_CREATED
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getHeaderFieldLong('Content-Length', -1) == fileSize
+		resourceConn.getHeaderField('Digest') == 'sha-256=' + sha256OfZeros(fileSize)
+		resourceConn.getInputStream().transferTo(OutputStream.nullOutputStream()) == fileSize
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} chunked raw upload without Content-Length is stored with its size and digest"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'chunkedRawFileId'], [resource: [name: 'Chunked raw file entry']])
+		long fileSize = 20L * 1024 * 1024 + 1
+
+		when:
+		def sendFileConn = EntryStoreClient.putRequestStreamed('/' + contextId + '/resource/' + entryId, fileSize, true)
+
+		then:
+		sendFileConn.getResponseCode() == HTTP_CREATED
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getHeaderFieldLong('Content-Length', -1) == fileSize
+		resourceConn.getHeaderField('Digest') == 'sha-256=' + sha256OfZeros(fileSize)
+		resourceConn.getInputStream().transferTo(OutputStream.nullOutputStream()) == fileSize
+	}
+
+	// Jetty answers Expect: 100-continue with 100 only once the application reads the body.
+	def "PUT /{context-id}/resource/{entry-id} raw upload with Expect: 100-continue from a writer is answered 100 Continue"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'expectContinueId'], [resource: [name: 'Expect-continue entry']])
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/resource/' + entryId) == 100
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} raw upload with Expect: 100-continue from a guest is answered 401 instead of 100 Continue"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'expectContinueId'], [resource: [name: 'Expect-continue entry']])
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/resource/' + entryId, '') ==
+				HTTP_UNAUTHORIZED
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} raw upload with Expect: 100-continue from a user without write access is answered 403 instead of 100 Continue"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'expectContinueId'], [resource: [name: 'Expect-continue entry']])
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/resource/' + entryId, 'user') ==
+				HTTP_FORBIDDEN
+	}
+
+	// Above Jetty's form size limit, which would reject the body if it were parsed as form fields.
+	static final byte[] FORM_ENCODED_BODY = ('field=value&' * 6000).bytes
+
+	def "PUT /{context-id}/resource/{entry-id} raw upload with Content-Type application/x-www-form-urlencoded stores the body as sent, as in 5.x"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'formEncodedFileId'], [resource: [name: 'Form-encoded file entry']])
+
+		when:
+		def conn = EntryStoreClient.sendRequestAsStream(HttpMethod.PUT, '/' + contextId + '/resource/' + entryId,
+				new ByteArrayInputStream(FORM_ENCODED_BODY), 'admin', 'application/x-www-form-urlencoded',
+				['Content-Length': FORM_ENCODED_BODY.length.toString()])
+
+		then:
+		conn.getResponseCode() == HTTP_CREATED
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().startsWith('application/x-www-form-urlencoded')
+		resourceConn.getInputStream().readAllBytes() == FORM_ENCODED_BODY
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} form-urlencoded raw upload with Expect: 100-continue from a guest is answered 401 instead of 100 Continue"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'formEncodedFileId'], [resource: [name: 'Form-encoded file entry']])
+
+		expect: 'no filter parses the body as form fields before the access check'
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/resource/' + entryId, '', 1024,
+				'application/x-www-form-urlencoded') == HTTP_UNAUTHORIZED
+	}
+
+	private static String sha256OfZeros(long size) {
+		def sha = MessageDigest.getInstance('SHA-256')
+		def chunk = new byte[64 * 1024]
+		for (long digested = 0; digested < size; digested += chunk.length) {
+			sha.update(chunk, 0, (int) Math.min(chunk.length, size - digested))
+		}
+		return sha.digest().encodeHex().toString()
+	}
+
 	def "PUT /{context-id}/resource/{entry-id} as guest should respond with Unauthorized 401"() {
 		given:
 		// create local String entry

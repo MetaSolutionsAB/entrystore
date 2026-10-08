@@ -44,6 +44,9 @@ spring:
     mapper:
       sort-properties-alphabetically: false
   mvc.problemdetails.enabled: false
+  # A form-urlencoded PUT body is a resource to store as sent, as in 5.x, not form fields to read into
+  # memory before the access check; see FormEncodedMethodsCustomizer.
+  mvc.formcontent.filter.enabled: false
   # No upload size limit, as in 5.x; see entrystore.properties_example for setting one. Lazy resolution
   # parses an upload only when the controller reads it, after the access check.
   servlet.multipart:

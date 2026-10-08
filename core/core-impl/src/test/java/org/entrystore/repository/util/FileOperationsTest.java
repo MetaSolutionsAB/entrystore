@@ -20,6 +20,7 @@ import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -311,4 +312,16 @@ public class FileOperationsTest {
 		return zipFile;
 	}
 
+
+	@Test
+	void copyPath_leavesOutExcludedFiles(@TempDir Path src, @TempDir Path dst) throws IOException {
+		Files.createDirectories(src.resolve("1"));
+		Files.writeString(src.resolve("1/data"), "data");
+		Files.writeString(src.resolve("1/.upload.part"), "partial");
+
+		FileOperations.copyPath(src, dst, name -> name.endsWith(".part"));
+
+		assertEquals("data", Files.readString(dst.resolve("1/data")));
+		assertFalse(Files.exists(dst.resolve("1/.upload.part")));
+	}
 }

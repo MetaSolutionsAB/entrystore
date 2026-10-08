@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doThrow;
@@ -160,6 +161,40 @@ public class RepositoryManagerImplTest {
 		Field field = RepositoryManagerImpl.class.getDeclaredField("instances");
 		field.setAccessible(true);
 		((Map<String, ?>) field.get(null)).remove(baseUrl);
+	}
+
+	@Test
+	public void maximumFileSizeDefaultsToOneGigabyte() throws Exception {
+		assertEquals(1024L * 1024 * 1024, maximumFileSizeFor(null));
+	}
+
+	@Test
+	public void maximumFileSizeOfMinusOneIsUnlimited() throws Exception {
+		assertEquals(-1, maximumFileSizeFor("-1"));
+	}
+
+	@Test
+	public void maximumFileSizeTakesTheConfiguredValue() throws Exception {
+		assertEquals(5L * 1024 * 1024 * 1024, maximumFileSizeFor("5G"));
+	}
+
+	/** The maximum file size of a repository manager configured with {@code configured}, or with none if null. */
+	private static long maximumFileSizeFor(String configured) throws Exception {
+		String baseUrl = "http://localhost:8181/";
+		Config config = new PropertiesConfiguration("EntryStore Configuration");
+		config.setProperty(Settings.STORE_TYPE, "memory");
+		config.setProperty(Settings.BASE_URL, baseUrl);
+		config.setProperty(Settings.SOLR, "off");
+		if (configured != null) {
+			config.setProperty(Settings.DATA_MAX_FILE_SIZE, configured);
+		}
+		RepositoryManagerImpl rm = new RepositoryManagerImpl(baseUrl, config);
+		try {
+			return rm.getMaximumFileSize();
+		} finally {
+			rm.shutdown();
+			deregisterInstance(baseUrl);
+		}
 	}
 
 	@Disabled("To be implemented")

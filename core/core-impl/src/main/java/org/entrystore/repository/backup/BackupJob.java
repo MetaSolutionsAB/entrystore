@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package org.entrystore.repository.backup;
 import org.apache.commons.io.FileUtils;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.eclipse.rdf4j.sail.SailException;
+import org.entrystore.impl.DataImpl;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.DateUtils;
@@ -212,7 +213,7 @@ public class BackupJob implements Job, InterruptableJob {
 						File dataPathFile = new File(dataPath);
 						log.info("Copying data folder from {} to {}", dataPathFile, newBackupDirectory);
 						try {
-							FileOperations.copyPath(dataPathFile.toPath(), newBackupDirectory.toPath());
+							FileOperations.copyPath(dataPathFile.toPath(), newBackupDirectory.toPath(), DataImpl::isStagingFile);
 							log.info("Copying data folder took {} ms", System.currentTimeMillis() - beforeFileExport);
 						} catch (IOException ioe) {
 							log.error("Unable to copy data folder from {} to {}", dataPathFile, newBackupDirectory);

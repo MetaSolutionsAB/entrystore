@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.service;
 
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.io.function.IOSupplier;
 import org.eclipse.rdf4j.model.Model;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
@@ -42,6 +43,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
@@ -196,10 +199,19 @@ public class ResourceService {
 	 * Routes a PUT body to the service owning the entry's graph type and bumps the entry's modification date.
 	 * A binary upload is reported as {@link CompletionState#CREATED}, every other update as
 	 * {@link CompletionState#UPDATED}; an unsupported graph type answers {@link CompletionState#ERROR} and leaves
-	 * the entry untouched.
+	 * the entry untouched. A binary (graph type None) body is passed on unopened once the caller is found to have
+	 * write access, and is streamed to disk; every other body is small and read into memory first.
 	 */
-	public CompletionState setEntryResource(Entry entry, byte[] requestBody, String mediaType, String mimeType,
-											String filename, String currentSessionId) {
+	public CompletionState setEntryResource(Entry entry, IOSupplier<InputStream> body, long contentLength,
+											String mediaType, String mimeType, String filename,
+											String currentSessionId) {
+		if (entry.getGraphType() == GraphType.None) {
+			principalManager.checkAuthenticatedUserAuthorized(entry, PrincipalManager.AccessProperty.WriteResource);
+			fileResourceService.setData(entry, body, contentLength, mediaType, mimeType, filename);
+			entry.updateModificationDate();
+			return CompletionState.CREATED;
+		}
+		byte[] requestBody = readBody(body);
 		CompletionState state = switch (entry.getGraphType()) {
 			case List, Group -> {
 				if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType)) {
@@ -208,10 +220,6 @@ public class ResourceService {
 					listResourceService.setGraph(entry, requestBody, mediaType);
 				}
 				yield CompletionState.UPDATED;
-			}
-			case None -> {
-				fileResourceService.setData(entry, requestBody, mediaType, mimeType, filename);
-				yield CompletionState.CREATED;
 			}
 			case String -> {
 				setString(entry, requestBody);
@@ -231,6 +239,14 @@ public class ResourceService {
 			entry.updateModificationDate();
 		}
 		return state;
+	}
+
+	private static byte[] readBody(IOSupplier<InputStream> body) {
+		try {
+			return body.get().readAllBytes();
+		} catch (IOException e) {
+			throw new BadRequestException("Failed to read the request body", e);
+		}
 	}
 
 	private static void setString(Entry entry, byte[] requestBody) {

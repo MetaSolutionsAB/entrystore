@@ -625,6 +625,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				File[] resourceFiles = resourceDir.isDirectory() ? resourceDir.listFiles() : null;
 				if (resourceFiles != null) {
 					for (File src : resourceFiles) {
+						if (DataImpl.isStagingFile(src.getName())) {
+							continue;
+						}
 						File dst = new File(dstDir, src.getName());
 						log.info("Copying {} to {}", src, dst);
 						try {

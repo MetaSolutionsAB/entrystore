@@ -16,6 +16,7 @@
 
 package org.entrystore.impl;
 
+import com.google.common.util.concurrent.Striped;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.Strings;
@@ -35,12 +36,22 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
+import java.net.URI;
+import java.nio.channels.FileChannel;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.locks.Lock;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.commons.codec.digest.MessageDigestAlgorithms.SHA_256;
@@ -57,6 +68,21 @@ public class DataImpl extends ResourceImpl implements Data {
 
 	private static final Logger log = LoggerFactory.getLogger(DataImpl.class);
 	public static final String SHA_256_POSTFIX = ".sha256";
+	public static final String STAGING_POSTFIX = ".part";
+	// Only the names stagingPath generates, so that an entry whose id happens to look similar keeps its file.
+	private static final Pattern STAGING_FILE_NAME = Pattern.compile(
+			"\\.\\p{XDigit}{8}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{12}" + Pattern.quote(STAGING_POSTFIX));
+
+	/** Moves files within the data folder; replaced only by tests to simulate an interruption. */
+	@FunctionalInterface
+	interface FileMover {
+		void move(Path source, Path target) throws IOException;
+	}
+
+	static volatile FileMover fileMover = DataImpl::moveReplacing;
+
+	/** Serializes the commit step of {@link #setData} and {@link #deleteFile} per entry URI. */
+	private static final Striped<Lock> WRITE_LOCKS = Striped.lock(64);
 
 	private File file = null;
 
@@ -68,10 +94,7 @@ public class DataImpl extends ResourceImpl implements Data {
 		if (file == null) {
 			String dataDirStr = entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER);
 			if (dataDirStr != null) {
-				// Workaround to handle allowed "file:" prefixes.
-				dataDirStr = Strings.CS.removeStart(dataDirStr, "file://");
-				dataDirStr = Strings.CS.removeStart(dataDirStr, "file:");
-				File dataDir = new File(dataDirStr);
+				File dataDir = dataFolder(dataDirStr);
 				if (!dataDir.exists()) {
 					if (!dataDir.mkdirs()) {
 						log.error("Unable to create data folder");
@@ -102,6 +125,11 @@ public class DataImpl extends ResourceImpl implements Data {
 		return null;
 	}
 
+	/**
+	 * Streams the data to a staging file next to the data file, then, holding a per-entry lock, charges the quota
+	 * and moves the data and its digest over the previous ones. A failed or rejected write leaves the previous
+	 * data and digest intact, and concurrent writes to one entry cannot mix one's data with another's digest.
+	 */
 	public void setData(InputStream is) throws QuotaException, IOException {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
 
@@ -112,25 +140,146 @@ public class DataImpl extends ResourceImpl implements Data {
 			throw new RuntimeException(e);
 		}
 		Path dataPath = getFile().toPath();
-		long bytes = FileOperations.copyFile(new DigestInputStream(is, sha), Files.newOutputStream(dataPath));
-		writeDigest(sha);
-
-		if (entry.getRepositoryManager().hasQuotas()) {
-			try {
-				entry.getContext().increaseQuotaFillLevel(bytes);
-			} catch (QuotaException qe) {
-				if (file.exists()) {
-					file.delete();
-				}
-				File digestFile = getDigestFile();
-				if (digestFile != null && digestFile.exists()) {
-					digestFile.delete();
-				}
-				throw qe;
+		Path dataPart = stagingPath(dataPath);
+		Path digestPart = stagingPath(dataPath);
+		try {
+			long bytes;
+			try (OutputStream os = Files.newOutputStream(dataPart, StandardOpenOption.CREATE_NEW)) {
+				bytes = FileOperations.copyFile(new DigestInputStream(is, sha), os);
 			}
+			forceToDisk(dataPart);
+			Files.writeString(digestPart, Hex.encodeHexString(sha.digest()), UTF_8, StandardOpenOption.CREATE_NEW);
+
+			commit(dataPart, dataPath, digestPart, bytes);
+		} finally {
+			deleteLogged(dataPart);
+			deleteLogged(digestPart);
 		}
 
 		entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
+	}
+
+	/**
+	 * Moves the staged data and digest into place, holding the per-entry lock that {@link #deleteFile} takes too,
+	 * unless the entry has been removed meanwhile, possibly recreated under the same id. The previous digest is
+	 * removed before the data is moved, so that whatever step fails or a crash interrupts, the digest present
+	 * either matches the data or is missing.
+	 */
+	private void commit(Path dataPart, Path dataPath, Path digestPart, long bytes) throws QuotaException, IOException {
+		Path digestPath = Path.of(dataPath.toFile().getCanonicalPath() + SHA_256_POSTFIX);
+		boolean hasQuotas = entry.getRepositoryManager().hasQuotas();
+		// Charged and rolled back outside the lock: entry removal holds the repository while it takes the lock,
+		// and the fill level is updated under the repository.
+		if (hasQuotas) {
+			entry.getContext().increaseQuotaFillLevel(bytes);
+		}
+		boolean dataMoved = false;
+		Lock lock = WRITE_LOCKS.get(entry.getEntryURI());
+		lock.lock();
+		try {
+			if (!isCurrentEntry()) {
+				throw new EntryRemovedException(entry.getEntryURI());
+			}
+			Files.deleteIfExists(digestPath);
+			fileMover.move(dataPart, dataPath);
+			dataMoved = true;
+			try {
+				fileMover.move(digestPart, digestPath);
+			} catch (IOException e) {
+				log.error("Failed to store the digest of entry {}, leaving it without one", entry.getEntryURI(), e);
+			}
+		} finally {
+			lock.unlock();
+			if (hasQuotas && !dataMoved) {
+				// Reads the fill level as the increase does, which is wrong once cached (ENTRYSTORE-1238).
+				entry.getContext().decreaseQuotaFillLevel(bytes);
+			}
+		}
+	}
+
+	/**
+	 * Whether this entry has neither been removed nor replaced by one created under the same id. Entry objects
+	 * may be reloaded, so the current one is recognised by its creation date rather than by identity.
+	 */
+	private boolean isCurrentEntry() {
+		if (entry.isDeleted()) {
+			return false;
+		}
+		Entry current = entry.getContext().getByEntryURI(entry.getEntryURI());
+		return current != null && !current.isDeleted()
+				&& Objects.equals(current.getCreationDate(), entry.getCreationDate());
+	}
+
+	/** Thrown by {@link #setData} when the entry was removed while its data was being received. */
+	public static final class EntryRemovedException extends IOException {
+		public EntryRemovedException(URI entryURI) {
+			super("Entry " + entryURI + " was removed while its data was being stored");
+		}
+	}
+
+	/** A staging name without the entry id, so that it stays short and is recognised by {@link #isStagingFile}. */
+	private static Path stagingPath(Path dataPath) {
+		return dataPath.resolveSibling("." + UUID.randomUUID() + STAGING_POSTFIX);
+	}
+
+	/**
+	 * Tells whether a file in the data folder is a staging file of a write in progress or of one interrupted by a
+	 * crash, which exports, backups and imports skip.
+	 */
+	public static boolean isStagingFile(String fileName) {
+		return STAGING_FILE_NAME.matcher(fileName).matches();
+	}
+
+	/** The data folder of a {@link Settings#DATA_FOLDER} value, which may carry a "file:" prefix. */
+	private static File dataFolder(String configured) {
+		return new File(Strings.CS.removeStart(Strings.CS.removeStart(configured, "file://"), "file:"));
+	}
+
+	/**
+	 * Deletes the staging files that writes interrupted by a crash left in the context folders of the data
+	 * folder, given as its {@link Settings#DATA_FOLDER} value. Only safe while no write is in progress, i.e. at
+	 * startup.
+	 */
+	public static void deleteStaleStagingFiles(String configuredDataFolder) {
+		Path dataFolder = dataFolder(configuredDataFolder).toPath();
+		if (!Files.isDirectory(dataFolder)) {
+			return;
+		}
+		try (Stream<Path> contextFolders = Files.list(dataFolder)) {
+			for (Path contextFolder : contextFolders.filter(Files::isDirectory).toList()) {
+				try (Stream<Path> files = Files.list(contextFolder)) {
+					files.filter(f -> isStagingFile(f.getFileName().toString())).forEach(f -> {
+						log.info("Deleting stale staging file {}", f);
+						deleteLogged(f);
+					});
+				}
+			}
+		} catch (IOException | UncheckedIOException e) {
+			log.warn("Could not delete stale staging files in {}", dataFolder, e);
+		}
+	}
+
+	/** Deletes without throwing, so that a failed cleanup cannot mask the exception being handled. */
+	private static void deleteLogged(Path path) {
+		try {
+			Files.deleteIfExists(path);
+		} catch (IOException e) {
+			log.warn("Could not delete {}", path, e);
+		}
+	}
+
+	private static void forceToDisk(Path path) throws IOException {
+		try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE)) {
+			channel.force(true);
+		}
+	}
+
+	private static void moveReplacing(Path source, Path target) throws IOException {
+		try {
+			Files.move(source, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+		} catch (AtomicMoveNotSupportedException e) {
+			Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+		}
 	}
 
 	public void useData(File file) throws IOException {
@@ -196,23 +345,33 @@ public class DataImpl extends ResourceImpl implements Data {
 	 * must have verified the caller's rights themselves; user-facing deletion goes through {@link #delete()}.
 	 */
 	protected boolean deleteFile() {
+		boolean existed = false;
 		boolean success = false;
+		long size = 0;
+		// Serialized with the commit of setData; the quota is updated after the lock is released, see commit.
+		Lock lock = WRITE_LOCKS.get(entry.getEntryURI());
+		lock.lock();
 		try {
 			File f = getFile();
 			File digestFile = getDigestFile();
 			if (f != null && f.exists()) {
-				long size = f.length();
+				existed = true;
+				size = f.length();
 				success = f.delete();
-				if (success && entry.getRepositoryManager().hasQuotas()) {
-					entry.getContext().decreaseQuotaFillLevel(size);
-				}
 				if (digestFile != null && digestFile.exists()) {
 					digestFile.delete();
 				}
-				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceDeleted));
 			}
 		} catch (IOException ioe) {
 			log.error("Failed to delete data file of entry {}", entry.getEntryURI(), ioe);
+		} finally {
+			lock.unlock();
+		}
+		if (success && entry.getRepositoryManager().hasQuotas()) {
+			entry.getContext().decreaseQuotaFillLevel(size);
+		}
+		if (existed) {
+			entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceDeleted));
 		}
 		return success;
 	}
@@ -267,12 +426,6 @@ public class DataImpl extends ResourceImpl implements Data {
 			return null;
 		}
 		return new File(digestFileName);
-	}
-
-	private void writeDigest(MessageDigest messageDigest) throws IOException {
-		byte[] digest = messageDigest.digest();
-		String s = String.valueOf(Hex.encodeHex(digest));
-		FileUtils.writeStringToFile(getDigestFile(), s, UTF_8);
 	}
 
 	/**

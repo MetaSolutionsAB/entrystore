@@ -21,10 +21,12 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -72,6 +74,24 @@ class ContextServiceTest {
 			assertEquals("first content", new String(zis.readAllBytes(), StandardCharsets.UTF_8));
 			assertEquals("second.txt", zis.getNextEntry().getName());
 			assertEquals("second content", new String(zis.readAllBytes(), StandardCharsets.UTF_8));
+			assertNull(zis.getNextEntry(), "no further entries expected");
+		}
+	}
+
+	@Test
+	void addDataFiles_leavesOutStagingFilesAndFilesThatAreGone(@TempDir Path tempDir) throws IOException {
+		Path data = Files.writeString(tempDir.resolve("7"), "data");
+		Path staging = Files.writeString(tempDir.resolve("." + UUID.randomUUID() + ".part"), "partial");
+		File gone = tempDir.resolve("7.sha256").toFile();
+		ByteArrayOutputStream zipBytes = new ByteArrayOutputStream();
+
+		try (ZipOutputStream zipOS = new ZipOutputStream(zipBytes)) {
+			ContextService.addDataFiles(zipOS, new File[]{gone, staging.toFile(), data.toFile()});
+		}
+
+		try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes.toByteArray()))) {
+			assertEquals("resources/7", zis.getNextEntry().getName());
+			assertEquals("data", new String(zis.readAllBytes(), StandardCharsets.UTF_8));
 			assertNull(zis.getNextEntry(), "no further entries expected");
 		}
 	}
