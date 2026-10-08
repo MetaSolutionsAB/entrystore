@@ -1075,9 +1075,24 @@ public class EntryImpl implements Entry {
 	private IRI getAccessSubject(AccessProperty prop) {
 		return switch (prop) {
 			case Administer -> entryURI;
-			case ReadMetadata, WriteMetadata -> localMdURI;
+			case ReadMetadata, WriteMetadata -> getMetadataAccessSubject();
 			case ReadResource, WriteResource -> resURI;
 		};
+	}
+
+	/**
+	 * The subject of the ReadMetadata/WriteMetadata ACL, which governs all metadata of the entry, local and cached
+	 * external: {@code {context}/metadata/{id}} for every entry type, which is also where clients read and write it.
+	 * A Reference loaded from the store has no {@link #localMdURI}, since it has no es:metadata; the URI is derived
+	 * for it without setting that field, whose null-ness tells other code that the entry has no local metadata.
+	 */
+	private IRI getMetadataAccessSubject() {
+		IRI mdURI = localMdURI;
+		if (mdURI != null) {
+			return mdURI;
+		}
+		return repository.getValueFactory().createIRI(URISplit.createURI(repositoryManager.getRepositoryURL().toString(),
+				context.id, RepositoryProperties.MD_PATH, id).toString());
 	}
 
 	private IRI getAccessPredicate(AccessProperty prop) {

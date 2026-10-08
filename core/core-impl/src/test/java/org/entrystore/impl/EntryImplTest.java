@@ -47,6 +47,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -63,6 +64,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import static org.eclipse.rdf4j.model.util.Values.iri;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -1078,5 +1080,132 @@ public class EntryImplTest extends AbstractCoreTest {
 		} finally {
 			rm.unregisterListener(listener, RepositoryEvent.EntryUpdated);
 		}
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@EnumSource(EntryType.class)
+	public void addAllowedPrincipalsFor_storesTheMetadataAclOnTheMetadataUriOfEveryEntryType(EntryType type) {
+		Entry entry = reload(switch (type) {
+			case Local -> resourceEntry;
+			case Link -> linkEntry;
+			case Reference -> refEntry;
+			case LinkReference -> refLinkEntry;
+		});
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+
+		entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, daisy);
+
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			assertTrue(rc.hasStatement(iri(metadataUriOf(entry)), RepositoryProperties.Read, iri(daisy.toString()),
+					false, iri(entry.getEntryURI().toString())));
+		}
+		assertEquals(Set.of(daisy), reload(entry).getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
+	}
+
+	@Test
+	public void getAllowedPrincipalsFor_metadataOfAReloadedReferenceIgnoresTheResourceAndAdministerGrants() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		refEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		refEntry.addAllowedPrincipalsFor(AccessProperty.WriteResource, daisy);
+		refEntry.addAllowedPrincipalsFor(AccessProperty.Administer, donald);
+
+		Entry reference = reloadedReferenceWithoutLocalMetadata();
+
+		assertEquals(Set.of(), reference.getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
+		assertEquals(Set.of(), reference.getAllowedPrincipalsFor(AccessProperty.WriteMetadata));
+	}
+
+	@Test
+	public void getAllowedPrincipalsFor_metadataOfAReloadedReferenceReadsTheGrantOnItsMetadataUri() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		Entry reference = reloadedReferenceWithoutLocalMetadata();
+		// the entry graph as EntryScape writes it, with the grant on {context}/metadata/{id}
+		Model graph = reference.getGraph();
+		graph.add(iri(metadataUriOf(reference)), RepositoryProperties.Read, iri(daisy.toString()));
+		reference.setGraph(graph);
+
+		assertEquals(Set.of(daisy), reference.getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
+		assertEquals(Set.of(), reference.getAllowedPrincipalsFor(AccessProperty.ReadResource));
+		assertEquals(Set.of(daisy), reload(reference).getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
+	}
+
+	@Test
+	public void getAllowedPrincipalsFor_freshAndReloadedReferenceAgree() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		refEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		refEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, donald);
+
+		Entry reloaded = reloadedReferenceWithoutLocalMetadata();
+
+		for (AccessProperty prop : AccessProperty.values()) {
+			assertEquals(refEntry.getAllowedPrincipalsFor(prop), reloaded.getAllowedPrincipalsFor(prop), prop.name());
+		}
+	}
+
+	@Test
+	public void setAllowedPrincipalsFor_metadataOfAReloadedReferenceKeepsTheResourceAndAdministerGrants() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		refEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		refEntry.addAllowedPrincipalsFor(AccessProperty.Administer, donald);
+		Entry reference = reloadedReferenceWithoutLocalMetadata();
+
+		reference.setAllowedPrincipalsFor(AccessProperty.ReadMetadata, Set.of(donald));
+
+		Entry reloaded = reload(reference);
+		assertEquals(Set.of(donald), reloaded.getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
+		assertEquals(Set.of(daisy), reloaded.getAllowedPrincipalsFor(AccessProperty.ReadResource));
+		assertEquals(Set.of(donald), reloaded.getAllowedPrincipalsFor(AccessProperty.Administer));
+	}
+
+	@Test
+	public void setAllowedPrincipalsFor_emptyMetadataSetOnAReloadedReferenceKeepsTheResourceAndAdministerGrants() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		refEntry.addAllowedPrincipalsFor(AccessProperty.WriteResource, daisy);
+		refEntry.addAllowedPrincipalsFor(AccessProperty.Administer, donald);
+		Entry reference = reloadedReferenceWithoutLocalMetadata();
+
+		reference.setAllowedPrincipalsFor(AccessProperty.WriteMetadata, Set.of());
+
+		Entry reloaded = reload(reference);
+		assertEquals(Set.of(daisy), reloaded.getAllowedPrincipalsFor(AccessProperty.WriteResource));
+		assertEquals(Set.of(donald), reloaded.getAllowedPrincipalsFor(AccessProperty.Administer));
+	}
+
+	@Test
+	public void removeAllowedPrincipalsFor_metadataOfAReloadedReferenceKeepsTheResourceGrant() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		refEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		refEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, daisy);
+		Entry reference = reloadedReferenceWithoutLocalMetadata();
+		// warms the per-property caches, which the removal must leave in line with the store
+		assertEquals(Set.of(daisy), reference.getAllowedPrincipalsFor(AccessProperty.ReadResource));
+		assertEquals(Set.of(daisy), reference.getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
+
+		assertTrue(reference.removeAllowedPrincipalsFor(AccessProperty.ReadMetadata, daisy));
+
+		assertEquals(Set.of(), reference.getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
+		assertEquals(Set.of(daisy), reference.getAllowedPrincipalsFor(AccessProperty.ReadResource));
+		assertEquals(Set.of(daisy), reload(reference).getAllowedPrincipalsFor(AccessProperty.ReadResource));
+	}
+
+	/** Drops the entry from the cache and loads it from the store, as after a cache eviction or a restart. */
+	private Entry reload(Entry entry) {
+		evictFromSoftCache(entry);
+		return context.get(entry.getId());
+	}
+
+	/** {@link #refEntry} loaded from the store: created without an entry graph, it has no es:metadata. */
+	private Entry reloadedReferenceWithoutLocalMetadata() {
+		Entry reloaded = reload(refEntry);
+		assertNull(reloaded.getLocalMetadataURI());
+		return reloaded;
+	}
+
+	private String metadataUriOf(Entry entry) {
+		return rm.getRepositoryURL() + context.getEntry().getId() + "/metadata/" + entry.getId();
 	}
 }

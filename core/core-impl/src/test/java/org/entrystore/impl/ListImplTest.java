@@ -29,6 +29,7 @@ import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.List;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.QuotaException;
 import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryEvent;
@@ -52,6 +53,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -1089,4 +1091,31 @@ public class ListImplTest extends AbstractCoreTest {
 		return state;
 	}
 
+	@Test
+	public void applyACLtoChildren_setsTheWholeAclOfAReferenceWithoutLocalMetadata() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		URI mickey = pm.getPrincipalEntry("Mickey").getResourceURI();
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null);
+		listEntry.addAllowedPrincipalsFor(AccessProperty.Administer, mickey);
+		listEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		listEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, daisy);
+		Entry reference = duck.createReference(null, URI.create("http://example.com/resource"),
+				URI.create("http://example.com/metadata"), null);
+		((List) listEntry.getResource()).addChild(reference.getEntryURI());
+		// loaded from the store, a Reference created without an entry graph has no es:metadata
+		evictFromSoftCache(reference);
+		assertNull(duck.get(reference.getId()).getLocalMetadataURI());
+
+		((List) listEntry.getResource()).applyACLtoChildren(false);
+
+		evictFromSoftCache(reference);
+		Entry reloaded = duck.get(reference.getId());
+		assertEquals(Set.of(mickey), reloaded.getAllowedPrincipalsFor(AccessProperty.Administer));
+		assertEquals(Set.of(daisy), reloaded.getAllowedPrincipalsFor(AccessProperty.ReadResource));
+		assertEquals(Set.of(daisy), reloaded.getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
+		assertEquals(Set.of(), reloaded.getAllowedPrincipalsFor(AccessProperty.WriteMetadata));
+		assertEquals(Set.of(), reloaded.getAllowedPrincipalsFor(AccessProperty.WriteResource));
+	}
 }
