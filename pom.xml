@@ -30,16 +30,12 @@
 		<java.version>25</java.version>
 		<solr.version>10.0.0</solr.version>
 		<rdf4j.version>6.1.0</rdf4j.version>
-		<guava.version>33.6.0-jre</guava.version>
+		<guava.version>33.7.2-jre</guava.version>
 		<jsonorg.version>20260814</jsonorg.version>
 		<!-- Applies to swagger-annotations-jakarta only (ENTRYSTORE-991). swagger-core-jakarta /
-		     swagger-models-jakarta stay on whatever springdoc pulls in (see the springdoc version
-		     in modules/rest/spring-boot/pom.xml), today 2.2.47 against this 2.2.53. The Jackson
-		     2.22.x obstacle noted in ENTRYSTORE-1068 is gone — jackson-2-bom is overridden below —
-		     but the split itself is springdoc's, so it stands until ENTRYSTORE-1068 moves springdoc.
-		     Do not add a requireSameVersions rule for the three swagger artifacts before then: it
-		     would fail the build today. -->
-		<swagger.version>2.2.53</swagger.version>
+		     swagger-models-jakarta come from springdoc (modules/rest/spring-boot/pom.xml); keep this
+		     at the version springdoc pulls in so all three stay in step. -->
+		<swagger.version>2.2.55</swagger.version>
 		<!-- Must stay below 4.0.0: OpenSAML 5.x is built against the xmlsec 3 API and breaks on
 		     xmlsec 4. Check for a newer 3.0.x when reviewing dependencies. -->
 		<xmlsec.version>3.0.6</xmlsec.version>
@@ -47,12 +43,12 @@
 		<jetbrains-annotations.version>26.1.0</jetbrains-annotations.version>
 		<!-- bcprov/bcpkix/bcutil must all resolve to the same version; bcprov sometimes gets patch
 		     releases the other two do not, so only move to a version published for all three. -->
-		<bouncycastle.version>1.85</bouncycastle.version>
-		<owasp-html-sanitizer.version>20260313.1</owasp-html-sanitizer.version>
+		<bouncycastle.version>1.86</bouncycastle.version>
+		<owasp-html-sanitizer.version>20260924.2</owasp-html-sanitizer.version>
 
 		<!-- Override Spring-boot versions -->
-		<!-- cas-client-core 4.1.1 needs commons-codec 1.22.0, above the Boot 4.1 BOM's 1.21.0 -->
-		<commons-codec.version>1.22.0</commons-codec.version>
+		<!-- cas-client-core 4.1.1 needs commons-codec 1.22.0 or later, above the Boot 4.1 BOM's 1.21.0 -->
+		<commons-codec.version>1.22.1</commons-codec.version>
 		<!-- RDF4J 6.1.0 is built against Jackson 3.2.x and jackson-annotations 2.22, both above the
 		     Boot 4.1 BOM's 3.1.5 / 2.21.5. These are the names Boot gives its own BOM imports, so
 		     setting them raises Boot's managed Jackson wholesale. Keep both in step, and do not
@@ -486,6 +482,14 @@
 				<groupId>com.nimbusds</groupId>
 				<artifactId>nimbus-jose-jwt</artifactId>
 				<version>10.9.1</version>
+			</dependency>
+			<dependency>
+				<!-- RDF4J's MapDB collection factory pins 1.11.1; 1.11.4 extracts the native library
+				     exclusively instead of at a predictable temp path (GHSA-mcr4-qmvw-px4g), which MapDB's
+				     XXHashFactory.fastestInstance() triggers. Drop once RDF4J pulls 1.11.4 or later. -->
+				<groupId>at.yawk.lz4</groupId>
+				<artifactId>lz4-java</artifactId>
+				<version>1.11.4</version>
 			</dependency>
 			<dependency>
 				<!-- Global exclusion: every spring-boot-starter-* pulls spring-boot-starter, which
