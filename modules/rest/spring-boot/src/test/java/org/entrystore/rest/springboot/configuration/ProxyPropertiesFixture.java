@@ -34,29 +34,20 @@ public final class ProxyPropertiesFixture {
 
 	/** The shipped defaults, matching the {@code @DefaultValue}s on {@link ProxyProperties}. */
 	public static ProxyProperties defaults() {
-		return new ProxyProperties(DataSize.ofBytes(-1), 15, Duration.ofSeconds(30), Duration.ofSeconds(60),
-				null, null);
+		return new ProxyProperties(DataSize.ofMegabytes(100), 15, Duration.ofSeconds(30), Duration.ofSeconds(60));
 	}
 
 	/** Defaults with the redirect cap overridden, for tests that assert the cap is honoured. */
 	public static ProxyProperties withMaxRedirects(int maxRedirects) {
 		ProxyProperties defaults = defaults();
 		return new ProxyProperties(defaults.maxResponseSize(), maxRedirects,
-				defaults.connectTimeout(), defaults.readTimeout(), defaults.whitelist(), defaults.remoteResource());
+				defaults.connectTimeout(), defaults.readTimeout());
 	}
 
 	/** Defaults with the response-size cap overridden, for tests that assert the cap is honoured. */
 	public static ProxyProperties withMaxResponseSize(DataSize maxResponseSize) {
 		ProxyProperties defaults = defaults();
 		return new ProxyProperties(maxResponseSize, defaults.maxRedirects(),
-				defaults.connectTimeout(), defaults.readTimeout(), defaults.whitelist(), defaults.remoteResource());
-	}
-
-	/** Defaults with the whitelists overridden, for tests that assert whitelist behaviour. */
-	public static ProxyProperties withWhitelists(ProxyProperties.Whitelist whitelist,
-			ProxyProperties.RemoteResource remoteResource) {
-		ProxyProperties defaults = defaults();
-		return new ProxyProperties(defaults.maxResponseSize(), defaults.maxRedirects(),
-				defaults.connectTimeout(), defaults.readTimeout(), whitelist, remoteResource);
+				defaults.connectTimeout(), defaults.readTimeout());
 	}
 }

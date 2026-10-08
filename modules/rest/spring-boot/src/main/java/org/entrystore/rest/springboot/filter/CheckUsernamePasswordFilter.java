@@ -23,13 +23,14 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
-import org.entrystore.rest.springboot.configuration.PasswordLoginListProperties;
+import org.entrystore.rest.springboot.configuration.IndexedListSettings;
 import org.entrystore.rest.springboot.configuration.PasswordLoginMode;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
@@ -59,14 +60,14 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 	public CheckUsernamePasswordFilter(LoginAttemptService loginAttemptService,
 									   ErrorResponseWriter errorResponseWriter,
 									   PasswordLoginMode passwordLoginMode,
-									   PasswordLoginListProperties passwordLoginLists) {
+									   Environment environment) {
 		this.loginAttemptService = loginAttemptService;
 		this.errorResponseWriter = errorResponseWriter;
 		this.whitelistMode = passwordLoginMode == PasswordLoginMode.WHITELIST;
 		this.passwordLoginWhitelist = whitelistMode
-				? List.copyOf(passwordLoginLists.whitelist().values())
+				? IndexedListSettings.read(environment, Settings.AUTH_PASSWORD_WHITELIST)
 				: List.of();
-		this.passwordLoginBlacklist = List.copyOf(passwordLoginLists.blacklist().values());
+		this.passwordLoginBlacklist = IndexedListSettings.read(environment, Settings.AUTH_PASSWORD_BLACKLIST);
 		if (whitelistMode && passwordLoginWhitelist.isEmpty()) {
 			// Deliberately not a startup failure: an empty whitelist fails closed — every password
 			// login is denied — which is also the only way this layer can express "no local password

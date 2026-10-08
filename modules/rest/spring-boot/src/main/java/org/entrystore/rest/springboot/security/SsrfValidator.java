@@ -20,10 +20,12 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.springboot.configuration.IndexedListSettings;
 import org.entrystore.rest.springboot.configuration.ProxyProperties;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 import javax.net.ssl.HttpsURLConnection;
@@ -51,9 +53,10 @@ import java.util.regex.Pattern;
 @Component
 public class SsrfValidator {
 
-	// Provides the whitelists and the timeouts applied per hop on both outbound paths that use
+	// Provides the timeouts applied per hop on both outbound paths that use
 	// openPinnedConnection: GET /proxy and DELETE /{context-id}/resource/{entry-id}?proxy=true.
 	private final ProxyProperties proxyProperties;
+	private final Environment environment;
 	private final String rowstoreUrl;
 
 	private Set<String> proxyHostWhitelist;
@@ -101,20 +104,22 @@ public class SsrfValidator {
 		}
 	}
 
-	public SsrfValidator(ProxyProperties proxyProperties,
+	public SsrfValidator(ProxyProperties proxyProperties, Environment environment,
 			@Value("${entrystore.rowstore.url:#{null}}") String rowstoreUrl) {
 		this.proxyProperties = proxyProperties;
+		this.environment = environment;
 		this.rowstoreUrl = rowstoreUrl;
 	}
 
 	@PostConstruct
 	void init() {
-		proxyHostWhitelist = proxyProperties.localWhitelist();
+		proxyHostWhitelist = IndexedListSettings.readHosts(environment, Settings.PROXY_WHITELIST_LOCAL);
 		if (!proxyHostWhitelist.isEmpty()) {
 			log.info("Proxy GET local whitelist (host-only) initialized with: {}", String.join(", ", proxyHostWhitelist));
 		}
 
-		deleteOriginWhitelist = toOriginSet(proxyProperties.deleteWhitelist(), Settings.PROXY_REMOTE_RESOURCE_DELETE_WHITELIST);
+		deleteOriginWhitelist = toOriginSet(IndexedListSettings.read(environment,
+				Settings.PROXY_REMOTE_RESOURCE_DELETE_WHITELIST), Settings.PROXY_REMOTE_RESOURCE_DELETE_WHITELIST);
 		if (!deleteOriginWhitelist.isEmpty()) {
 			log.info("Resource DELETE origin whitelist initialized with: {}",
 					deleteOriginWhitelist.stream().map(Origin::toString).toList());

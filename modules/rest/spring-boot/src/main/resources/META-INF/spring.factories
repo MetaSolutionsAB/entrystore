@@ -1,4 +1,4 @@
 org.springframework.boot.EnvironmentPostProcessor=\
   org.entrystore.rest.springboot.configuration.LegacyPropertyKeyDetector,\
-  org.entrystore.rest.springboot.configuration.IndexedListConfigValidator,\
+  org.entrystore.rest.springboot.configuration.IndexedListSettings,\
   org.entrystore.rest.springboot.configuration.LegacyPropertyTranslator

@@ -17,16 +17,14 @@
 package org.entrystore.rest.springboot.service.auth;
 
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.rest.springboot.configuration.PermittedRedirectsProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.env.MockEnvironment;
 
 import java.net.URI;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -44,12 +42,11 @@ class RedirectUrlValidatorTest {
 
 	private RedirectUrlValidator createValidator(String baseUrl, List<String> additionalPermitted) throws Exception {
 		when(repositoryManager.getRepositoryURL()).thenReturn(URI.create(baseUrl).toURL());
-		Map<String, String> indexed = new LinkedHashMap<>();
+		var environment = new MockEnvironment();
 		for (int i = 0; i < additionalPermitted.size(); i++) {
-			indexed.put(String.valueOf(i + 1), additionalPermitted.get(i));
+			environment.setProperty("entrystore.auth.permitted.redirects." + (i + 1), additionalPermitted.get(i));
 		}
-		RedirectUrlValidator validator = new RedirectUrlValidator(repositoryManager,
-				new PermittedRedirectsProperties(indexed));
+		RedirectUrlValidator validator = new RedirectUrlValidator(repositoryManager, environment);
 		validator.init();
 		return validator;
 	}

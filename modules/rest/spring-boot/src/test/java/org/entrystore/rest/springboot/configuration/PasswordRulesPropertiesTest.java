@@ -26,6 +26,7 @@ import org.springframework.boot.context.properties.bind.BindException;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.core.convert.ConversionFailedException;
 
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -48,7 +49,7 @@ class PasswordRulesPropertiesTest {
 	@Test
 	void nothingConfigured_yieldsThe5xDefaults() {
 		runner().run(context -> {
-			Password.Rules rules = context.getBean(PasswordRulesProperties.class).toRules();
+			Password.Rules rules = context.getBean(PasswordRulesProperties.class).toRules(List.of());
 
 			assertTrue(rules.isUppercase());
 			assertTrue(rules.isLowercase());
@@ -70,7 +71,8 @@ class PasswordRulesPropertiesTest {
 						"entrystore.auth.password.rule.custom.1=^\\S+$",
 						"entrystore.auth.password.rule.custom.2=[xyz]")
 				.run(context -> {
-					Password.Rules rules = context.getBean(PasswordRulesProperties.class).toRules();
+					Password.Rules rules = context.getBean(PasswordRulesProperties.class).toRules(
+							IndexedListSettings.read(context.getEnvironment(), "entrystore.auth.password.rule.custom"));
 
 					assertFalse(rules.isUppercase());
 					assertFalse(rules.isLowercase());
@@ -86,7 +88,7 @@ class PasswordRulesPropertiesTest {
 	void booleanRules_acceptTheRelaxedSpellings(String value, boolean expected) {
 		runner().withPropertyValues("entrystore.auth.password.rule.symbol=" + value)
 				.run(context -> assertEquals(expected,
-						context.getBean(PasswordRulesProperties.class).toRules().isSymbol()));
+						context.getBean(PasswordRulesProperties.class).toRules(List.of()).isSymbol()));
 	}
 
 	@Test
@@ -101,7 +103,8 @@ class PasswordRulesPropertiesTest {
 
 	@Test
 	void invalidCustomRegex_failsStartupNamingTheKeyAndIndex() {
-		runner().withPropertyValues(
+		runner().withUserConfiguration(PasswordRulesInitializer.class)
+				.withPropertyValues(
 						"entrystore.auth.password.rule.custom.1=[0-9]",
 						"entrystore.auth.password.rule.custom.2=[unclosed")
 				.run(context -> {
@@ -123,6 +126,17 @@ class PasswordRulesPropertiesTest {
 					assertTrue(Password.conformsToRules("lowercase123"), "uppercase is no longer required");
 					assertFalse(Password.conformsToRules("Lower case123"), "the custom rule rejects whitespace");
 					assertFalse(Password.conformsToRules("Lowercase"), "unconfigured rules keep their defaults");
+				});
+	}
+
+	@Test
+	void bareCustomRule_isAppliedAsOneRule() {
+		// 5.x read a bare value as a one-element list.
+		runner().withUserConfiguration(PasswordRulesInitializer.class)
+				.withPropertyValues("entrystore.auth.password.rule.custom=^\\S+$")
+				.run(context -> {
+					assertTrue(Password.conformsToRules("Lowercase123"));
+					assertFalse(Password.conformsToRules("Lower case123"), "the bare custom rule rejects whitespace");
 				});
 	}
 

@@ -17,7 +17,6 @@
 package org.entrystore.rest.springboot.filter;
 
 import org.entrystore.rest.springboot.configuration.PasswordLoginConfiguration;
-import org.entrystore.rest.springboot.configuration.PasswordLoginListProperties;
 import org.entrystore.rest.springboot.configuration.PasswordLoginMode;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
@@ -28,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 import org.springframework.http.HttpStatus;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -62,10 +62,8 @@ class CheckUsernamePasswordFilterTest {
 				.withUserConfiguration(PasswordLoginConfiguration.class)
 				.withBean(LoginAttemptService.class, () -> loginAttemptService)
 				.withBean(ErrorResponseWriter.class, () -> new ErrorResponseWriter(JsonMapper.builder().build()))
-				.withBean(PasswordLoginListProperties.class,
-						() -> new PasswordLoginListProperties(Map.of("1", "admin"), Map.of()))
 				.withBean(CheckUsernamePasswordFilter.class)
-				.withPropertyValues("entrystore.auth.password=whitelist")
+				.withPropertyValues("entrystore.auth.password=whitelist", "entrystore.auth.password.whitelist.1=admin")
 				.run(context -> {
 					var response = new MockHttpServletResponse();
 
@@ -168,10 +166,12 @@ class CheckUsernamePasswordFilterTest {
 
 	private CheckUsernamePasswordFilter filter(PasswordLoginMode passwordLoginMode, Map<String, String> whitelist,
 			Map<String, String> blacklist) {
+		var environment = new MockEnvironment();
+		whitelist.forEach((index, user) -> environment.setProperty("entrystore.auth.password.whitelist." + index, user));
+		blacklist.forEach((index, user) -> environment.setProperty("entrystore.auth.password.blacklist." + index, user));
 		// A real writer, not a stub: the 401 assertions read the status it writes.
 		return new CheckUsernamePasswordFilter(loginAttemptService,
-				new ErrorResponseWriter(JsonMapper.builder().build()), passwordLoginMode,
-				new PasswordLoginListProperties(whitelist, blacklist));
+				new ErrorResponseWriter(JsonMapper.builder().build()), passwordLoginMode, environment);
 	}
 
 	private static MockHttpServletRequest loginRequest(String username) {

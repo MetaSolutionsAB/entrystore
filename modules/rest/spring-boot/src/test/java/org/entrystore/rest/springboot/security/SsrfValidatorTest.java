@@ -26,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.unit.DataSize;
 
@@ -43,7 +44,6 @@ import java.net.SocketException;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -67,7 +67,7 @@ class SsrfValidatorTest {
 
 	@BeforeEach
 	void setUp() {
-		validator = new SsrfValidator(ProxyPropertiesFixture.defaults(), null);
+		validator = new SsrfValidator(ProxyPropertiesFixture.defaults(), new MockEnvironment(), null);
 		validator.setProxyHostWhitelist(Set.of());
 		validator.setDeleteOriginWhitelist(Set.of());
 		validator.setRowstoreOrigin(null);
@@ -77,14 +77,15 @@ class SsrfValidatorTest {
 	void init_wiresEachTrustSetToItsOwnSetting() {
 		// Every other test here bypasses init() via the package-private setters, so this is the one place
 		// pinning that init() reads each trust set from ITS setting: if deleteOriginWhitelist were wired
-		// to localWhitelist(), every proxy-GET-whitelisted host would silently become a trusted
+		// to the local whitelist, every proxy-GET-whitelisted host would silently become a trusted
 		// remote-resource DELETE origin — and the ITs configure neither the delete whitelist nor a
 		// rowstore URL, so nothing else would fail.
-		var properties = ProxyPropertiesFixture.withWhitelists(
-				new ProxyProperties.Whitelist(Map.of("1", "cache.internal"), Map.of("1", "guest.example")),
-				new ProxyProperties.RemoteResource(new ProxyProperties.RemoteResource.Delete(
-						Map.of("1", "http://rowstore.internal:8282"))));
-		var wired = new SsrfValidator(properties, "https://rowstore.example:9000/");
+		var environment = new MockEnvironment()
+				.withProperty("entrystore.proxy.whitelist.local.1", "Cache.Internal")
+				.withProperty("entrystore.proxy.whitelist.local.2", " ")
+				.withProperty("entrystore.proxy.whitelist.anonymous.1", "guest.example")
+				.withProperty("entrystore.proxy.remote-resource.delete.whitelist.1", "http://rowstore.internal:8282");
+		var wired = new SsrfValidator(ProxyPropertiesFixture.defaults(), environment, "https://rowstore.example:9000/");
 
 		wired.init();
 
@@ -329,8 +330,8 @@ class SsrfValidatorTest {
 		// Distinct values, so swapping the two setters at the call site fails here rather than passing
 		// on symmetry — and so a seconds/milliseconds slip in the *Millis() accessors is visible.
 		SsrfValidator configured = new SsrfValidator(
-				new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ofSeconds(7), Duration.ofSeconds(11),
-						null, null),
+				new ProxyProperties(DataSize.ofMegabytes(10), 15, Duration.ofSeconds(7), Duration.ofSeconds(11)),
+				new MockEnvironment(),
 				null);
 		InetAddress ipv4 = Inet4Address.getByAddress("example.com",
 				new byte[]{(byte) 93, (byte) 184, (byte) 216, (byte) 34});
