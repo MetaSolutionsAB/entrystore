@@ -172,9 +172,10 @@ class ResourceServiceTest {
 
 	@Test
 	void getResourceRepresentation_syndicationRequested_delegatesBeforeInspectingEntry() {
-		when(syndicationService.renderFeed(entry, "rss_2.0", "sv", 7))
+		when(syndicationService.renderFeed(entry, "rss_2.0", "sv", 7, "test123", "My feed"))
 				.thenReturn(new RenderedFeed("<rss/>", MediaType.APPLICATION_RSS_XML));
-		var query = new ResourceQuery(null, null, "application/rdf+xml", "rss_2.0", "sv", 7, emptyListFilter());
+		var query = new ResourceQuery(null, null, "application/rdf+xml", "rss_2.0", "sv", 7, "test123", "My feed",
+				emptyListFilter());
 
 		ResourceRepresentation result = service.getResourceRepresentation(entry, query);
 
@@ -193,7 +194,7 @@ class ResourceServiceTest {
 		when(entry.getResource()).thenReturn(list);
 		when(list.getGraph()).thenReturn(new LinkedHashModel());
 		var query = new ResourceQuery(null, MediaType.parseMediaType("text/turtle"), "application/rdf+xml", null, "en",
-				50, emptyListFilter());
+				50, null, null, emptyListFilter());
 
 		ResourceRepresentation result = service.getResourceRepresentation(entry, query);
 
@@ -209,7 +210,8 @@ class ResourceServiceTest {
 		when(entry.getResource()).thenReturn(graph);
 		when(graph.getGraph()).thenReturn(new LinkedHashModel());
 		var query = new ResourceQuery(MediaType.parseMediaType("application/n-triples"),
-				MediaType.parseMediaType("text/turtle"), "application/rdf+xml", null, "en", 50, emptyListFilter());
+				MediaType.parseMediaType("text/turtle"), "application/rdf+xml", null, "en", 50, null, null,
+				emptyListFilter());
 
 		ResourceRepresentation result = service.getResourceRepresentation(entry, query);
 
@@ -485,7 +487,8 @@ class ResourceServiceTest {
 	}
 
 	private static ResourceQuery plainQuery() {
-		return new ResourceQuery(null, null, "application/rdf+xml", null, "en", 50, emptyListFilter());
+		return new ResourceQuery(null, null, "application/rdf+xml", null, "en", 50, null, null,
+				emptyListFilter());
 	}
 
 	private static ListFilter emptyListFilter() {
