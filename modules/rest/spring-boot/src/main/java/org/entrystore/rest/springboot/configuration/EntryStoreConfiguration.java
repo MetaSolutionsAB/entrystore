@@ -85,9 +85,12 @@ public class EntryStoreConfiguration {
 		return properties;
 	}
 
-	/** Depends on the password rules so core applies the configured ones from its first password check on. */
+	/**
+	 * Depends on the password rules so core applies the configured ones from its first password check on, and on the
+	 * RDF4J system properties so the native store sees them when it is first opened.
+	 */
 	@Bean(destroyMethod = "shutdown")
-	@DependsOn(PasswordRulesInitializer.BEAN_NAME)
+	@DependsOn({PasswordRulesInitializer.BEAN_NAME, Rdf4jSystemPropertiesInitializer.BEAN_NAME})
 	public RepositoryManagerImpl createRepositoryManager(Config config) {
 		String baseURI = config.getString(Settings.BASE_URL);
 		if (baseURI == null) {
