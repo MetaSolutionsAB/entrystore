@@ -4,6 +4,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1246](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1246) org.eclipse.rdf4j.sail.nativerdf.softFailOnCorruptDataAndRepairIndexes set in entrystore.properties takes effect again, as in 5.x, so a corrupt native store can be repaired without passing -D. 6.x ignored it there. A value passed with -D now wins over the configuration; 5.x overwrote it.
+
 [ENTRYSTORE-1168](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1168) The metadata ACL \(ReadMetadata, WriteMetadata\) of a Reference without es:metadata in its entry graph, i.e. one created without an entry graph, is now kept on \{context\}/metadata/\{entry-id\}, as for every other entry type and where EntryScape and entrystore.js read and write it. Once such a Reference was loaded from the store, reading that ACL matched every read or write grant of the entry, and writing it failed or removed other grants. 5.x had the same fault. **Behaviour note:** on such a Reference, the metadata ACL no longer matches grants on its resource or on any other subject; Administer still gives access to its metadata, including the cached external metadata.
 
 [ENTRYSTORE-1209](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1209) With CAS enabled, password login \(POST /auth/cookie\) and HTTP Basic work again, as in 5.x; they failed because the CAS provider replaced the password check, and a failed form login also counted towards the lockout. A CAS login now changes the session id, as form, SAML and OIDC logins do, and disabling the user ends their CAS sessions. Ending SSO sessions on a password change or reset is [ENTRYSTORE-1211](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1211).
