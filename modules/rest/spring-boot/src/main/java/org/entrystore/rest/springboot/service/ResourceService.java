@@ -76,7 +76,7 @@ public class ResourceService {
 	public ResourceRepresentation getResourceRepresentation(Entry entry, ResourceQuery query) {
 		if (query.syndication() != null) {
 			RenderedFeed feed = syndicationService.renderFeed(entry, query.syndication(), query.language(),
-					query.feedSize());
+					query.feedSize(), query.urlTemplate(), query.feedTitle());
 			return new ResourceRepresentation.TextBody(feed.xml(), feed.mediaType());
 		}
 

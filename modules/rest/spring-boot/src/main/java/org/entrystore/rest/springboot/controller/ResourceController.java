@@ -88,6 +88,8 @@ public class ResourceController {
 			@RequestParam(required = false) MediaType rdfFormat,
 			@RequestParam(required = false) String syndication,
 			@RequestParam(required = false, defaultValue = "50") int feedSize,
+			@RequestParam(name = "urltemplate", required = false) String urlTemplate,
+			@RequestParam(name = "feedtitle", required = false) String feedTitle,
 			@RequestParam(name = "lang", required = false, defaultValue = "en") String language,
 			@RequestParam(required = false) String download,
 			@ModelAttribute ListFilter listFilter,
@@ -98,7 +100,7 @@ public class ResourceController {
 	) {
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 		ResourceQuery query = new ResourceQuery(format, rdfFormat, acceptHeader, syndication, language, feedSize,
-				listFilter);
+				urlTemplate, feedTitle, listFilter);
 		Date modified = entry.getModifiedDate();
 
 		return switch (resourceService.getResourceRepresentation(entry, query)) {

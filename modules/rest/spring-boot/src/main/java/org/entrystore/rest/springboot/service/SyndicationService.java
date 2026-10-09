@@ -28,6 +28,7 @@ import org.entrystore.GraphType;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.rest.springboot.configuration.SyndicationProperties;
 import org.entrystore.rest.springboot.model.dto.RenderedFeed;
 import org.entrystore.rest.springboot.model.exception.MethodNotAllowedException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
@@ -51,6 +52,7 @@ public class SyndicationService {
 	private static final int DEFAULT_FEED_SIZE = 50;
 
 	private final RepositoryManagerImpl repositoryManager;
+	private final SyndicationProperties syndicationProperties;
 
 	@Value("${entrystore.solr.max-limit:" + DEFAULT_FEED_SIZE + "}")
 	private int maxFeedSize;
@@ -59,16 +61,21 @@ public class SyndicationService {
 	 * Renders the feed of a context or list entry as XML; an unknown feed type fails as a bad request. Entries of
 	 * any other graph type are rejected with {@link MethodNotAllowedException}, installations without a Solr index
 	 * answer {@link NotImplementedException}, and {@code feedSize} is clamped to {@code entrystore.solr.max-limit}.
+	 * Item links follow the URL template configured under {@code urlTemplate} (the {@code default} one when null),
+	 * else the resource URI; {@code feedTitle} replaces the default title "Feed of &lt;alias&gt;" and is sanitized
+	 * like a /search feed title.
 	 */
-	public RenderedFeed renderFeed(Entry entry, String feedType, String language, int feedSize) {
-		SyndFeed feed = getSyndicationFeedSolr(entry, feedType, language, feedSize);
+	public RenderedFeed renderFeed(Entry entry, String feedType, String language, int feedSize, String urlTemplate,
+								   String feedTitle) {
+		SyndFeed feed = getSyndicationFeedSolr(entry, feedType, language, feedSize, urlTemplate, feedTitle);
 		String xml = Syndication.convertSyndFeedToXml(feed);
 		MediaType mediaType = Objects.requireNonNull(Syndication.convertFeedTypeToMediaType(feed.getFeedType()),
 				() -> "No media type for feed type " + feed.getFeedType());
 		return new RenderedFeed(xml, mediaType);
 	}
 
-	private SyndFeed getSyndicationFeedSolr(Entry entry, String type, String language, int feedSize) {
+	private SyndFeed getSyndicationFeedSolr(Entry entry, String type, String language, int feedSize,
+											String urlTemplate, String feedTitle) {
 
 		if (repositoryManager.getIndex() == null) {
 			throw new NotImplementedException("Feeds are not supported by this installation");
@@ -96,9 +103,9 @@ public class SyndicationService {
 			alias = EntryUtil.getTitle(entry, language);
 		}
 
-		SyndFeed feed = Syndication.createFeedFromEntries(repositoryManager.getPrincipalManager(), recursiveEntries,
-				language, feedSize, e -> e.getResourceURI().toString());
-		feed.setTitle("Feed of \"" + alias + "\"");
+		SyndFeed feed = Syndication.createFeedFromEntries(repositoryManager.getPrincipalManager(),
+				syndicationProperties.template(urlTemplate), recursiveEntries, language, feedSize);
+		feed.setTitle(Syndication.sanitizeFeedTitle(Objects.requireNonNullElse(feedTitle, "Feed of " + alias)));
 		feed.setLink(entry.getResourceURI().toString());
 		feed.setFeedType(type);
 

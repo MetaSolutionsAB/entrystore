@@ -20,6 +20,7 @@ import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
+import java.nio.charset.StandardCharsets
 import java.time.Year
 import java.util.concurrent.TimeUnit
 
@@ -112,7 +113,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def channelTitleNode = channelNode['title'][0] as Node
 		channelTitleNode.attributes().size() == 0
 		channelTitleNode.value().size() == 1
-		channelTitleNode.value()[0] == 'Feed of "Syndication Test"'
+		channelTitleNode.value()[0] == 'Feed of Syndication Test'
 
 		channelNode['link'].size() == 1
 		def channelLinkNode = channelNode['link'][0] as Node
@@ -152,7 +153,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def channelTitleNode = channelNode['title'][0] as Node
 		channelTitleNode.attributes().size() == 0
 		channelTitleNode.value().size() == 1
-		channelTitleNode.value()[0] == 'Feed of "Syndication Test"'
+		channelTitleNode.value()[0] == 'Feed of Syndication Test'
 
 		channelNode['link'].size() == 1
 		def channelLinkNode = channelNode['link'][0] as Node
@@ -212,7 +213,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def channelTitleNode = channelNode['title'][0] as Node
 		channelTitleNode.attributes().size() == 0
 		channelTitleNode.value().size() == 1
-		channelTitleNode.value()[0] == 'Feed of "Syndication Test"'
+		channelTitleNode.value()[0] == 'Feed of Syndication Test'
 
 		channelNode['link'].size() == 1
 		def channelLinkNode = channelNode['link'][0] as Node
@@ -272,7 +273,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def channelTitleNode = channelNode['title'][0] as Node
 		channelTitleNode.attributes().size() == 0
 		channelTitleNode.value().size() == 1
-		channelTitleNode.value()[0] == 'Feed of "Syndication Test"'
+		channelTitleNode.value()[0] == 'Feed of Syndication Test'
 
 		channelNode['link'].size() == 1
 		def channelLinkNode = channelNode['link'][0] as Node
@@ -328,7 +329,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def titleNode = respXml['title'][0] as Node
 		titleNode.attributes().size() == 0
 		titleNode.value().size() == 1
-		titleNode.value()[0] == 'Feed of "Syndication Test"'
+		titleNode.value()[0] == 'Feed of Syndication Test'
 
 		respXml['link'].size() == 1
 		def linkNode = respXml['link'][0] as Node
@@ -364,7 +365,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def titleNode = respXml['title'][0] as Node
 		titleNode.attributes().size() == 0
 		titleNode.value().size() == 1
-		titleNode.value()[0] == 'Feed of "Syndication Test"'
+		titleNode.value()[0] == 'Feed of Syndication Test'
 
 		respXml['link'].size() == 1
 		def linkNode = respXml['link'][0] as Node
@@ -430,7 +431,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def titleNode = respXml['title'][0] as Node
 		titleNode.attributes().size() == 0
 		titleNode.value().size() == 1
-		titleNode.value()[0] == 'Feed of "Syndication Test"'
+		titleNode.value()[0] == 'Feed of Syndication Test'
 
 		respXml['link'].size() == 1
 		def linkNode = respXml['link'][0] as Node
@@ -496,7 +497,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def titleNode = respXml['title'][0] as Node
 		titleNode.attributes().size() == 0
 		titleNode.value().size() == 1
-		titleNode.value()[0] == 'Feed of "Syndication Test"'
+		titleNode.value()[0] == 'Feed of Syndication Test'
 
 		respXml['link'].size() == 1
 		def linkNode = respXml['link'][0] as Node
@@ -553,5 +554,57 @@ class ResourceSyndicationIT extends BaseSpec {
 		resourceConn.getContentType().contains('application/json')
 		def resp = JSON_PARSER.parseText(resourceConn.errorStream.text)
 		resp['error'] == 'Invalid syndication feed type: \'random-string\''
+	}
+
+	def "GET /{context-id}/resource/{entry-id}?syndication=rss_2.0&feedtitle=... should use the given feed title"() {
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + contextId +
+			'?syndication=rss_2.0&feedtitle=' + encode('Latest datasets'))
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		def channelNode = new XmlParser(false, false).parseText(resourceConn.inputStream.text)['channel'][0] as Node
+		(channelNode['title'][0] as Node).value()[0] == 'Latest datasets'
+	}
+
+	def "GET /{context-id}/resource/{entry-id}?syndication=rss_2.0&feedtitle=... should HTML-escape and truncate the feed title"() {
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + contextId +
+			'?syndication=rss_2.0&feedtitle=' + encode('<b>Bold</b>' + 'x' * 60))
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		def channelNode = new XmlParser(false, false).parseText(resourceConn.inputStream.text)['channel'][0] as Node
+		(channelNode['title'][0] as Node).value()[0] == '&lt;b&gt;Bold&lt;/b&gt;' + 'x' * 52
+	}
+
+	def "GET /{context-id}/resource/{entry-id}?syndication=rss_2.0&urltemplate=test123 should build item links from the URL template"() {
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + contextId +
+			'?syndication=rss_2.0&urltemplate=test123')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		def channelNode = new XmlParser(false, false).parseText(resourceConn.inputStream.text)['channel'][0] as Node
+		def itemNode = channelNode['item'][0] as Node
+		(itemNode['link'][0] as Node).value()[0] == 'http://localhost?cid=' + contextId + '&eid=' + entryId +
+			'&euri=' + encode(EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId) +
+			'&ruri=' + encode(EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryId)
+	}
+
+	def "GET /{context-id}/resource/{entry-id}?syndication=rss_2.0&urltemplate=unknown should fall back to resource URIs as item links"() {
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + contextId +
+			'?syndication=rss_2.0&urltemplate=unknown')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		def channelNode = new XmlParser(false, false).parseText(resourceConn.inputStream.text)['channel'][0] as Node
+		def itemNode = channelNode['item'][0] as Node
+		(itemNode['link'][0] as Node).value()[0] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryId
+	}
+
+	private static String encode(String value) {
+		URLEncoder.encode(value, StandardCharsets.UTF_8).replace('+', '%20')
 	}
 }
