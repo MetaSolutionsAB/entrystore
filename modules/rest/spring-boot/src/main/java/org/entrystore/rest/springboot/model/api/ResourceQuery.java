@@ -21,8 +21,9 @@ import org.springframework.http.MediaType;
 /**
  * The parts of a GET on a resource URI that select the representation: the Accept header and every query parameter
  * except {@code download}, which only affects Content-Disposition and stays in the controller. A non-null
- * {@code syndication} asks for a feed of the given ROME feed type instead of the resource itself. The RDF format of
- * a Graph or List resource follows {@code format}, then {@code rdfFormat}, then the Accept header.
+ * {@code syndication} asks for a feed of the given ROME feed type instead of the resource itself; {@code urlTemplate}
+ * names a configured feed-link template and {@code feedTitle} overrides the feed title, both null when not given.
+ * The RDF format of a Graph or List resource follows {@code format}, then {@code rdfFormat}, then the Accept header.
  */
 public record ResourceQuery(MediaType format,
 							MediaType rdfFormat,
@@ -30,5 +31,7 @@ public record ResourceQuery(MediaType format,
 							String syndication,
 							String language,
 							int feedSize,
+							String urlTemplate,
+							String feedTitle,
 							ListFilter listFilter) {
 }
