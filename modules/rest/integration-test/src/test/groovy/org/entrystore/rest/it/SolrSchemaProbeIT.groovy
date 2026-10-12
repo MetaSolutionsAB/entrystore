@@ -89,6 +89,21 @@ class SolrSchemaProbeIT extends BaseSpec {
 		terms.contains('xxxboundaryyy')
 	}
 
+	private static Object readSchemaFieldType(String name) {
+		def url = new URI(coreUrl() + '/schema/fieldtypes/' + name + '?wt=json').toURL()
+		def connection = (HttpURLConnection) url.openConnection()
+		assert connection.getResponseCode() == HTTP_OK
+		return new JsonSlurper().parseText(connection.inputStream.text)['fieldType']
+	}
+
+	def "the string, boolean and date types are declared with docValues"() {
+		expect:
+		// facets and sorts on these fields read docValues; without them Solr uninverts the fields onto its heap
+		readSchemaFieldType('string')['docValues'] == true
+		readSchemaFieldType('boolean')['docValues'] == true
+		readSchemaFieldType('date')['docValues'] == true
+	}
+
 	def "the startup guard reads the required dynamic fields from the Solr core used by the ITs"() {
 		given:
 		def client = new HttpJettySolrClient.Builder(coreUrl()).useHttp1_1(true).build()
