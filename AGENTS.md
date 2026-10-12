@@ -45,6 +45,7 @@ entrystore/
 │   ├── harvesting/            # OAI-PMH harvesting
 │   ├── transforms/            # Data format transformations
 │   └── benchmark/             # Benchmarks
+├── solr/conf/                 # Solr configset: used by the ITs, shipped in the image at /srv/entrystore/solr/conf
 └── templates/                 # HTML/CSS templates
 ```
 

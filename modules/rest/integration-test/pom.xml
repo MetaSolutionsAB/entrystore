@@ -36,6 +36,12 @@
 				</includes>
 				<filtering>false</filtering>
 			</testResource>
+			<!-- The Solr configset that BaseSpec copies into the Solr container; the image ships the same files. -->
+			<testResource>
+				<directory>${project.basedir}/../../../solr/conf</directory>
+				<targetPath>solr</targetPath>
+				<filtering>false</filtering>
+			</testResource>
 		</testResources>
 
 		<plugins>

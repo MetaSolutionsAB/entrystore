@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,14 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 public class ConverterManagerImplTest {
 
 	@Test
-	public void register() {
-		URL resourceURL = ConverterUtil.findResource("solrconfig.xml_default");
-		assertNotNull(resourceURL);
-	}
-
-	@Test
-	public void findResource_schema() {
-		URL resourceURL = ConverterUtil.findResource("schema.xml_default");
+	public void findResource_classpathResource() {
+		URL resourceURL = ConverterUtil.findResource("lom10.xsd");
 		assertNotNull(resourceURL);
 	}
 

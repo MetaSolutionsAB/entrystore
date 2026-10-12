@@ -157,6 +157,10 @@ The container uses the following paths for persistent data:
 
 Mount a volume or bind mount to `/srv/entrystore/data` to persist all data, or mount individual subdirectories as needed.
 
+## Solr configset
+
+The image ships the Solr configset that matches its schema as plain files under `/srv/entrystore/solr/conf` (root-owned, world-readable). deploy-tools copies it from the image without starting a container (`docker create` and `docker cp`), so the path is a contract with deploy-tools and must not change. The source is `solr/conf` in this repository.
+
 ## JVM options
 
 Pass JVM options via the `JAVA_TOOL_OPTIONS` environment variable:
