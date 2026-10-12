@@ -56,7 +56,9 @@ import java.util.Set;
  * {@code datasetURL} comes from the pipeline, which any context writer can edit, so it must have the origin of
  * {@code entrystore.rowstore.url}; this keeps the server from sending requests to arbitrary hosts.
  * {@code replace}, {@code append} and {@code setalias} return the existing PipelineResult entry of the dataset.
- * If RowStore fails, answers unexpectedly or does not answer in time, it throws {@link UpstreamServiceException}.
+ * If RowStore rejects a request with a 4xx answer, such as an invalid or taken alias, the transform throws
+ * {@link IllegalStateException}, as for other invalid pipeline input; if RowStore fails, answers unexpectedly or does
+ * not answer in time, it throws {@link UpstreamServiceException}.
  *
  * @author Hannes Ebner
  */
@@ -162,10 +164,16 @@ public class CSV2RowStoreTransform extends Transform {
 	/**
 	 * Logs an unexpected answer at WARN, as the exception handler logs at INFO; RowStoreClient has already logged a
 	 * request that got no answer.
+	 *
+	 * @throws IllegalStateException if RowStore rejected the request with a 4xx answer, which reflects the pipeline's
+	 *                               arguments, such as the alias, rather than a failure of RowStore
 	 */
 	private static UpstreamServiceException rowStoreFailure(String operation, RowStoreClient.Response response) {
 		if (!response.isAnswer()) {
 			return new UpstreamServiceException(operation + " failed: no answer from RowStore", response.isTimeout());
+		}
+		if (response.status() >= 400 && response.status() < 500) {
+			throw new IllegalStateException(operation + " failed: RowStore rejected it with " + response.status());
 		}
 		String message = operation + " failed: RowStore answered " + response.status()
 				+ (response.status() == 202 ? " without Location" : "");

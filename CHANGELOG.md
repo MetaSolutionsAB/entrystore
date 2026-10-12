@@ -4,7 +4,7 @@
 
 ### Bug
 
-[ENTRYSTORE-1250](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1250) POST /\{context-id\}/execute answers 502 when a RowStore pipeline fails because RowStore cannot be reached or answers with an error or unexpectedly, and 504 when RowStore does not answer in time, instead of 400 as in 5.x. A failed connection to RowStore is logged with its cause and the addresses the RowStore host resolves to.
+[ENTRYSTORE-1250](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1250) POST /\{context-id\}/execute answers 502 when a RowStore pipeline fails because RowStore cannot be reached, answers with a server error or answers unexpectedly, and 504 when RowStore does not answer in time, instead of 400 as in 5.x. A request RowStore rejects, such as an invalid or taken alias, is still answered 400. A failed connection to RowStore is logged with its cause and the addresses the RowStore host resolves to.
 
 [ENTRYSTORE-1249](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1249) The login and SSO entry points \(/auth/login, /auth/saml, /auth/oidc, /auth/cas\), the sign-up and password-reset routes \(/auth/signup, /auth/pwreset and their /confirm\) expire the cookie of an ended or unknown session and continue as guest, also with entrystore.auth.cookie.invalid-token-error on. They answered 401, so starting a login after the previous one ended, or opening a confirmation link in a browser holding an old login, failed. Requests with ignoreAuth are served as guest too and, as in 5.x, keep the cookie of an unknown session, so they cannot end a login made meanwhile in another tab.
 

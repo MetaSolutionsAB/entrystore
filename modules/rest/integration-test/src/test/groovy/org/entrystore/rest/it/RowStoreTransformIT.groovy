@@ -150,7 +150,8 @@ class RowStoreTransformIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_BAD_GATEWAY
-		JSON_PARSER.parseText(connection.errorStream.text)['error'] == 'Pipeline execution failed: a service it calls failed'
+		JSON_PARSER.parseText(connection.errorStream.text)['error'] ==
+			'Pipeline execution failed: a service it calls failed'
 	}
 
 	def "create should return 502 when RowStore accepts the dataset without a Location"() {
@@ -336,7 +337,21 @@ class RowStoreTransformIT extends BaseSpec {
 			.withRequestBody(equalToJson('["my-alias"]')))
 	}
 
-	def "setalias should return 502 when RowStore rejects the alias"() {
+	def "setalias should return 400 when RowStore rejects the alias as invalid or taken"() {
+		given:
+		def dataset = createDataset()
+		stub(put(urlPathEqualTo(dataset.path + '/aliases')).willReturn(aResponse().withStatus(400)))
+		def pipelineUri = createRowStorePipeline([action: 'setalias', datasetURL: dataset.url, alias: 'taken-alias'])
+
+		when:
+		def connection = execute(pipelineUri, null)
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		values(entryInfo(dataset.entryUri), PIPELINE_DATA) == [dataset.sourceUri]
+	}
+
+	def "setalias should return 502 when RowStore fails to set the alias"() {
 		given:
 		def dataset = createDataset()
 		stub(put(urlPathEqualTo(dataset.path + '/aliases')).willReturn(aResponse().withStatus(500)))
