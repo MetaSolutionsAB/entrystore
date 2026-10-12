@@ -90,6 +90,8 @@ import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.session.SessionManagementFilter;
 import org.springframework.security.web.util.matcher.AndRequestMatcher;
+import org.springframework.security.web.util.matcher.AnyRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
@@ -103,6 +105,23 @@ import java.util.Optional;
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
+
+	/**
+	 * Requests that need no existing session, so a stale session cookie on them is expired and the request served as
+	 * guest even with {@code entrystore.auth.cookie.invalid-token-error} on: the login pages and SSO initiations,
+	 * which a user whose login ended is sent to, the sign-up and password-reset flows, whose emailed links are often
+	 * opened in a browser holding an old login, and {@code ignoreAuth}, as in 5.x.
+	 */
+	private static final RequestMatcher SESSIONLESS_REQUESTS = new OrRequestMatcher(
+			PathPatternRequestMatcher.withDefaults().matcher("/auth/login"),
+			PathPatternRequestMatcher.withDefaults().matcher("/auth/saml"),
+			PathPatternRequestMatcher.withDefaults().matcher("/auth/oidc"),
+			PathPatternRequestMatcher.withDefaults().matcher("/auth/cas"),
+			PathPatternRequestMatcher.withDefaults().matcher("/auth/signup"),
+			PathPatternRequestMatcher.withDefaults().matcher("/auth/signup/confirm"),
+			PathPatternRequestMatcher.withDefaults().matcher("/auth/pwreset"),
+			PathPatternRequestMatcher.withDefaults().matcher("/auth/pwreset/confirm"),
+			IgnoreAuthFilter::isRequested);
 
 	private final CheckUsernamePasswordFilter checkUsernamePasswordFilter;
 	private final IgnoreAuthFilter ignoreAuthFilter;
@@ -220,7 +239,7 @@ public class SecurityConfig {
 							.maximumSessions(-1)
 							.sessionRegistry(sessionRegistry)
 							.expiredSessionStrategy(event -> {
-								if (!invalidTokenError) {
+								if (!invalidTokenError || SESSIONLESS_REQUESTS.matches(event.getRequest())) {
 									event.getFilterChain().doFilter(event.getRequest(), event.getResponse());
 									return;
 								}
@@ -267,10 +286,8 @@ public class SecurityConfig {
 						.accessDeniedHandler(customAccessDeniedHandler)
 				);
 
-		if (!invalidTokenError) {
-			// Without an invalid-session strategy, SessionManagementFilter lets the request continue as guest
-			http.addFilterBefore(new InvalidSessionCookieFilter(authTokenCookies), SessionManagementFilter.class);
-		}
+		http.addFilterBefore(new InvalidSessionCookieFilter(authTokenCookies,
+				invalidTokenError ? SESSIONLESS_REQUESTS : AnyRequestMatcher.INSTANCE), SessionManagementFilter.class);
 		if (!authTokenCookies.isRefreshExpirationOnAccess()) {
 			http.addFilterBefore(new SessionLifetimeFilter(authTokenCookies), SecurityContextHolderFilter.class);
 		}

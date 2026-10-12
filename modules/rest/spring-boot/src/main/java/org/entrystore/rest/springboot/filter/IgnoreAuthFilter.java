@@ -42,11 +42,16 @@ import java.io.IOException;
 @Component
 public class IgnoreAuthFilter extends OncePerRequestFilter {
 
+	/** @return whether the request asks to be served as guest whatever its credentials */
+	public static boolean isRequested(HttpServletRequest request) {
+		return HttpUtil.getQueryParameter(request, "ignoreAuth") != null;
+	}
+
 	@Override
 	protected void doFilterInternal(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response, @NotNull FilterChain filterChain)
 			throws ServletException, IOException {
 
-		if (HttpUtil.getQueryParameter(request, "ignoreAuth") != null) {
+		if (isRequested(request)) {
 			log.debug("Forcing anonymous access due to ignoreAuth request parameter");
 			SecurityContext originalContext = SecurityContextHolder.getContext();
 			SecurityContext anonymousContext = SecurityContextHolder.createEmptyContext();

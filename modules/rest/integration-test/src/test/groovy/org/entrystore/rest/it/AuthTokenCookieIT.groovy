@@ -16,9 +16,13 @@
 
 package org.entrystore.rest.it
 
+import groovy.json.JsonOutput
 import org.apache.commons.lang3.RandomStringUtils
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.springframework.http.HttpMethod
 
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
@@ -50,6 +54,63 @@ class AuthTokenCookieIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		assertExpiredOnStoreAndLegacyPath(conn)
+	}
+
+	def "#method #path with an unknown auth_token should reach the handler as guest and expire the cookie on /store and /store/"() {
+		given: 'an unknown confirmation token, answered 400, and SSO disabled, answered 404, both by the handler'
+		def body = method == 'POST'
+				? JsonOutput.toJson([confirm: 'unknownConfirmToken', email: 'stale@test.com', password: 'newPass12345'])
+				: null
+
+		when:
+		def conn = EntryStoreClient.sendRequestAsStream(HttpMethod.valueOf(method), path,
+				body == null ? null : new ByteArrayInputStream(body.bytes), '', body == null ? null : 'application/json',
+				[Cookie: 'auth_token=' + STALE_TOKEN, Accept: 'text/html'])
+
+		then:
+		conn.getResponseCode() == status
+		assertExpiredOnStoreAndLegacyPath(conn)
+
+		where:
+		method | path                    || status
+		'GET'  | '/auth/login'           || HTTP_OK
+		'GET'  | '/auth/saml'            || HTTP_NOT_FOUND
+		'GET'  | '/auth/oidc'            || HTTP_NOT_FOUND
+		'GET'  | '/auth/cas'             || HTTP_NOT_FOUND
+		'GET'  | '/auth/signup'          || HTTP_OK
+		'GET'  | '/auth/pwreset'         || HTTP_OK
+		'POST' | '/auth/signup/confirm'  || HTTP_BAD_REQUEST
+		'POST' | '/auth/pwreset/confirm' || HTTP_BAD_REQUEST
+	}
+
+	def "GET /auth/user?ignoreAuth with an unknown auth_token should respond as guest and expire the cookie on /store and /store/"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', 'application/json',
+				[Cookie: 'auth_token=' + STALE_TOKEN])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['user'] == 'guest'
+		assertExpiredOnStoreAndLegacyPath(conn)
+	}
+
+	def "GET /auth/user?ignoreAuth with an ended session should respond as guest and expire the cookie on /store and /store/"() {
+		given: 'a session of the user that another of its sessions ended'
+		def ending = EntryStoreClient.loginIsolated('user')
+		def ended = EntryStoreClient.loginIsolated('user')
+		def endedSessionId = ended.authCookie.split(';')[0].substring('auth_token='.length()).split(/\.node/)[0]
+		assert EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: endedSessionId]), '',
+				'application/json', EntryStoreClient.csrfHeaders(ending.authCookie, ending.csrf))
+				.getResponseCode() == HTTP_NO_CONTENT
+
+		when:
+		def conn = EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', 'application/json',
+				[Cookie: ended.authCookie])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['user'] == 'guest'
 		assertExpiredOnStoreAndLegacyPath(conn)
 	}
 
