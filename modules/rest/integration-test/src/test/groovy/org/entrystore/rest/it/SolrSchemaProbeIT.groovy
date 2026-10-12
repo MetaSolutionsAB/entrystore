@@ -26,7 +26,8 @@ import static java.net.HttpURLConnection.HTTP_OK
  * The startup schema guard fails open on an unreachable Solr: when it cannot read the schema it logs and lets the
  * boot continue, so a wrong path, a changed Schema API response shape or a parser mismatch would switch the guard
  * off with nothing failing. These specs run the guard's own schema read, through SolrJ, against the real Solr the
- * ITs run on, so the guard's input is pinned rather than assumed.
+ * ITs run on, so the guard's input is pinned rather than assumed. The analyzer specs pin the terms the shipped
+ * configset indexes, which search results alone cannot show.
  */
 class SolrSchemaProbeIT extends BaseSpec {
 
@@ -45,6 +46,47 @@ class SolrSchemaProbeIT extends BaseSpec {
 		connection.setRequestMethod('GET')
 		assert connection.getResponseCode() == HTTP_OK
 		return new JsonSlurper().parseText(connection.inputStream.text)
+	}
+
+	/** The terms the index analyzer of {@code fieldType} produces for {@code value}, via Solr's field analysis. */
+	private static List<String> indexTerms(String fieldType, String value) {
+		def url = new URI(coreUrl() + '/analysis/field?wt=json&analysis.fieldtype=' + fieldType
+			+ '&analysis.fieldvalue=' + URLEncoder.encode(value, 'UTF-8')).toURL()
+		def connection = (HttpURLConnection) url.openConnection()
+		assert connection.getResponseCode() == HTTP_OK
+		def stages = new JsonSlurper().parseText(connection.inputStream.text)['analysis']['field_types'][fieldType]['index']
+		// a flat list of stage name and token list; the last token list is what gets indexed
+		return stages.last().collect { it['text'] as String }
+	}
+
+	def "the text_ngram index analyzer should emit no term that spans whitespace"() {
+		when:
+		def terms = indexTerms('text_ngram', 'Open\tData  portal\nof Sweden')
+
+		then:
+		['ope', 'open', 'dat', 'data', 'portal', 'swede', 'sweden'].every { terms.contains(it) }
+		terms.every { !(it =~ /\s/) }
+	}
+
+	def "the text_ngram index analyzer should also index words shorter than the minimum gram whole"() {
+		when:
+		def terms = indexTerms('text_ngram', 'EU AI policy')
+
+		then:
+		// entrystore.js sends eu* for a search on "EU", which needs a term starting with "eu"
+		terms.containsAll(['eu', 'ai', 'pol'])
+	}
+
+	def "the text_ngram index analyzer should not split a word longer than 255 characters"() {
+		given:
+		def word = 'x' * 250 + 'boundary' + 'y' * 50
+
+		when:
+		def terms = indexTerms('text_ngram', word)
+
+		then:
+		// this gram crosses character 255, where WhitespaceTokenizer splits by default
+		terms.contains('xxxboundaryyy')
 	}
 
 	def "the startup guard reads the required dynamic fields from the Solr core used by the ITs"() {
