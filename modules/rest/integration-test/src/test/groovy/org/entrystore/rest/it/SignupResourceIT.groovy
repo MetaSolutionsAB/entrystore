@@ -469,6 +469,22 @@ class SignupResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 1
 	}
 
+	def "GET /auth/signup should confirm creating new user when the browser sends the cookie of an unknown session"() {
+		given:
+		def requestBody = signupBody('userSignupConfirmStaleCookie@test.com')
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		def token = extractConfirmationToken(greenMail)
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + token, '', 'text/html',
+				[Cookie: 'auth_token=unknownToken'])
+
+		then:
+		confirmConn.getResponseCode() == HTTP_CREATED
+		confirmConn.inputStream.text.contains('Sign-up successful.')
+		EntryStoreClient.expiredCookies(confirmConn, 'auth_token').keySet() == ['/store', '/store/'] as Set
+	}
+
 	def "GET /auth/signup should not confirm creating new user after signing up with an invalid token"() {
 		given:
 		def username = 'userSignupConfirmBadToken@test.com'

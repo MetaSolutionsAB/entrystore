@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.web.util.matcher.AnyRequestMatcher;
 
 import java.util.Collections;
 import java.util.Locale;
@@ -36,7 +37,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 class InvalidSessionCookieFilterTest {
 
-	private final InvalidSessionCookieFilter filter = new InvalidSessionCookieFilter(authTokenCookies("none", false, ""));
+	private final InvalidSessionCookieFilter filter =
+			new InvalidSessionCookieFilter(authTokenCookies("none", false, ""), AnyRequestMatcher.INSTANCE);
 
 	@Test
 	void invalidRequestedSession_expiresCookieAndContinuesChain() throws Exception {
@@ -52,6 +54,54 @@ class InvalidSessionCookieFilterTest {
 		assertEquals(2, response.getHeaders("Set-Cookie").size(), "cookie must be expired on /store and /store/");
 		assertEquals(request, ((HttpServletRequestWrapper) chain.getRequest()).getRequest(),
 				"request must continue as guest");
+	}
+
+	@Test
+	void invalidRequestedSession_continuesWithoutRequestedSessionId() throws Exception {
+		var request = requestWithAuthToken();
+		request.setMethod("POST");
+		request.setRequestedSessionId("unknown");
+		request.setRequestedSessionIdValid(false);
+		request.setRequestedSessionIdFromCookie(true);
+		var chain = new MockFilterChain();
+
+		filter.doFilter(request, new MockHttpServletResponse(), chain);
+
+		var continued = (HttpServletRequest) chain.getRequest();
+		assertNull(continued.getRequestedSessionId(), "SessionManagementFilter must not see the invalid session id");
+		assertFalse(continued.isRequestedSessionIdFromCookie());
+	}
+
+	@Test
+	void invalidRequestedSession_ignoreAuthKeepsCookieAndContinuesWithoutRequestedSessionId() throws Exception {
+		var request = requestWithAuthToken();
+		request.setMethod("GET");
+		request.setQueryString("ignoreAuth");
+		request.setRequestedSessionId("unknown");
+		request.setRequestedSessionIdValid(false);
+		var response = new MockHttpServletResponse();
+		var chain = new MockFilterChain();
+
+		filter.doFilter(request, response, chain);
+
+		assertEquals(0, response.getHeaders("Set-Cookie").size(), "ignoreAuth must not change the browser's login");
+		assertNull(((HttpServletRequest) chain.getRequest()).getRequestedSessionId());
+	}
+
+	@Test
+	void invalidRequestedSession_notMatchedKeepsCookieAndRequest() throws Exception {
+		var notMatching = new InvalidSessionCookieFilter(authTokenCookies("none", false, ""), _ -> false);
+		var request = requestWithAuthToken();
+		request.setMethod("GET");
+		request.setRequestedSessionId("unknown");
+		request.setRequestedSessionIdValid(false);
+		var response = new MockHttpServletResponse();
+		var chain = new MockFilterChain();
+
+		notMatching.doFilter(request, response, chain);
+
+		assertEquals(0, response.getHeaders("Set-Cookie").size());
+		assertEquals(request, chain.getRequest(), "the invalid-session strategy must still see the session id");
 	}
 
 	@Test

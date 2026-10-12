@@ -22,8 +22,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.entrystore.rest.springboot.filter.IgnoreAuthFilter;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.http.HttpHeaders;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -34,9 +36,11 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * Expires an unknown or expired session cookie and lets the request continue as guest. Registered only when
- * {@code entrystore.auth.cookie.invalid-token-error} is false; otherwise the invalid-session strategy in
- * {@link SecurityConfig} expires the cookie and answers 401.
+ * Expires an unknown or expired session cookie on the requests it applies to and lets them continue as guest, with
+ * the requested session id hidden so that {@code SessionManagementFilter} does not answer them 401. Applies to every
+ * request when {@code entrystore.auth.cookie.invalid-token-error} is false, otherwise only to requests that need no
+ * existing session; see {@link SecurityConfig}. An {@code ignoreAuth} request keeps the cookie, as in 5.x: it must
+ * not change the browser's login, such as one completed in another tab while it was underway.
  * <p>
  * A guest GET or HEAD continues without {@code If-None-Match}, {@code If-Modified-Since}, {@code Range} and
  * {@code If-Range}: their validators may come from a response the session was allowed to see, and a 304 or 206
@@ -51,21 +55,54 @@ class InvalidSessionCookieFilter extends OncePerRequestFilter {
 
 	private final AuthTokenCookies authTokenCookies;
 
+	private final RequestMatcher appliesTo;
+
 	@Override
 	protected void doFilterInternal(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response,
 									@NotNull FilterChain filterChain) throws ServletException, IOException {
-		if (request.getRequestedSessionId() != null && !request.isRequestedSessionIdValid()) {
-			authTokenCookies.expireAll(request, response);
-			if (READ_METHODS.contains(request.getMethod())) {
-				filterChain.doFilter(new UnconditionalRequest(request), response);
-				return;
+		if (request.getRequestedSessionId() != null && !request.isRequestedSessionIdValid()
+				&& appliesTo.matches(request)) {
+			if (!IgnoreAuthFilter.isRequested(request)) {
+				authTokenCookies.expireAll(request, response);
 			}
+			filterChain.doFilter(READ_METHODS.contains(request.getMethod())
+					? new UnconditionalRequest(request)
+					: new SessionlessRequest(request), response);
+			return;
 		}
 		filterChain.doFilter(request, response);
 	}
 
-	/** Hides the revalidation and range request headers, so the request is answered in full. */
-	static final class UnconditionalRequest extends HttpServletRequestWrapper {
+	/** Hides the requested session id, so the request reads as one that carried no session cookie. */
+	static class SessionlessRequest extends HttpServletRequestWrapper {
+
+		SessionlessRequest(HttpServletRequest request) {
+			super(request);
+		}
+
+		@Override
+		public String getRequestedSessionId() {
+			return null;
+		}
+
+		@Override
+		public boolean isRequestedSessionIdValid() {
+			return false;
+		}
+
+		@Override
+		public boolean isRequestedSessionIdFromCookie() {
+			return false;
+		}
+
+		@Override
+		public boolean isRequestedSessionIdFromURL() {
+			return false;
+		}
+	}
+
+	/** Also hides the revalidation and range request headers, so the request is answered in full. */
+	static final class UnconditionalRequest extends SessionlessRequest {
 
 		private static final Set<String> HIDDEN_HEADERS = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
 
