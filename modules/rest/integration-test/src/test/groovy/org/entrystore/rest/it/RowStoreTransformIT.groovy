@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.it
 
+import com.github.tomakehurst.wiremock.http.Fault
 import com.github.tomakehurst.wiremock.stubbing.StubMapping
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
@@ -33,6 +34,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.put
 import static com.github.tomakehurst.wiremock.client.WireMock.putRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
+import static java.net.HttpURLConnection.HTTP_BAD_GATEWAY
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_OK
@@ -123,7 +125,7 @@ class RowStoreTransformIT extends BaseSpec {
 		values(entryInfo(resultUri), NameSpaceConst.TERM_RESOURCE) == [datasetUrl]
 	}
 
-	def "create should return 400 when RowStore does not accept the dataset"() {
+	def "create should return 502 when RowStore does not accept the dataset"() {
 		given:
 		stub(post(urlPathEqualTo(DATASETS_PATH)).willReturn(aResponse().withStatus(500)))
 		def pipelineUri = createRowStorePipeline([action: 'create'])
@@ -133,11 +135,26 @@ class RowStoreTransformIT extends BaseSpec {
 		def connection = execute(pipelineUri, sourceUri)
 
 		then:
-		connection.getResponseCode() == HTTP_BAD_REQUEST
+		connection.getResponseCode() == HTTP_BAD_GATEWAY
 		wireMockServer.verify(1, postRequestedFor(urlPathEqualTo(DATASETS_PATH)))
 	}
 
-	def "create should return 400 when RowStore accepts the dataset without a Location"() {
+	def "create should return 502 when the connection to RowStore fails"() {
+		given:
+		stub(post(urlPathEqualTo(DATASETS_PATH)).willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)))
+		def pipelineUri = createRowStorePipeline([action: 'create'])
+		def sourceUri = createCsvSource('a,b\n1,2\n')
+
+		when:
+		def connection = execute(pipelineUri, sourceUri)
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_GATEWAY
+		JSON_PARSER.parseText(connection.errorStream.text)['error'] ==
+			'Pipeline execution failed: a service it calls failed'
+	}
+
+	def "create should return 502 when RowStore accepts the dataset without a Location"() {
 		given:
 		stub(post(urlPathEqualTo(DATASETS_PATH)).willReturn(aResponse().withStatus(202)))
 		def pipelineUri = createRowStorePipeline([action: 'create'])
@@ -147,10 +164,10 @@ class RowStoreTransformIT extends BaseSpec {
 		def connection = execute(pipelineUri, sourceUri)
 
 		then:
-		connection.getResponseCode() == HTTP_BAD_REQUEST
+		connection.getResponseCode() == HTTP_BAD_GATEWAY
 	}
 
-	def "create should return 400 when RowStore answers 201 instead of 202"() {
+	def "create should return 502 when RowStore answers 201 instead of 202"() {
 		given:
 		def datasetUrl = 'http://localhost:' + wireMockServer.port() + DATASETS_PATH + '/' + uniqueId()
 		stub(post(urlPathEqualTo(DATASETS_PATH))
@@ -162,7 +179,7 @@ class RowStoreTransformIT extends BaseSpec {
 		def connection = execute(pipelineUri, sourceUri)
 
 		then:
-		connection.getResponseCode() == HTTP_BAD_REQUEST
+		connection.getResponseCode() == HTTP_BAD_GATEWAY
 	}
 
 	def "create without source entry should return 400 and not contact RowStore"() {
@@ -230,7 +247,7 @@ class RowStoreTransformIT extends BaseSpec {
 			.withRequestBody(equalTo(csv)))
 	}
 
-	def "replace should return 400 and keep pipelineData when RowStore rejects the update"() {
+	def "replace should return 502 and keep pipelineData when RowStore rejects the update"() {
 		given:
 		def dataset = createDataset()
 		stub(put(urlPathEqualTo(dataset.path)).willReturn(aResponse().withStatus(500)))
@@ -241,7 +258,7 @@ class RowStoreTransformIT extends BaseSpec {
 		def connection = execute(pipelineUri, newSourceUri)
 
 		then:
-		connection.getResponseCode() == HTTP_BAD_REQUEST
+		connection.getResponseCode() == HTTP_BAD_GATEWAY
 		values(entryInfo(dataset.entryUri), PIPELINE_DATA) == [dataset.sourceUri]
 	}
 
@@ -318,6 +335,34 @@ class RowStoreTransformIT extends BaseSpec {
 		wireMockServer.verify(1, putRequestedFor(urlPathEqualTo(dataset.path + '/aliases'))
 			.withHeader('Content-Type', equalTo('application/json'))
 			.withRequestBody(equalToJson('["my-alias"]')))
+	}
+
+	def "setalias should return 400 when RowStore rejects the alias as invalid or taken"() {
+		given:
+		def dataset = createDataset()
+		stub(put(urlPathEqualTo(dataset.path + '/aliases')).willReturn(aResponse().withStatus(400)))
+		def pipelineUri = createRowStorePipeline([action: 'setalias', datasetURL: dataset.url, alias: 'taken-alias'])
+
+		when:
+		def connection = execute(pipelineUri, null)
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		values(entryInfo(dataset.entryUri), PIPELINE_DATA) == [dataset.sourceUri]
+	}
+
+	def "setalias should return 502 when RowStore fails to set the alias"() {
+		given:
+		def dataset = createDataset()
+		stub(put(urlPathEqualTo(dataset.path + '/aliases')).willReturn(aResponse().withStatus(500)))
+		def pipelineUri = createRowStorePipeline([action: 'setalias', datasetURL: dataset.url, alias: 'my-alias'])
+
+		when:
+		def connection = execute(pipelineUri, null)
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_GATEWAY
+		values(entryInfo(dataset.entryUri), PIPELINE_DATA) == [dataset.sourceUri]
 	}
 
 	def "setalias should send quotes and backslashes in the alias as valid JSON"() {

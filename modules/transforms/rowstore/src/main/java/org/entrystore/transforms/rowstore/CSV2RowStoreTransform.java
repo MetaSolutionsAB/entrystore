@@ -31,6 +31,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.Transform;
 import org.entrystore.transforms.TransformParameters;
+import org.entrystore.transforms.UpstreamServiceException;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -55,7 +56,9 @@ import java.util.Set;
  * {@code datasetURL} comes from the pipeline, which any context writer can edit, so it must have the origin of
  * {@code entrystore.rowstore.url}; this keeps the server from sending requests to arbitrary hosts.
  * {@code replace}, {@code append} and {@code setalias} return the existing PipelineResult entry of the dataset.
- * If RowStore rejects a request the transform returns null.
+ * If RowStore rejects a request with a 4xx answer, such as an invalid or taken alias, the transform throws
+ * {@link IllegalStateException}, as for other invalid pipeline input; if RowStore fails, answers unexpectedly or does
+ * not answer in time, it throws {@link UpstreamServiceException}.
  *
  * @author Hannes Ebner
  */
@@ -72,7 +75,7 @@ public class CSV2RowStoreTransform extends Transform {
 	private static final ValueFactory vf = SimpleValueFactory.getInstance();
 
 	@Override
-	public Object transform(Pipeline pipeline, Entry sourceEntry) {
+	public Object transform(Pipeline pipeline, Entry sourceEntry) throws UpstreamServiceException {
 		String action = getArguments().getOrDefault("action", "create").toLowerCase(Locale.ROOT);
 		if (sourceEntry == null && !"setalias".equals(action)) {
 			throw new IllegalStateException("CSV2RowStoreTransform requires a sourceEntry for action " + action);
@@ -88,15 +91,13 @@ public class CSV2RowStoreTransform extends Transform {
 		};
 	}
 
-	private Entry createDataset(Pipeline pipeline, Entry sourceEntry) {
+	private Entry createDataset(Pipeline pipeline, Entry sourceEntry) throws UpstreamServiceException {
 		String rowstoreUrl = rowStoreUrl(pipeline);
 		URI datasetsUri = URI.create(rowstoreUrl + (rowstoreUrl.endsWith("/") ? "" : "/") + "datasets");
 
 		RowStoreClient.Response response = client.send("POST", datasetsUri, csvBody(sourceEntry), TEXT_CSV);
 		if (response.status() != 202 || response.location() == null) {
-			log.error("Dataset could not be created in RowStore, status {}, location {}",
-					response.status(), response.location());
-			return null;
+			throw rowStoreFailure("Creating a dataset", response);
 		}
 		String datasetURL = response.location().toString();
 
@@ -114,7 +115,8 @@ public class CSV2RowStoreTransform extends Transform {
 		return newEntry;
 	}
 
-	private Entry updateDataset(Pipeline pipeline, Entry sourceEntry, String action) {
+	private Entry updateDataset(Pipeline pipeline, Entry sourceEntry, String action)
+			throws UpstreamServiceException {
 		String datasetURL = getArguments().get("dataseturl");
 		if (datasetURL == null) {
 			throw new IllegalStateException("CSV2RowStoreTransform action " + action + " requires a datasetURL parameter");
@@ -143,8 +145,7 @@ public class CSV2RowStoreTransform extends Transform {
 			default -> setAlias(datasetURL, getArguments().get("alias"));
 		};
 		if (!response.isSuccess()) {
-			log.error("Dataset {} could not be modified in RowStore, status {}", datasetURL, response.status());
-			return null;
+			throw rowStoreFailure("Modifying dataset " + datasetURL, response);
 		}
 
 		if (!"setalias".equals(action)) {
@@ -158,6 +159,26 @@ public class CSV2RowStoreTransform extends Transform {
 			datasetEntry.setGraph(datasetEntryGraph);
 		}
 		return datasetEntry;
+	}
+
+	/**
+	 * Logs an unexpected answer at WARN, as the exception handler logs at INFO; RowStoreClient has already logged a
+	 * request that got no answer.
+	 *
+	 * @throws IllegalStateException if RowStore rejected the request with a 4xx answer, which reflects the pipeline's
+	 *                               arguments, such as the alias, rather than a failure of RowStore
+	 */
+	private static UpstreamServiceException rowStoreFailure(String operation, RowStoreClient.Response response) {
+		if (!response.isAnswer()) {
+			return new UpstreamServiceException(operation + " failed: no answer from RowStore", response.isTimeout());
+		}
+		if (response.status() >= 400 && response.status() < 500) {
+			throw new IllegalStateException(operation + " failed: RowStore rejected it with " + response.status());
+		}
+		String message = operation + " failed: RowStore answered " + response.status()
+				+ (response.status() == 202 ? " without Location" : "");
+		log.warn(message);
+		return new UpstreamServiceException(message, false);
 	}
 
 	private RowStoreClient.Response setAlias(String datasetURL, String alias) {

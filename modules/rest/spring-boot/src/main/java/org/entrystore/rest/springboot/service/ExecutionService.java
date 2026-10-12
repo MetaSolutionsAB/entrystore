@@ -28,11 +28,14 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
 import org.entrystore.rest.springboot.model.api.ExecutePipelineResponse;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.TransformException;
+import org.entrystore.transforms.UpstreamServiceException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -98,6 +101,10 @@ public class ExecutionService {
 			processed = new Pipeline(pipelineEntry).run(sourceEntry, listURI);
 		} catch (IllegalStateException e) {
 			throw new BadRequestException("Pipeline execution failed", e);
+		} catch (UpstreamServiceException e) {
+			HttpStatus status = e.isTimeout() ? HttpStatus.GATEWAY_TIMEOUT : HttpStatus.BAD_GATEWAY;
+			String outcome = e.isTimeout() ? "did not respond in time" : "failed";
+			throw new CustomResponseException("Pipeline execution failed: a service it calls " + outcome, status, e);
 		} catch (TransformException e) {
 			throw new InternalServerErrorException("Pipeline execution failed", e);
 		}

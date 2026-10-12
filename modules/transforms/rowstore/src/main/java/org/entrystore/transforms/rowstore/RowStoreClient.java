@@ -19,19 +19,26 @@ package org.entrystore.transforms.rowstore;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.net.ConnectException;
+import java.net.InetAddress;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
+import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.BodyPublisher;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
+import java.util.Arrays;
 
 /**
  * Sends requests to the RowStore dataset API.
  *
- * <p>Transport failures are returned as a {@link Response} with status {@link Response#TRANSPORT_FAILURE}
- * instead of being thrown, so callers handle them like any unsuccessful HTTP status.
+ * <p>Transport failures and timeouts are returned as a {@link Response} with status
+ * {@link Response#TRANSPORT_FAILURE} or {@link Response#TIMEOUT} instead of being thrown, so callers handle them
+ * like any unsuccessful HTTP status.
  */
 @Slf4j
 class RowStoreClient {
@@ -76,13 +83,45 @@ class RowStoreClient {
 			response.body().close();
 			URI location = response.headers().firstValue("Location").map(uri::resolve).orElse(null);
 			return new Response(response.statusCode(), location);
+		} catch (ConnectException | HttpConnectTimeoutException e) {
+			log.warn("RowStore request {} {} could not connect: {}; {}", method, uri, withRootCause(e),
+					resolvedAddresses(uri));
+			return new Response(Response.TRANSPORT_FAILURE, null);
+		} catch (HttpTimeoutException e) {
+			log.warn("RowStore request {} {} timed out: {}", method, uri, e.toString());
+			return new Response(Response.TIMEOUT, null);
 		} catch (IOException | IllegalArgumentException e) {
-			log.warn("RowStore request {} {} failed: {}", method, uri, e.toString());
+			log.warn("RowStore request {} {} failed: {}", method, uri, withRootCause(e));
 			return new Response(Response.TRANSPORT_FAILURE, null);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			log.warn("RowStore request {} {} was interrupted", method, uri);
 			return new Response(Response.TRANSPORT_FAILURE, null);
+		}
+	}
+
+	/** HttpClient often wraps the cause without a message, e.g. a ConnectException around "Connection refused". */
+	private static String withRootCause(Throwable e) {
+		Throwable root = e;
+		while (root.getCause() != null && root.getCause() != root) {
+			root = root.getCause();
+		}
+		return root == e ? e.toString() : e + " caused by " + root;
+	}
+
+	/**
+	 * @return the addresses the host resolves to, one of which the failed connection used: a container may resolve
+	 * the public RowStore host to an address that only works on the host. Called right after the connect attempt,
+	 * so the JVM's address cache normally answers without a lookup.
+	 */
+	private static String resolvedAddresses(URI uri) {
+		String host = uri.getHost();
+		try {
+			return host + " resolves to " + Arrays.stream(InetAddress.getAllByName(host))
+					.map(InetAddress::getHostAddress)
+					.toList();
+		} catch (UnknownHostException e) {
+			return host + " does not resolve";
 		}
 	}
 
@@ -93,8 +132,19 @@ class RowStoreClient {
 
 		static final int TRANSPORT_FAILURE = -1;
 
+		static final int TIMEOUT = -2;
+
 		boolean isSuccess() {
 			return status >= 200 && status < 300;
+		}
+
+		boolean isTimeout() {
+			return status == TIMEOUT;
+		}
+
+		/** Whether RowStore answered at all, as opposed to a transport failure or timeout. */
+		boolean isAnswer() {
+			return status >= 0;
 		}
 	}
 }
