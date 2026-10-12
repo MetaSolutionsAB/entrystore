@@ -4,6 +4,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1250](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1250) POST /\{context-id\}/execute answers 502 when a RowStore pipeline fails because RowStore cannot be reached or answers with an error or unexpectedly, and 504 when RowStore does not answer in time, instead of 400 as in 5.x. A failed connection to RowStore is logged with its cause and the addresses the RowStore host resolves to.
+
 [ENTRYSTORE-1246](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1246) org.eclipse.rdf4j.sail.nativerdf.softFailOnCorruptDataAndRepairIndexes set in entrystore.properties takes effect again, as in 5.x, so a corrupt native store can be repaired without passing -D. 6.x ignored it there. A value passed with -D now wins over the configuration; 5.x overwrote it.
 
 [ENTRYSTORE-1245](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1245) Feeds of contexts and lists \(GET /\{context-id\}/resource/\{entry-id\}?syndication=...\) honour feedtitle and urltemplate again and default to the title Feed of \<alias\>, as in 5.x. 6.x ignored both parameters and the configured default URL template, linked items to their resource URI and quoted the alias in the title. feedtitle is shortened and HTML-escaped as on /search, and urltemplate only selects a template configured under entrystore.syndication.url-template.

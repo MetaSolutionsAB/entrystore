@@ -43,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RowStoreClientTest {
 
@@ -203,6 +204,7 @@ class RowStoreClientTest {
 
 		assertEquals(RowStoreClient.Response.TRANSPORT_FAILURE, response.status());
 		assertFalse(response.isSuccess());
+		assertFalse(response.isTimeout());
 	}
 
 	@Test
@@ -230,14 +232,16 @@ class RowStoreClientTest {
 	}
 
 	@Test
-	void slowServerIsReportedAsTransportFailure() {
+	void slowServerIsReportedAsTimeout() {
 		responseStatus = 202;
 		stallBeforeHeaders = true;
 
 		RowStoreClient.Response response = new RowStoreClient(Duration.ofMillis(200)).send("POST",
 				baseUri.resolve("/datasets"), BodyPublishers.ofString("a,b"), "text/csv");
 
-		assertEquals(RowStoreClient.Response.TRANSPORT_FAILURE, response.status());
+		assertEquals(RowStoreClient.Response.TIMEOUT, response.status());
+		assertTrue(response.isTimeout());
+		assertFalse(response.isSuccess());
 	}
 
 	@Test
