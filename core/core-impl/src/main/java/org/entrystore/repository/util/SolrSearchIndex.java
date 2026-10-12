@@ -92,8 +92,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import static java.lang.Thread.interrupted;
-
 
 /**
  * @author Hannes Ebner
@@ -113,6 +111,10 @@ public class SolrSearchIndex implements SearchIndex {
 	private static final long EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS = 10;
 
 	private static final long MAX_PURGE_WAIT_NANOS = TimeUnit.MINUTES.toNanos(5);
+
+	private static final long MAX_PURGE_TOTAL_WAIT_NANOS = TimeUnit.HOURS.toNanos(1);
+
+	static final int SENT_CHECK_CHUNK_SIZE = 1000;
 
 	/**
 	 * Number of distinct entry failure causes per context reindex that are logged with a stack trace. Entries
@@ -150,6 +152,17 @@ public class SolrSearchIndex implements SearchIndex {
 	private final Cache<URI, SolrInputDocument> postQueue = Caffeine.newBuilder().build();
 
 	/**
+	 * Entries whose documents were taken from the submission queue by the submitter but whose add batch Solr has
+	 * neither accepted nor rejected yet; a failed batch puts them back into the queue, unless their deletion was
+	 * queued meanwhile, in which case they are dropped. Guarded by the submission queue's monitor, so that an entry
+	 * is always in the queue, in flight, or settled.
+	 */
+	private final Set<URI> inFlightAdds = new HashSet<>();
+
+	/** How long a purge after a reindex waits without Solr answering any document; a field so tests can shorten it. */
+	long purgeStallNanos = MAX_PURGE_WAIT_NANOS;
+
+	/**
 	 * Entries whose documents are to be removed from the index, in the order in which they were queued. A set, so
 	 * that dropping the pending deletion of an entry when its document is queued does not scan all pending
 	 * deletions.
@@ -169,6 +182,9 @@ public class SolrSearchIndex implements SearchIndex {
 	// Documents Solr rejected on an add batch. Startup withholds the version markers over rejections only when
 	// the schema could not be verified, so an unchecked schema mismatch is retried on the next start.
 	private final AtomicLong rejectedDocuments = new AtomicLong();
+
+	// Documents Solr has accepted or rejected; growing while a purge waits means the submitter is not stalled.
+	private final AtomicLong settledDocuments = new AtomicLong();
 
 	/** Total {@code facet.query} clauses one {@link #facetCountsForLabels} request may carry, across all fields. */
 	public static final int MAX_COUNT_CLAUSES = 1600;
@@ -290,8 +306,9 @@ public class SolrSearchIndex implements SearchIndex {
 		 */
 		private boolean processAddBatch() {
 			submitterInFlight.set(true);
+			Map<URI, SolrInputDocument> addBatch = Map.of();
 			try {
-				Map<URI, SolrInputDocument> addBatch = drainPostQueue();
+				addBatch = drainPostQueue();
 				if (addBatch.isEmpty()) {
 					return false;
 				}
@@ -311,14 +328,15 @@ public class SolrSearchIndex implements SearchIndex {
 						log.info("Sending {} entries to Solr (attempt {}/{}), {} entries remaining in post queue",
 								addBatch.size(), attempt, MAX_RETRIES, postQueue.estimatedSize());
 						addReq.process(solrServer);
+						settleAdds(addBatch);
 						return false;
 					} catch (RemoteSolrException e) {
 						log.error("Solr rejected {} entries (HTTP {}, discarding batch). URIs: {}",
 								addBatch.size(), e.code(), addBatch.keySet(), e);
 						rejectedDocuments.addAndGet(addBatch.size());
+						settleAdds(addBatch);
 						return false;
 					} catch (RuntimeException e) {
-						requeueAdds(addBatch);
 						if (e.getCause() instanceof InterruptedException) {
 							log.info("Solr document submitter got interrupted during send, re-queuing and shutting down");
 							Thread.currentThread().interrupt();
@@ -329,16 +347,16 @@ public class SolrSearchIndex implements SearchIndex {
 						log.warn("Failed to send {} entries to Solr (attempt {}/{}): {}",
 								addBatch.size(), attempt, MAX_RETRIES, e.getMessage());
 						if (attempt < MAX_RETRIES && sleepForRetry(attempt)) {
-							requeueAdds(addBatch);
 							return true;
 						}
 					}
 				}
 
 				log.error("Permanently failed to send {} entries to Solr after {} attempts, re-queuing", addBatch.size(), MAX_RETRIES);
-				requeueAdds(addBatch);
 				return true;
 			} finally {
+				// Also for an Error escaping the send, which must not leave the batch in flight forever
+				requeueAdds(addBatch);
 				submitterInFlight.set(false);
 			}
 		}
@@ -359,7 +377,8 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		/**
-		 * Drains up to {@link SolrSearchIndex#BATCH_SIZE_ADD} entries from the post queue.
+		 * Drains up to {@link SolrSearchIndex#BATCH_SIZE_ADD} entries from the post queue; they are in flight until
+		 * {@link #settleAdds} or {@link #requeueAdds}.
 		 */
 		private Map<URI, SolrInputDocument> drainPostQueue() {
 			Map<URI, SolrInputDocument> batch = new HashMap<>();
@@ -375,9 +394,20 @@ public class SolrSearchIndex implements SearchIndex {
 						continue;
 					}
 					batch.put(key, doc);
+					inFlightAdds.add(key);
 				}
 			}
 			return batch;
+		}
+
+		/**
+		 * Marks the entries of a batch that Solr accepted or rejected as no longer in flight.
+		 */
+		private void settleAdds(Map<URI, SolrInputDocument> batch) {
+			synchronized (postQueue) {
+				inFlightAdds.removeAll(batch.keySet());
+			}
+			settledDocuments.addAndGet(batch.size());
 		}
 
 		/**
@@ -397,8 +427,22 @@ public class SolrSearchIndex implements SearchIndex {
 			}
 		}
 
+		/**
+		 * Puts the documents of a failed batch that are still in flight back into the post queue, except those of
+		 * entries whose deletion was queued meanwhile: the deletion supersedes the document, as in
+		 * {@link #requeueDeletes(List)}. Documents already settled or requeued are left alone, so the call is safe
+		 * on every exit of {@link #processAddBatch()}.
+		 */
 		private void requeueAdds(Map<URI, SolrInputDocument> batch) {
-			batch.forEach((k, v) -> postQueue.asMap().putIfAbsent(k, v));
+			synchronized (postQueue) {
+				synchronized (deleteQueue) {
+					batch.forEach((k, v) -> {
+						if (inFlightAdds.remove(k) && !deleteQueue.contains(k)) {
+							postQueue.asMap().putIfAbsent(k, v);
+						}
+					});
+				}
+			}
 		}
 
 		/**
@@ -767,11 +811,11 @@ public class SolrSearchIndex implements SearchIndex {
 
 	/**
 	 * Re-indexes a context: every entry is queued for reposting on the calling thread, and a purge of
-	 * the documents this reindex did not repost is scheduled to run once the last queued entry has been
-	 * submitted, so search never sees a gap. The method returns before the queue drains or the purge
+	 * the documents this reindex did not repost is scheduled to run once Solr has accepted or rejected every
+	 * queued document, so search never sees a gap. The method returns before the queue drains or the purge
 	 * runs. The conditions under which no purge happens are listed at
-	 * {@link #purgeExpiredDocumentsAfterReindex}; the purge is abandoned after MAX_PURGE_WAIT_NANOS or on
-	 * shutdown.
+	 * {@link #purgeExpiredDocumentsAfterReindex}; the purge is abandoned once Solr has answered no document for
+	 * MAX_PURGE_WAIT_NANOS, after MAX_PURGE_TOTAL_WAIT_NANOS in all, or on shutdown.
 	 *
 	 * @param contextURI The URI of the context to be re-indexed, never null.
 	 */
@@ -819,8 +863,15 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Removes the documents of a context that were indexed before its reindex started, as soon as the entry that
-	 * the reindex posted last has left the submission queue. Nothing is purged if
+	 * Removes the documents of a context that were indexed before its reindex started, as soon as none of the
+	 * documents the reindex posted is in the submission queue or in an add batch that Solr has not answered yet:
+	 * the submitter drains the queue in no particular order, and a failed batch is put back into the queue. A
+	 * document the reindex posted whose entry is deleted meanwhile counts as sent, since its deletion is queued
+	 * and the purge may remove the old document too; one that is replaced by a newer document of the same entry
+	 * is awaited as that document. Documents Solr rejects are discarded and count as sent; the purge then warns that
+	 * entries of the context may be missing from search. The wait is given up when Solr has answered no document at
+	 * all for MAX_PURGE_WAIT_NANOS, so a large backlog ahead of the context is awaited but a stalled submitter is
+	 * not, and after MAX_PURGE_TOTAL_WAIT_NANOS in all. Nothing is purged if
 	 * <ul>
 	 *     <li>the context's URI index is incomplete, because the purge would remove the documents of the entries
 	 *     missing from its listing (ENTRYSTORE-1095),</li>
@@ -853,28 +904,51 @@ public class SolrSearchIndex implements SearchIndex {
 					contextURI);
 			return;
 		}
-		URI lastQueuedEntryURI = posted.lastQueuedEntryURI();
+		Set<URI> pending = new HashSet<>(posted.queuedEntryURIs());
 		purgeExecutor.submit(() -> {
-			long deadline = System.nanoTime() + MAX_PURGE_WAIT_NANOS;
+			long giveUp = System.nanoTime() + MAX_PURGE_TOTAL_WAIT_NANOS;
+			long deadline = System.nanoTime() + purgeStallNanos;
+			long settledBefore = settledDocuments.get();
+			long rejectedBefore = rejectedDocuments.get();
 			try {
-				// We need to wait until the last entry of the context is indexed, otherwise this would leave a gap of some time
-				// (between milliseconds to seconds or even minutes) where the entries of that particular context are not in the index
-				while (isQueued(lastQueuedEntryURI)
+				removeSentDocuments(pending);
+				while (!pending.isEmpty()
 						&& System.nanoTime() < deadline
+						&& System.nanoTime() < giveUp
 						&& !Thread.currentThread().isInterrupted()) {
-					log.debug("Entries of context {} are still in submission queue, sleeping 5 seconds before attempting new purge of expired entries", contextURI);
+					log.debug("{} documents of context {} are still queued or being sent, sleeping 5 seconds before"
+							+ " attempting new purge of expired entries", pending.size(), contextURI);
 					Thread.sleep(5000);
-					postQueue.cleanUp();
+					removeSentDocuments(pending);
+					// The wait is bounded by a stalled submitter, not by the size of the backlog ahead of the context
+					long settled = settledDocuments.get();
+					if (settled != settledBefore) {
+						settledBefore = settled;
+						deadline = System.nanoTime() + purgeStallNanos;
+					}
 				}
 				if (Thread.currentThread().isInterrupted()) {
 					log.warn("Delayed purge of context {} interrupted (shutdown); expired entries were NOT removed",
 							contextURI);
 					return;
 				}
-				if (isQueued(lastQueuedEntryURI)) {
-					log.warn("Delayed purge of context {} aborted after {} min wait; submission queue still contains {}",
-							contextURI, TimeUnit.NANOSECONDS.toMinutes(MAX_PURGE_WAIT_NANOS), lastQueuedEntryURI);
+				if (!pending.isEmpty()) {
+					if (System.nanoTime() < giveUp) {
+						log.warn("Delayed purge of context {} aborted after {} s without Solr answering any document;"
+								+ " {} of its documents are still queued or being sent", contextURI,
+								TimeUnit.NANOSECONDS.toSeconds(purgeStallNanos), pending.size());
+					} else {
+						log.warn("Delayed purge of context {} aborted after {} h; the submission backlog did not drain"
+								+ " in time and {} of its documents are still queued or being sent", contextURI,
+								TimeUnit.NANOSECONDS.toHours(MAX_PURGE_TOTAL_WAIT_NANOS), pending.size());
+					}
 					return;
+				}
+				long rejected = rejectedDocuments.get() - rejectedBefore;
+				if (rejected > 0) {
+					log.warn("Solr rejected {} documents while the purge of context {} waited; entries of the context"
+							+ " may be missing from search results until a reindex after the cause is fixed",
+							rejected, contextURI);
 				}
 				if (clearSolrIndex(solrServer, reindexStart, contextEntry)) {
 					log.info("Expired entries of context {} have been purged from the index", contextURI);
@@ -898,8 +972,31 @@ public class SolrSearchIndex implements SearchIndex {
 		});
 	}
 
-	private boolean isQueued(URI entryURI) {
-		return entryURI != null && postQueue.asMap().containsKey(entryURI);
+	/**
+	 * Removes from the set the entries whose document is neither in the submission queue nor in flight. The monitor
+	 * is held per chunk only, so that posting documents is not blocked for long by a large set; this is safe because
+	 * a document only leaves the queue into flight, and only leaves flight by settling, by going back into the queue
+	 * or by being dropped for a queued deletion, all under the monitor, so an entry seen in neither stays sent.
+	 */
+	private void removeSentDocuments(Set<URI> entryURIs) {
+		Iterator<URI> it = entryURIs.iterator();
+		while (it.hasNext()) {
+			synchronized (postQueue) {
+				for (int i = 0; i < SENT_CHECK_CHUNK_SIZE && it.hasNext(); i++) {
+					URI entryURI = it.next();
+					if (!postQueue.asMap().containsKey(entryURI) && !inFlightAdds.contains(entryURI)) {
+						it.remove();
+					}
+				}
+			}
+		}
+	}
+
+	private boolean hasPendingAdds() {
+		synchronized (postQueue) {
+			postQueue.cleanUp();
+			return postQueue.estimatedSize() > 0 || !inFlightAdds.isEmpty();
+		}
 	}
 
 	public boolean isIndexing() {
@@ -943,7 +1040,7 @@ public class SolrSearchIndex implements SearchIndex {
 	 * @return true if the submitter became quiescent, false if interrupted
 	 */
 	public boolean waitForQueueDrain() {
-		while (getPostQueueSize() > 0 || !deleteQueue.isEmpty() || submitterInFlight.get()) {
+		while (hasPendingAdds() || !deleteQueue.isEmpty() || submitterInFlight.get()) {
 			try {
 				Thread.sleep(500);
 			} catch (InterruptedException e) {
@@ -1035,7 +1132,7 @@ public class SolrSearchIndex implements SearchIndex {
 	 * keep their previous documents and prevent that purge.
 	 *
 	 * @param outcome            whether all entries of the context were processed
-	 * @param lastQueuedEntryURI the entry that was posted last, or null if none was posted
+	 * @param queuedEntryURIs    the entries whose documents were posted
 	 * @param loadedEntries      entries that were loaded, whether they were then posted, skipped as deleted or
 	 *                           could not be indexed
 	 * @param corruptEntries     entries whose loading failed because of their data, see
@@ -1044,11 +1141,11 @@ public class SolrSearchIndex implements SearchIndex {
 	 * @param unloadableEntries  entries whose loading failed for another reason, e.g. an error of the store
 	 * @param unindexableEntries entries that were loaded but whose Solr document could not be constructed
 	 */
-	private record ContextPostResult(ContextPostOutcome outcome, URI lastQueuedEntryURI, int loadedEntries,
+	private record ContextPostResult(ContextPostOutcome outcome, Set<URI> queuedEntryURIs, int loadedEntries,
 			int corruptEntries, int unresolvedEntries, int unloadableEntries, int unindexableEntries) {
 
 		static ContextPostResult unresolved() {
-			return new ContextPostResult(ContextPostOutcome.UNRESOLVED, null, 0, 0, 0, 0, 0);
+			return new ContextPostResult(ContextPostOutcome.UNRESOLVED, Set.of(), 0, 0, 0, 0, 0);
 		}
 
 		/**
@@ -1099,7 +1196,7 @@ public class SolrSearchIndex implements SearchIndex {
 		if (context == null) {
 			return ContextPostResult.unresolved();
 		}
-		URI lastQueuedEntryURI = null;
+		Set<URI> queuedEntryURIs = new HashSet<>();
 		int loadedEntries = 0;
 		int corruptEntries = 0;
 		int unresolvedEntries = 0;
@@ -1108,7 +1205,7 @@ public class SolrSearchIndex implements SearchIndex {
 		Set<String> tracedFailureCauses = new HashSet<>();
 		for (URI entryURI : context.getEntries()) {
 			if (Thread.currentThread().isInterrupted()) {
-				return new ContextPostResult(ContextPostOutcome.INTERRUPTED, lastQueuedEntryURI, loadedEntries,
+				return new ContextPostResult(ContextPostOutcome.INTERRUPTED, queuedEntryURIs, loadedEntries,
 						corruptEntries, unresolvedEntries, unloadableEntries, unindexableEntries);
 			}
 			if (entryURI == null) {
@@ -1144,14 +1241,14 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 					log.info("Adding entry to Solr post queue: {}", entryURI);
 					queueDocument(entryURI, constructSolrInputDocument(entry, extractFulltext));
-					lastQueuedEntryURI = entryURI;
+					queuedEntryURIs.add(entryURI);
 				} catch (Exception | StackOverflowError e) {
 					unindexableEntries++;
 					logEntryFailure("Not indexing entry", entryURI, e, tracedFailureCauses);
 				}
 			}
 		}
-		ContextPostResult posted = new ContextPostResult(ContextPostOutcome.COMPLETED, lastQueuedEntryURI,
+		ContextPostResult posted = new ContextPostResult(ContextPostOutcome.COMPLETED, queuedEntryURIs,
 				loadedEntries, corruptEntries, unresolvedEntries, unloadableEntries, unindexableEntries);
 		if (posted.notIndexedEntries() > 0) {
 			log.error("{} entries of context {} could not be indexed: {} are corrupt and {} could not be found, their"

@@ -95,7 +95,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyBoolean;
-import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.argThat;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.eq;
@@ -115,6 +116,7 @@ public class SolrSearchIndexTest {
 	private static final URI ENTRY_1_1 = URI.create("http://localhost:8181/1/entry/1");
 	private static final URI ENTRY_1_2 = URI.create("http://localhost:8181/1/entry/2");
 	private static final URI ENTRY_1_3 = URI.create("http://localhost:8181/1/entry/3");
+	private static final URI ENTRY_1_4 = URI.create("http://localhost:8181/1/entry/4");
 	private static final URI ENTRY_2_1 = URI.create("http://localhost:8181/2/entry/1");
 	private static final URI METADATA_2_1 = URI.create("http://localhost:8181/2/metadata/1");
 	private static final URI PRINCIPAL_ENTRY = URI.create("http://localhost:8181/_principals/entry/5");
@@ -525,6 +527,69 @@ public class SolrSearchIndexTest {
 	}
 
 	@Test
+	public void failedAddIsNotRequeuedWhenTheEntryWasDeletedMeanwhile() throws Exception {
+		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
+		postQueue().put(ENTRY_1_1, new SolrInputDocument());
+		postQueue().put(ENTRY_1_2, new SolrInputDocument());
+		Method drainPostQueue = SolrSearchIndex.SolrInputDocumentSubmitter.class.getDeclaredMethod("drainPostQueue");
+		drainPostQueue.setAccessible(true);
+		Method requeueAdds = SolrSearchIndex.SolrInputDocumentSubmitter.class
+				.getDeclaredMethod("requeueAdds", Map.class);
+		requeueAdds.setAccessible(true);
+		Entry deletedEntry = mock(Entry.class);
+		when(deletedEntry.getEntryURI()).thenReturn(ENTRY_1_1);
+
+		Object batch = drainPostQueue.invoke(documentSubmitter());
+		index.removeEntry(deletedEntry); // deleted while the batch was being sent
+		requeueAdds.invoke(documentSubmitter(), batch); // the batch failed
+
+		assertEquals(Set.of(ENTRY_1_2), postQueue().asMap().keySet(),
+				"The deletion queued meanwhile must not be followed by the stale document");
+		assertEquals(List.of(ENTRY_1_1), List.copyOf(deleteQueue()));
+		assertTrue(inFlightAdds().isEmpty());
+	}
+
+	@Test
+	public void failedAddDoesNotReplaceADocumentQueuedMeanwhile() throws Exception {
+		stopDocumentSubmitter(); // keeps queued documents in their queue
+		postQueue().put(ENTRY_1_1, new SolrInputDocument());
+		Method drainPostQueue = SolrSearchIndex.SolrInputDocumentSubmitter.class.getDeclaredMethod("drainPostQueue");
+		drainPostQueue.setAccessible(true);
+		Method requeueAdds = SolrSearchIndex.SolrInputDocumentSubmitter.class
+				.getDeclaredMethod("requeueAdds", Map.class);
+		requeueAdds.setAccessible(true);
+		SolrInputDocument newerDocument = new SolrInputDocument();
+
+		Object batch = drainPostQueue.invoke(documentSubmitter());
+		postQueue().put(ENTRY_1_1, newerDocument); // the entry was updated while the batch was being sent
+		requeueAdds.invoke(documentSubmitter(), batch); // the batch failed
+
+		assertSame(newerDocument, postQueue().getIfPresent(ENTRY_1_1));
+		assertTrue(inFlightAdds().isEmpty());
+	}
+
+	@Test
+	public void addBatchIsRequeuedWhenAnErrorEscapesTheSend() throws Exception {
+		doAnswer(invocation -> {
+			if (isAddRequest(invocation.getArgument(0))) {
+				throw new StackOverflowError("simulated");
+			}
+			return null;
+		}).when(solrServer).request(any(), any());
+		postQueue().put(ENTRY_1_1, new SolrInputDocument());
+		postQueue().put(ENTRY_1_2, new SolrInputDocument());
+
+		verify(solrServer, timeout(10_000)).request(argThat(SolrSearchIndexTest::isAddRequest), any());
+		Thread documentSubmitter = documentSubmitter();
+		documentSubmitter.join(TimeUnit.SECONDS.toMillis(10));
+
+		assertFalse(documentSubmitter.isAlive(), "the submitter dies on an Error");
+		// The documents must be back in the queue rather than left in flight, where nothing could settle them
+		assertEquals(Set.of(ENTRY_1_1, ENTRY_1_2), postQueue().asMap().keySet());
+		assertTrue(inFlightAdds().isEmpty());
+	}
+
+	@Test
 	public void reindexOfContextKeepsIndexedDocumentsWhenLoadingAnEntryFailsForAnotherReason() throws Exception {
 		stopDocumentSubmitter(); // keeps removed documents in the delete queue
 		ContextManager cm = contextManagerListing(CONTEXT_1);
@@ -627,25 +692,245 @@ public class SolrSearchIndexTest {
 	}
 
 	@Test
-	public void reindexOfContextPurgesOnlyAfterTheLastQueuedEntryHasLeftTheQueue() throws Exception {
+	public void reindexOfContextPurgesOnlyAfterEveryQueuedEntryHasLeftTheQueue() throws Exception {
 		stopDocumentSubmitter(); // keeps posted documents in the submission queue
 		SolrSearchIndex indexWithoutDocuments = spy(index);
 		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
-		// The deleted entry comes last, so the purge must wait for the entry before it, not for the last entry.
-		// The corrupt entry does not prevent the purge, and its document is removed right away.
-		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), ENTRY_1_3, deletedEntry(cm, ENTRY_1_2));
+		// The corrupt entry does not prevent the purge, and its document is removed right away; the deleted entry
+		// is not posted.
+		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), ENTRY_1_3, indexableEntry(cm, ENTRY_1_2),
+				deletedEntry(cm, ENTRY_1_4));
 		when(cm.getEntry(ENTRY_1_3)).thenThrow(corruptEntryFailure(ENTRY_1_3));
 		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
 
 		indexWithoutDocuments.reindexSync(CONTEXT_1);
 
-		assertEquals(1, index.getPostQueueSize());
+		assertEquals(2, index.getPostQueueSize());
 		assertEquals(List.of(ENTRY_1_3), List.copyOf(deleteQueue()));
-		verify(solrServer, after(1000).never()).request(any(), any());
-		postQueue().invalidate(ENTRY_1_1); // as the document submitter does when it takes the document
+		// The submitter takes documents in no particular order, so the purge must not follow the entry posted last
+		postQueue().invalidate(ENTRY_1_2); // as the document submitter does when it takes the document
 		// The purge checks the queue every 5 seconds
+		verify(solrServer, after(6000).never()).request(any(), any());
+		postQueue().invalidate(ENTRY_1_1);
 		verify(solrServer, timeout(10_000)).request(any(), any());
+	}
+
+	@Test
+	public void reindexOfContextDoesNotPurgeWhileAnAddBatchIsInFlightOrRequeued() throws Exception {
+		stopDocumentSubmitter(); // keeps posted documents in the submission queue
+		SolrSearchIndex indexWithoutDocuments = spy(index);
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
+		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+		Method drainPostQueue = SolrSearchIndex.SolrInputDocumentSubmitter.class.getDeclaredMethod("drainPostQueue");
+		drainPostQueue.setAccessible(true);
+		Method requeueAdds = SolrSearchIndex.SolrInputDocumentSubmitter.class
+				.getDeclaredMethod("requeueAdds", Map.class);
+		requeueAdds.setAccessible(true);
+
+		indexWithoutDocuments.reindexSync(CONTEXT_1);
+		Object batch = drainPostQueue.invoke(documentSubmitter()); // the batch is being sent
+
+		assertEquals(0, index.getPostQueueSize());
+		// The purge checks the queue every 5 seconds
+		verify(solrServer, after(6000).never()).request(any(), any());
+		requeueAdds.invoke(documentSubmitter(), batch); // the batch failed
+		assertEquals(2, index.getPostQueueSize());
+		verify(solrServer, after(6000).never()).request(any(), any());
+		postQueue().invalidate(ENTRY_1_1); // as the document submitter does when it takes the documents
+		postQueue().invalidate(ENTRY_1_2);
+		verify(solrServer, timeout(10_000)).request(any(), any());
+	}
+
+	@Test
+	public void reindexOfContextPurgesAfterSolrAcceptedTheAddBatch() throws Exception {
+		CountDownLatch addStarted = new CountDownLatch(1);
+		CountDownLatch solrAnswers = new CountDownLatch(1);
+		try {
+			doAnswer(invocation -> {
+				if (isAddRequest(invocation.getArgument(0))) {
+					addStarted.countDown();
+					awaitSolrAnswer(solrAnswers);
+				}
+				return null;
+			}).when(solrServer).request(any(), any());
+			SolrSearchIndex indexWithoutDocuments = spy(index);
+			doReturn(new SolrInputDocument()).when(indexWithoutDocuments)
+					.constructSolrInputDocument(any(), anyBoolean());
+			ContextManager cm = contextManagerListing(CONTEXT_1);
+			resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
+			stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+
+			indexWithoutDocuments.reindexSync(CONTEXT_1);
+
+			assertTrue(addStarted.await(10, TimeUnit.SECONDS));
+			assertEquals(0, index.getPostQueueSize());
+			AtomicBoolean drained = new AtomicBoolean();
+			Thread waiter = new Thread(() -> drained.set(index.waitForQueueDrain()), "drain-waiter");
+			waiter.start();
+			waiter.join(1000);
+			assertTrue(waiter.isAlive(), "the queue is empty but the batch is in flight");
+			// The purge checks the queue every 5 seconds
+			verify(solrServer, after(6000).never()).request(argThat(SolrSearchIndexTest::isDeleteRequest), any());
+			solrAnswers.countDown();
+			verify(solrServer, timeout(10_000)).request(argThat(SolrSearchIndexTest::isDeleteRequest), any());
+			waiter.join(TimeUnit.SECONDS.toMillis(10));
+			assertFalse(waiter.isAlive());
+			assertTrue(drained.get());
+		} finally {
+			solrAnswers.countDown();
+		}
+	}
+
+	@Test
+	public void reindexOfContextDoesNotPurgeWhenTheAddBatchFails() throws Exception {
+		doAnswer(invocation -> {
+			if (isAddRequest(invocation.getArgument(0))) {
+				throw new RuntimeException("connection reset");
+			}
+			return null;
+		}).when(solrServer).request(any(), any());
+		SolrSearchIndex indexWithoutDocuments = spy(index);
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
+		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+
+		indexWithoutDocuments.reindexSync(CONTEXT_1);
+
+		verify(solrServer, timeout(10_000)).request(argThat(SolrSearchIndexTest::isAddRequest), any());
+		// The failed batch is requeued; the purge checks the queue every 5 seconds
+		verify(solrServer, after(6000).never()).request(argThat(SolrSearchIndexTest::isDeleteRequest), any());
+		assertEquals(2, index.getPostQueueSize());
+	}
+
+	@Test
+	public void reindexOfContextPurgesWhenSolrRejectedTheAddBatch() throws Exception {
+		doAnswer(invocation -> {
+			if (isAddRequest(invocation.getArgument(0))) {
+				throw new RemoteSolrException("localhost", 400, "unknown field", null);
+			}
+			return null;
+		}).when(solrServer).request(any(), any());
+		SolrSearchIndex indexWithoutDocuments = spy(index);
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
+		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+
+		indexWithoutDocuments.reindexSync(CONTEXT_1);
+
+		// Rejected documents are discarded, so the purge does not wait for them
+		verify(solrServer, timeout(10_000)).request(argThat(SolrSearchIndexTest::isDeleteRequest), any());
+		assertEquals(2, index.getRejectedDocumentCount());
+	}
+
+	@Test
+	public void reindexOfContextTreatsAnEntryDeletedWhilePendingAsSent() throws Exception {
+		stopDocumentSubmitter(); // keeps posted documents in the submission queue
+		SolrSearchIndex indexWithoutDocuments = spy(index);
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
+		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+		Entry deletedEntry = mock(Entry.class);
+		when(deletedEntry.getEntryURI()).thenReturn(ENTRY_1_1);
+
+		indexWithoutDocuments.reindexSync(CONTEXT_1);
+		index.removeEntry(deletedEntry); // drops the queued document and queues the deletion
+
+		assertEquals(List.of(ENTRY_1_1), List.copyOf(deleteQueue()));
+		assertEquals(1, index.getPostQueueSize());
+		postQueue().invalidate(ENTRY_1_2); // as the document submitter does when it takes the document
+		// The purge checks the queue every 5 seconds
+		verify(solrServer, timeout(10_000)).request(argThat(SolrSearchIndexTest::isDeleteRequest), any());
+	}
+
+	@Test
+	public void reindexOfContextKeepsWaitingWhileSolrAnswersDocuments() throws Exception {
+		stopDocumentSubmitter(); // keeps posted documents in the submission queue
+		index.purgeStallNanos = TimeUnit.SECONDS.toNanos(1);
+		SolrSearchIndex indexWithoutDocuments = spy(index);
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
+		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+		Method settleAdds = SolrSearchIndex.SolrInputDocumentSubmitter.class.getDeclaredMethod("settleAdds", Map.class);
+		settleAdds.setAccessible(true);
+
+		indexWithoutDocuments.reindexSync(CONTEXT_1);
+		// Solr answers a document of another context before the purge checks again, after 5 seconds
+		settleAdds.invoke(documentSubmitter(), Map.of(ENTRY_2_1, new SolrInputDocument()));
+		postQueue().invalidate(ENTRY_1_1);
+		Thread.sleep(6000);
+		postQueue().invalidate(ENTRY_1_2);
+
+		// The stall bound has long passed, but Solr kept answering documents, so the purge still runs
+		verify(solrServer, timeout(10_000)).request(argThat(SolrSearchIndexTest::isDeleteRequest), any());
+	}
+
+	@Test
+	public void reindexOfContextGivesUpWhenSolrAnswersNoDocument() throws Exception {
+		stopDocumentSubmitter(); // keeps posted documents in the submission queue
+		index.purgeStallNanos = TimeUnit.SECONDS.toNanos(1);
+		SolrSearchIndex indexWithoutDocuments = spy(index);
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
+		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+
+		indexWithoutDocuments.reindexSync(CONTEXT_1);
+		Thread.sleep(6000); // the purge checks again after 5 seconds and finds the stall bound passed
+		postQueue().invalidate(ENTRY_1_1);
+		postQueue().invalidate(ENTRY_1_2);
+
+		verify(solrServer, after(6000).never()).request(argThat(SolrSearchIndexTest::isDeleteRequest), any());
+	}
+
+	@Test
+	public void reindexOfContextPurgesWhenMoreEntriesThanOneCheckChunkWereQueued() throws Exception {
+		stopDocumentSubmitter(); // keeps posted documents in the submission queue
+		SolrSearchIndex indexWithoutDocuments = spy(index);
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		int entries = SolrSearchIndex.SENT_CHECK_CHUNK_SIZE + 1;
+		URI[] entryURIs = new URI[entries];
+		for (int i = 0; i < entries; i++) {
+			entryURIs[i] = indexableEntry(cm, URI.create("http://localhost:8181/1/entry/" + i));
+		}
+		resolvableContext(cm, "1", entryURIs);
+		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+
+		indexWithoutDocuments.reindexSync(CONTEXT_1);
+
+		assertEquals(entries, index.getPostQueueSize());
+		postQueue().invalidateAll(); // as the document submitter does when it takes the documents
+		// The purge checks the queue every 5 seconds; the entries beyond the first chunk must be checked too
+		verify(solrServer, timeout(10_000)).request(argThat(SolrSearchIndexTest::isDeleteRequest), any());
+	}
+
+	private static boolean isAddRequest(SolrRequest<?> request) {
+		return request instanceof UpdateRequest update && update.getDocuments() != null
+				&& !update.getDocuments().isEmpty();
+	}
+
+	private static boolean isDeleteRequest(SolrRequest<?> request) {
+		return request instanceof UpdateRequest update && update.getDeleteQuery() != null;
+	}
+
+	/**
+	 * Blocks a mocked Solr request until the latch is released. An interruption, i.e. the shutdown of the
+	 * submitter, is rethrown as the client would, so that the submitter requeues the batch and stops.
+	 */
+	private static void awaitSolrAnswer(CountDownLatch solrAnswers) {
+		try {
+			solrAnswers.await();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new RuntimeException(e);
+		}
 	}
 
 	@Test
@@ -830,6 +1115,13 @@ public class SolrSearchIndexTest {
 		Field f = SolrSearchIndex.class.getDeclaredField("postQueue");
 		f.setAccessible(true);
 		return (Cache<URI, SolrInputDocument>) f.get(index);
+	}
+
+	@SuppressWarnings("unchecked")
+	private Set<URI> inFlightAdds() throws Exception {
+		Field f = SolrSearchIndex.class.getDeclaredField("inFlightAdds");
+		f.setAccessible(true);
+		return (Set<URI>) f.get(index);
 	}
 
 	@SuppressWarnings("unchecked")
