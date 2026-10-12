@@ -22,6 +22,10 @@ ARG ENTRYSTORE_VERSION
 COPY --chown=entrystore:entrystore docker/docker-entrypoint.sh docker-entrypoint.sh
 COPY --chown=entrystore:entrystore modules/rest/spring-boot/target/entrystore-rest-spring-boot-${ENTRYSTORE_VERSION}-exec.jar entrystore.jar
 
+# Read by deploy-tools without starting the container; the path is a contract with it.
+COPY solr/conf/ /srv/entrystore/solr/conf/
+RUN chmod -R a+rX,go-w /srv/entrystore/solr
+
 EXPOSE 8080
 USER entrystore
 
