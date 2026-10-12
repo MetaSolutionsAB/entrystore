@@ -110,12 +110,15 @@ public class ProxyService {
 	public void proxy(SsrfValidator.ValidatedTarget target, String acceptHeader, boolean headersOnly,
 					  HttpServletResponse response) {
 		Map<String, String> requestHeaders = acceptHeader != null ? Map.of("Accept", acceptHeader) : Map.of();
+		// D6 (ENTRYSTORE-1090): a streamed body is read to EOF and closed unless the handler throws, which
+		// returns the connection to the JDK keep-alive pool; a HEAD never reads it, so that one is disconnected.
 		ssrfSafeHttpClient.execute(target, "GET", requestHeaders,
 				this::validateRedirectTarget,
 				(status, conn) -> {
 					streamResponse(status, conn, headersOnly, response);
 					return null;
-				});
+				},
+				!headersOnly);
 	}
 
 	private void streamResponse(int status, HttpURLConnection conn, boolean headersOnly, HttpServletResponse response)
