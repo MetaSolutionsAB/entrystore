@@ -46,10 +46,10 @@
            limits compression (if enabled in the derived fields) to values which
            exceed a certain size (in characters).
         -->
-        <fieldType name="string" class="solr.StrField" sortMissingLast="true" omitNorms="true"/>
+        <fieldType name="string" class="solr.StrField" sortMissingLast="true" omitNorms="true" docValues="true"/>
 
         <!-- boolean type: "true" or "false" -->
-        <fieldType name="boolean" class="solr.BoolField" sortMissingLast="true" omitNorms="true"/>
+        <fieldType name="boolean" class="solr.BoolField" sortMissingLast="true" omitNorms="true" docValues="true"/>
 
         <!-- The optional sortMissingLast and sortMissingFirst attributes are
              currently supported on types that are sorted internally as strings.
@@ -104,7 +104,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
 
            Consult the DateField javadocs for more information.
         -->
-        <fieldType name="date" class="solr.DatePointField" sortMissingLast="true" omitNorms="true"/>
+        <fieldType name="date" class="solr.DatePointField" sortMissingLast="true" omitNorms="true" docValues="true"/>
 
         <!-- solr.TextField allows the specification of custom text analyzers
             specified as a tokenizer and a list of token filters. Different
