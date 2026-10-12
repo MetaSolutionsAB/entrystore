@@ -88,10 +88,11 @@ class SearchIT extends BaseSpec {
 	static final String SORT_MARKER_VALUE = 'sortmarkervalue'
 
 	// Test-only predicate whose literal is indexed in the text_ngram field metadata.predicate.literal.<hash>, for the
-	// n-gram specs. Its own predicate keeps the exact-count assertions on title and description valid.
+	// n-gram specs. Its own predicate keeps the exact-count assertions on title and description valid. "EU" comes last,
+	// so the old whole-literal analyzer has no gram "eu " that eu* could match.
 	static final String NGRAM_MARKER_IRI = 'http://example.org/ns/searchIT-ngram-marker'
 	static final String NGRAM_FIELD = 'metadata.predicate.literal.' + Hashing.hash(NGRAM_MARKER_IRI, HashType.MD5).substring(0, 8)
-	static final String NGRAM_VALUE = 'EU ngramsearchitheritage'
+	static final String NGRAM_VALUE = 'ngramsearchitheritage EU'
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
@@ -360,7 +361,7 @@ class SearchIT extends BaseSpec {
 	def "GET /search?type=solr on a text_ngram field should not match a prefix that spans whitespace"() {
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
-			[type: 'solr', query: NGRAM_FIELD + ':eu\\ ngram*']))
+			[type: 'solr', query: NGRAM_FIELD + ':heritage\\ eu*']))
 
 		then:
 		// grams are made per word, so no indexed term contains the space
@@ -371,7 +372,7 @@ class SearchIT extends BaseSpec {
 	def "GET /search?type=solr with a phrase on a text_ngram field should match adjacent words of one literal"() {
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
-			[type: 'solr', query: NGRAM_FIELD + ':"eu ngramsearchitheritage"']))
+			[type: 'solr', query: NGRAM_FIELD + ':"ngramsearchitheritage eu"']))
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -382,7 +383,7 @@ class SearchIT extends BaseSpec {
 		when:
 		// both orders, since the order of the two literals in the field is not fixed
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
-			[type: 'solr', query: NGRAM_FIELD + ':"ngramsearchitheritage gapprobe" OR ' + NGRAM_FIELD + ':"gapprobe eu"']))
+			[type: 'solr', query: NGRAM_FIELD + ':"eu gapprobe" OR ' + NGRAM_FIELD + ':"gapprobe ngramsearchitheritage"']))
 
 		then:
 		conn.getResponseCode() == HTTP_OK
