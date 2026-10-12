@@ -4,7 +4,7 @@
 
 ### Bug
 
-[ENTRYSTORE-1249](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1249) The login and SSO entry points \(/auth/login, /auth/saml, /auth/oidc, /auth/cas\), the sign-up and password-reset routes \(/auth/signup, /auth/pwreset and their /confirm\) and requests with ignoreAuth expire the cookie of an ended or unknown session and continue as guest, also with entrystore.auth.cookie.invalid-token-error on. They answered 401, so starting a login after the previous one ended, or opening a confirmation link in a browser holding an old login, failed. ignoreAuth served such requests as guest in 5.x too.
+[ENTRYSTORE-1249](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1249) The login and SSO entry points \(/auth/login, /auth/saml, /auth/oidc, /auth/cas\), the sign-up and password-reset routes \(/auth/signup, /auth/pwreset and their /confirm\) expire the cookie of an ended or unknown session and continue as guest, also with entrystore.auth.cookie.invalid-token-error on. They answered 401, so starting a login after the previous one ended, or opening a confirmation link in a browser holding an old login, failed. Requests with ignoreAuth are served as guest too and, as in 5.x, keep the cookie of an unknown session, so they cannot end a login made meanwhile in another tab.
 
 [ENTRYSTORE-1246](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1246) org.eclipse.rdf4j.sail.nativerdf.softFailOnCorruptDataAndRepairIndexes set in entrystore.properties takes effect again, as in 5.x, so a corrupt native store can be repaired without passing -D. 6.x ignored it there. A value passed with -D now wins over the configuration; 5.x overwrote it.
 

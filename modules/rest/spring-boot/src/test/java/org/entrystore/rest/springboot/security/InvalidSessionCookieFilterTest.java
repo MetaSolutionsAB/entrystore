@@ -73,6 +73,22 @@ class InvalidSessionCookieFilterTest {
 	}
 
 	@Test
+	void invalidRequestedSession_ignoreAuthKeepsCookieAndContinuesWithoutRequestedSessionId() throws Exception {
+		var request = requestWithAuthToken();
+		request.setMethod("GET");
+		request.setQueryString("ignoreAuth");
+		request.setRequestedSessionId("unknown");
+		request.setRequestedSessionIdValid(false);
+		var response = new MockHttpServletResponse();
+		var chain = new MockFilterChain();
+
+		filter.doFilter(request, response, chain);
+
+		assertEquals(0, response.getHeaders("Set-Cookie").size(), "ignoreAuth must not change the browser's login");
+		assertNull(((HttpServletRequest) chain.getRequest()).getRequestedSessionId());
+	}
+
+	@Test
 	void invalidRequestedSession_notMatchedKeepsCookieAndRequest() throws Exception {
 		var notMatching = new InvalidSessionCookieFilter(authTokenCookies("none", false, ""), _ -> false);
 		var request = requestWithAuthToken();

@@ -215,7 +215,8 @@ entrystore.data.folder=/srv/entrystore/files/
 # Path of the auth_token cookie; "auto" uses the path of entrystore.baseurl.folder. (default: auto)
 # entrystore.auth.cookie.path=auto
 # Whether an unknown or expired auth_token is answered with 401; with off the request is served
-# as guest. The cookie is expired in both cases. (default: on)
+# as guest. The cookie is expired in both cases. The login, sign-up and password-reset routes are
+# always served as guest, and requests with ignoreAuth too, without expiring an unknown cookie. (default: on)
 # entrystore.auth.cookie.invalid-token-error=on|off
 # Seconds a cookie session uses its loaded user before reloading it from the repository; 0 reloads on every request.
 # A change of the user's admin role reaches an open session up to this late. Disabling or deleting a user, a

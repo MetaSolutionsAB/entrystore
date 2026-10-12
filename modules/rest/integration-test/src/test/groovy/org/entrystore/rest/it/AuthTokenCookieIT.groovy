@@ -84,7 +84,7 @@ class AuthTokenCookieIT extends BaseSpec {
 		'POST' | '/auth/pwreset/confirm' || HTTP_BAD_REQUEST
 	}
 
-	def "GET /auth/user?ignoreAuth with an unknown auth_token should respond as guest and expire the cookie on /store and /store/"() {
+	def "GET /auth/user?ignoreAuth with an unknown auth_token should respond as guest and keep the cookie"() {
 		when:
 		def conn = EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', 'application/json',
 				[Cookie: 'auth_token=' + STALE_TOKEN])
@@ -92,7 +92,7 @@ class AuthTokenCookieIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		JSON_PARSER.parseText(conn.inputStream.text)['user'] == 'guest'
-		assertExpiredOnStoreAndLegacyPath(conn)
+		EntryStoreClient.findSetCookies(conn, 'auth_token').isEmpty()
 	}
 
 	def "GET /auth/user?ignoreAuth with an ended session should respond as guest and expire the cookie on /store and /store/"() {

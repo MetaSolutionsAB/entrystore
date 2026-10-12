@@ -189,7 +189,7 @@ public class AuthTokenCookies implements LogoutHandler {
 		if (!evenIfNotSent && WebUtils.getCookie(request, cookieName) == null) {
 			return;
 		}
-		// With invalid-token-error off, ConcurrentSessionFilter's logout and InvalidSessionCookieFilter both expire it
+		// On an ended session, ConcurrentSessionFilter's logout and InvalidSessionCookieFilter may both expire it
 		@SuppressWarnings("unchecked")
 		var expired = (Set<Target>) request.getAttribute(EXPIRED_ATTRIBUTE);
 		if (expired == null) {

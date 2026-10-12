@@ -469,7 +469,7 @@ class SignupResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 1
 	}
 
-	def "GET /auth/signup should confirm creating new user when the browser sends the cookie of an expired login"() {
+	def "GET /auth/signup should confirm creating new user when the browser sends the cookie of an unknown session"() {
 		given:
 		def requestBody = signupBody('userSignupConfirmStaleCookie@test.com')
 		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
