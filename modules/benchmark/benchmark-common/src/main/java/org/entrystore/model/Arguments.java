@@ -46,6 +46,7 @@ public class Arguments {
 	boolean batched = false;
 	Boolean forceSync;
 	String solrUrl;
+	boolean readAsGroupUser = false;
 	File storePath;
 	File solrPath;
 	File dataPath;

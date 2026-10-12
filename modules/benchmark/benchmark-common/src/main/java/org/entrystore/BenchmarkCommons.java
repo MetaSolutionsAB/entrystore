@@ -98,6 +98,7 @@ public class BenchmarkCommons {
 		Option batchedOption = createOption("B", "batched", "BATCHED", "Run all EntryStore inserts inside one RepositoryManagerImpl.inBatch(...) call, committed every entrystore.repository.batch.max-operations operations: @boolean.", false);
 		Option forceSyncOption = createOption("f", "force-sync", "FORCE_SYNC", "Override NativeStore forceSync (default off — no fsync per commit). 'true' forces an fsync on every commit at the durability/throughput trade-off: @boolean.", false);
 		Option solrUrlOption = createOption("S", "solr-url", "SOLR_URL", "External Solr URL used by benchmark-solr (embedded Solr is not supported). Example: 'http://localhost:8983/solr/entrystore-core'.", false);
+		Option readAsGroupUserOption = createOption("r", "read-as-user", "READ_AS_USER", "After the write phase, read every entry as a non-admin user whose access is granted only via a group (exercises group-based authorization): @boolean. Requires -a true.", false);
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -116,6 +117,7 @@ public class BenchmarkCommons {
 		options.addOption(batchedOption);
 		options.addOption(forceSyncOption);
 		options.addOption(solrUrlOption);
+		options.addOption(readAsGroupUserOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -246,6 +248,10 @@ public class BenchmarkCommons {
 			} else {
 				System.setProperty("log.solrUrl", "none");
 			}
+
+			boolean readAsGroupUser = commandLine.hasOption("r") && "true".equals(commandLine.getOptionValue(readAsGroupUserOption));
+			arguments.setReadAsGroupUser(readAsGroupUser);
+			System.setProperty("log.readAsGroupUser", readAsGroupUser ? "on" : "off");
 
 			// welcome message
 			LogUtils.logWelcome(storeType, arguments.isWithTransactions(), arguments.getSizeToGenerate());
