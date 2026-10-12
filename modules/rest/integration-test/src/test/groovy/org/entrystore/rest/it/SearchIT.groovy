@@ -87,6 +87,13 @@ class SearchIT extends BaseSpec {
 	static final String SORT_MARKER_FIELD = 'metadata.predicate.literal_s.' + Hashing.hash(SORT_MARKER_IRI, HashType.MD5).substring(0, 8)
 	static final String SORT_MARKER_VALUE = 'sortmarkervalue'
 
+	// Test-only predicate whose literal is indexed in the text_ngram field metadata.predicate.literal.<hash>, for the
+	// n-gram specs. Its own predicate keeps the exact-count assertions on title and description valid. "EU" comes last,
+	// so the old whole-literal analyzer has no gram "eu " that eu* could match.
+	static final String NGRAM_MARKER_IRI = 'http://example.org/ns/searchIT-ngram-marker'
+	static final String NGRAM_FIELD = 'metadata.predicate.literal.' + Hashing.hash(NGRAM_MARKER_IRI, HashType.MD5).substring(0, 8)
+	static final String NGRAM_VALUE = 'ngramsearchitheritage EU'
+
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
@@ -236,6 +243,10 @@ class SearchIT extends BaseSpec {
 			[resource: 'Sort text B', metadata: sortMetadata,
 			 info    : [(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]]]).length() > 0
 
+		assert getOrCreateEntry(contextId, [id: 'searchNgramEntryId', graphtype: 'string'],
+			[resource: 'Ngram text', metadata: [(newResourceIri): [
+				(NGRAM_MARKER_IRI): [[type: 'literal', value: NGRAM_VALUE], [type: 'literal', value: 'gapprobe']]]]]).length() > 0
+
 		// Entry whose DECIMAL_PREDICATE_IRI value is typed xsd:double but has a non-numeric lexical
 		// form. The indexer's isDecimalLiteral guard matches (datatype is xsd:double), l.doubleValue()
 		// throws NumberFormatException, and the decimal field is skipped — but the rest of the entry
@@ -325,6 +336,58 @@ class SearchIT extends BaseSpec {
 																   value: 'lokalne metadane tytułsearch jawnie po polsku',
 																   lang : 'pl'])
 
+	}
+
+	def "GET /search?type=solr on a text_ngram field should match a two-letter word by prefix, as entrystore.js queries it"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: NGRAM_FIELD + ':eu*']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['results'] == 1
+	}
+
+	def "GET /search?type=solr on a text_ngram field should match a substring inside a word"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: NGRAM_FIELD + ':SearchItHerit']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['results'] == 1
+	}
+
+	def "GET /search?type=solr on a text_ngram field should not match a prefix that spans whitespace"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: NGRAM_FIELD + ':heritage\\ eu*']))
+
+		then:
+		// grams are made per word, so no indexed term contains the space
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['results'] == 0
+	}
+
+	def "GET /search?type=solr with a phrase on a text_ngram field should match adjacent words of one literal"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: NGRAM_FIELD + ':"ngramsearchitheritage eu"']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['results'] == 1
+	}
+
+	def "GET /search?type=solr with a phrase on a text_ngram field should not match across two literals"() {
+		when:
+		// both orders, since the order of the two literals in the field is not fixed
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: NGRAM_FIELD + ':"eu gapprobe" OR ' + NGRAM_FIELD + ':"gapprobe ngramsearchitheritage"']))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['results'] == 0
 	}
 
 	def "GET /search?type=solr with numeric range query covering an indexed decimal literal should return the entry"() {

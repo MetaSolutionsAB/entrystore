@@ -160,9 +160,14 @@ lexicographic ordering isn't equal to the numeric ordering) -->
             </analyzer>
         </fieldType>
 
-        <fieldType name="text_ngram" class="solr.TextField">
+        <fieldType name="text_ngram" class="solr.TextField" positionIncrementGap="100">
+            <!-- Grams never span whitespace: the query analyzer splits on it, so such grams could never match.
+                 preserveOriginal also indexes words of 1-2 characters (matched by eu*) and of more than 25 whole.
+                 maxTokenLen lifts the default of 255 so grams across character 255 of a long word still exist,
+                 and keeps a preserved word below Lucene's 32766-byte term limit. -->
             <analyzer type="index">
-                <tokenizer class="solr.NGramTokenizerFactory" minGramSize="3" maxGramSize="25"/>
+                <tokenizer class="solr.WhitespaceTokenizerFactory" maxTokenLen="8191"/>
+                <filter class="solr.NGramFilterFactory" minGramSize="3" maxGramSize="25" preserveOriginal="true"/>
                 <filter class="solr.LowerCaseFilterFactory"/>
             </analyzer>
             <analyzer type="query">
