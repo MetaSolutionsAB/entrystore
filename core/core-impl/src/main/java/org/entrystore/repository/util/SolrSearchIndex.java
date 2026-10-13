@@ -789,8 +789,8 @@ public class SolrSearchIndex implements SearchIndex {
 	 * Re-indexes a context: every entry is queued for reposting on the calling thread, which waits while
 	 * the queue is full, and a purge of the documents this reindex did not repost is scheduled to run once
 	 * the last queued entry has been submitted, so search never sees a gap. The method returns before the
-	 * queue drains or the purge runs. Shutdown and a stopped submitter end the reindex as an interruption
-	 * does. The conditions under which no purge happens are listed at
+	 * queue drains or the purge runs. Shutdown, and a stopped submitter while the queue is full, end the
+	 * reindex as an interruption does. The conditions under which no purge happens are listed at
 	 * {@link #purgeExpiredDocumentsAfterReindex}; the purge is abandoned after MAX_PURGE_WAIT_NANOS or on
 	 * shutdown.
 	 *
@@ -1189,12 +1189,12 @@ public class SolrSearchIndex implements SearchIndex {
 	 * queue's monitor, which the submitter takes to drain it. Entry writes do not wait, so the queue may exceed the
 	 * bound by the documents they queue.
 	 *
-	 * @return false if the thread was interrupted, the index is shutting down or the submitter has stopped, since
-	 * the queue would then not drain
+	 * @return false if the index is shutting down, or if the thread was interrupted or the submitter has stopped
+	 * while waiting, since the queue would then not drain
 	 */
 	private boolean awaitPostQueueCapacity() {
-		while (getPostQueueSize() >= maxReindexQueueSize) {
-			if (shuttingDown || !documentSubmitter.isAlive()) {
+		while (!shuttingDown && getPostQueueSize() >= maxReindexQueueSize) {
+			if (!documentSubmitter.isAlive()) {
 				return false;
 			}
 			try {
@@ -1204,7 +1204,7 @@ public class SolrSearchIndex implements SearchIndex {
 				return false;
 			}
 		}
-		return true;
+		return !shuttingDown;
 	}
 
 	/**

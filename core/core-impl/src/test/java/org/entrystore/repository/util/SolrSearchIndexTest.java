@@ -659,10 +659,9 @@ public class SolrSearchIndexTest {
 
 		Thread reindex = Thread.ofPlatform().start(() -> indexWithoutDocuments.reindexSync(CONTEXT_1));
 		try {
-			verify(solrServer, timeout(10_000)).request(any(), any());
+			awaitWaitingForPostQueueCapacity(reindex, 2);
 			// At most two documents are in flight and two are queued, so the last entry is not loaded
-			verify(cm, after(1000).never()).getEntry(lastEntry);
-			assertEquals(2, index.getPostQueueSize());
+			verify(cm, after(500).never()).getEntry(lastEntry);
 		} finally {
 			solrAvailable.countDown();
 		}
@@ -682,7 +681,7 @@ public class SolrSearchIndexTest {
 		AtomicReference<ReindexResult> result = new AtomicReference<>();
 
 		Thread reindex = Thread.ofPlatform().start(() -> result.set(indexWithoutDocuments.reindexSync()));
-		verify(solrServer, timeout(10_000)).request(any(), any());
+		awaitWaitingForPostQueueCapacity(reindex, 2);
 		reindex.interrupt();
 
 		reindex.join(TimeUnit.SECONDS.toMillis(10));
@@ -701,7 +700,7 @@ public class SolrSearchIndexTest {
 
 		// As the startup reindex, which shutdown does not interrupt
 		Thread reindex = Thread.ofPlatform().start(() -> result.set(indexWithoutDocuments.reindexSync()));
-		verify(solrServer, timeout(10_000)).request(any(), any());
+		awaitWaitingForPostQueueCapacity(reindex, 2);
 		indexWithoutDocuments.shutdown();
 
 		reindex.join(TimeUnit.SECONDS.toMillis(10));
@@ -735,6 +734,20 @@ public class SolrSearchIndexTest {
 		SolrSearchIndex indexWithoutDocuments = spy(index);
 		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
 		return indexWithoutDocuments;
+	}
+
+	/**
+	 * Waits until the reindex sleeps for capacity in a post queue that holds the given number of documents: the
+	 * capacity wait is the reindex's only timed wait.
+	 */
+	private void awaitWaitingForPostQueueCapacity(Thread reindex, int queuedDocuments) {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (reindex.getState() != Thread.State.TIMED_WAITING || index.getPostQueueSize() != queuedDocuments) {
+			if (System.nanoTime() > deadline) {
+				throw new AssertionError("Reindex is not waiting for a full post queue");
+			}
+			Thread.yield();
+		}
 	}
 
 	/**
