@@ -58,6 +58,7 @@ import org.mockito.InOrder;
 
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
 import java.lang.reflect.Field;
@@ -646,6 +647,123 @@ public class SolrSearchIndexTest {
 		postQueue().invalidate(ENTRY_1_1); // as the document submitter does when it takes the document
 		// The purge checks the queue every 5 seconds
 		verify(solrServer, timeout(10_000)).request(any(), any());
+	}
+
+	@Test
+	public void reindexWaitsWhileThePostQueueIsFullAndContinuesOnceSolrTakesDocuments() throws Exception {
+		SolrSearchIndex indexWithoutDocuments = indexWithoutDocumentsAndMaxReindexQueueSize(2);
+		CountDownLatch solrAvailable = new CountDownLatch(1);
+		blockSolrRequestsUntil(solrAvailable);
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		URI lastEntry = contextWithFiveIndexableEntries(cm);
+
+		Thread reindex = Thread.ofPlatform().start(() -> indexWithoutDocuments.reindexSync(CONTEXT_1));
+		try {
+			verify(solrServer, timeout(10_000)).request(any(), any());
+			// At most two documents are in flight and two are queued, so the last entry is not loaded
+			verify(cm, after(1000).never()).getEntry(lastEntry);
+			assertEquals(2, index.getPostQueueSize());
+		} finally {
+			solrAvailable.countDown();
+		}
+
+		reindex.join(TimeUnit.SECONDS.toMillis(10));
+		assertFalse(reindex.isAlive());
+		verify(cm).getEntry(lastEntry);
+		assertTrue(index.waitForQueueDrain());
+	}
+
+	@Test
+	public void reindexWaitingForThePostQueueStopsWhenInterrupted() throws Exception {
+		SolrSearchIndex indexWithoutDocuments = indexWithoutDocumentsAndMaxReindexQueueSize(2);
+		blockSolrRequestsUntil(new CountDownLatch(1));
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		URI lastEntry = contextWithFiveIndexableEntries(cm);
+		AtomicReference<ReindexResult> result = new AtomicReference<>();
+
+		Thread reindex = Thread.ofPlatform().start(() -> result.set(indexWithoutDocuments.reindexSync()));
+		verify(solrServer, timeout(10_000)).request(any(), any());
+		reindex.interrupt();
+
+		reindex.join(TimeUnit.SECONDS.toMillis(10));
+		assertFalse(reindex.isAlive());
+		assertEquals(new ReindexResult(0, 0, true), result.get());
+		verify(cm, never()).getEntry(lastEntry);
+	}
+
+	@Test
+	public void reindexWaitingForThePostQueueStopsOnShutdown() throws Exception {
+		SolrSearchIndex indexWithoutDocuments = indexWithoutDocumentsAndMaxReindexQueueSize(2);
+		blockSolrRequestsUntil(new CountDownLatch(1));
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		URI lastEntry = contextWithFiveIndexableEntries(cm);
+		AtomicReference<ReindexResult> result = new AtomicReference<>();
+
+		// As the startup reindex, which shutdown does not interrupt
+		Thread reindex = Thread.ofPlatform().start(() -> result.set(indexWithoutDocuments.reindexSync()));
+		verify(solrServer, timeout(10_000)).request(any(), any());
+		indexWithoutDocuments.shutdown();
+
+		reindex.join(TimeUnit.SECONDS.toMillis(10));
+		assertFalse(reindex.isAlive());
+		assertEquals(new ReindexResult(0, 0, true), result.get());
+		verify(cm, never()).getEntry(lastEntry);
+	}
+
+	@Test
+	public void reindexDoesNotWaitForAFullPostQueueThatTheStoppedSubmitterWouldNeverDrain() throws Exception {
+		SolrSearchIndex indexWithoutDocuments = indexWithoutDocumentsAndMaxReindexQueueSize(2);
+		stopDocumentSubmitter();
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2),
+				indexableEntry(cm, ENTRY_1_3));
+
+		ReindexResult result = indexWithoutDocuments.reindexSync();
+
+		assertEquals(new ReindexResult(0, 0, true), result);
+		assertEquals(2, index.getPostQueueSize());
+		verify(cm, never()).getEntry(ENTRY_1_3);
+	}
+
+	/**
+	 * Replaces the index with one whose reindex waits once the post queue holds the given number of documents, and
+	 * returns a spy of it that queues empty documents.
+	 */
+	private SolrSearchIndex indexWithoutDocumentsAndMaxReindexQueueSize(int maxReindexQueueSize) {
+		index.shutdown();
+		index = new SolrSearchIndex(rm, solrServer, maxReindexQueueSize);
+		SolrSearchIndex indexWithoutDocuments = spy(index);
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		return indexWithoutDocuments;
+	}
+
+	/**
+	 * Makes every Solr request wait until the latch opens; an interrupt, as on shutdown, fails the request.
+	 */
+	private void blockSolrRequestsUntil(CountDownLatch solrAvailable) throws Exception {
+		when(solrServer.request(any(), any())).thenAnswer(invocation -> {
+			try {
+				solrAvailable.await();
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				throw new IOException("Interrupted while waiting for Solr", e);
+			}
+			return null;
+		});
+	}
+
+	/**
+	 * Stubs context 1 with five indexable entries.
+	 *
+	 * @return the URI of the last entry
+	 */
+	private static URI contextWithFiveIndexableEntries(ContextManager cm) {
+		URI[] entryURIs = new URI[5];
+		for (int i = 0; i < entryURIs.length; i++) {
+			entryURIs[i] = indexableEntry(cm, URI.create("http://localhost:8181/1/entry/" + (i + 1)));
+		}
+		resolvableContext(cm, "1", entryURIs);
+		return entryURIs[entryURIs.length - 1];
 	}
 
 	@Test
