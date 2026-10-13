@@ -95,6 +95,11 @@ springboot/
 **Spring bean dependency rules:**
 - **Avoid and verify that no circular bean dependencies are introduced.** A `@Configuration` class is a wiring spec, not an actor — if it needs to do something beyond constructing objects, that logic belongs in a separate `@Service` or `@Component`. A common violation: a `@Configuration` class injecting a bean it itself produces (via constructor / `@RequiredArgsConstructor`), creating a self-referencing cycle that prevents startup.
 
+### Solr configset (`solr/conf/`)
+
+- A change to how a field is stored in the index (adding `docValues`, or changing a field type's `class`) is rejected by Lucene on an existing index, even after all documents are deleted. The startup reindex only deletes documents and the startup schema check passes, so Solr rejects every document and the version markers are still written, which leaves an empty index. Such a change needs a CHANGELOG deployment note: empty the index before the upgrade (dedicated: the core's data directory; cluster: `ecli solr-collection-rotate`). Analyzer changes don't need this; they take effect with the next reindex.
+- Clients query the `text_ngram` fields through entrystore.js. It splits a search term on whitespace into one AND clause per word, cuts each word to 15 characters, and appends `*` to words shorter than 3 characters. Facets on `metadata.predicate.literal.*` are rewritten to `literal_s.*` (5.x and 6.x). Check analyzer changes against these query shapes.
+
 ## Code Style
 
 **Use Java 25 features** when writing new code or refactoring. Prefer modern idioms (records, sealed classes, pattern matching for `instanceof` and `switch`, text blocks, enhanced `switch` expressions, virtual threads, sequenced collections, scoped values) over legacy patterns equivalent to them.
