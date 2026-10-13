@@ -106,6 +106,15 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static final int BATCH_SIZE_DELETE = 100;
 
+	/**
+	 * Documents the post queue may hold before a reindex waits for the submitter, so that the heap does not grow
+	 * with the number of entries. Solr's ingest limits the reindex anyway; ten batches keep the submitter supplied
+	 * and the queue above the threshold for the longer commitWithin.
+	 */
+	private static final int MAX_REINDEX_QUEUE_SIZE = BATCH_SIZE_ADD * 10;
+
+	private static final long REINDEX_QUEUE_POLL_MS = 20;
+
 	private static final int SOLR_COMMIT_WITHIN = 1000;
 
 	private static final int SOLR_COMMIT_WITHIN_MAX = 10000;
@@ -148,6 +157,10 @@ public class SolrSearchIndex implements SearchIndex {
 	private final Thread delayedContextIndexer;
 
 	private final Cache<URI, SolrInputDocument> postQueue = Caffeine.newBuilder().build();
+
+	private final int maxReindexQueueSize;
+
+	private volatile boolean shuttingDown;
 
 	/**
 	 * Entries whose documents are to be removed from the index, in the order in which they were queued. A set, so
@@ -480,6 +493,11 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public SolrSearchIndex(RepositoryManager rm, SolrClient solrServer) {
+		this(rm, solrServer, MAX_REINDEX_QUEUE_SIZE);
+	}
+
+	SolrSearchIndex(RepositoryManager rm, SolrClient solrServer, int maxReindexQueueSize) {
+		this.maxReindexQueueSize = maxReindexQueueSize;
 		this.rm = rm;
 		valueFactory = this.rm.getValueFactory();
 		this.solrServer = solrServer;
@@ -513,6 +531,8 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public void shutdown() {
+		shuttingDown = true;
+
 		if (documentSubmitter != null) {
 			documentSubmitter.interrupt();
 		}
@@ -766,10 +786,11 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Re-indexes a context: every entry is queued for reposting on the calling thread, and a purge of
-	 * the documents this reindex did not repost is scheduled to run once the last queued entry has been
-	 * submitted, so search never sees a gap. The method returns before the queue drains or the purge
-	 * runs. The conditions under which no purge happens are listed at
+	 * Re-indexes a context: every entry is queued for reposting on the calling thread, which waits while
+	 * the queue is full, and a purge of the documents this reindex did not repost is scheduled to run once
+	 * the last queued entry has been submitted, so search never sees a gap. The method returns before the
+	 * queue drains or the purge runs. Shutdown, and a stopped submitter while the queue is full, end the
+	 * reindex as an interruption does. The conditions under which no purge happens are listed at
 	 * {@link #purgeExpiredDocumentsAfterReindex}; the purge is abandoned after MAX_PURGE_WAIT_NANOS or on
 	 * shutdown.
 	 *
@@ -786,6 +807,10 @@ public class SolrSearchIndex implements SearchIndex {
 	private ContextPostResult reindexContext(URI contextURI) {
 		if (contextURI == null) {
 			throw new IllegalArgumentException("Context URI must not be null");
+		}
+		// Reindex tasks still queued on the executor run after shutdown(); they end here without logging
+		if (shuttingDown) {
+			return ContextPostResult.interrupted();
 		}
 
 		log.info("Starting Solr reindexing of context " + contextURI);
@@ -1051,6 +1076,10 @@ public class SolrSearchIndex implements SearchIndex {
 			return new ContextPostResult(ContextPostOutcome.UNRESOLVED, null, 0, 0, 0, 0, 0);
 		}
 
+		static ContextPostResult interrupted() {
+			return new ContextPostResult(ContextPostOutcome.INTERRUPTED, null, 0, 0, 0, 0, 0);
+		}
+
 		/**
 		 * @return the entries that were processed, whether they could be loaded or not
 		 */
@@ -1107,7 +1136,7 @@ public class SolrSearchIndex implements SearchIndex {
 		int unindexableEntries = 0;
 		Set<String> tracedFailureCauses = new HashSet<>();
 		for (URI entryURI : context.getEntries()) {
-			if (Thread.currentThread().isInterrupted()) {
+			if (Thread.currentThread().isInterrupted() || !awaitPostQueueCapacity()) {
 				return new ContextPostResult(ContextPostOutcome.INTERRUPTED, lastQueuedEntryURI, loadedEntries,
 						corruptEntries, unresolvedEntries, unloadableEntries, unindexableEntries);
 			}
@@ -1161,6 +1190,31 @@ public class SolrSearchIndex implements SearchIndex {
 					contextURI, corruptEntries, unresolvedEntries, unloadableEntries, unindexableEntries);
 		}
 		return posted;
+	}
+
+	/**
+	 * Waits while the post queue holds {@link #maxReindexQueueSize} documents or more. The caller must not hold the
+	 * queue's monitor, which the submitter takes to drain it. Entry writes do not wait, so the queue may exceed the
+	 * bound by the documents they queue.
+	 *
+	 * @return false if the index is shutting down, or if the thread was interrupted or the submitter has stopped
+	 * while waiting, since the queue would then not drain
+	 */
+	private boolean awaitPostQueueCapacity() {
+		while (!shuttingDown && getPostQueueSize() >= maxReindexQueueSize) {
+			if (!documentSubmitter.isAlive()) {
+				log.error("Stopping the reindex because the Solr document submitter has stopped and would not drain"
+						+ " the post queue; a restart is required to resume indexing");
+				return false;
+			}
+			try {
+				Thread.sleep(REINDEX_QUEUE_POLL_MS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return false;
+			}
+		}
+		return !shuttingDown;
 	}
 
 	/**
