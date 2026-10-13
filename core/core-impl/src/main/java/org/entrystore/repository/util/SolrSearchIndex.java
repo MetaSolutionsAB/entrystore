@@ -808,6 +808,10 @@ public class SolrSearchIndex implements SearchIndex {
 		if (contextURI == null) {
 			throw new IllegalArgumentException("Context URI must not be null");
 		}
+		// Reindex tasks still queued on the executor run after shutdown(); they end here without logging
+		if (shuttingDown) {
+			return ContextPostResult.interrupted();
+		}
 
 		log.info("Starting Solr reindexing of context " + contextURI);
 
@@ -1072,6 +1076,10 @@ public class SolrSearchIndex implements SearchIndex {
 			return new ContextPostResult(ContextPostOutcome.UNRESOLVED, null, 0, 0, 0, 0, 0);
 		}
 
+		static ContextPostResult interrupted() {
+			return new ContextPostResult(ContextPostOutcome.INTERRUPTED, null, 0, 0, 0, 0, 0);
+		}
+
 		/**
 		 * @return the entries that were processed, whether they could be loaded or not
 		 */
@@ -1195,6 +1203,8 @@ public class SolrSearchIndex implements SearchIndex {
 	private boolean awaitPostQueueCapacity() {
 		while (!shuttingDown && getPostQueueSize() >= maxReindexQueueSize) {
 			if (!documentSubmitter.isAlive()) {
+				log.error("Stopping the reindex because the Solr document submitter has stopped and would not drain"
+						+ " the post queue; a restart is required to resume indexing");
 				return false;
 			}
 			try {

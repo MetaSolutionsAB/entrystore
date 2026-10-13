@@ -710,6 +710,17 @@ public class SolrSearchIndexTest {
 	}
 
 	@Test
+	public void reindexAfterShutdownEndsWithoutLoadingTheContext() {
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		index.shutdown();
+
+		ReindexResult result = index.reindexSync();
+
+		assertEquals(new ReindexResult(0, 0, true), result);
+		verify(cm, never()).getByEntryURI(CONTEXT_1);
+	}
+
+	@Test
 	public void reindexDoesNotWaitForAFullPostQueueThatTheStoppedSubmitterWouldNeverDrain() throws Exception {
 		SolrSearchIndex indexWithoutDocuments = indexWithoutDocumentsAndMaxReindexQueueSize(2);
 		stopDocumentSubmitter();
