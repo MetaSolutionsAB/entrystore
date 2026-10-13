@@ -17,6 +17,11 @@
 package org.entrystore.impl;
 
 import org.apache.solr.client.solrj.SolrClient;
+import org.eclipse.rdf4j.repository.Repository;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.rio.RDFFormat;
+import org.eclipse.rdf4j.rio.RDFHandlerException;
+import org.eclipse.rdf4j.rio.Rio;
 import org.entrystore.Entry;
 import org.entrystore.SearchIndex.ReindexResult;
 import org.entrystore.config.Config;
@@ -26,16 +31,28 @@ import org.entrystore.repository.RepositoryListener;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
+import java.util.zip.GZIPInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -84,10 +101,100 @@ public class RepositoryManagerImplTest {
 		// TODO
 	}
 
-	@Disabled("To be implemented")
-	@Test
-	public void testExportToFile() throws Exception {
-		// TODO
+	/** The export only reads the repository, so the tests share one repository manager. */
+	@Nested
+	@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+	class ExportToFile {
+
+		private static final String BASE_URL = "http://localhost:8181/";
+
+		private RepositoryManagerImpl rm;
+
+		@BeforeAll
+		void startRepositoryManager() {
+			rm = newMinimalRepositoryManager(BASE_URL);
+		}
+
+		@AfterAll
+		void shutDownRepositoryManager() throws Exception {
+			rm.shutdown();
+			deregisterInstance(BASE_URL);
+		}
+
+		@ParameterizedTest(name = "{0}")
+		@MethodSource("exportFormats")
+		public void writesADumpThatParsesBackToTheRepositoryStatements(RDFFormat format, @TempDir Path tempDir)
+				throws Exception {
+			Path dump = tempDir.resolve("repository." + format.getDefaultFileExtension() + ".gz");
+
+			rm.exportToFile(rm.getRepository(), dump.toUri(), true, format);
+
+			long statementsInRepository;
+			try (RepositoryConnection con = rm.getRepository().getConnection()) {
+				statementsInRepository = con.size();
+			}
+			assertTrue(statementsInRepository > 0, "an empty repository would make the round trip prove nothing");
+			try (InputStream in = new GZIPInputStream(Files.newInputStream(dump))) {
+				assertEquals(statementsInRepository, Rio.parse(in, "", format).size());
+			}
+		}
+
+		Stream<RDFFormat> exportFormats() {
+			return RepositoryManagerImpl.EXPORT_FORMATS.stream();
+		}
+
+		@Test
+		public void throwsAndKeepsATargetItCannotOpen(@TempDir Path tempDir) throws Exception {
+			Path emptyDirectory = Files.createDirectory(tempDir.resolve("repository.xml"));
+
+			assertThrows(IOException.class,
+					() -> rm.exportToFile(rm.getRepository(), emptyDirectory.toUri(), false, RDFFormat.TRIX));
+
+			assertTrue(Files.isDirectory(emptyDirectory), "a target the export did not open must not be deleted");
+		}
+
+		@Test
+		public void deletesThePartialDumpWhenTheExportFails(@TempDir Path tempDir) {
+			Path dump = tempDir.resolve("repository.xml.gz");
+			Repository failingRepository = AbstractCoreTest.repositoryFailingMidExport();
+
+			assertThrows(RDFHandlerException.class,
+					() -> rm.exportToFile(failingRepository, dump.toUri(), true, RDFFormat.TRIX));
+
+			assertFalse(Files.exists(dump), "a partly written dump must not be left behind");
+		}
+
+		@Test
+		public void deletesThePartialDumpWhenTheExportFailsWithAnError(@TempDir Path tempDir) {
+			Path dump = tempDir.resolve("repository.xml.gz");
+			Repository failingRepository =
+					AbstractCoreTest.repositoryFailingMidExport(new OutOfMemoryError("simulated"));
+
+			assertThrows(OutOfMemoryError.class,
+					() -> rm.exportToFile(failingRepository, dump.toUri(), true, RDFFormat.TRIX));
+
+			assertFalse(Files.exists(dump), "a partly written dump must not be left behind");
+		}
+
+		@Test
+		public void rejectsAFormatWithoutNamedGraphs(@TempDir Path tempDir) {
+			Path dump = tempDir.resolve("repository.ttl");
+
+			assertThrows(IllegalArgumentException.class,
+					() -> rm.exportToFile(rm.getRepository(), dump.toUri(), false, RDFFormat.TURTLE));
+
+			assertFalse(Files.exists(dump));
+		}
+
+		@Test
+		public void rejectsANullFormat(@TempDir Path tempDir) {
+			Path dump = tempDir.resolve("repository");
+
+			assertThrows(IllegalArgumentException.class,
+					() -> rm.exportToFile(rm.getRepository(), dump.toUri(), false, null));
+
+			assertFalse(Files.exists(dump));
+		}
 	}
 
 	@Test
