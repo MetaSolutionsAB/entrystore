@@ -21,13 +21,18 @@ import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.saml2.core.Saml2Error;
 import org.springframework.security.saml2.core.Saml2ErrorCodes;
 import org.springframework.security.saml2.provider.service.authentication.Saml2AuthenticationException;
+import org.springframework.security.web.WebAttributes;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class SsoLoginFailureHandlerTest {
 
@@ -82,5 +87,35 @@ class SsoLoginFailureHandlerTest {
 							+ "Invalid issuer [x]?2026-10-05 INFO Admin login succeeded"),
 					appender.messagesAt(Level.WARN).toList(), appender::toString);
 		}
+	}
+
+	// The CAS and OIDC callbacks are anonymous; a session started on failure would set an auth_token cookie.
+	@Test
+	void failure_withoutSession_startsNoSession() throws Exception {
+		var request = new MockHttpServletRequest("GET", "/auth/cas");
+		var response = new MockHttpServletResponse();
+
+		new SsoLoginFailureHandler("CAS", "/auth/login").onAuthenticationFailure(request, response, noTicket());
+
+		assertNull(request.getSession(false));
+		assertEquals("/auth/login", response.getRedirectedUrl());
+	}
+
+	// A failed login in a browser that is already logged in keeps its session, which still receives the exception.
+	@Test
+	void failure_withSession_keepsTheExceptionInTheSession() throws Exception {
+		var request = new MockHttpServletRequest("GET", "/auth/cas");
+		var session = new MockHttpSession();
+		request.setSession(session);
+		var exception = noTicket();
+
+		new SsoLoginFailureHandler("CAS", "/auth/login")
+				.onAuthenticationFailure(request, new MockHttpServletResponse(), exception);
+
+		assertSame(exception, session.getAttribute(WebAttributes.AUTHENTICATION_EXCEPTION));
+	}
+
+	private static BadCredentialsException noTicket() {
+		return new BadCredentialsException("Failed to provide a CAS service ticket to validate");
 	}
 }

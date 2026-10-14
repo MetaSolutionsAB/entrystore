@@ -1,5 +1,11 @@
 # ENTRYSTORE CHANGELOG
 
+## Version 6.2
+
+### Bug
+
+[ENTRYSTORE-1203](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1203) A CAS or OIDC callback that fails authentication no longer starts a session or sets an auth_token cookie, as in 5.x; each such callback kept a session in memory until it idled out. A failed login in a browser that is already logged in keeps its session.
+
 ## Version 6.1
 
 ### Bug
