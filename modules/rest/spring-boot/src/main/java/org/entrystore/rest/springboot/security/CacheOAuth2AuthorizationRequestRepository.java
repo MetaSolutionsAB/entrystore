@@ -53,7 +53,7 @@ public class CacheOAuth2AuthorizationRequestRepository
 	static final long MAX_ENTRIES = 10_000;
 
 	private final CapacityEvictionWarning capacityWarning =
-			new CapacityEvictionWarning(log, "OAuth2 authorization-request", MAX_ENTRIES);
+			new CapacityEvictionWarning(log, "OAuth2 authorization-request", MAX_ENTRIES + " entries");
 
 	private final Cache<String, OAuth2AuthorizationRequest> cache = Caffeine.newBuilder()
 			.expireAfterWrite(2, TimeUnit.MINUTES)

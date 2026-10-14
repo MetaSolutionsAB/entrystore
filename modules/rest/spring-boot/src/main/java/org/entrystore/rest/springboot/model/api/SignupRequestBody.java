@@ -75,7 +75,7 @@ public record SignupRequestBody(
 		/**
 		 * Body members that match none of the components above. Sign-up carries caller-defined
 		 * {@code custom_*} properties onto the new user, so the unrecognised remainder is data, not
-		 * something to reject or discard.
+		 * something to reject or discard, up to the {@code custom_*} count that {@code AuthService.signup} caps.
 		 */
 		@JsonAnySetter Map<String, String> extraProperties) {
 

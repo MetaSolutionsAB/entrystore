@@ -101,6 +101,8 @@ public class AuthService {
 	private static final String PARAMETERS_MISSING_MESSAGE = AuthValidationMessages.PARAMETERS_MISSING;
 	/** Prefix marking a sign-up body member as a custom property to carry onto the new user. */
 	private static final String CUSTOM_PROPERTY_PREFIX = "custom_";
+	// Bounds what one pending sign-up weighs in SignupTokenCache, so a flood cannot evict real tokens cheaply.
+	private static final int MAX_CUSTOM_PROPERTIES = 50;
 	private static final String SHORT_PASSWORD_MESSAGE = "The password has to consist of at least 8 characters.";
 	private static final String BAD_PASSWORD_FORMAT_MESSAGE = "The password must conform to the configured rules.";
 	// Shared with @ValidEmail, which the sign-up body uses instead of validateAndSetEmail. The two paths
@@ -108,6 +110,8 @@ public class AuthService {
 	private static final String INVALID_EMAIL_MESSAGE = AuthValidationMessages.INVALID_EMAIL;
 	private static final String EMAIL_PLACEHOLDER = "{email}";
 	private static final String INVALID_NAME_MESSAGE = "Invalid name.";
+	private static final String TOO_MANY_CUSTOM_PROPERTIES_MESSAGE =
+			"At most " + MAX_CUSTOM_PROPERTIES + " custom properties are accepted.";
 	private static final String RECAPTCHA_MISSING_MESSAGE = "reCaptcha information missing.";
 	private static final String RECAPTCHA_INVALID_MESSAGE = "Invalid reCaptcha received.";
 	private static final String FAILED_TO_SEND_SIGNUP_EMAIL_MESSAGE = "Failed to send confirmation request to {}.";
@@ -297,11 +301,10 @@ public class AuthService {
 	 * the requester chose at request time. Used when {@code entrystore.auth.confirmation.legacy=true}.
 	 */
 	public String confirmPasswordLegacy(String token, String title) {
-		SignupInfo ci = signupTokenCache.getTokenValue(token);
+		SignupInfo ci = signupTokenCache.consumeToken(token);
 		if (ci == null) {
 			throw new BadRequestHtmlException(INVALID_TOKEN_MESSAGE, title);
 		}
-		signupTokenCache.removeToken(token);
 		return applyPasswordReset(ci, title);
 	}
 
@@ -520,11 +523,10 @@ public class AuthService {
 	 * credentials chosen at sign-up time. Used when {@code entrystore.auth.confirmation.legacy=true}.
 	 */
 	public String confirmSignupLegacy(String token, String title) {
-		SignupInfo signupInfo = signupTokenCache.getTokenValue(token);
+		SignupInfo signupInfo = signupTokenCache.consumeToken(token);
 		if (signupInfo == null) {
 			throw new BadRequestHtmlException(INVALID_SIGNUP_TOKEN_MESSAGE, title, appBaseUrl());
 		}
-		signupTokenCache.removeToken(token);
 		return createUserFromSignup(signupInfo, title);
 	}
 
@@ -737,6 +739,13 @@ public class AuthService {
 
 		setRedirectUrlIfPermitted(requestBody.urlFailure(), ci::setUrlFailure, "failure");
 		setRedirectUrlIfPermitted(requestBody.urlSuccess(), ci::setUrlSuccess, "success");
+
+		long customPropertyCount = requestBody.extraProperties().keySet().stream()
+				.filter(key -> key.startsWith(CUSTOM_PROPERTY_PREFIX))
+				.count();
+		if (customPropertyCount > MAX_CUSTOM_PROPERTIES) {
+			throw new BadRequestHtmlException(TOO_MANY_CUSTOM_PROPERTIES_MESSAGE, title);
+		}
 
 		if (!requestBody.extraProperties().isEmpty()) {
 			ci.setCustomProperties(new HashMap<>());

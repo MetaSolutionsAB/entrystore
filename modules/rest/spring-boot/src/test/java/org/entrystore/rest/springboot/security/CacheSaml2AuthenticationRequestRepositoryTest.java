@@ -146,10 +146,22 @@ class CacheSaml2AuthenticationRequestRepositoryTest {
 	}
 
 	@Test
-	void savingNullRequestStoresNothing() {
+	void savingNullRequestRemovesThePendingRequestForItsRelayState() {
+		repository.saveAuthenticationRequest(authnRequest(RELAY_STATE), acsRequest(null), new MockHttpServletResponse());
+
+		repository.saveAuthenticationRequest(null, acsRequest(RELAY_STATE), new MockHttpServletResponse());
+
+		assertNull(repository.loadAuthenticationRequest(acsRequest(RELAY_STATE)));
+	}
+
+	@Test
+	void savingNullRequestWithoutRelayStateLeavesPendingRequestsAlone() {
+		var authnRequest = authnRequest(RELAY_STATE);
+		repository.saveAuthenticationRequest(authnRequest, acsRequest(null), new MockHttpServletResponse());
+
 		repository.saveAuthenticationRequest(null, acsRequest(null), new MockHttpServletResponse());
 
-		assertEquals(0L, nativeCache().estimatedSize());
+		assertSame(authnRequest, repository.loadAuthenticationRequest(acsRequest(RELAY_STATE)));
 	}
 
 	@Test

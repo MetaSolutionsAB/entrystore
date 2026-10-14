@@ -46,7 +46,7 @@ public class OidcAuthStateCache implements CaffeineCacheSource {
 	static final long MAX_ENTRIES = 10_000;
 
 	private final CapacityEvictionWarning capacityWarning =
-			new CapacityEvictionWarning(log, "OIDC auth-state", MAX_ENTRIES);
+			new CapacityEvictionWarning(log, "OIDC auth-state", MAX_ENTRIES + " entries");
 
 	private final Cache<String, AuthState> requestCache = Caffeine.newBuilder()
 			.expireAfterWrite(2, TimeUnit.MINUTES)

@@ -47,7 +47,7 @@ class CapacityEvictionWarningTest {
 	@EnumSource(value = RemovalCause.class, names = "SIZE", mode = EnumSource.Mode.EXCLUDE)
 	void nonCapacityEvictionsAreSilent(RemovalCause cause) {
 		try (var appender = CapturingAppender.attachTo(CapacityEvictionWarningTest.class)) {
-			var warning = new CapacityEvictionWarning(OWNER_LOG, "Widget", 10_000);
+			var warning = new CapacityEvictionWarning(OWNER_LOG, "Widget", "10000 entries");
 
 			warning.onEviction(cause);
 
@@ -58,7 +58,7 @@ class CapacityEvictionWarningTest {
 	@Test
 	void capacityEvictionWarnsThroughTheOwnersLoggerNamingCacheAndCap() {
 		try (var appender = CapturingAppender.attachTo(CapacityEvictionWarningTest.class)) {
-			var warning = new CapacityEvictionWarning(OWNER_LOG, "Widget", 10_000);
+			var warning = new CapacityEvictionWarning(OWNER_LOG, "Widget", "10000 entries");
 
 			warning.onEviction(RemovalCause.SIZE);
 
@@ -75,7 +75,7 @@ class CapacityEvictionWarningTest {
 		var clock = new AtomicLong(1_000_000L);
 		var throttle = new LogThrottle(Duration.ofMinutes(1), clock::get);
 		try (var appender = CapturingAppender.attachTo(CapacityEvictionWarningTest.class)) {
-			var warning = new CapacityEvictionWarning(OWNER_LOG, "Widget", 10_000, throttle);
+			var warning = new CapacityEvictionWarning(OWNER_LOG, "Widget", "10000 entries", throttle);
 
 			warning.onEviction(RemovalCause.SIZE);
 			warning.onEviction(RemovalCause.SIZE);
@@ -91,7 +91,7 @@ class CapacityEvictionWarningTest {
 	@Test
 	void listenerForwardsOnlyTheRemovalCause() {
 		try (var appender = CapturingAppender.attachTo(CapacityEvictionWarningTest.class)) {
-			var warning = new CapacityEvictionWarning(OWNER_LOG, "Widget", 10_000);
+			var warning = new CapacityEvictionWarning(OWNER_LOG, "Widget", "10000 entries");
 			RemovalListener<String, String> listener = warning.listener();
 
 			listener.onRemoval("key", "value", RemovalCause.EXPIRED);

@@ -63,6 +63,28 @@ public class SignupInfo {
 		return ++confirmationAttempts;
 	}
 
+	/**
+	 * Estimated bytes held in this record's strings, for the token cache's byte bound: one byte per char for a
+	 * Latin-1 string, two once it holds a char above U+00FF (compact strings). A new string field must be added
+	 * here, or it escapes the bound.
+	 */
+	public int estimatedSize() {
+		int size = bytes(firstName) + bytes(lastName) + bytes(email) + bytes(saltedHashedPassword)
+				+ bytes(urlSuccess) + bytes(urlFailure);
+		if (customProperties != null) {
+			for (var property : customProperties.entrySet()) {
+				size += bytes(property.getKey()) + bytes(property.getValue());
+			}
+		}
+		return size;
+	}
+
+	private static int bytes(String value) {
+		if (value == null) {
+			return 0;
+		}
+		return value.chars().allMatch(c -> c <= 0xFF) ? value.length() : 2 * value.length();
+	}
 	public void setEmail(@NonNull String email) {
 		// we have to store it in lower case only to avoid problems with different cases in
 		// different steps of the process (if the user provides inconsistent information)

@@ -26,6 +26,7 @@ import org.entrystore.rest.springboot.model.auth.ConfirmAttemptResult;
 import org.entrystore.rest.springboot.model.auth.SignupInfo;
 import org.entrystore.rest.springboot.util.CapacityEvictionWarning;
 import org.springframework.stereotype.Service;
+import org.springframework.util.unit.DataSize;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -41,29 +42,38 @@ import java.util.function.Predicate;
  * {@link #confirmAttempt} can verify, count and remove atomically; a read takes the lock only to
  * drop a record it finds past its deadline (see {@code pastDeadline}).
  *
- * <p>Tokens are minted by anonymous requests, so {@code maximumSize} caps the entry count (not the
- * bytes held) and {@link CapacityEvictionWarning} reports when the cap bites. Caffeine evicts by
- * W-TinyLFU, not by age: under a flood of write-once entries the victim is a recently admitted entry,
- * so legitimate tokens minted during a flood can be evicted before their deadline while flood entries
- * persist to theirs. The per-IP rate limiters bound legitimate creation; the cap only matters under a
- * many-source flood, and the WARN is the signal to look for one.
+ * <p>Tokens are minted by anonymous requests whose caller strings (names, redirect URLs, at most 50
+ * {@code custom_*} properties) are bounded only by the 32 KB request cap, so {@code maximumWeight} caps the
+ * estimated bytes held (see {@link #weigh}) rather than the entry count, and {@link CapacityEvictionWarning}
+ * reports when the cap bites. Caffeine evicts by W-TinyLFU, not by age: flood and legitimate tokens are both
+ * write-once, so once the cache is full a newly minted legitimate token is evicted before its deadline while
+ * flood entries persist to theirs. A flood entry weighs at most ~40 KB (~70 KB with UTF-16 strings), so at the
+ * default sign-up rate limit (10 per IP per hour, 24 h TTL) about 8 source IPs fill the cache; the WARN is the
+ * signal to look for one.
  */
 @Slf4j
 @Service
 public class SignupTokenCache implements CaffeineCacheSource {
 
-	// Entry-count cap, not a byte bound: a day of legitimate traffic stays far below it, and when a
-	// flood makes it bite the victims are recently admitted tokens, not the oldest (see class Javadoc).
-	static final long MAX_ENTRIES = 100_000;
+	// Estimated bytes: ~100k typical tokens (~1.3 KB each), but only ~2k-3k flood entries (see class Javadoc).
+	static final DataSize MAX_WEIGHT = DataSize.ofMegabytes(128);
+
+	// Object headers, the Date, the map and the cache node: rough, but keeps tiny entries from weighing ~0.
+	static final int ENTRY_OVERHEAD = 1024;
+
+	// HashMap node, two String and two byte[] headers, table slot: else many tiny custom_* members hold heap for free.
+	static final int PROPERTY_OVERHEAD = 120;
 
 	private final Object lock = new Object();
 	private final Cache<String, SignupInfo> tokens;
 
 	public SignupTokenCache(Ticker ticker) {
-		var capacityWarning = new CapacityEvictionWarning(log, "Sign-up/password-reset token", MAX_ENTRIES);
+		var capacityWarning = new CapacityEvictionWarning(log, "Sign-up/password-reset token",
+				MAX_WEIGHT.toMegabytes() + " MB");
 		this.tokens = Caffeine.newBuilder()
 				.ticker(ticker)
-				.maximumSize(MAX_ENTRIES)
+				.maximumWeight(MAX_WEIGHT.toBytes())
+				.weigher(SignupTokenCache::weigh)
 				// Remaining time is measured on the wall clock, elapsed time on the ticker; a record already
 				// past its deadline gets a non-positive duration and expires on insert.
 				.expireAfter(Expiry.writing((String token, SignupInfo info) ->
@@ -90,8 +100,9 @@ public class SignupTokenCache implements CaffeineCacheSource {
 	 * Returns the pending record for {@code token}, or {@code null} when the token is unknown, already
 	 * consumed, or past its deadline. The deadline is re-checked on the wall clock because Caffeine's
 	 * expiry runs on the ticker (see {@code pastDeadline}); a record found past it is removed here, so
-	 * the legacy confirm paths and the confirmation-form checks in {@code AuthService}, which read
-	 * through this method, never honour a stale token.
+	 * the confirmation-form checks in {@code AuthService}, which read through this method, never honour
+	 * a stale token. Does not consume the token; a confirmation uses {@link #consumeToken} or
+	 * {@link #confirmAttempt}.
 	 */
 	public SignupInfo getTokenValue(String token) {
 		if (token == null) {
@@ -103,6 +114,22 @@ public class SignupTokenCache implements CaffeineCacheSource {
 			return null;
 		}
 		return info;
+	}
+
+	/**
+	 * Removes and returns the pending record for {@code token}, or returns {@code null} when the token is
+	 * unknown, already consumed, or past its deadline. The atomic remove guarantees that of two concurrent
+	 * legacy confirmations of the same link only one gets the record and applies it.
+	 */
+	public SignupInfo consumeToken(String token) {
+		if (token == null) {
+			return null;
+		}
+		SignupInfo info;
+		synchronized (lock) {
+			info = tokens.asMap().remove(token);
+		}
+		return (info == null || pastDeadline(info)) ? null : info;
 	}
 
 	public void removeToken(String token) {
@@ -171,5 +198,14 @@ public class SignupTokenCache implements CaffeineCacheSource {
 	 */
 	private static boolean pastDeadline(SignupInfo info) {
 		return info.getExpirationDate().before(new Date());
+	}
+
+	/**
+	 * Estimated bytes held by one entry: {@link #ENTRY_OVERHEAD}, {@link #PROPERTY_OVERHEAD} per custom property,
+	 * plus the caller strings it carries.
+	 */
+	static int weigh(String token, SignupInfo info) {
+		int properties = info.getCustomProperties() == null ? 0 : info.getCustomProperties().size();
+		return ENTRY_OVERHEAD + token.length() + PROPERTY_OVERHEAD * properties + info.estimatedSize();
 	}
 }

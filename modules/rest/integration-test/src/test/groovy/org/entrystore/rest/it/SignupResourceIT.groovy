@@ -31,6 +31,7 @@ import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CONFLICT
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAVAILABLE
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
@@ -469,6 +470,22 @@ class SignupResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 1
 	}
 
+	def "GET /auth/signup should reject a token minted before an admin cleared the signup-tokens cache"() {
+		given:
+		def requestBody = signupBody('userSignupClearedCache@test.com')
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		def token = extractConfirmationToken(greenMail)
+		assert EntryStoreClient.deleteRequest('/management/caches/signup-tokens', null).getResponseCode() == HTTP_NO_CONTENT
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + token)
+
+		then:
+		confirmConn.getResponseCode() == HTTP_BAD_REQUEST
+		confirmConn.getContentType().contains('text/html')
+		confirmConn.errorStream.text.contains('Invalid confirmation link.')
+	}
+
 	def "GET /auth/signup should confirm creating new user when the browser sends the cookie of an unknown session"() {
 		given:
 		def requestBody = signupBody('userSignupConfirmStaleCookie@test.com')
@@ -651,6 +668,34 @@ class SignupResourceIT extends BaseSpec {
 		resourceRespJson['customProperties']['foo'] == 'foo'
 		resourceRespJson['customProperties']['boo'] == 'boo'
 		resourceRespJson['name'] == username.toLowerCase()
+	}
+
+	def "POST /auth/signup should accept 50 custom properties"() {
+		given:
+		def customProperties = (1..50).collectEntries { ['custom_p' + it, 'v'] }
+		def requestBody = signupBody('userSignupMaxCustomProps@test.com', customProperties)
+
+		when:
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+
+		then:
+		signupConn.getResponseCode() == HTTP_OK
+		greenMail.getReceivedMessages().size() == 1
+	}
+
+	def "POST /auth/signup should reject more than 50 custom properties without sending an email"() {
+		given:
+		def customProperties = (1..51).collectEntries { ['custom_p' + it, 'v'] }
+		def requestBody = signupBody('userSignupTooManyCustomProps@test.com', customProperties)
+
+		when:
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+
+		then:
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.errorStream.text.contains('At most 50 custom properties are accepted.')
+		greenMail.getReceivedMessages().size() == 0
 	}
 
 	def "POST /auth/signup should confirm creating new user with custom properties after signing up with a valid token posted as an html form"() {

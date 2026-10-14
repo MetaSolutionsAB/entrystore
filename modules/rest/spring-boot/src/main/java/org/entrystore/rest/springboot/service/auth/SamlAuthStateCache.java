@@ -51,7 +51,7 @@ public class SamlAuthStateCache implements CaffeineCacheSource {
 	private final Cache<String, AuthState> requestCache;
 
 	public SamlAuthStateCache(SamlCustomConfiguration samlConfiguration, Ticker ticker) {
-		var capacityWarning = new CapacityEvictionWarning(log, "SAML auth-state", MAX_ENTRIES);
+		var capacityWarning = new CapacityEvictionWarning(log, "SAML auth-state", MAX_ENTRIES + " entries");
 		this.requestCache = Caffeine.newBuilder()
 				.ticker(ticker)
 				.expireAfterWrite(samlConfiguration.requestLifetime())

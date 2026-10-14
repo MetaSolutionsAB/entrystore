@@ -57,7 +57,7 @@ public class CacheSaml2AuthenticationRequestRepository
 	private final Cache<String, AbstractSaml2AuthenticationRequest> cache;
 
 	public CacheSaml2AuthenticationRequestRepository(SamlCustomConfiguration samlConfiguration, Ticker ticker) {
-		var capacityWarning = new CapacityEvictionWarning(log, "SAML authentication-request", MAX_ENTRIES);
+		var capacityWarning = new CapacityEvictionWarning(log, "SAML authentication-request", MAX_ENTRIES + " entries");
 		this.cache = Caffeine.newBuilder()
 				.ticker(ticker)
 				.expireAfterWrite(samlConfiguration.requestLifetime())
@@ -82,7 +82,12 @@ public class CacheSaml2AuthenticationRequestRepository
 	public void saveAuthenticationRequest(AbstractSaml2AuthenticationRequest authRequest,
 										  HttpServletRequest request,
 										  HttpServletResponse response) {
-		if (authRequest != null && authRequest.getRelayState() != null) {
+		if (authRequest == null) {
+			// As in Spring's session repository a null request means removal, here of the one named by RelayState.
+			removeAuthenticationRequest(request, response);
+			return;
+		}
+		if (authRequest.getRelayState() != null) {
 			cache.put(authRequest.getRelayState(), authRequest);
 		}
 	}

@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.service.auth;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Ticker;
 import org.apache.logging.log4j.Level;
 import org.entrystore.rest.springboot.model.auth.ConfirmAttemptResult;
@@ -25,6 +26,8 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
@@ -32,6 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -53,6 +57,17 @@ class SignupTokenCacheTest {
 		SignupInfo info = new SignupInfo();
 		info.setEmail("user@example.com");
 		info.setExpirationDate(new Date(System.currentTimeMillis() + 3600_000));
+		return info;
+	}
+
+	// A legacy-mode sign-up: names, a salted hash and both redirect URLs.
+	private SignupInfo typicalSignupInfo() {
+		SignupInfo info = pendingInfo();
+		info.setFirstName("Firstname");
+		info.setLastName("Lastname-Surname");
+		info.setSaltedHashedPassword("h".repeat(100));
+		info.setUrlSuccess("https://app.example.com/signup/success?lang=en&return=/some/path");
+		info.setUrlFailure("https://app.example.com/signup/failure?lang=en&return=/some/path");
 		return info;
 	}
 
@@ -275,36 +290,160 @@ class SignupTokenCacheTest {
 		assertEquals(1L, caches.get("signup-tokens").estimatedSize());
 	}
 
-	// The maximumSize bound and its throttled SIZE-eviction warn bound the heap against a sign-up
-	// flood that outruns the per-IP rate limiter (many source addresses); this pins both, and that
-	// the cap stays generous enough that a day of legitimate sign-ups is never evicted early.
+	// The weight bound and its throttled SIZE-eviction warn bound the heap against a sign-up flood that
+	// outruns the per-IP rate limiter (many source addresses); this pins both, and that the budget stays
+	// generous enough that a day of typical sign-ups (~100k records) is never evicted early.
 	@Test
-	void capacityEvictionIsBoundedAndWarnsOnce() {
+	void capacityEvictionOfTypicalTokensIsBoundedAndWarnsOnce() {
 		try (var appender = CapturingAppender.attachTo(SignupTokenCache.class)) {
 			var cache = newCache();
-			for (int i = 0; i < SignupTokenCache.MAX_ENTRIES + 100; i++) {
-				cache.putToken("tok-" + i, pendingInfo());
+			int dayOfTypicalTokens = 100_000;
+			long typicalWeight = SignupTokenCache.weigh("0123456789abcdef", typicalSignupInfo());
+			long tokensToOverfill = SignupTokenCache.MAX_WEIGHT.toBytes() / typicalWeight + 100;
+			for (int i = 0; i < tokensToOverfill; i++) {
+				cache.putToken(String.format("%016d", i), typicalSignupInfo());
 			}
 			var caffeine = cache.caffeineCaches().get("signup-tokens");
 			caffeine.cleanUp();
 
-			assertTrue(caffeine.estimatedSize() <= SignupTokenCache.MAX_ENTRIES);
-			assertTrue(SignupTokenCache.MAX_ENTRIES >= 100_000,
-					"declared cap shrunk below a day of legitimate sign-ups and password resets");
-			assertTrue(caffeine.estimatedSize() >= 99_000,
+			assertTrue(weightedSize(caffeine) <= SignupTokenCache.MAX_WEIGHT.toBytes());
+			assertTrue(caffeine.estimatedSize() >= dayOfTypicalTokens,
 					"effective cache cap shrunk below a day of legitimate sign-ups and password resets");
 			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
 		}
 	}
 
+	// Every minting body may carry up to 32 KB of caller strings; an entry-count cap alone would let
+	// 100k of them hold ~3 GB.
+	@Test
+	void capacityEvictionBoundsTheBytesOfLargeTokens() {
+		try (var appender = CapturingAppender.attachTo(SignupTokenCache.class)) {
+			var cache = newCache();
+			String largeValue = "x".repeat(30 * 1024);
+			int tokens = 5_000; // ~150 MB of caller strings
+			for (int i = 0; i < tokens; i++) {
+				SignupInfo info = pendingInfo();
+				info.setCustomProperties(Map.of("bio", largeValue));
+				cache.putToken("tok-" + i, info);
+			}
+			var caffeine = cache.caffeineCaches().get("signup-tokens");
+			caffeine.cleanUp();
+
+			assertTrue(weightedSize(caffeine) <= SignupTokenCache.MAX_WEIGHT.toBytes());
+			assertTrue(caffeine.estimatedSize() < tokens, "large tokens must be evicted by weight");
+			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
+		}
+	}
+
+	@Test
+	void weigh_countsOverheadAndEveryCallerString() {
+		SignupInfo info = pendingInfo(); // email "user@example.com", 16 chars
+		info.setFirstName("Ada");
+		info.setLastName("Lovelace");
+		info.setSaltedHashedPassword("hash");
+		info.setUrlSuccess("https://ok");
+		info.setUrlFailure("https://ko");
+		info.setCustomProperties(Map.of("dept", "maths"));
+
+		assertEquals(SignupTokenCache.ENTRY_OVERHEAD + 3 + 16 + 3 + 8 + 4 + 10 + 10 + SignupTokenCache.PROPERTY_OVERHEAD + 4 + 5,
+				SignupTokenCache.weigh("tok", info));
+	}
+
+	// ~2,000 empty custom_* members fit a 32 KB body; their map nodes and String objects must be weighed.
+	@Test
+	void weigh_countsOverheadPerCustomProperty() {
+		SignupInfo info = new SignupInfo();
+		var properties = new HashMap<String, String>();
+		for (int i = 0; i < 2_000; i++) {
+			properties.put(String.valueOf(i), "");
+		}
+		info.setCustomProperties(properties);
+
+		assertTrue(SignupTokenCache.weigh("tok", info) >= 2_000 * SignupTokenCache.PROPERTY_OVERHEAD);
+	}
+
+	// The JVM stores a string as UTF-16 once it holds a char above U+00FF.
+	@Test
+	void weigh_countsTwoBytesPerChar_forNonLatin1Strings() {
+		SignupInfo latin1 = new SignupInfo();
+		latin1.setFirstName("Zo" + (char) 0xEB); // Latin-1 e-diaeresis: one byte per char
+		SignupInfo nonLatin1 = new SignupInfo();
+		nonLatin1.setFirstName("Zo" + (char) 0x0113); // e-macron: the whole string is UTF-16
+
+		assertEquals(SignupTokenCache.ENTRY_OVERHEAD + 3 + 3, SignupTokenCache.weigh("tok", latin1));
+		assertEquals(SignupTokenCache.ENTRY_OVERHEAD + 3 + 6, SignupTokenCache.weigh("tok", nonLatin1));
+	}
+
+	@Test
+	void weigh_countsAbsentFieldsAsZero() {
+		SignupInfo info = new SignupInfo();
+
+		assertEquals(SignupTokenCache.ENTRY_OVERHEAD + 3, SignupTokenCache.weigh("tok", info));
+	}
+
+	@Test
+	void consumeToken_returnsTheRecordOnceAndRemovesIt() {
+		var cache = newCache();
+		SignupInfo info = pendingInfo();
+		cache.putToken("tok", info);
+
+		assertSame(info, cache.consumeToken("tok"));
+		assertNull(cache.consumeToken("tok"), "a consumed token must not be consumable again");
+		assertNull(cache.getTokenValue("tok"));
+	}
+
+	@Test
+	void consumeToken_returnsNull_forUnknownToken() {
+		assertNull(newCache().consumeToken("missing"));
+	}
+
+	@Test
+	void consumeToken_returnsNull_forNullToken() {
+		var cache = newCache();
+		cache.putToken("tok", pendingInfo());
+
+		assertNull(cache.consumeToken(null));
+		assertNotNull(cache.getTokenValue("tok"), "a null token must not touch other records");
+	}
+
+	@Test
+	void consumeToken_returnsNullAndRemoves_whenDeadlinePassesWhileTickerStandsStill() {
+		var cache = new SignupTokenCache(new AtomicLong()::get);
+		SignupInfo info = pendingInfo();
+		cache.putToken("tok", info);
+		info.setExpirationDate(new Date(System.currentTimeMillis() - 1000));
+
+		assertNull(cache.consumeToken("tok"), "a token past its wall-clock deadline must not be consumed");
+
+		// Restoring the deadline proves the record was removed rather than merely filtered.
+		info.setExpirationDate(new Date(System.currentTimeMillis() + 3600_000));
+		assertNull(cache.getTokenValue("tok"));
+	}
+
+	@Test
+	void consumeToken_returnsTheRecordExactlyOnce_underConcurrentConsumers() {
+		var cache = newCache();
+		cache.putToken("tok", pendingInfo());
+		int consumers = 200;
+
+		ConcurrentLinkedQueue<Boolean> results = fireConcurrently(consumers, () -> cache.consumeToken("tok") != null);
+
+		assertEquals(1L, results.stream().filter(Boolean::booleanValue).count(),
+				"two concurrent legacy confirmations must not both apply the same token");
+		assertEquals(consumers, results.size());
+	}
+
+	private static long weightedSize(Cache<?, ?> caffeine) {
+		return caffeine.policy().eviction().orElseThrow().weightedSize().orElseThrow();
+	}
+
 	/**
 	 * Runs {@code task} on {@code count} virtual threads released simultaneously (via a start latch) so the
 	 * attempts genuinely race, and returns their results once all have completed.
 	 */
-	private static ConcurrentLinkedQueue<ConfirmAttemptResult.Status> fireConcurrently(
-			int count, java.util.function.Supplier<ConfirmAttemptResult.Status> task) {
-		var results = new ConcurrentLinkedQueue<ConfirmAttemptResult.Status>();
+	private static <T> ConcurrentLinkedQueue<T> fireConcurrently(int count, Supplier<T> task) {
+		var results = new ConcurrentLinkedQueue<T>();
 		var start = new CountDownLatch(1);
 		try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
 			for (int i = 0; i < count; i++) {

@@ -24,9 +24,9 @@ import java.time.Duration;
 import java.util.Objects;
 
 /**
- * Reports capacity eviction on a size-capped Caffeine cache whose entries are minted on an anonymous,
- * un-rate-limited path. {@code maximumSize} bounds the heap; this class makes the bound observable: a
- * {@link RemovalCause#SIZE} eviction emits one WARN through the owning cache's logger, at most once per
+ * Reports capacity eviction on a size- or weight-capped Caffeine cache whose entries are minted on an
+ * anonymous, un-rate-limited path. {@code maximumSize} or {@code maximumWeight} bounds the heap; this class
+ * makes the bound observable: a {@link RemovalCause#SIZE} eviction emits one WARN through the owning cache's logger, at most once per
  * minute via {@link LogThrottle}, because the listener runs inside the cache's eviction maintenance and
  * an unthrottled line per eviction would trade the heap bound for log amplification. Every other cause
  * — ordinary expiry above all — stays silent, or normal traffic (abandoned logins timing out) would
@@ -41,17 +41,18 @@ public final class CapacityEvictionWarning {
 
 	private final Logger log;
 	private final String cacheDescription;
-	private final long maxEntries;
+	private final String capacity;
 	private final LogThrottle throttle;
 
-	public CapacityEvictionWarning(Logger log, String cacheDescription, long maxEntries) {
-		this(log, cacheDescription, maxEntries, new LogThrottle(WARN_INTERVAL));
+	/** {@code capacity} describes the cap in the WARN, e.g. {@code "50000 entries"} or {@code "100 MB"}. */
+	public CapacityEvictionWarning(Logger log, String cacheDescription, String capacity) {
+		this(log, cacheDescription, capacity, new LogThrottle(WARN_INTERVAL));
 	}
 
-	CapacityEvictionWarning(Logger log, String cacheDescription, long maxEntries, LogThrottle throttle) {
+	CapacityEvictionWarning(Logger log, String cacheDescription, String capacity, LogThrottle throttle) {
 		this.log = Objects.requireNonNull(log, "log");
 		this.cacheDescription = Objects.requireNonNull(cacheDescription, "cacheDescription");
-		this.maxEntries = maxEntries;
+		this.capacity = Objects.requireNonNull(capacity, "capacity");
 		this.throttle = Objects.requireNonNull(throttle, "throttle");
 	}
 
@@ -64,7 +65,7 @@ public final class CapacityEvictionWarning {
 		// Guard order matters: tryAcquire consumes the interval token (see its Javadoc).
 		if (cause == RemovalCause.SIZE && throttle.tryAcquire()) {
 			log.warn("{} cache is evicting at capacity ({}) — possible flood on its write path",
-					cacheDescription, maxEntries);
+					cacheDescription, capacity);
 		}
 	}
 }
