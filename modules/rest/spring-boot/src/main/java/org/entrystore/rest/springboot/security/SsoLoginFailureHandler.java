@@ -34,6 +34,9 @@ import java.io.IOException;
  *
  * <p>The SAML ACS endpoint is anonymous and Spring's messages quote values from the response, so the WARN carries
  * the sanitized message only and the stack trace goes to DEBUG.
+ *
+ * <p>A failure starts no session: one started only to hold the exception would set an {@code auth_token} cookie,
+ * unlike 5.x, and stay in memory until it idles out. A session the request already has still receives the exception.
  */
 @Slf4j
 class SsoLoginFailureHandler extends SimpleUrlAuthenticationFailureHandler {
@@ -43,6 +46,7 @@ class SsoLoginFailureHandler extends SimpleUrlAuthenticationFailureHandler {
 	SsoLoginFailureHandler(String authTypeLabel, String defaultFailureUrl) {
 		super(defaultFailureUrl);
 		this.authTypeLabel = authTypeLabel;
+		setAllowSessionCreation(false);
 	}
 
 	@Override
