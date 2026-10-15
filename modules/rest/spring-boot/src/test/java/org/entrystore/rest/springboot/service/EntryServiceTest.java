@@ -193,6 +193,23 @@ class EntryServiceTest {
 	}
 
 	@Test
+	void createLinkEntry_failureAfterCreate_removesEntryAndRethrows() {
+		ContextImpl contextImpl = mock(ContextImpl.class);
+		URI entryUri = URI.create("http://example.org/1/entry/e1");
+		URI listUri = URI.create("http://example.org/1/resource/list1");
+		when(contextImpl.createLink(any(), any(), any())).thenReturn(entry);
+		when(entry.getEntryURI()).thenReturn(entryUri);
+		RepositoryException failure = new RepositoryException("rdf4j transaction error");
+		doThrow(failure).when(contextImpl).copyACL(listUri, entry);
+
+		RepositoryException thrown = assertThrows(RepositoryException.class, () -> service.createLinkEntry(
+				contextImpl, "e1", null, URI.create("http://external.example.com/doc"), listUri, null));
+
+		assertSame(failure, thrown);
+		verify(contextImpl).remove(entryUri);
+	}
+
+	@Test
 	void createReferenceEntry_metadataBodyIgnored_onlyCachedMetadataAndInfoSet() {
 		// setLocalMetadataGraph must no-op for Reference entries even when the body carries metadata.
 		when(context.createReference(any(), any(), any(), any())).thenReturn(entry);

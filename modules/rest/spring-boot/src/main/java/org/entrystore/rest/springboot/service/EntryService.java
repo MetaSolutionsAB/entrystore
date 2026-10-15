@@ -535,10 +535,14 @@ public class EntryService {
 	/**
 	 * Shared tail of the link/reference/link-reference create pipelines: applies the request body's
 	 * graphs (each setter no-ops for entry types it does not apply to), the optional graph type, and
-	 * copies the parent list's ACL.
+	 * copies the parent list's ACL. A failure removes the just-created entry, with the error-propagation
+	 * contract of {@link #createLocalEntry}: invalid RDF/JSON in the body becomes a {@link BadRequestException}.
 	 */
 	private Entry finishEntry(Context context, Entry entry, GraphType graphType, URI listUri, CreateEntryRequestBody body) {
-		if (entry != null) {
+		if (entry == null) {
+			return null;
+		}
+		try {
 			setLocalMetadataGraph(entry, body);
 			setCachedMetadataGraph(entry, body);
 			setEntryGraph(entry, body);
@@ -548,8 +552,14 @@ public class EntryService {
 			if (listUri != null) {
 				((ContextImpl) context).copyACL(listUri, entry);
 			}
+			return entry;
+		} catch (RDFParseException e) {
+			safeRollback(context, entry, e);
+			throw new BadRequestException("Cannot create an entry with provided JSON/RDF", e);
+		} catch (RuntimeException e) {
+			safeRollback(context, entry, e);
+			throw e;
 		}
-		return entry;
 	}
 
 	public Entry modifyEntry(Entry entry, String body, String mediaType, boolean applyACLtoChildren) throws AuthorizationException {
