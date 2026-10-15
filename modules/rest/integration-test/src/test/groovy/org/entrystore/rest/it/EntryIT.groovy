@@ -930,9 +930,10 @@ class EntryIT extends BaseSpec {
 		EntryStoreClient.getRequest('/' + contextId + '/entry/' + requestedEntryId).getResponseCode() == HTTP_NOT_FOUND
 	}
 
-	def "POST /{context-id}?entrytype=link&id=x&list=y as USER with write ACL with an invalid IRI in the metadata should respond with Bad Request and leave neither the entry nor the list child"() {
+	def "POST /{context-id}?entrytype=link&list=y as USER with write ACL with metadata that is invalid only with the generated entry ID should respond with Bad Request and leave neither the entry nor the list child"() {
 		given:
-		// Harvesters typically write to the context without owning it; the new entry carries the list's ACL
+		// %_newId passes the check before creation (stand-in 10) but not with a one-digit generated ID, so the
+		// entry is created and removed again, by a user who writes to the context without owning it
 		def writerContextId = 'rollback-writer-ctx'
 		getOrCreateContext([contextId: writerContextId])
 		def userResourceUri = EntryStoreClient.createdEsUsers['user']['resourceUri']
@@ -941,10 +942,10 @@ class EntryIT extends BaseSpec {
 		assert EntryStoreClient.putRequest('/_contexts/entry/' + writerContextId, aclBody, 'admin').getResponseCode() == HTTP_NO_CONTENT
 		def listId = createEntry(writerContextId, [graphtype: 'list'])
 		def listUri = EntryStoreClient.baseUrl + '/' + writerContextId + '/entry/' + listId
-		def requestedEntryId = 'writerLinkWithInvalidIriInMetadata'
-		def resourceIri = EntryStoreClient.baseUrl + '/' + writerContextId + '/resource/_newId'
-		def params = [entrytype: 'link', resource: resourceUrl, id: requestedEntryId, list: listUri]
-		def body = [metadata: [(resourceIri): [(NameSpaceConst.DC_TERM_SUBJECT): [[type: 'uri', value: 'http://example.com/invalid uri']]]]]
+		def generatedEntryId = (listId as long) + 1
+		assert generatedEntryId < 10
+		def params = [entrytype: 'link', resource: resourceUrl, list: listUri]
+		def body = [metadata: [(resourceUrl): [(NameSpaceConst.DC_TERM_SUBJECT): [[type: 'uri', value: 'http://example.com/%_newId/']]]]]
 
 		when:
 		def connection = EntryStoreClient.postRequest('/' + writerContextId + convertMapToQueryParams(params), JsonOutput.toJson(body), 'user')
@@ -952,10 +953,73 @@ class EntryIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_BAD_REQUEST
 		JSON_PARSER.parseText(connection.errorStream.text)['error'].toString().contains('Cannot create an entry with provided JSON/RDF')
-		EntryStoreClient.getRequest('/' + writerContextId + '/entry/' + requestedEntryId).getResponseCode() == HTTP_NOT_FOUND
+		EntryStoreClient.getRequest('/' + writerContextId + '/entry/' + generatedEntryId).getResponseCode() == HTTP_NOT_FOUND
 		def listConn = EntryStoreClient.getRequest('/' + writerContextId + '/resource/' + listId)
 		listConn.getResponseCode() == HTTP_OK
 		JSON_PARSER.parseText(listConn.inputStream.text) == []
+
+		and: 'the entry was created and removed again, not rejected before creation'
+		createEntry(writerContextId, [entrytype: 'link', resource: resourceUrl]) as long == generatedEntryId + 1
+	}
+
+	def "POST /{context-id}?entrytype=link with an invalid IRI in the metadata should respond with Bad Request and not take an entry ID"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def previousEntryId = createEntry(contextId, params) as long
+		def resourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(resourceIri): [(NameSpaceConst.DC_TERM_SUBJECT): [[type: 'uri', value: 'http://example.com/invalid uri']]]]]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), JsonOutput.toJson(body))
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(connection.errorStream.text)['error'].toString().contains('Cannot create an entry with provided JSON/RDF')
+		createEntry(contextId, params) as long == previousEntryId + 1
+	}
+
+	def "POST /{context-id} for a local entry with an invalid IRI in the metadata should respond with Bad Request and not take an entry ID"() {
+		given:
+		def previousEntryId = createEntry(contextId, [:]) as long
+		def resourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(resourceIri): [(NameSpaceConst.DC_TERM_SUBJECT): [[type: 'uri', value: 'http://example.com/invalid uri']]]]]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId, JsonOutput.toJson(body))
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(connection.errorStream.text)['error'].toString().contains('Cannot create an entry with provided JSON/RDF')
+		createEntry(contextId, [:]) as long == previousEntryId + 1
+	}
+
+	def "POST /{context-id}?entrytype=reference with an invalid IRI in the metadata should create the entry, as a reference has no local metadata"() {
+		given:
+		def resourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def params = [entrytype: 'reference', resource: resourceUrl, 'cached-external-metadata': 'https://bbc.co.uk/metadata']
+		def body = [metadata: [(resourceIri): [(NameSpaceConst.DC_TERM_SUBJECT): [[type: 'uri', value: 'http://example.com/invalid uri']]]]]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), JsonOutput.toJson(body))
+
+		then:
+		connection.getResponseCode() == HTTP_CREATED
+	}
+
+	def "POST /{context-id}?entrytype=link&id=x with metadata that is valid only with the requested entry ID should create the entry"() {
+		given:
+		def requestedEntryId = 'a'
+		def params = [entrytype: 'link', resource: resourceUrl, id: requestedEntryId]
+		def body = [metadata: [(resourceUrl): [(NameSpaceConst.DC_TERM_SUBJECT): [[type: 'uri', value: 'http://[::fff_newId]/']]]]]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), JsonOutput.toJson(body))
+
+		then:
+		connection.getResponseCode() == HTTP_CREATED
+		def metadataConn = EntryStoreClient.getRequest('/' + contextId + '/metadata/' + requestedEntryId)
+		metadataConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(metadataConn.inputStream.text)[resourceUrl][NameSpaceConst.DC_TERM_SUBJECT][0]['value'] == 'http://[::fffa]/'
 	}
 
 	def "POST /{context-id}?entrytype=reference&id=x with an invalid IRI in the cached external metadata should respond with Bad Request and create nothing"() {

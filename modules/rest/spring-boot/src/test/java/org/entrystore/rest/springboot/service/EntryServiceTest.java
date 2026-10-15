@@ -193,6 +193,19 @@ class EntryServiceTest {
 	}
 
 	@Test
+	void createEntry_invalidIriInMetadata_rejectsBeforeCreating() {
+		String rdfJson = "{\"http://example.org/1/resource/_newId\":"
+				+ "{\"http://purl.org/dc/terms/subject\":[{\"value\":\"http://example.com/invalid uri\",\"type\":\"uri\"}]}}";
+		CreateEntryRequestBody body = new CreateEntryRequestBody(null, rdfJson, null, null);
+
+		BadRequestException thrown = assertThrows(BadRequestException.class, () -> service.createEntry(context, null,
+				EntryType.Link, null, URI.create("http://external.example.com/doc"), null, null, null, null, null, body));
+
+		assertEquals("Cannot create an entry with provided JSON/RDF", thrown.getMessage());
+		verifyNoInteractions(context);
+	}
+
+	@Test
 	void createLinkEntry_failureAfterCreate_removesEntryAndRethrows() {
 		ContextImpl contextImpl = mock(ContextImpl.class);
 		URI entryUri = URI.create("http://example.org/1/entry/e1");
