@@ -94,6 +94,7 @@ public class EntryService {
 
 	private static final int JSON_OBJECT_TO_STRING_INDENT_SIZE = 0;
 	private static final Pattern ENTRY_ID_PATTERN = Pattern.compile("^[\\w\\-]+$");
+	private static final String NEW_ID_STAND_IN = "10";
 
 	private final PrincipalManager principalManager;
 	private final RepositoryManagerImpl repositoryManager;
@@ -327,6 +328,8 @@ public class EntryService {
 			}
 		}
 
+		checkGraphsOfRequestBody(entryId, entryType, body);
+
 		Entry entry = null; // A variable to store the new entry in.
 
 		try {
@@ -535,10 +538,15 @@ public class EntryService {
 	/**
 	 * Shared tail of the link/reference/link-reference create pipelines: applies the request body's
 	 * graphs (each setter no-ops for entry types it does not apply to), the optional graph type, and
-	 * copies the parent list's ACL.
+	 * copies the parent list's ACL. A failure removes the just-created entry, with the error-propagation
+	 * contract of {@link #createLocalEntry}: invalid RDF/JSON that {@link #checkGraphsOfRequestBody} could not
+	 * detect before creation becomes a {@link BadRequestException}.
 	 */
 	private Entry finishEntry(Context context, Entry entry, GraphType graphType, URI listUri, CreateEntryRequestBody body) {
-		if (entry != null) {
+		if (entry == null) {
+			return null;
+		}
+		try {
 			setLocalMetadataGraph(entry, body);
 			setCachedMetadataGraph(entry, body);
 			setEntryGraph(entry, body);
@@ -548,8 +556,14 @@ public class EntryService {
 			if (listUri != null) {
 				((ContextImpl) context).copyACL(listUri, entry);
 			}
+			return entry;
+		} catch (RDFParseException e) {
+			safeRollback(context, entry, e);
+			throw new BadRequestException("Cannot create an entry with provided JSON/RDF", e);
+		} catch (RuntimeException e) {
+			safeRollback(context, entry, e);
+			throw e;
 		}
-		return entry;
 	}
 
 	public Entry modifyEntry(Entry entry, String body, String mediaType, boolean applyACLtoChildren) throws AuthorizationException {
@@ -808,6 +822,45 @@ public class EntryService {
 	}
 
 	/**
+	 * Rejects invalid RDF/JSON in the graphs of the request body that the entry type applies, before the entry is
+	 * created, so that a rejected request takes no entry ID from the context's counter and leaves no deletion
+	 * record. As in the graph setters, {@code _newId} is replaced with the given entry ID; a generated ID is not
+	 * known yet, so it is replaced with the numeric stand-in "10". The generated ID can only make a difference
+	 * where {@code _newId} adjoins other digits or a percent sign: a body that passes here and fails with the
+	 * generated ID is removed again after creation, and one that fails here but would pass with it (for example
+	 * {@code _newId} in an IPv6 literal after other digits) is rejected although no client sends such IRIs.
+	 * Malformed JSON is left to the graph setters, which ignore it as in 5.x.
+	 *
+	 * @throws BadRequestException if a graph that the entry type applies is invalid RDF/JSON
+	 */
+	private void checkGraphsOfRequestBody(String entryId, EntryType entryType, CreateEntryRequestBody body) {
+		if (body == null) {
+			return;
+		}
+		String newId = entryId != null ? entryId : NEW_ID_STAND_IN;
+		if (entryType != Reference) {
+			checkGraph(body.metadata(), newId);
+		}
+		if (entryType == Reference || entryType == LinkReference) {
+			checkGraph(body.cachedExternalMetadata(), newId);
+		}
+		checkGraph(body.info(), newId);
+	}
+
+	private void checkGraph(String rawRdfJson, String newId) {
+		if (StringUtils.isEmpty(rawRdfJson)) {
+			return;
+		}
+		try {
+			RDFJSON.rdfJsonToGraph(new JSONObject(rawRdfJson.replaceAll("_newId", newId)));
+		} catch (JSONException e) {
+			// Ignored by the graph setters as well
+		} catch (RDFParseException e) {
+			throw new BadRequestException("Cannot create an entry with provided JSON/RDF", e);
+		}
+	}
+
+	/**
 	 * Validates the external metadata URI that the entry graph in the request body sets, before the entry is
 	 * created: the entry graph is applied only after the entry has been created, and a rejected URI must not leave
 	 * a created entry behind. The entry graph may refer to the new entry as {@code _newId}; as in
@@ -830,7 +883,7 @@ public class EntryService {
 			String info = entryId != null ? body.info().replaceAll("_newId", entryId) : body.info();
 			graph = RDFJSON.rdfJsonToGraph(new JSONObject(info));
 		} catch (JSONException | RDFParseException e) {
-			return; // Handled as before by the create path of the entry type
+			return; // Malformed JSON is ignored by setEntryGraph, invalid RDF/JSON is rejected elsewhere
 		}
 		if (graph == null) {
 			return;
