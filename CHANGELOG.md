@@ -4,6 +4,8 @@
 
 ### Improvement
 
+[ENTRYSTORE-1192](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1192) The sign-up, password-reset and search rate limiters count every client address that is not an IP address, such as Forwarded for=unknown or an obfuscated identifier, against one shared budget. Each such value had its own budget, so forwarded headers passed through from clients, of up to 8 KB each, could grow a limiter to about 800 MB. Different spellings of one IP address, such as a bracketed or abbreviated IPv6 address, share a budget, and an X-Forwarded-For address with a port, as Azure Application Gateway sends, counts against the budget of its IP address.
+
 [ENTRYSTORE-1110](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1110) The signup-tokens cache is capped at an estimated 128 MB instead of 100 000 entries, so sign-up bodies of up to 32 KB can no longer hold gigabytes. A legacy confirmation link \(entrystore.auth.confirmation.legacy=true\) is consumed atomically, so two concurrent clicks cannot both apply it. Saving a null SAML authentication request removes the pending request named by the request's RelayState. **Behaviour note:** a sign-up with more than 50 custom\_\* properties is rejected with 400
 
 ## Version 6.1

@@ -17,14 +17,14 @@
 package org.entrystore.rest.springboot.service.auth;
 
 import com.github.benmanes.caffeine.cache.Ticker;
-import org.entrystore.rest.springboot.service.FixedWindowRateLimiter;
+import org.entrystore.rest.springboot.service.ClientAddressRateLimiter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 
 @Service
-public class SignupRateLimiter extends FixedWindowRateLimiter {
+public class SignupRateLimiter extends ClientAddressRateLimiter {
 
 	public SignupRateLimiter(
 			@Value("${entrystore.auth.signup.rate.limit.max:10}") int max,

@@ -97,4 +97,48 @@ class ZzzSearchRateLimitIT extends BaseSpec {
 		then:
 		codes == [HTTP_OK, HTTP_OK, HTTP_TOO_MANY_REQUESTS]
 	}
+
+	def "GET /search — client addresses that are not IP addresses share one budget"() {
+		when:
+		def codes = searchCodes([
+			['Forwarded': 'for=unknown'],
+			['Forwarded': 'for=unknown'],
+			['X-Forwarded-For': 'not-an-ip'],
+			['Forwarded': 'for=_hidden']
+		])
+
+		then:
+		codes == [HTTP_OK, HTTP_OK, HTTP_OK, HTTP_TOO_MANY_REQUESTS]
+	}
+
+	def "GET /search — an IPv6 client has its own budget, shared across Forwarded and X-Forwarded-For"() {
+		when:
+		def codes = searchCodes([
+			['Forwarded': 'for="[2001:db8::1]:4711"'],
+			['Forwarded': 'for="[2001:db8::1]:4711"'],
+			['X-Forwarded-For': '2001:DB8:0:0:0:0:0:1'],
+			['X-Forwarded-For': '2001:DB8:0:0:0:0:0:1']
+		])
+
+		then: 'the bucket for addresses that are not IP addresses is used up, so a first 200 needs a budget of its own'
+		codes == [HTTP_OK, HTTP_OK, HTTP_OK, HTTP_TOO_MANY_REQUESTS]
+	}
+
+	def "GET /search — an X-Forwarded-For address with a port has the budget of its IP address"() {
+		when: 'each request comes from another port, as behind Azure Application Gateway'
+		def codes = searchCodes([
+			['X-Forwarded-For': '203.0.113.50:51001'],
+			['X-Forwarded-For': '203.0.113.50:51002'],
+			['X-Forwarded-For': '203.0.113.50:51003'],
+			['X-Forwarded-For': '203.0.113.50:51004']
+		])
+
+		then:
+		codes == [HTTP_OK, HTTP_OK, HTTP_OK, HTTP_TOO_MANY_REQUESTS]
+	}
+
+	/** One guest search per header map, in order; returns the response codes. */
+	private static List<Integer> searchCodes(List<Map<String, String>> headersPerRequest) {
+		headersPerRequest.collect { EntryStoreClient.getRequest(QUERY, '', 'application/json', it).getResponseCode() }
+	}
 }

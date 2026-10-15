@@ -17,14 +17,14 @@
 package org.entrystore.rest.springboot.service.auth;
 
 import com.github.benmanes.caffeine.cache.Ticker;
-import org.entrystore.rest.springboot.service.FixedWindowRateLimiter;
+import org.entrystore.rest.springboot.service.ClientAddressRateLimiter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 
 @Service
-public class PasswordResetRateLimiter extends FixedWindowRateLimiter {
+public class PasswordResetRateLimiter extends ClientAddressRateLimiter {
 
 	public PasswordResetRateLimiter(
 			@Value("${entrystore.auth.password-reset.rate.limit.max:10}") int max,

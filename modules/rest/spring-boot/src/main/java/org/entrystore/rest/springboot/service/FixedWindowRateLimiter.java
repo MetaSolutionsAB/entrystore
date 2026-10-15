@@ -22,6 +22,8 @@ import com.github.benmanes.caffeine.cache.Ticker;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
+import org.entrystore.rest.springboot.util.HttpUtil;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.event.Level;
 import org.springframework.http.HttpStatus;
 
@@ -38,6 +40,9 @@ import java.util.Map;
  */
 @Slf4j
 public abstract class FixedWindowRateLimiter implements CaffeineCacheSource {
+
+	/** The budget shared by every key whose client cannot be identified. */
+	protected static final String UNKNOWN_KEY = "__unknown__";
 
 	private final Cache<String, Integer> attemptMap;
 	private final int max;
@@ -79,12 +84,20 @@ public abstract class FixedWindowRateLimiter implements CaffeineCacheSource {
 		return attemptMap == null ? Map.of() : Map.of("rate-limit-" + rateLimitName, attemptMap);
 	}
 
-	public void acquirePermit(String key) {
+	/**
+	 * The budget {@code key} counts against, never null. A subclass may map several keys to one budget, such as
+	 * the spellings of one address, or keys that name no client to {@link #UNKNOWN_KEY}.
+	 */
+	protected String permitKey(@Nullable String key) {
+		return key == null || key.isBlank() ? UNKNOWN_KEY : key;
+	}
+
+	public void acquirePermit(@Nullable String key) {
 		if (attemptMap == null) {
 			return;
 		}
 
-		String effectiveKey = (key == null || key.isBlank()) ? "__unknown__" : key;
+		String effectiveKey = permitKey(key);
 
 		// Read-only fast path once over the cap. Caffeine's expireAfterWrite resets on every
 		// successful compute (including one that returns the same reference), so writing on the
@@ -107,8 +120,14 @@ public abstract class FixedWindowRateLimiter implements CaffeineCacheSource {
 
 		if (result > max) {
 			if (firstOverLimit[0]) {
-				log.warn("Rate limit exceeded [event=rate_limit_exceeded, limiter={}, key={}, count={}, max={}]",
-						rateLimitName, effectiveKey, result, max);
+				if (effectiveKey.equals(key)) {
+					log.warn("Rate limit exceeded [event=rate_limit_exceeded, limiter={}, key={}, count={}, max={}]",
+							rateLimitName, effectiveKey, result, max);
+				} else {
+					// permitKey replaced what the client sent, which the key alone no longer shows
+					log.warn("Rate limit exceeded [event=rate_limit_exceeded, limiter={}, key={}, sent={}, count={}, "
+							+ "max={}]", rateLimitName, effectiveKey, HttpUtil.sanitizeForLog(key), result, max);
+				}
 			}
 			throw new CustomResponseException("Rate limit exceeded. Try again later.", HttpStatus.TOO_MANY_REQUESTS);
 		}

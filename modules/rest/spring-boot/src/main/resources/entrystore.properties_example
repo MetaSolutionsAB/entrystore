@@ -169,7 +169,8 @@ entrystore.data.folder=/srv/entrystore/files/
 ## headers and set X-Forwarded-For to the connecting client's address, not append to it (nginx:
 ## proxy_set_header Forwarded ""; proxy_set_header X-Forwarded-For $remote_addr;). Otherwise this
 ## and the other per-IP limits are bypassable by spoofing either header. Without a reverse proxy,
-## set server.forward-headers-strategy=none.
+## set server.forward-headers-strategy=none. A client address that is not an IP address (e.g.
+## for=unknown or for=_hidden) shares one budget with all such clients.
 # entrystore.auth.signup.rate.limit.max=10
 # entrystore.auth.signup.rate.limit.window=1h
 
