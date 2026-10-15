@@ -173,6 +173,7 @@ public class StatusService {
 		return Map.of(
 			"active", backupScheduler.isPresent(),
 			"format", statusProperties.backupFormat(),
+			"formatResolved", backupScheduler.map(scheduler -> scheduler.getFormat().getName()).orElse(""),
 			"maintenance", statusProperties.backupMaintenance(),
 			"cronExpression", statusProperties.backupCronExpression(),
 			"cronExpressionResolved", backupScheduler.map(BackupScheduler::getCronExpression).orElse(""),
@@ -202,15 +203,13 @@ public class StatusService {
 
 	private Map<String, Object> buildCountStats() {
 		PrincipalManager pm = repositoryManager.getPrincipalManager();
-		return PrincipalManagerUtil.runAsAdmin(pm, () -> {
-			return Map.of(
-				"contextCount", repositoryManager.getContextManager().getEntries().size(),
-				"groupCount", pm.getGroupUris().size(),
-				"userCount", pm.getUsersAsUris().size(),
-				"namedGraphCount", repositoryManager.getNamedGraphCount(),
-				"tripleCount", repositoryManager.getTripleCount()
-			);
-		});
+		return PrincipalManagerUtil.runAsAdmin(pm, () -> Map.of(
+			"contextCount", repositoryManager.getContextManager().getEntries().size(),
+			"groupCount", pm.getGroupUris().size(),
+			"userCount", pm.getUsersAsUris().size(),
+			"namedGraphCount", repositoryManager.getNamedGraphCount(),
+			"tripleCount", repositoryManager.getTripleCount()
+		));
 	}
 
 	private Map<String, Object> buildRelationStats(boolean verbose) {

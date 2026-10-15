@@ -20,7 +20,10 @@ import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.rio.RDFHandler;
+import org.eclipse.rdf4j.rio.RDFHandlerException;
 import org.entrystore.AuthorizationException;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
@@ -37,6 +40,11 @@ import org.junit.jupiter.api.BeforeEach;
 import java.net.URI;
 import java.util.Map;
 import java.util.Set;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Manages EntryStore instance(s) as preparation for the tests in entrystore-core-impl.
@@ -107,6 +115,30 @@ public abstract class AbstractCoreTest {
 		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
 			rc.remove((Resource) null, predicate, null, graph);
 		}
+	}
+
+	/**
+	 * A repository whose export hands one statement to the writer and then fails, as a write to a full disk does,
+	 * so that a partial dump has been started when the failure arrives.
+	 */
+	protected static Repository repositoryFailingMidExport() {
+		return repositoryFailingMidExport(new RDFHandlerException("simulated write failure: No space left on device"));
+	}
+
+	/** A repository whose export hands one statement to the writer and then throws {@code failure}. */
+	protected static Repository repositoryFailingMidExport(Throwable failure) {
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		RepositoryConnection connection = mock(RepositoryConnection.class);
+		doAnswer(invocation -> {
+			RDFHandler handler = invocation.getArgument(0);
+			handler.startRDF();
+			handler.handleStatement(vf.createStatement(vf.createIRI("urn:test:s"), vf.createIRI("urn:test:p"),
+					vf.createLiteral("o"), vf.createIRI("urn:test:g")));
+			throw failure;
+		}).when(connection).export(any(RDFHandler.class), any(Resource[].class));
+		Repository repository = mock(Repository.class);
+		when(repository.getConnection()).thenReturn(connection);
+		return repository;
 	}
 
 	/**

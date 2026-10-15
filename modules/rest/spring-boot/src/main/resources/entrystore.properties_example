@@ -40,6 +40,7 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.backup.folder=/srv/entrystore/backup/
 # entrystore.backup.timeregexp=time regular expression as for cron jobs
 # entrystore.backup.gzip=on|off (default: off)
+# entrystore.backup.format=TriX|TriG|N-Quads|BinaryRDF (default: TriX)
 # entrystore.backup.maintenance=on|off (default: off)
 # entrystore.backup.maintenance.upper-limit=maximum amount of stored backups
 # entrystore.backup.maintenance.lower-limit=minimum amount of stored backups

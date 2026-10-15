@@ -17,8 +17,9 @@
 package org.entrystore.repository.backup;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.function.IORunnable;
+import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.rio.RDFFormat;
-import org.eclipse.rdf4j.sail.SailException;
 import org.entrystore.impl.DataImpl;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
@@ -38,9 +39,14 @@ import java.nio.file.Files;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Runs a backup of the repository.
@@ -54,17 +60,110 @@ public class BackupJob implements Job, InterruptableJob {
 
 	private static boolean interrupted = false;
 
-	private static void writeErrorStatus(File errorFile, List<String> errors, String backupDateTime) {
-		String errorFileContent = backupDateTime + "\n" + String.join("\n", errors);
+	private static void writeErrorStatus(File errorFile, Throwable failure, String backupDateTime) {
+		String errorFileContent = Stream.concat(Stream.of(backupDateTime, failure.toString()),
+				Arrays.stream(failure.getSuppressed()).map(Throwable::toString)).collect(Collectors.joining("\n"));
 		try {
 			FileOperations.writeStringToFile(errorFile, errorFileContent);
 		} catch (IOException e) {
-			log.error(e.getMessage());
+			log.error("Unable to write {}", errorFile, e);
 		}
 	}
 
 	private static File getErrorStatusFile(File backupDirectory) {
 		return new File(backupDirectory, "BACKUP_FAILED");
+	}
+
+	private static File getBackupDateFile(File backupDirectory) {
+		return new File(backupDirectory, "BACKUP_DATE");
+	}
+
+	/**
+	 * Whether a status marker is present. Only a regular file counts, as the data folder copied into a backup may
+	 * hold a directory of the same name.
+	 */
+	private static boolean isMarker(File marker) {
+		return Files.isRegularFile(marker.toPath());
+	}
+
+	/**
+	 * Whether {@code backupDirectory} holds a completed backup. Older versions also wrote BACKUP_DATE for a failed
+	 * backup, next to BACKUP_FAILED, so both files are checked.
+	 */
+	private static boolean isSuccessfulBackup(File backupDirectory) {
+		return isMarker(getBackupDateFile(backupDirectory)) && !isMarker(getErrorStatusFile(backupDirectory));
+	}
+
+	/**
+	 * Whether a dated backup folder is marked as failed by this version. A folder with both markers, written by
+	 * earlier versions when the data copy failed, holds a complete repository dump and counts as a backup, as does a
+	 * folder without markers, written before 4.11 or by a run that was killed.
+	 */
+	private static boolean isFailedBackup(File backupDirectory) {
+		return isMarker(getErrorStatusFile(backupDirectory)) && !isMarker(getBackupDateFile(backupDirectory));
+	}
+
+	private static void deleteBackupDirectory(File backupDirectory) {
+		if (backupDirectory.exists()) {
+			try {
+				FileUtils.forceDelete(backupDirectory);
+				log.info("Deleted {}", backupDirectory);
+			} catch (IOException e) {
+				log.warn("Unable to delete {}", backupDirectory, e);
+			}
+		}
+	}
+
+	/** Runs one step of a backup; its failure is collected, so that the remaining steps still run. */
+	private static void attempt(List<Exception> failures, IORunnable step) {
+		try {
+			step.run();
+		} catch (Exception e) {
+			failures.add(e);
+		}
+	}
+
+	private static void exportRepository(RepositoryManagerImpl rm, Repository repository, String name, File file,
+			boolean gzip, RDFFormat format) throws IOException {
+		long before = System.currentTimeMillis();
+		log.info("Exporting {}", name);
+		rm.exportToFile(repository, file.toURI(), gzip, format);
+		log.info("Exporting {} took {} ms", name, System.currentTimeMillis() - before);
+	}
+
+	/**
+	 * Deletes failed backups once a newer completed backup supersedes them. Newer ones are kept, as a run that failed
+	 * after its export holds the newest restorable repository dump, but at most {@code upperLimit} of them (at least
+	 * one), so that a failure on every run cannot fill the disk. Backup folder names sort chronologically.
+	 */
+	private static void deleteFailedBackups(List<File> failedBackupFolders, String newestCompletedBackup,
+			int upperLimit) {
+		failedBackupFolders.sort(Comparator.comparing(File::getName).reversed());
+		int kept = 0;
+		for (File failedBackup : failedBackupFolders) {
+			if (failedBackup.getName().compareTo(newestCompletedBackup) > 0 && kept < Math.max(upperLimit, 1)) {
+				kept++;
+			} else {
+				deleteBackupDirectory(failedBackup);
+			}
+		}
+	}
+
+	/**
+	 * Writes BACKUP_DATE. A partly written one is deleted on failure, as it would mark the backup completed.
+	 */
+	private static void writeBackupDate(File backupDirectory, String backupDateTime) throws IOException {
+		File backupDateFile = getBackupDateFile(backupDirectory);
+		try {
+			FileOperations.writeStringToFile(backupDateFile, backupDateTime);
+		} catch (IOException e) {
+			try {
+				Files.deleteIfExists(backupDateFile.toPath());
+			} catch (IOException deleteFailure) {
+				e.addSuppressed(deleteFailure);
+			}
+			throw e;
+		}
 	}
 
 	public void execute(JobExecutionContext context) {
@@ -106,7 +205,15 @@ public class BackupJob implements Job, InterruptableJob {
 		}
 	}
 
-	synchronized public static void runBackup(JobExecutionContext jobContext) {
+	/**
+	 * Runs a backup. An error in one step does not stop the others, so that as much as possible is backed up, but the
+	 * backup is then marked with BACKUP_FAILED instead of BACKUP_DATE. A run without a backup folder setting, that
+	 * cannot create its folder, or that cannot replace "all-old" with "all" writes neither marker; a failed replace
+	 * leaves "all" untouched. Any other failure to delete "all-old" is only logged.
+	 *
+	 * @return whether the backup completed without errors
+	 */
+	synchronized public static boolean runBackup(JobExecutionContext jobContext) {
 		if (interrupted) {
 			interrupted = false;
 			throw new RuntimeException("Backup job \"runBackup()\" was interrupted");
@@ -123,6 +230,7 @@ public class BackupJob implements Job, InterruptableJob {
 		RDFFormat format = (RDFFormat) dataMap.getOrDefault("format", RDFFormat.TRIX);
 		log.info("Backup gzip: {}", gzip);
 
+		boolean succeeded = false;
 		String exportPath = rm.getConfiguration().getString(Settings.BACKUP_FOLDER);
 		if (exportPath == null) {
 			log.error("Unknown backup path, please check the following setting: {}", Settings.BACKUP_FOLDER);
@@ -131,34 +239,31 @@ public class BackupJob implements Job, InterruptableJob {
 			boolean deleteAfter = dataMap.getBoolean("deleteAfter");
 			File oldBackupDirectory = new File(exportPath, "all-old");
 			File newBackupDirectory = new File(exportPath, currentDateTime);
-			List<String> errors = new LinkedList<>();
 
 			try {
 				if (simple) {
 					newBackupDirectory = new File(exportPath, "all");
+					// failing to delete "all" fails the backup, as files left from the previous one would be dated anew
 					if (newBackupDirectory.isDirectory()) {
-						if (oldBackupDirectory.exists()) {
+						if (!deleteAfter) {
+							deleteBackupDirectory(oldBackupDirectory);
+							FileUtils.deleteDirectory(newBackupDirectory);
+						} else if (isSuccessfulBackup(newBackupDirectory) || !isSuccessfulBackup(oldBackupDirectory)) {
 							try {
-								FileUtils.deleteDirectory(oldBackupDirectory);
-								log.info("Deleted {}", oldBackupDirectory);
-							} catch (IOException e) {
-								log.warn("Unable to delete {}: {}", oldBackupDirectory, e);
-							}
-						}
-
-						if (deleteAfter) {
-							if (newBackupDirectory.renameTo(oldBackupDirectory)) {
+								if (oldBackupDirectory.exists()) {
+									FileUtils.forceDelete(oldBackupDirectory);
+								}
+								Files.move(newBackupDirectory.toPath(), oldBackupDirectory.toPath());
 								log.info("Renamed {} to {}", newBackupDirectory, oldBackupDirectory);
-							} else {
-								log.warn("Unable to rename {} to {}", newBackupDirectory, oldBackupDirectory);
+							} catch (IOException e) {
+								// "all" may hold the only restorable backup and must not be overwritten
+								log.error("Unable to replace {} with {}", oldBackupDirectory, newBackupDirectory, e);
+								log.info("Aborting backup due to unrecoverable error");
+								return false;
 							}
 						} else {
-							try {
-								FileUtils.deleteDirectory(newBackupDirectory);
-								log.info("Deleted {}", newBackupDirectory);
-							} catch (IOException e) {
-								log.warn("Unable to delete {}: {}", newBackupDirectory, e);
-							}
+							// a failed backup is replaced, keeping the last completed one in "all-old"
+							FileUtils.deleteDirectory(newBackupDirectory);
 						}
 					}
 				}
@@ -171,34 +276,18 @@ public class BackupJob implements Job, InterruptableJob {
 						// we cannot create an error status file either
 						log.error("Unable to create directory {}", newBackupDirectory);
 						log.info("Aborting backup due to unrecoverable error");
-						return;
+						return false;
 					}
 				}
 
-				// Main repo
-				long beforeMainExport = System.currentTimeMillis();
-				log.info("Exporting main repository");
-				String mainRepoFile = "repository." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
-				try {
-					rm.exportToFile(rm.getRepository(), new File(newBackupDirectory, mainRepoFile).toURI(), gzip, format);
-					log.info("Exporting main repository took {} ms", System.currentTimeMillis() - beforeMainExport);
-				} catch (SailException se) {
-					log.error("Unable to export main repository {}", se.getMessage());
-					errors.add(se.getMessage());
-				}
-
-				// Provenance repo
+				String extension = "." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
+				File backupDirectory = newBackupDirectory;
+				List<Exception> failures = new ArrayList<>();
+				attempt(failures, () -> exportRepository(rm, rm.getRepository(), "main repository",
+						new File(backupDirectory, "repository" + extension), gzip, format));
 				if (rm.getProvenanceRepository() != null) {
-					long beforeProvExport = System.currentTimeMillis();
-					log.info("Exporting provenance repository");
-					String provRepoFile = "repository_prov." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
-					try {
-						rm.exportToFile(rm.getProvenanceRepository(), new File(newBackupDirectory, provRepoFile).toURI(), gzip, format);
-						log.info("Exporting provenance repository took {} ms", System.currentTimeMillis() - beforeProvExport);
-					} catch (SailException se) {
-						log.error("Unable to export provenance repository {}", se.getMessage());
-						errors.add(se.getMessage());
-					}
+					attempt(failures, () -> exportRepository(rm, rm.getProvenanceRepository(), "provenance repository",
+							new File(backupDirectory, "repository_prov" + extension), gzip, format));
 				} else {
 					log.info("Provenance repository is not configured and is therefore not be included in the backup");
 				}
@@ -211,54 +300,40 @@ public class BackupJob implements Job, InterruptableJob {
 					} else {
 						long beforeFileExport = System.currentTimeMillis();
 						File dataPathFile = new File(dataPath);
-						log.info("Copying data folder from {} to {}", dataPathFile, newBackupDirectory);
-						try {
-							FileOperations.copyPath(dataPathFile.toPath(), newBackupDirectory.toPath(), DataImpl::isStagingFile);
+						log.info("Copying data folder from {} to {}", dataPathFile, backupDirectory);
+						attempt(failures, () -> {
+							FileOperations.copyPath(dataPathFile.toPath(), backupDirectory.toPath(),
+									DataImpl::isStagingFile);
 							log.info("Copying data folder took {} ms", System.currentTimeMillis() - beforeFileExport);
-						} catch (IOException ioe) {
-							log.error("Unable to copy data folder from {} to {}", dataPathFile, newBackupDirectory);
-							errors.add(ioe.getMessage());
-						}
+						});
 					}
 				} else {
 					log.warn("Files not included in backup due to configuration");
 				}
 
-				// Clean-up with "delete-after"
-				if (simple && deleteAfter && oldBackupDirectory.exists()) {
-					try {
-						FileUtils.deleteDirectory(oldBackupDirectory);
-						log.info("Deleted {}", oldBackupDirectory);
-					} catch (IOException e) {
-						log.warn("Unable to delete {}: {}", oldBackupDirectory, e.getMessage());
-					}
+				if (!failures.isEmpty()) {
+					Exception failure = failures.getFirst();
+					failures.stream().skip(1).forEach(failure::addSuppressed);
+					throw failure;
 				}
 
-				// Writing time stamp
-				try {
-					FileOperations.writeStringToFile(new File(newBackupDirectory, "BACKUP_DATE"), currentDateTime);
-				} catch (IOException e) {
-					log.error(e.getMessage());
+				writeBackupDate(newBackupDirectory, currentDateTime);
+				// Clean-up with "delete-after", once the new backup is complete
+				if (simple && deleteAfter) {
+					deleteBackupDirectory(oldBackupDirectory);
 				}
-
-				// Removing eventually an existing failed status file
-				try {
-					Files.deleteIfExists(getErrorStatusFile(newBackupDirectory).toPath());
-				} catch (IOException e) {
-					log.warn("Unable to delete {}: {}", getErrorStatusFile(newBackupDirectory), e.getMessage());
+				succeeded = true;
+			} catch (Throwable e) {
+				log.error("Backup failed", e);
+				writeErrorStatus(getErrorStatusFile(newBackupDirectory), e, currentDateTime);
+				if (e instanceof Error error) {
+					throw error;
 				}
-			} catch (Exception e) {
-				log.error("Backup failed: {}", e.getMessage(), e);
-				errors.add(e.getMessage());
-			}
-
-			if (!errors.isEmpty()) {
-				File errorStatusFile = getErrorStatusFile(newBackupDirectory);
-				writeErrorStatus(errorStatusFile, errors, currentDateTime);
 			}
 		}
 
 		log.info("Backup job done with execution, took {} ms in total", System.currentTimeMillis() - beforeTotal);
+		return succeeded;
 	}
 
 	synchronized public static void runBackupMaintenance(JobExecutionContext jobContext) {
@@ -291,6 +366,9 @@ public class BackupJob implements Job, InterruptableJob {
 				DateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmss");
 
 				List<Date> backupFolders = new LinkedList<>();
+				List<File> failedBackupFolders = new ArrayList<>();
+				// only a dated backup supersedes failed ones; an unmarked folder may hold a truncated dump
+				String newestCompletedBackup = "";
 				for (File file : backupFolder.listFiles()) {
 					if (!file.isDirectory() || file.isHidden()) {
 						log.info("Ignoring: {}", file);
@@ -299,12 +377,24 @@ public class BackupJob implements Job, InterruptableJob {
 
 					try {
 						Date date = formatter.parse(file.getName());
-						backupFolders.add(date);
-						log.info("Found backup folder: {}", file);
+						if (!formatter.format(date).equals(file.getName())) {
+							log.warn("Skipping path: {}. Reason: not a backup folder name", file);
+						} else if (isFailedBackup(file)) {
+							failedBackupFolders.add(file);
+							log.info("Found failed backup folder: {}", file);
+						} else {
+							backupFolders.add(date);
+							log.info("Found backup folder: {}", file);
+							if (isSuccessfulBackup(file) && file.getName().compareTo(newestCompletedBackup) > 0) {
+								newestCompletedBackup = file.getName();
+							}
+						}
 					} catch (ParseException pe) {
 						log.warn("Skipping path: {}. Reason: {}", file, pe.getMessage());
 					}
 				}
+
+				deleteFailedBackups(failedBackupFolders, newestCompletedBackup, upperLimit);
 
 				if (backupFolders.size() <= lowerLimit) {
 					log.info("Lower limit not reached - backup maintenance job done with execution");

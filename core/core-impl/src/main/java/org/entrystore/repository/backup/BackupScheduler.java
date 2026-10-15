@@ -19,6 +19,7 @@ package org.entrystore.repository.backup;
 import lombok.Getter;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.config.Config;
+import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.MetadataUtil;
@@ -74,6 +75,7 @@ public class BackupScheduler {
 
 	boolean includeFiles;
 
+	@Getter
 	RDFFormat format;
 
 	private BackupScheduler(RepositoryManager rm, String cronExp, boolean gzip, boolean deleteAfter, boolean includeFiles, boolean maintenance, int upperLimit, int lowerLimit, int expiresAfterDays, RDFFormat format) {
@@ -119,11 +121,7 @@ public class BackupScheduler {
 		int lowerLimit = config.getInt(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, -1);
 		int expiresAfterDays = config.getInt(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, -1);
 
-		RDFFormat format = MetadataUtil.getRDFFormat(config.getString(Settings.BACKUP_FORMAT, RDFFormat.TRIX.getName()));
-		if (format == null) {
-			log.warn("Invalid backup format {}, falling back to TriX", config.getString(Settings.BACKUP_FORMAT));
-			format = RDFFormat.TRIX;
-		}
+		RDFFormat format = backupFormat(config);
 
 		if (cronExp.toLowerCase().contains("rnd")) {
 			cronExp = randomizeCronString(cronExp);
@@ -139,6 +137,19 @@ public class BackupScheduler {
 		log.info("Maintenance expires after days: {}", expiresAfterDays);
 
 		return new BackupScheduler(rm, cronExp, gzip, deleteAfter, includeFiles, maintenance, upperLimit, lowerLimit, expiresAfterDays, format);
+	}
+
+	/**
+	 * The configured backup format, or TriX if it is unknown or cannot hold the named graphs of the repository.
+	 */
+	static RDFFormat backupFormat(Config config) {
+		String configured = config.getString(Settings.BACKUP_FORMAT, RDFFormat.TRIX.getName());
+		RDFFormat format = MetadataUtil.getRDFFormat(configured);
+		if (format == null || !RepositoryManagerImpl.EXPORT_FORMATS.contains(format)) {
+			log.warn("Unsupported backup format {}, falling back to TriX", configured);
+			return RDFFormat.TRIX;
+		}
+		return format;
 	}
 
 	private static String randomizeCronString(String cronExp) {

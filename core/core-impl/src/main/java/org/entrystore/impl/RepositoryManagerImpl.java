@@ -31,8 +31,6 @@ import org.eclipse.rdf4j.repository.http.HTTPRepository;
 import org.eclipse.rdf4j.repository.sail.SailRepository;
 import org.eclipse.rdf4j.repository.sparql.SPARQLRepository;
 import org.eclipse.rdf4j.rio.RDFFormat;
-import org.eclipse.rdf4j.rio.RDFHandlerException;
-import org.eclipse.rdf4j.rio.RDFWriter;
 import org.eclipse.rdf4j.rio.RDFWriterFactory;
 import org.eclipse.rdf4j.rio.binary.BinaryRDFWriterFactory;
 import org.eclipse.rdf4j.rio.nquads.NQuadsWriterFactory;
@@ -93,6 +91,17 @@ import java.util.zip.GZIPOutputStream;
 public class RepositoryManagerImpl implements RepositoryManager {
 
 	private static final Logger log = LoggerFactory.getLogger(RepositoryManagerImpl.class);
+
+	private static final Map<RDFFormat, RDFWriterFactory> EXPORT_WRITER_FACTORIES = Map.of(
+			RDFFormat.TRIG, new TriGWriterFactory(),
+			RDFFormat.TRIX, new TriXWriterFactory(),
+			RDFFormat.NQUADS, new NQuadsWriterFactory(),
+			RDFFormat.BINARY, new BinaryRDFWriterFactory());
+
+	/**
+	 * The formats {@link #exportToFile(Repository, URI, boolean, RDFFormat)} writes: those that keep named graphs.
+	 */
+	public static final Set<RDFFormat> EXPORT_FORMATS = EXPORT_WRITER_FACTORIES.keySet();
 
 	@Getter
 	private Repository repository;
@@ -424,59 +433,39 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	/**
-	 * Export the whole repository.
+	 * Exports the whole repository, with its named graphs, to {@code file}. The file exists afterwards only if the
+	 * export completed: a file this method opened is deleted again when the export or closing it fails.
 	 *
 	 * @param file File to export repository to.
+	 * @throws IllegalArgumentException if {@code format} is not one of {@link #EXPORT_FORMATS}
+	 * @throws IOException if the file cannot be opened, written or closed
+	 * @throws org.eclipse.rdf4j.common.exception.RDF4JException if reading the repository or writing the RDF fails;
+	 * a failed write to the file arrives as {@link org.eclipse.rdf4j.rio.RDFHandlerException}
 	 */
-	public void exportToFile(Repository repo, URI file, boolean gzip, RDFFormat format) {
-		RepositoryConnection con = null;
-		OutputStream out = null;
-		Date before = new Date();
-		RDFWriterFactory rdfWriterFactory;
-
-		if (RDFFormat.TRIG.equals(format)) {
-			rdfWriterFactory = new TriGWriterFactory();
-		} else if (RDFFormat.TRIX.equals(format)) {
-			rdfWriterFactory = new TriXWriterFactory();
-		} else if (RDFFormat.NQUADS.equals(format)) {
-			rdfWriterFactory = new NQuadsWriterFactory();
-		} else if (RDFFormat.BINARY.equals(format)) {
-			rdfWriterFactory = new BinaryRDFWriterFactory();
-		} else {
-			log.error("RDF format is not supported for backups: {}", format);
-			return;
+	public void exportToFile(Repository repo, URI file, boolean gzip, RDFFormat format) throws IOException {
+		RDFWriterFactory rdfWriterFactory = format == null ? null : EXPORT_WRITER_FACTORIES.get(format);
+		if (rdfWriterFactory == null) {
+			throw new IllegalArgumentException("Unsupported export format: " + format);
 		}
 
+		long before = System.currentTimeMillis();
+		Path target = Path.of(file);
 		log.info("Exporting repository to {}", file);
-		try {
-			con = repo.getConnection();
-			out = Files.newOutputStream(new File(file).toPath());
-			if (gzip) {
-				out = new GZIPOutputStream(out);
-			}
-			out = new BufferedOutputStream(out);
-			RDFWriter writer = rdfWriterFactory.getWriter(out);
-			con.export(writer);
-		} catch (RepositoryException | IOException | RDFHandlerException e) {
-			log.error(e.getMessage());
-		} finally {
-			if (out != null) {
+		try (RepositoryConnection con = repo.getConnection()) {
+			OutputStream fileOut = Files.newOutputStream(target);
+			try (fileOut; OutputStream out = new BufferedOutputStream(
+					gzip ? new GZIPOutputStream(fileOut, 64 * 1024) : fileOut)) {
+				con.export(rdfWriterFactory.getWriter(out));
+			} catch (Throwable e) {
 				try {
-					out.close();
-				} catch (IOException ioe) {
-					log.error(ioe.getMessage());
+					Files.deleteIfExists(target);
+				} catch (IOException deleteFailure) {
+					e.addSuppressed(deleteFailure);
 				}
-			}
-			if (con != null) {
-				try {
-					con.close();
-				} catch (RepositoryException re) {
-					log.error(re.getMessage());
-				}
+				throw e;
 			}
 		}
-		long timeDiff = new Date().getTime() - before.getTime();
-		log.info("Export finished after {} ms", timeDiff);
+		log.info("Export finished after {} ms", System.currentTimeMillis() - before);
 	}
 
 	@Override
