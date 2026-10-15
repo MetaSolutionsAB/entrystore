@@ -144,4 +144,12 @@ class PasswordResetRateLimiterTest {
 		rateLimiter.acquirePermit("");
 		assertThrows(CustomResponseException.class, () -> rateLimiter.acquirePermit("   "));
 	}
+
+	@Test
+	void nonIpAddressesShareOneBudget() {
+		var rateLimiter = new PasswordResetRateLimiter(1, Duration.ofHours(1), Ticker.systemTicker());
+
+		rateLimiter.acquirePermit("unknown");
+		assertThrows(CustomResponseException.class, () -> rateLimiter.acquirePermit("_hidden"));
+	}
 }

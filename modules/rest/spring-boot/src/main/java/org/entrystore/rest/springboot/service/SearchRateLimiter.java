@@ -23,15 +23,13 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 
 /**
- * Opt-in per-IP rate limiter for the guest-accessible {@code /search} endpoint, keyed by the resolved
- * client IP ({@code request.getRemoteAddr()}, which Spring's forwarded-header handling takes from
- * {@code Forwarded: for=}, else the leftmost {@code X-Forwarded-For} entry, on any request that carries
- * them). Disabled by default: it applies to every caller, so pipelines, the EntryScape API and users
- * behind one NAT address share a single budget and are blocked. Enable it with
+ * Opt-in per-IP rate limiter for the guest-accessible {@code /search} endpoint, keyed by client address as
+ * {@link ClientAddressRateLimiter} describes. Disabled by default: it applies to every caller, so pipelines,
+ * the EntryScape API and users behind one NAT address share a single budget and are blocked. Enable it with
  * {@code entrystore.solr.search.rate.limit.max} only where no high-volume clients share an IP.
  */
 @Service
-public class SearchRateLimiter extends FixedWindowRateLimiter {
+public class SearchRateLimiter extends ClientAddressRateLimiter {
 
 	public SearchRateLimiter(
 			@Value("${entrystore.solr.search.rate.limit.max:0}") int max,
