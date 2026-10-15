@@ -96,7 +96,9 @@ public class ErrorResponseWriter {
 
 	/**
 	 * Writes the unified 401 JSON envelope used for every authentication failure
-	 * (bad credentials, unknown user, disabled account, blacklisted user). Centralised
+	 * (bad credentials, unknown user, blacklisted user, a disabled account's wrong password)
+	 * except a disabled account's correct password, which
+	 * {@code FormLoginAuthenticationFailureHandler} answers 403. Centralised
 	 * here so the body stays identical across all call sites for a given request URI
 	 * and no caller can accidentally introduce a discriminator. The timestamp field
 	 * is explicitly nulled so the wall-clock delta between branches (immediate

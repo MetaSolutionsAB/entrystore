@@ -131,9 +131,8 @@ public class CasConfig {
 	}
 
 	/**
-	 * Builds the provider for the CAS filter alone. It must not be a bean: Spring Security makes a single
-	 * {@code AuthenticationProvider} bean the only provider of the global AuthenticationManager, which then no
-	 * longer authenticates password and HTTP Basic logins against {@link ESUserDetailsService}.
+	 * Builds the provider for the CAS filter alone. It must not be a bean, see
+	 * {@link SecurityConfig#passwordAuthenticationProvider}.
 	 */
 	static CasAuthenticationProvider casAuthenticationProvider(ServiceProperties serviceProperties,
 															   TicketValidator ticketValidator) {
