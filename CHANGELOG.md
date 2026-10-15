@@ -2,6 +2,10 @@
 
 ## Version 6.2
 
+### Bug
+
+[ENTRYSTORE-1217](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1217) POST /auth/cookie answers 403 when the password of a disabled account is correct, as in 5.x, so EntryScape says the account is disabled instead of "wrong username or password". 6.x answered 401. A wrong password is still answered 401, and a disabled account now goes through the same password check as any other, so it is no longer answered faster. As in 5.x, the 403 does not count towards the temporary lockout, and HTTP Basic still answers 401.
+
 ### Improvement
 
 [ENTRYSTORE-1110](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1110) The signup-tokens cache is capped at an estimated 128 MB instead of 100 000 entries, so sign-up bodies of up to 32 KB can no longer hold gigabytes. A legacy confirmation link \(entrystore.auth.confirmation.legacy=true\) is consumed atomically, so two concurrent clicks cannot both apply it. Saving a null SAML authentication request removes the pending request named by the request's RelayState. **Behaviour note:** a sign-up with more than 50 custom\_\* properties is rejected with 400

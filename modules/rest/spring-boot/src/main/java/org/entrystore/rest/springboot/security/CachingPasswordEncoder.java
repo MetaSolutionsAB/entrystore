@@ -34,14 +34,13 @@ import java.util.Objects;
  * (the encoded hash carries a per-user salt). Only successful verifications are cached, and
  * password rotation invalidates entries naturally (a new salt yields a new key).
  *
- * <p>Disabled-user freshness: {@link #matches} is only ever reached for HTTP Basic — the wrapper
- * is installed only when basic auth is enabled, and {@code DaoAuthenticationProvider} is the
- * single caller. {@code DaoAuthenticationProvider} reloads {@code UserDetails} from
- * {@code ESUserDetailsService} on every basic-auth request and runs pre-auth checks (disabled,
- * locked, expired) <em>before</em> delegating to {@link #matches}, so a freshly-disabled account
- * is rejected even while its cache entry is still warm. Session-authenticated callers (form
- * login, SAML, CAS) never re-enter {@code matches}; their disabled-account freshness is provided
- * by {@code ReloadUserPropertiesFilter}, not by this cache.
+ * <p>Disabled-user freshness: the wrapper is installed only when basic auth is enabled, and
+ * {@code SecurityConfig#passwordAuthenticationProvider} (form login and HTTP Basic) is its single
+ * caller. That provider reloads {@code UserDetails} from {@code ESUserDetailsService} on every
+ * password authentication and checks the account status (disabled, locked, expired) after
+ * {@link #matches} returns, so a freshly-disabled account is rejected even while its cache entry is
+ * still warm. Session-authenticated requests (form login, SAML, CAS) never re-enter {@code matches};
+ * their disabled-account freshness is provided by {@code ReloadUserPropertiesFilter}, not by this cache.
  */
 public class CachingPasswordEncoder implements PasswordEncoder, CaffeineCacheSource {
 
