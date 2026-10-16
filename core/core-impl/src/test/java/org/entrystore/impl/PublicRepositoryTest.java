@@ -16,18 +16,38 @@
 
 package org.entrystore.impl;
 
+import static org.awaitility.Awaitility.await;
 import static org.eclipse.rdf4j.model.util.Values.iri;
+import static org.eclipse.rdf4j.model.util.Values.literal;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.net.URI;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.Optional;
+import java.util.UUID;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.core.LogEvent;
+import org.awaitility.core.ConditionFactory;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 public class PublicRepositoryTest extends AbstractCoreTest {
 
@@ -35,6 +55,8 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 	private static final String UNPARSEABLE_IRI = "http://example.com/not a uri";
 
 	private static final IRI TITLE = iri("http://purl.org/dc/terms/title");
+
+	private static final Duration TIMEOUT = Duration.ofSeconds(10);
 
 	/**
 	 * ENTRYSTORE-1095. {@code rebuildRepository} clears the whole public repository and then re-adds only
@@ -102,6 +124,221 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 			rc.add(vf.createIRI(UNPARSEABLE_IRI), RepositoryProperties.resHasEntry,
 				child.getSesameEntryURI(), owner.resourceURI);
 		}
+	}
+
+	@ParameterizedTest(name = "{0} consecutive failures back off {1} ms")
+	@CsvSource({
+		"1, 1000",
+		"2, 2000",
+		"3, 4000",
+		"6, 32000",
+		"7, 60000",
+		"8, 60000",
+		"2147483647, 60000"
+	})
+	public void backoffMillis_doublesFromOneSecondAndCapsAtSixtySeconds(int consecutiveFailures, long expectedMillis) {
+		assertEquals(expectedMillis, PublicRepository.backoffMillis(consecutiveFailures));
+	}
+
+	/** Each test gets a fresh submitter, so that it starts without failures. */
+	@Nested
+	class Submitter {
+
+		private LogCapture logs;
+
+		private PublicRepository publicRepository;
+
+		@BeforeEach
+		public void startSubmitter() {
+			logs = new LogCapture(PublicRepository.class, Level.INFO);
+			publicRepository = new PublicRepository(rm);
+		}
+
+		@AfterEach
+		public void stopSubmitter() {
+			publicRepository.shutdown();
+			logs.close();
+		}
+
+		@Test
+		public void failedBatch_isLoggedWithConsecutiveFailureCountAndBackoff() {
+			publicRepository.enqueue(entryFailingUpdate());
+
+			LogEvent failure = awaitEvent(Level.ERROR, "consecutive failures: 1,");
+			assertTrue(messageOf(failure).contains("backing off 1000 ms"), messageOf(failure));
+			assertInstanceOf(IllegalStateException.class, failure.getThrown(),
+				"the failure must be logged with its stack trace, not only counted");
+		}
+
+		/**
+		 * Under steady writes, a backoff that new work could end would end every time: the escalation would never
+		 * take effect and each new entry would be sent into the failing store.
+		 */
+		@Test
+		public void enqueueDuringBackoff_doesNotEndIt() {
+			Entry queuedDuringBackoff = publishableEntry("queued during backoff");
+			publicRepository.enqueue(entryFailingUpdate());
+			LogEvent failure = awaitEvent(Level.ERROR, "consecutive failures: 1,");
+
+			publicRepository.enqueue(queuedDuringBackoff);
+
+			LogEvent recovery = awaitEvent(Level.INFO, "recovered after 1 consecutive failures");
+			// 100 ms below the 1 s backoff, as slack for the wall clock the event timestamps come from
+			assertTrue(recovery.getTimeMillis() - failure.getTimeMillis() >= 900,
+				"the entry must wait out the backoff, not end it");
+			assertTrue(hasTitle("queued during backoff"), "and it must be sent once the backoff is over, not dropped");
+		}
+
+		@Test
+		public void successAfterFailure_logsRecoveryAndResetsCount() {
+			Entry published = publishableEntry("sent after a failure");
+			publicRepository.enqueue(entryFailingUpdate());
+			awaitEvent(Level.ERROR, "consecutive failures: 1,");
+			publicRepository.enqueue(published);
+			awaitEvent(Level.INFO, "recovered after 1 consecutive failures");
+
+			publicRepository.enqueue(entryFailingUpdate());
+
+			awaiting().until(() -> logs.count(Level.ERROR, "consecutive failures: ") == 2);
+			assertEquals(2, logs.count(Level.ERROR, "consecutive failures: 1, failing for 0 s"),
+				"a failure after a sent batch must start a new run, counted and timed from that failure");
+		}
+
+		/** The idle wait returns without having sent anything, so it proves nothing about the store. */
+		@Test
+		public void idleIterationAfterFailure_doesNotResetCount() {
+			publicRepository.enqueue(entryFailingUpdate());
+			awaitEvent(Level.ERROR, "consecutive failures: 1,");
+			awaiting().until(this::isWaitingForWork);
+
+			publicRepository.enqueue(entryFailingUpdate());
+
+			awaiting().until(() -> logs.count(Level.ERROR, "consecutive failures: ") == 2);
+			Optional<LogEvent> second = logs.first(Level.ERROR, "consecutive failures: 2,");
+			assertTrue(second.isPresent(), "an iteration that only waited for work must not end the run of failures");
+			assertTrue(messageOf(second.get()).contains("backing off 2000 ms"), messageOf(second.get()));
+			assertEquals(0, logs.count(Level.INFO, "recovered after"));
+		}
+
+		@Test
+		public void interruptDuringBackoff_stopsSubmitter() throws InterruptedException {
+			publicRepository.enqueue(entryFailingUpdate());
+			awaitEvent(Level.ERROR, "consecutive failures: 1,");
+
+			publicRepository.shutdown();
+
+			awaitEvent(Level.INFO, "interrupted during failure backoff");
+			assertTrue(publicRepository.entrySubmitter.join(TIMEOUT),
+				"the submitter thread must end instead of continuing after the backoff");
+		}
+
+		/** A store outage must be counted and backed off like any other failure. */
+		@Test
+		public void storeFailureInUpdateBatch_countsAsSubmitterFailure() {
+			publicRepository.enqueue(entryFailingUpdate(new RepositoryException("simulated store failure")));
+
+			awaitEvent(Level.ERROR, "updateEntries failed; dropped 1 entries");
+			LogEvent failure = awaitEvent(Level.ERROR, "consecutive failures: 1,");
+			assertInstanceOf(RepositoryException.class, failure.getThrown());
+		}
+
+		@Test
+		public void storeFailureInRemoveBatch_countsAsSubmitterFailure() {
+			publicRepository.remove(entryFailingRemoval());
+
+			awaitEvent(Level.ERROR, "removeEntries failed; dropped 1 entries");
+			LogEvent failure = awaitEvent(Level.ERROR, "consecutive failures: 1,");
+			assertInstanceOf(RepositoryException.class, failure.getThrown());
+		}
+
+		/** An Error is not isolated like a RuntimeException, so it must reach the log before the thread ends. */
+		@Test
+		public void errorInBatch_isLoggedAndStopsSubmitter() throws InterruptedException {
+			publicRepository.enqueue(entryFailingUpdate(new StackOverflowError("simulated")));
+
+			// the submitter's Error is expected; by default Awaitility rethrows it here
+			LogEvent stopped = awaiting().dontCatchUncaughtExceptions()
+				.until(() -> logs.first(Level.ERROR, "submitter stopped"), Optional::isPresent)
+				.orElseThrow();
+			assertInstanceOf(StackOverflowError.class, stopped.getThrown());
+			assertTrue(publicRepository.entrySubmitter.join(TIMEOUT), "an Error must end the submitter thread");
+		}
+
+		/** Guest cannot read the entry, which is what keeps it out of the public repository: the normal case. */
+		@Test
+		public void privateEntry_isLeftOutWithoutWarning() {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+			Context context = (Context) cm.createResource(null, GraphType.Context, null, null).getResource();
+			URI resource = URI.create("http://example.com/private");
+			EntryImpl privateEntry = (EntryImpl) context.createLink(null, resource, null);
+			addTitle(privateEntry, "private");
+
+			publicRepository.enqueue(privateEntry);
+
+			awaitEvent(Level.INFO, "Sending 1 entries for update");
+			awaiting().until(this::isWaitingForWork);
+			assertFalse(hasTitle("private"), "an entry guest cannot read must not reach the public repository");
+			assertEquals(0, logs.count(Level.WARN, ""), "leaving out a non-public entry is not a warning");
+		}
+
+		private LogEvent awaitEvent(Level level, String needle) {
+			return awaiting().until(() -> logs.first(level, needle), Optional::isPresent).orElseThrow();
+		}
+
+		private boolean hasTitle(String title) {
+			try (RepositoryConnection rc = publicRepository.getConnection()) {
+				return rc.hasStatement(null, TITLE, literal(title), false);
+			}
+		}
+
+		/** The backoff sleeps in {@code run()}, so the only timed wait inside {@code runOnce()} is the idle one. */
+		private boolean isWaitingForWork() {
+			Thread submitter = publicRepository.entrySubmitter;
+			return submitter.getState() == Thread.State.TIMED_WAITING
+				&& Arrays.stream(submitter.getStackTrace()).anyMatch(frame -> frame.getMethodName().equals("runOnce"));
+		}
+	}
+
+	/** Polls from the start and often, as most conditions hold within milliseconds. */
+	private static ConditionFactory awaiting() {
+		return await().pollDelay(Duration.ZERO).pollInterval(Duration.ofMillis(10)).atMost(TIMEOUT);
+	}
+
+	private static String messageOf(LogEvent event) {
+		return event.getMessage().getFormattedMessage();
+	}
+
+	private static Entry entryFailingUpdate() {
+		return entryFailingUpdate(new IllegalStateException("simulated failure"));
+	}
+
+	/** An entry whose update fails with {@code failure} when the submitter reads its graph type. */
+	private static Entry entryFailingUpdate(Throwable failure) {
+		Entry entry = mock(Entry.class);
+		when(entry.getEntryURI()).thenReturn(URI.create("http://example.com/failing/" + UUID.randomUUID()));
+		when(entry.getGraphType()).thenThrow(failure);
+		return entry;
+	}
+
+	/** An entry whose removal throws a store exception inside the store transaction. */
+	private static Entry entryFailingRemoval() {
+		Entry entry = mock(Entry.class);
+		when(entry.getEntryURI()).thenReturn(URI.create("http://example.com/failing/" + UUID.randomUUID()));
+		when(entry.getRepositoryManager()).thenThrow(new RepositoryException("simulated store failure"));
+		return entry;
+	}
+
+	/**
+	 * A link with the given title in a new context. The submitter reads entries as guest, so authorization checks
+	 * are turned off for it to publish the title.
+	 */
+	private EntryImpl publishableEntry(String title) {
+		rm.setCheckForAuthorization(false);
+		Context context = (Context) cm.createResource(null, GraphType.Context, null, null).getResource();
+		URI resource = URI.create("http://example.com/" + UUID.randomUUID());
+		EntryImpl link = (EntryImpl) context.createLink(null, resource, null);
+		addTitle(link, title);
+		return link;
 	}
 
 	@Disabled("To be implemented")
