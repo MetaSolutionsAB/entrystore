@@ -379,6 +379,10 @@ entrystore.auth.temp.lockout.duration=0ms
 ## How long a started login may stay at the IdP (MFA, consent, password change) before its response is rejected
 ## and its successurl/failureurl are forgotten (default: 15m, 1m to 60m).
 # entrystore.auth.saml.request-lifetime=15m
+## SAML login starts allowed per client address and window (default: 60 per 1m, 0 = no limit); users behind one
+## NAT address share a budget. A start over the limit is redirected to its failureurl or the default failure URL.
+# entrystore.auth.saml.rate.limit.max=60
+# entrystore.auth.saml.rate.limit.window=1m
 
 ## CAS authentication (default: false)
 ## Renamed in 6.0 — previously `entrystore.auth.cas`. The legacy key is still accepted:

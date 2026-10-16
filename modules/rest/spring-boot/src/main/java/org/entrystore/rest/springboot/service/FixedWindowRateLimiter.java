@@ -18,6 +18,7 @@ package org.entrystore.rest.springboot.service;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Expiry;
 import com.github.benmanes.caffeine.cache.Ticker;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
@@ -66,7 +67,9 @@ public abstract class FixedWindowRateLimiter implements CaffeineCacheSource {
 			this.attemptMap = Caffeine.newBuilder()
 					.ticker(ticker)
 					.maximumSize(100_000)
-					.expireAfterWrite(window)
+					// Not expireAfterWrite: each counted request would push the window back, so steady traffic
+					// below the limit would never reset its count
+					.expireAfter(Expiry.creating((String key, Integer count) -> window))
 					.recordStats()
 					.build();
 			log.info("Rate limiter [{}] enabled: max={}, window={}", rateLimitName, max, window);
@@ -92,44 +95,46 @@ public abstract class FixedWindowRateLimiter implements CaffeineCacheSource {
 		return key == null || key.isBlank() ? UNKNOWN_KEY : key;
 	}
 
+	/** Counts a request against the budget of {@code key}, answering 429 once that budget is used up. */
 	public void acquirePermit(@Nullable String key) {
+		if (!tryAcquirePermit(key)) {
+			throw new CustomResponseException("Rate limit exceeded. Try again later.", HttpStatus.TOO_MANY_REQUESTS);
+		}
+	}
+
+	/**
+	 * Counts a request against the budget of {@code key}; false once that budget is used up in the current window,
+	 * for callers that cannot answer through an exception, such as a servlet filter.
+	 */
+	public boolean tryAcquirePermit(@Nullable String key) {
 		if (attemptMap == null) {
-			return;
+			return true;
 		}
 
 		String effectiveKey = permitKey(key);
 
-		// Read-only fast path once over the cap. Caffeine's expireAfterWrite resets on every
-		// successful compute (including one that returns the same reference), so writing on the
-		// reject path would keep pushing the expiry forward and prevent the window from ever
-		// resetting under continuous traffic. Read with getIfPresent here so a rejected client
-		// can recover after the window naturally expires.
+		// Read-only fast path once over the cap, so a flood of rejected requests writes nothing
 		Integer existing = attemptMap.getIfPresent(effectiveKey);
 		if (existing != null && existing > max) {
-			throw new CustomResponseException("Rate limit exceeded. Try again later.", HttpStatus.TOO_MANY_REQUESTS);
+			return false;
 		}
 
-		boolean[] firstOverLimit = new boolean[1];
-		Integer result = attemptMap.asMap().compute(effectiveKey, (_, current) -> {
-			int next = current == null ? 1 : current + 1;
-			if (next == max + 1) {
-				firstOverLimit[0] = true;
-			}
-			return next;
-		});
+		int result = attemptMap.asMap().merge(effectiveKey, 1, Integer::sum);
 
-		if (result > max) {
-			if (firstOverLimit[0]) {
-				if (effectiveKey.equals(key)) {
-					log.warn("Rate limit exceeded [event=rate_limit_exceeded, limiter={}, key={}, count={}, max={}]",
-							rateLimitName, effectiveKey, result, max);
-				} else {
-					// permitKey replaced what the client sent, which the key alone no longer shows
-					log.warn("Rate limit exceeded [event=rate_limit_exceeded, limiter={}, key={}, sent={}, count={}, "
-							+ "max={}]", rateLimitName, effectiveKey, HttpUtil.sanitizeForLog(key), result, max);
-				}
-			}
-			throw new CustomResponseException("Rate limit exceeded. Try again later.", HttpStatus.TOO_MANY_REQUESTS);
+		if (result <= max) {
+			return true;
 		}
+		// The atomic merge hands max + 1 to exactly one request per window, so the WARN is logged once
+		if (result == max + 1) {
+			if (effectiveKey.equals(key)) {
+				log.warn("Rate limit exceeded [event=rate_limit_exceeded, limiter={}, key={}, count={}, max={}]",
+						rateLimitName, effectiveKey, result, max);
+			} else {
+				// permitKey replaced what the client sent, which the key alone no longer shows
+				log.warn("Rate limit exceeded [event=rate_limit_exceeded, limiter={}, key={}, sent={}, count={}, "
+						+ "max={}]", rateLimitName, effectiveKey, HttpUtil.sanitizeForLog(key), result, max);
+			}
+		}
+		return false;
 	}
 }

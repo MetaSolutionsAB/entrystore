@@ -25,10 +25,10 @@ import java.util.Objects;
 
 /**
  * Reports capacity eviction on a size- or weight-capped Caffeine cache whose entries are minted on an
- * anonymous, un-rate-limited path. {@code maximumSize} or {@code maximumWeight} bounds the heap; this class
- * makes the bound observable: a {@link RemovalCause#SIZE} eviction emits one WARN through the owning cache's logger, at most once per
- * minute via {@link LogThrottle}, because the listener runs inside the cache's eviction maintenance and
- * an unthrottled line per eviction would trade the heap bound for log amplification. Every other cause
+ * anonymous path. {@code maximumSize}, {@code maximumWeight} or an {@link OldestFirstBoundedCache} bounds the
+ * heap; this class makes the bound observable: a {@link RemovalCause#SIZE} eviction emits one WARN through the
+ * owning cache's logger, at most once per minute via {@link LogThrottle}, because under a flood an unthrottled
+ * line per eviction would trade the heap bound for log amplification. Every other cause
  * — ordinary expiry above all — stays silent, or normal traffic (abandoned logins timing out) would
  * raise false flood alarms.
  *
@@ -61,6 +61,7 @@ public final class CapacityEvictionWarning {
 		return (key, value, cause) -> onEviction(cause);
 	}
 
+	/** Called by the listener, or by a bound that evicts on its own, such as {@link OldestFirstBoundedCache}. */
 	public void onEviction(RemovalCause cause) {
 		// Guard order matters: tryAcquire consumes the interval token (see its Javadoc).
 		if (cause == RemovalCause.SIZE && throttle.tryAcquire()) {

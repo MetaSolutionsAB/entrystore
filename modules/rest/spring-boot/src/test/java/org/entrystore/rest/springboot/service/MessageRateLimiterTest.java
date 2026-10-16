@@ -87,27 +87,19 @@ class MessageRateLimiterTest {
 
 	@Test
 	void windowExpiryIsNotExtendedByContinuousOverLimitPolling() {
-		// Caffeine's expireAfterWrite resets on every successful compute, including one that
-		// returns the current value unchanged. A naive over-limit implementation that rewrites
-		// the entry on the reject path would keep pushing the expiry forward, so a client polling
-		// at sub-window spacing would never recover from HTTP 429. The fix uses a read-only fast
-		// path (`getIfPresent`) once the cap is known to be exceeded, so polling cannot extend the
-		// window past the first over-limit write.
+		// The window runs from the first request; a client polling at sub-window spacing must still recover from
+		// HTTP 429 once it ends, however often it was refused or counted meanwhile.
 		var nanos = new AtomicLong();
 		var rateLimiter = new MessageRateLimiter(1, Duration.ofSeconds(1), nanos::get);
 		String user = "http://example.com/user/1";
 
 		rateLimiter.acquirePermit(user);                                          // t=0, success
-		// Sustained over-limit polling within the window.
-		for (long millis : new long[] {500, 800, 1100, 1400}) {
+		for (long millis : new long[] {500, 700, 900}) {
 			nanos.set(Duration.ofMillis(millis).toNanos());
 			assertThrows(CustomResponseException.class,
 					() -> rateLimiter.acquirePermit(user));
 		}
-		// Past the bounded expiry: the first over-limit write at t=0.5s extended expiry to t=1.5s,
-		// but subsequent polls take the read-only path and cannot push expiry further. Without the
-		// fix every poll resets the timer and the entry stays alive past t=1.6s.
-		nanos.set(Duration.ofMillis(1600).toNanos());
+		nanos.set(Duration.ofMillis(1100).toNanos());
 		assertDoesNotThrow(() -> rateLimiter.acquirePermit(user));
 	}
 
