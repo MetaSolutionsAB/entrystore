@@ -38,7 +38,9 @@ import org.entrystore.rest.springboot.filter.SetUserURIAfterAuthenticationFilter
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.springboot.service.OidcAuthService;
+import org.entrystore.rest.springboot.service.SamlAuthService;
 import org.entrystore.rest.springboot.service.auth.OidcAuthStateCache;
+import org.entrystore.rest.springboot.service.auth.SamlLoginRateLimiter;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.beans.factory.annotation.Value;
@@ -70,6 +72,7 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
 import org.springframework.security.saml2.provider.service.web.DefaultRelyingPartyRegistrationResolver;
 import org.springframework.security.saml2.provider.service.web.OpenSaml5AuthenticationTokenConverter;
+import org.springframework.security.saml2.provider.service.web.Saml2WebSsoAuthenticationRequestFilter;
 import org.springframework.security.saml2.provider.service.web.authentication.OpenSaml5AuthenticationRequestResolver;
 import org.springframework.security.saml2.provider.service.web.authentication.Saml2AuthenticationRequestResolver;
 import org.springframework.security.saml2.provider.service.web.authentication.Saml2WebSsoAuthenticationFilter;
@@ -139,10 +142,12 @@ public class SecurityConfig {
 
 	private final AuthTokenCookies authTokenCookies;
 
-	// SAML-auth related beans (handlers optional — only present when entrystore.auth.saml.enabled=true)
+	// SAML-auth related beans (handlers and limiter optional — only present when entrystore.auth.saml.enabled=true)
 	private final SamlCustomConfiguration samlConfiguration;
+	private final SamlAuthService samlAuthService;
 	private final Optional<SamlLoginSuccessHandler> samlLoginSuccessHandler;
 	private final Optional<SamlLoginFailureHandler> samlLoginFailureHandler;
+	private final Optional<SamlLoginRateLimiter> samlLoginRateLimiter;
 	private final Optional<RelyingPartyRegistrationRepository> repo; // optional as it will be injected only when Spring's SAML properties are configured
 	private final SamlRelayStateResolver samlRelayStateResolver;
 	private final CacheSaml2AuthenticationRequestRepository saml2AuthenticationRequestRepository;
@@ -374,6 +379,11 @@ public class SecurityConfig {
 							return filter;
 						}
 					}));
+			var rateLimiter = samlLoginRateLimiter.orElseThrow(() -> new IllegalStateException(
+					"SAML is enabled but SamlLoginRateLimiter bean is missing — check the " +
+							"entrystore.auth.saml.enabled binding."));
+			http.addFilterBefore(new SamlLoginRateLimitFilter(rateLimiter, samlAuthService),
+					Saml2WebSsoAuthenticationRequestFilter.class);
 		} else {
 			log.info("SAML Auth Disabled");
 		}

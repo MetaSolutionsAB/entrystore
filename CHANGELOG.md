@@ -2,6 +2,10 @@
 
 ## Version 6.2
 
+### Bug
+
+[ENTRYSTORE-1205](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1205) A flood of anonymous SAML login starts no longer makes logins in progress fail. Once full, the two SAML request caches kept old entries and evicted new ones, so at about 55 login starts per second a login lost its authentication request and its successurl/failureurl within seconds. They now evict the oldest entry first, and login start is limited per client address. The sign-up, password-reset, search and message rate limiters count each window from a client's first request: every counted request pushed the window back, so steady traffic below a limit was eventually refused. **Behaviour note:** more than 60 SAML login starts per minute from one client address, which users behind one NAT address share, are redirected to the failureurl or the default failure URL. The limit is set with entrystore.auth.saml.rate.limit.max \(0 turns it off\) and entrystore.auth.saml.rate.limit.window \(default 1m\).
+
 ### Improvement
 
 [ENTRYSTORE-1192](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1192) The sign-up, password-reset and search rate limiters count every client address that is not an IP address, such as Forwarded for=unknown or an obfuscated identifier, against one shared budget. Each such value had its own budget, so forwarded headers passed through from clients, of up to 8 KB each, could grow a limiter to about 800 MB. Different spellings of one IP address, such as a bracketed or abbreviated IPv6 address, share a budget, and an X-Forwarded-For address with a port, as Azure Application Gateway sends, counts against the budget of its IP address.

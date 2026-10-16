@@ -33,6 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SamlAuthStateCacheTest {
 
+	private static final int FLOOD_PER_SECOND = 55;
+
 	private final AtomicLong nanos = new AtomicLong();
 
 	@Test
@@ -70,10 +72,25 @@ class SamlAuthStateCacheTest {
 		assertNull(cache.getAuthState("relay-state"));
 	}
 
-	// The maximumSize bound and its throttled SIZE-eviction warn are the DoS defences on this
+	// A flood from many clients keeps the cache full. Oldest-first eviction keeps the URLs of a login started during
+	// it for MAX_ENTRIES ÷ rate, about 15 minutes at 55 req/s; Caffeine's maximumSize would evict them within
+	// seconds. The one-hour lifetime makes the cap, not expiry, bound the cache.
+	@Test
+	void loginStartedDuringAFloodKeepsItsStateFiveMinutesLater() {
+		var cache = cacheWithLifetime(Duration.ofHours(1));
+		var authState = new AuthState("http://app.example.com/ok", "http://app.example.com/fail");
+
+		flood(cache, SamlAuthStateCache.MAX_ENTRIES);
+		cache.storeAuthState("relay-state", authState);
+		flood(cache, 5 * 60 * FLOOD_PER_SECOND);
+
+		assertEquals(authState, cache.getAuthState("relay-state"));
+	}
+
+	// The oldest-first bound and its throttled SIZE-eviction warn are the DoS defences on this
 	// anonymously writable cache (every GET /auth/saml with a whitelisted redirect mints an entry) —
 	// this pins both: the cache never grows past its cap, and sustained capacity eviction emits one
-	// throttled WARN rather than one line per eviction (mirrors OidcAuthStateCacheTest).
+	// throttled WARN rather than one line per eviction.
 	@Test
 	void capacityEvictionIsBoundedAndWarnsOnce() {
 		try (var appender = CapturingAppender.attachTo(SamlAuthStateCache.class)) {
@@ -82,14 +99,9 @@ class SamlAuthStateCacheTest {
 			for (int i = 0; i < SamlAuthStateCache.MAX_ENTRIES + 100; i++) {
 				cache.storeAuthState("relay-" + i, authState);
 			}
-			var caffeine = cache.caffeineCaches().get("saml-auth-state");
-			caffeine.cleanUp();
 
-			assertTrue(caffeine.estimatedSize() <= SamlAuthStateCache.MAX_ENTRIES);
-			assertTrue(SamlAuthStateCache.MAX_ENTRIES >= 50_000,
-					"declared cap shrunk below legitimate login concurrency");
-			assertTrue(caffeine.estimatedSize() >= 49_000,
-					"effective cache cap shrunk below legitimate login concurrency");
+			assertEquals(SamlAuthStateCache.MAX_ENTRIES, cache.caffeineCaches().get("saml-auth-state").estimatedSize());
+			assertTrue(SamlAuthStateCache.MAX_ENTRIES >= 50_000, "cap shrunk below legitimate login concurrency");
 			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
 		}
@@ -98,5 +110,14 @@ class SamlAuthStateCacheTest {
 	private SamlAuthStateCache cacheWithLifetime(Duration requestLifetime) {
 		var samlConfiguration = new SamlCustomConfiguration(true, null, List.of(), Map.of(), null, null, requestLifetime);
 		return new SamlAuthStateCache(samlConfiguration, nanos::get);
+	}
+
+	/** Starts {@code logins} logins at {@link #FLOOD_PER_SECOND}, advancing the ticker. */
+	private void flood(SamlAuthStateCache cache, long logins) {
+		var authState = new AuthState("http://app.example.com/flood", null);
+		for (long i = 0; i < logins; i++) {
+			nanos.addAndGet(Duration.ofSeconds(1).toNanos() / FLOOD_PER_SECOND);
+			cache.storeAuthState("flood-" + nanos.get(), authState);
+		}
 	}
 }

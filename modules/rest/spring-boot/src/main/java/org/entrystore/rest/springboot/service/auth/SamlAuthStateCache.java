@@ -17,13 +17,12 @@
 package org.entrystore.rest.springboot.service.auth;
 
 import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Ticker;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.model.auth.AuthState;
-import org.entrystore.rest.springboot.util.CapacityEvictionWarning;
+import org.entrystore.rest.springboot.util.OldestFirstBoundedCache;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -34,36 +33,25 @@ import java.util.Map;
  * {@link SamlCustomConfiguration#requestLifetime()}, the lifetime of the authentication request saved
  * under the same token.
  *
- * <p>The cache is written on the anonymous login-initiation path, so {@code maximumSize} bounds the
- * heap and {@link CapacityEvictionWarning} reports when the bound bites — the same posture as
- * {@link OidcAuthStateCache}.
+ * <p>The cache is written on the anonymous login-start path, which {@link SamlLoginRateLimiter} limits per client.
+ * Against a flood from many clients, {@link OldestFirstBoundedCache} bounds the heap and evicts the oldest login first.
  */
 @Slf4j
 @Service
 public class SamlAuthStateCache implements CaffeineCacheSource {
 
-	// Cardinality bound: anonymous logins with a whitelisted successurl/failureurl mint entries, and
-	// expireAfterWrite bounds only lifetime — cap the size so an initiation flood cannot exhaust the heap.
-	// Once full, Caffeine admits by frequency, so in-flight logins lose their redirect URLs within seconds
-	// (ENTRYSTORE-1205).
 	static final long MAX_ENTRIES = 50_000;
 
-	private final Cache<String, AuthState> requestCache;
+	private final OldestFirstBoundedCache<String, AuthState> requestCache;
 
 	public SamlAuthStateCache(SamlCustomConfiguration samlConfiguration, Ticker ticker) {
-		var capacityWarning = new CapacityEvictionWarning(log, "SAML auth-state", MAX_ENTRIES + " entries");
-		this.requestCache = Caffeine.newBuilder()
-				.ticker(ticker)
-				.expireAfterWrite(samlConfiguration.requestLifetime())
-				.maximumSize(MAX_ENTRIES)
-				.evictionListener(capacityWarning.listener())
-				.recordStats()
-				.build();
+		this.requestCache = new OldestFirstBoundedCache<>(samlConfiguration.requestLifetime(), MAX_ENTRIES, ticker, log,
+				"SAML auth-state");
 	}
 
 	@Override
 	public Map<String, Cache<?, ?>> caffeineCaches() {
-		return Map.of("saml-auth-state", requestCache);
+		return Map.of("saml-auth-state", requestCache.caffeineCache());
 	}
 
 	public AuthState getAuthState(String id) {

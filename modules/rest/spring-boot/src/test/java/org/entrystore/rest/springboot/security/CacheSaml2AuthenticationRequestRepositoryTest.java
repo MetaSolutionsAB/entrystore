@@ -50,6 +50,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CacheSaml2AuthenticationRequestRepositoryTest {
 
 	private static final String RELAY_STATE = "relay-state-token";
+	private static final int FLOOD_PER_SECOND = 55;
 
 	private static final RelyingPartyRegistration REGISTRATION = RelyingPartyRegistration.withRegistrationId("keycloak")
 			.entityId("https://sp.example.com/saml2/service-provider-metadata/keycloak")
@@ -214,7 +215,24 @@ class CacheSaml2AuthenticationRequestRepositoryTest {
 		assertEquals(1, winners.size(), "exactly one concurrent remove may return the request");
 	}
 
-	// The maximumSize bound and its throttled SIZE-eviction warn are the DoS defences on this
+	// A flood from many clients keeps the cache full. Oldest-first eviction keeps a login started during it for
+	// MAX_ENTRIES ÷ rate, about 15 minutes at 55 req/s; Caffeine's maximumSize would evict it within seconds. The
+	// one-hour lifetime makes the cap, not expiry, bound the cache.
+	@Test
+	void loginStartedDuringAFloodIsStillLoadedFiveMinutesLater() {
+		repository = repositoryWithLifetime(Duration.ofHours(1));
+		var authnRequest = authnRequest(RELAY_STATE);
+
+		flood(CacheSaml2AuthenticationRequestRepository.MAX_ENTRIES);
+		repository.saveAuthenticationRequest(authnRequest, acsRequest(null), new MockHttpServletResponse());
+		flood(5 * 60 * FLOOD_PER_SECOND);
+
+		assertSame(authnRequest, repository.loadAuthenticationRequest(acsRequest(RELAY_STATE)));
+		assertSame(authnRequest, repository.removeAuthenticationRequest(acsRequest(RELAY_STATE),
+				new MockHttpServletResponse()));
+	}
+
+	// The oldest-first bound and its throttled SIZE-eviction warn are the DoS defences on this
 	// anonymously writable cache (every GET /auth/saml mints an entry) — this pins both: the cache
 	// never grows past its cap, and sustained capacity eviction emits one throttled WARN rather than
 	// one line per eviction.
@@ -226,16 +244,9 @@ class CacheSaml2AuthenticationRequestRepositoryTest {
 			for (int i = 0; i < CacheSaml2AuthenticationRequestRepository.MAX_ENTRIES + 100; i++) {
 				repository.saveAuthenticationRequest(authnRequest("relay-" + i), request, response);
 			}
-			var cache = nativeCache();
-			cache.cleanUp();
-
-			assertTrue(cache.estimatedSize() <= CacheSaml2AuthenticationRequestRepository.MAX_ENTRIES);
-			// Both bounds pinned against literals — see CacheOAuth2AuthorizationRequestRepositoryTest
-			// for why the constant and the effective cap are asserted separately.
+			assertEquals(CacheSaml2AuthenticationRequestRepository.MAX_ENTRIES, nativeCache().estimatedSize());
 			assertTrue(CacheSaml2AuthenticationRequestRepository.MAX_ENTRIES >= 50_000,
-					"declared cap shrunk below legitimate login concurrency");
-			assertTrue(cache.estimatedSize() >= 49_000,
-					"effective cache cap shrunk below legitimate login concurrency");
+					"cap shrunk below legitimate login concurrency");
 			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
 		}
@@ -243,5 +254,15 @@ class CacheSaml2AuthenticationRequestRepositoryTest {
 
 	private Cache<?, ?> nativeCache() {
 		return repository.caffeineCaches().get("saml2-authn-requests");
+	}
+
+	/** Starts {@code logins} logins at {@link #FLOOD_PER_SECOND}, advancing the ticker. */
+	private void flood(long logins) {
+		var request = acsRequest(null);
+		var response = new MockHttpServletResponse();
+		for (long i = 0; i < logins; i++) {
+			nanos.addAndGet(Duration.ofSeconds(1).toNanos() / FLOOD_PER_SECOND);
+			repository.saveAuthenticationRequest(authnRequest("flood-" + nanos.get()), request, response);
+		}
 	}
 }

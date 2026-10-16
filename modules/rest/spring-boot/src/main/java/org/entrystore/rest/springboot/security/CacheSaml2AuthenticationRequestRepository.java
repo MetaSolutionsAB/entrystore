@@ -17,14 +17,13 @@
 package org.entrystore.rest.springboot.security;
 
 import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Ticker;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
-import org.entrystore.rest.springboot.util.CapacityEvictionWarning;
+import org.entrystore.rest.springboot.util.OldestFirstBoundedCache;
 import org.springframework.security.saml2.provider.service.authentication.AbstractSaml2AuthenticationRequest;
 import org.springframework.security.saml2.provider.service.web.Saml2AuthenticationRequestRepository;
 import org.springframework.stereotype.Component;
@@ -40,36 +39,27 @@ import java.util.Map;
  * <p>Entries expire after {@link SamlCustomConfiguration#requestLifetime()}: Spring validates the response's
  * {@code InResponseTo} against the request loaded here, so a login that outlives its entry fails.
  *
- * <p>The cache is written on the anonymous, un-rate-limited login-initiation path, so
- * {@code maximumSize} bounds the heap and {@link CapacityEvictionWarning} reports when the bound
- * bites — the same posture as {@link CacheOAuth2AuthorizationRequestRepository}.
+ * <p>The cache is written on the anonymous login-start path, which {@link SamlLoginRateLimitFilter} limits per client.
+ * Against a flood from many clients, {@link OldestFirstBoundedCache} bounds the heap and evicts the oldest login first.
  */
 @Slf4j
 @Component
 public class CacheSaml2AuthenticationRequestRepository
 		implements Saml2AuthenticationRequestRepository<AbstractSaml2AuthenticationRequest>, CaffeineCacheSource {
 
-	// expireAfterWrite bounds lifetime only, so request-rate × lifetime of anonymous entries needs a cap. At about
-	// 2 KB per request, 50k entries ≈ 100 MB at worst; a flood needs ~55 req/s for 15 minutes to fill it. Once full,
-	// Caffeine admits by frequency, so in-flight logins lose their request within seconds (ENTRYSTORE-1205).
+	// At about 2 KB per request, 50k entries ≈ 100 MB at worst; a flood needs ~55 req/s for 15 minutes to fill it.
 	static final long MAX_ENTRIES = 50_000;
 
-	private final Cache<String, AbstractSaml2AuthenticationRequest> cache;
+	private final OldestFirstBoundedCache<String, AbstractSaml2AuthenticationRequest> cache;
 
 	public CacheSaml2AuthenticationRequestRepository(SamlCustomConfiguration samlConfiguration, Ticker ticker) {
-		var capacityWarning = new CapacityEvictionWarning(log, "SAML authentication-request", MAX_ENTRIES + " entries");
-		this.cache = Caffeine.newBuilder()
-				.ticker(ticker)
-				.expireAfterWrite(samlConfiguration.requestLifetime())
-				.maximumSize(MAX_ENTRIES)
-				.evictionListener(capacityWarning.listener())
-				.recordStats()
-				.build();
+		this.cache = new OldestFirstBoundedCache<>(samlConfiguration.requestLifetime(), MAX_ENTRIES, ticker, log,
+				"SAML authentication-request");
 	}
 
 	@Override
 	public Map<String, Cache<?, ?>> caffeineCaches() {
-		return Map.of("saml2-authn-requests", cache);
+		return Map.of("saml2-authn-requests", cache.caffeineCache());
 	}
 
 	@Override
@@ -94,8 +84,8 @@ public class CacheSaml2AuthenticationRequestRepository
 
 	/**
 	 * Removes and returns the request for the {@code RelayState} of this ACS POST. The atomic
-	 * {@code asMap().remove} guarantees that of two concurrent POSTs carrying the same RelayState only
-	 * one takes the request out of the cache; a {@code getIfPresent} + {@code invalidate} pair would
+	 * {@link OldestFirstBoundedCache#remove} guarantees that of two concurrent POSTs carrying the same RelayState
+	 * only one takes the request out of the cache; a {@code getIfPresent} + {@code invalidate} pair would
 	 * hand it to both. This is not a replay guard on its own: {@code Saml2WebSsoAuthenticationFilter}
 	 * obtains the request through the converter's non-destructive {@link #loadAuthenticationRequest}
 	 * before calling this method and discards the value returned here. The atomic form matches
@@ -105,6 +95,6 @@ public class CacheSaml2AuthenticationRequestRepository
 	public AbstractSaml2AuthenticationRequest removeAuthenticationRequest(
 			HttpServletRequest request, HttpServletResponse response) {
 		String relayState = request.getParameter("RelayState");
-		return (relayState != null) ? cache.asMap().remove(relayState) : null;
+		return (relayState != null) ? cache.remove(relayState) : null;
 	}
 }
