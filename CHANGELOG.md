@@ -6,6 +6,10 @@
 
 [ENTRYSTORE-1110](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1110) The signup-tokens cache is capped at an estimated 128 MB instead of 100 000 entries, so sign-up bodies of up to 32 KB can no longer hold gigabytes. A legacy confirmation link \(entrystore.auth.confirmation.legacy=true\) is consumed atomically, so two concurrent clicks cannot both apply it. Saving a null SAML authentication request removes the pending request named by the request's RelayState. **Behaviour note:** a sign-up with more than 50 custom\_\* properties is rejected with 400
 
+### Bug
+
+[ENTRYSTORE-1181](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1181) A Solr add batch that fails and is retried no longer restores the document of an entry that was deleted, or whose document was removed as corrupt, while the batch was being sent. The document stayed in the index until the next reindex and inflated search hit counts.
+
 ## Version 6.1
 
 ### Bug
