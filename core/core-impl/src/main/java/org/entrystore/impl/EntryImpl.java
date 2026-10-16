@@ -818,7 +818,7 @@ public class EntryImpl implements Entry {
 	}
 
 	/** Rolls back without losing the failure that made it necessary. */
-	private static void rollbackQuietly(RepositoryConnection rc, Exception cause) {
+	static void rollbackQuietly(RepositoryConnection rc, Exception cause) {
 		try {
 			rc.rollback();
 		} catch (RuntimeException e) {

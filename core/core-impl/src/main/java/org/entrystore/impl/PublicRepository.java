@@ -19,6 +19,7 @@ package org.entrystore.impl;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
+import lombok.extern.slf4j.Slf4j;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Resource;
@@ -41,38 +42,37 @@ import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.URISplit;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.net.URI;
+import java.time.Duration;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.BiConsumer;
 
 /**
  * @author Hannes Ebner
  */
+@Slf4j
 public class PublicRepository {
-	
-	Logger log = LoggerFactory.getLogger(PublicRepository.class);
-	
-	private boolean rebuilding = false;
-	
-	private Repository repository;
-	
-	private RepositoryManager rm;
-	
-	private PrincipalManager pm;
-
-	private Thread entrySubmitter;
 
 	private final Cache<URI, Entry> postQueue = Caffeine.newBuilder().build();
 
 	private final Queue<Entry> deleteQueue = Queues.newConcurrentLinkedQueue();
+
+	private final RepositoryManager rm;
+
+	private final PrincipalManager pm;
+
+	private boolean rebuilding = false;
+	
+	private Repository repository;
+
+	Thread entrySubmitter;
 
 	// Wakes the EntrySubmitter when an entry is enqueued so it does not have to wait out its
 	// idle timeout. The 10 s timeout on wait() is defense against spurious wakeups (per
@@ -89,37 +89,60 @@ public class PublicRepository {
 
 	private static final long IDLE_TIMEOUT_MS = 10_000;
 
+	private static final long FAILURE_BACKOFF_BASE_MS = 1_000;
+
+	private static final long FAILURE_BACKOFF_MAX_MS = 60_000;
+
 	public class EntrySubmitter extends Thread {
 
+		/**
+		 * Sends queued removals and updates until interrupted. A RuntimeException from an iteration does not end the
+		 * thread, which would stop public-repository mirroring until a restart; its batch is dropped and the next one
+		 * waits for a backoff that grows with each consecutive failure ({@link PublicRepository#backoffMillis}). An
+		 * Error does end it, and is logged. The backoff is a sleep rather than a wait on {@code queueSignal}, so new
+		 * work cannot end it: entries queued meanwhile wait for the next attempt instead of being sent into a failing
+		 * one. Only an iteration that sent entries ends a run of failures.
+		 */
 		@Override
 		public void run() {
+			int consecutiveFailures = 0;
+			long firstFailureNanos = 0;
+			long lastFailureNanos = 0;
 			while (!interrupted()) {
 				try {
-					runOnce();
-				} catch (RuntimeException e) {
-					// Fault isolation: an unchecked exception from a single iteration's update/remove
-					// batch must NOT kill the submitter thread — that would silently disable public-repo
-					// mirroring for the rest of the JVM lifetime. Log and continue to the next iteration.
-					log.error("Public Repository submitter caught unchecked exception, continuing", e);
-					// Wait on queueSignal (rather than Thread.sleep) so an enqueue/remove during a
-					// transient-failure recovery window can short-circuit the backoff; otherwise the
-					// consumer would block for the full second after the failure cleared, accruing
-					// queue depth a producer burst would only have to drain. The 1 s ceiling caps
-					// CPU usage when the failure is persistent.
-					synchronized (queueSignal) {
-						try {
-							queueSignal.wait(1000);
-						} catch (InterruptedException ie) {
-							Thread.currentThread().interrupt();
-							log.info("Public Repository submitter got interrupted during failure backoff, shutting down submitter thread");
-							break;
-						}
+					if (runOnce() && consecutiveFailures > 0) {
+						log.info("Public Repository submitter recovered after {} consecutive failures over {} s",
+								consecutiveFailures, secondsBetween(firstFailureNanos, lastFailureNanos));
+						consecutiveFailures = 0;
 					}
+				} catch (RuntimeException e) {
+					lastFailureNanos = System.nanoTime();
+					if (consecutiveFailures == 0) {
+						firstFailureNanos = lastFailureNanos;
+					}
+					consecutiveFailures++;
+					long backoffMs = backoffMillis(consecutiveFailures);
+					log.error("Public Repository submitter failed (consecutive failures: {}, failing for {} s), "
+							+ "backing off {} ms: {}", consecutiveFailures,
+							secondsBetween(firstFailureNanos, lastFailureNanos), backoffMs, e.getMessage(), e);
+					try {
+						Thread.sleep(backoffMs);
+					} catch (InterruptedException ie) {
+						Thread.currentThread().interrupt();
+						log.info("Public Repository submitter got interrupted during failure backoff, "
+								+ "shutting down submitter thread");
+						break;
+					}
+				} catch (Error e) {
+					log.error("Public Repository submitter stopped, the public repository is not updated until a "
+							+ "restart: {}", e.getMessage(), e);
+					throw e;
 				}
 			}
 		}
 
-		private void runOnce() {
+		/** Sends one batch of queued entries, or waits for work if there is none; returns whether it sent any. */
+		private boolean runOnce() {
 			postQueue.cleanUp();
 			int batchCount = 0;
 
@@ -204,8 +227,19 @@ public class PublicRepository {
 					}
 				}
 			}
+			return batchCount > 0;
 		}
 
+	}
+
+	/** The wait after the given number of consecutive submitter failures: 1 s, doubling up to 60 s. */
+	static long backoffMillis(int consecutiveFailures) {
+		// the shift is bounded only against overflow; FAILURE_BACKOFF_MAX_MS is the cap
+		return Math.min(FAILURE_BACKOFF_MAX_MS, FAILURE_BACKOFF_BASE_MS << Math.min(consecutiveFailures - 1, 30));
+	}
+
+	private static long secondsBetween(long fromNanos, long toNanos) {
+		return Duration.ofNanos(toNanos - fromNanos).toSeconds();
 	}
 
 	public PublicRepository(RepositoryManager rm) {
@@ -214,7 +248,7 @@ public class PublicRepository {
 		Config config = rm.getConfiguration();
 
 		String storeType = config.getString(Settings.REPOSITORY_PUBLIC_TYPE, "memory").trim();
-		log.info("Public repository type: " + storeType);
+		log.info("Public repository type: {}", storeType);
 		
 		if (storeType.equalsIgnoreCase("memory")) {
 			this.repository = new SailRepository(new MemoryStore());
@@ -227,15 +261,13 @@ public class PublicRepository {
 				((RepositoryManagerImpl) rm).checkAndUpgradeNativeStore(path, indexes);
 				log.info("Public repository: using Native Store at {} with indexes {}", path, indexes);
 				
-				NativeStore store = null;
+				NativeStore store;
 				if (indexes != null) {
 					store = new NativeStore(path, indexes);
 				} else {
 					store = new NativeStore(path);
 				}
-				if (store != null) {
-					this.repository = new SailRepository(store);
-				}
+				this.repository = new SailRepository(store);
 			}
 		}
 		
@@ -271,7 +303,7 @@ public class PublicRepository {
 	public void enqueue(Entry entry) {
 		URI entryURI = entry.getEntryURI();
 		synchronized (postQueue) {
-			log.info("Adding document to update queue: " + entryURI);
+			log.info("Adding document to update queue: {}", entryURI);
 			postQueue.put(entryURI, entry);
 		}
 		signalSubmitter();
@@ -280,7 +312,7 @@ public class PublicRepository {
 	public void remove(Entry entry) {
 		URI entryURI = entry.getEntryURI();
 		synchronized (deleteQueue) {
-			log.info("Adding entry to delete queue: " + entryURI);
+			log.info("Adding entry to delete queue: {}", entryURI);
 			deleteQueue.add(entry);
 		}
 		signalSubmitter();
@@ -353,6 +385,18 @@ public class PublicRepository {
 	}
 
 	private void updateEntries(Set<Entry> entries) {
+		writeBatch(entries, this::updateEntry);
+	}
+
+	private void removeEntries(Set<Entry> entries) {
+		writeBatch(entries, this::removeEntry);
+	}
+
+	/**
+	 * Writes the entries in one transaction, as guest. A RuntimeException rolls the transaction back and is rethrown,
+	 * so that the submitter counts it and backs off.
+	 */
+	private void writeBatch(Set<Entry> entries, BiConsumer<Entry, RepositoryConnection> write) {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
@@ -362,18 +406,14 @@ public class PublicRepository {
 					rc = repository.getConnection();
 					rc.begin();
 					for (Entry e : entries) {
-						updateEntry(e, rc);
+						write.accept(e, rc);
 					}
 					rc.commit();
-				} catch (RepositoryException re) {
-					try {
-						if (rc != null) {
-							rc.rollback();
-						}
-					} catch (RepositoryException re1) {
-						log.error(re1.getMessage());
+				} catch (RuntimeException e) {
+					if (rc != null) {
+						EntryImpl.rollbackQuietly(rc, e);
 					}
-					log.error(re.getMessage());
+					throw e;
 				} finally {
 					if (rc != null) {
 						try {
@@ -413,44 +453,9 @@ public class PublicRepository {
 				}
 			}
 		} else {
-			log.debug("Processing entry: " + e.getEntryURI());
+			log.debug("Processing entry: {}", e.getEntryURI());
 			removeEntry(e, rc);
 			addEntry(e, rc);
-		}
-	}
-
-	private void removeEntries(Set<Entry> entries) {
-		URI currentUser = pm.getAuthenticatedUserURI();
-		try {
-			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
-			synchronized (repository) {
-				RepositoryConnection rc = null;
-				try {
-					rc = repository.getConnection();
-					rc.begin();
-					for (Entry e : entries) {
-						removeEntry(e, rc);
-					}
-					rc.commit();
-				} catch (RepositoryException re) {
-					try {
-						rc.rollback();
-					} catch (RepositoryException re1) {
-						log.error(re1.getMessage());
-					}
-					log.error(re.getMessage());
-				} finally {
-					if (rc != null) {
-						try {
-							rc.close();
-						} catch (RepositoryException re2) {
-							log.error(re2.getMessage());
-						}
-					}
-				}
-			}
-		} finally {
-			pm.setAuthenticatedUserURI(currentUser);
 		}
 	}
 
@@ -502,7 +507,7 @@ public class PublicRepository {
 				Date before = new Date();
 				rc.begin();
 				rc.clear();
-				log.info("Clearing public repository took " + (new Date().getTime() - before.getTime()) + " ms");
+				log.info("Clearing public repository took {} ms", new Date().getTime() - before.getTime());
 
 				ContextManager cm = rm.getContextManager();
 				Set<URI> contexts = cm.getEntries();
@@ -511,7 +516,7 @@ public class PublicRepository {
 					String id = URISplit.getLastSegment(contextURI.toString());
 					Context context = cm.getContext(id);
 					if (context != null) {
-						log.info("Adding context " + contextURI + " to public repository");
+						log.info("Adding context {} to public repository", contextURI);
 						before = new Date();
 						// Enumerated from the store, not from getEntries(). rc.clear() above wiped the whole
 						// public repository and this loop is the only thing that re-adds data, so a listing
@@ -526,7 +531,7 @@ public class PublicRepository {
 						Set<URI> entries = (context instanceof ContextImpl ci)
 								? ci.getChildEntryURIsFromStore()
 								: context.getEntries();
-						log.info("Fetching entries took " + (new Date().getTime() - before.getTime()) + " ms");
+						log.info("Fetching entries took {} ms", new Date().getTime() - before.getTime());
 						before = new Date();
 						Date timeTracker = new Date();
 						long publicEntryCount = 0;
@@ -536,7 +541,9 @@ public class PublicRepository {
 								processedCount++;
 								if ((new Date().getTime() - timeTracker.getTime()) > 60000) {
 									if (processedCount > 0) {
-										log.debug("Average time per entry after " + (new Date().getTime() - before.getTime()) + " ms: " + ((new Date().getTime() - before.getTime()) / processedCount) + " ms");
+										log.debug("Average time per entry after {} ms: {} ms",
+												new Date().getTime() - before.getTime(),
+												(new Date().getTime() - before.getTime()) / processedCount);
 										timeTracker = new Date();
 									}
 								}
@@ -552,12 +559,12 @@ public class PublicRepository {
 								}
 							}
 						}
-						log.info("Added " + publicEntryCount + " entries to public repository");
-						log.info("Total time for context: " + (new Date().getTime() - before.getTime()) + " ms");
-						if (entries.size() > 0) {
-							log.debug("Total average time per entry: " + ((new Date().getTime() - before.getTime()) / entries.size()) + " ms");
+						log.info("Added {} entries to public repository", publicEntryCount);
+						log.info("Total time for context: {} ms", new Date().getTime() - before.getTime());
+						if (!entries.isEmpty()) {
+							log.debug("Total average time per entry: {} ms", (new Date().getTime() - before.getTime()) / entries.size());
 						}
-						log.info("Done processing context " + contextURI);
+						log.info("Done processing context {}", contextURI);
 					}
 				}
 				rc.commit();
@@ -575,7 +582,7 @@ public class PublicRepository {
 					log.error(re.getMessage());
 				}
 				log.info("Rebuild of public repository complete");
-				log.info("Number of triples in public repository: " + getTripleCount());
+				log.info("Number of triples in public repository: {}", getTripleCount());
 				rebuilding = false;
 			}
 		}
@@ -620,7 +627,7 @@ public class PublicRepository {
 		try {
 			repository.shutDown();
 		} catch (RepositoryException e) {
-			log.error("Error when shutting down public repository: " + e.getMessage());
+			log.error("Error when shutting down public repository: {}", e.getMessage(), e);
 		}
 	}
 
