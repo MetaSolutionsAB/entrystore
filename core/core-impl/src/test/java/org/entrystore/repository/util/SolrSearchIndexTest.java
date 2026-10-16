@@ -96,7 +96,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyBoolean;
-import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.eq;
@@ -523,6 +522,35 @@ public class SolrSearchIndexTest {
 		requeueDeletes.invoke(documentSubmitter(), List.of(ENTRY_1_1, ENTRY_1_2));
 
 		assertEquals(List.of(ENTRY_1_2), List.copyOf(deleteQueue()));
+	}
+
+	@Test
+	public void failedDocumentIsNotRequeuedWhenADeletionOfTheEntryWasQueuedMeanwhile() throws Exception {
+		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
+		deleteQueue().add(ENTRY_1_1); // queued while the add batch was being sent
+		Method requeueAdds = SolrSearchIndex.SolrInputDocumentSubmitter.class
+				.getDeclaredMethod("requeueAdds", Map.class);
+		requeueAdds.setAccessible(true);
+
+		requeueAdds.invoke(documentSubmitter(),
+				Map.of(ENTRY_1_1, new SolrInputDocument(), ENTRY_1_2, new SolrInputDocument()));
+
+		assertEquals(Set.of(ENTRY_1_2), postQueue().asMap().keySet());
+		assertEquals(List.of(ENTRY_1_1), List.copyOf(deleteQueue()));
+	}
+
+	@Test
+	public void failedDocumentDoesNotReplaceADocumentOfTheEntryQueuedMeanwhile() throws Exception {
+		stopDocumentSubmitter(); // keeps queued documents in their queue
+		SolrInputDocument queued = new SolrInputDocument();
+		postQueue().put(ENTRY_1_1, queued); // queued while the add batch was being sent
+		Method requeueAdds = SolrSearchIndex.SolrInputDocumentSubmitter.class
+				.getDeclaredMethod("requeueAdds", Map.class);
+		requeueAdds.setAccessible(true);
+
+		requeueAdds.invoke(documentSubmitter(), Map.of(ENTRY_1_1, new SolrInputDocument()));
+
+		assertSame(queued, postQueue().getIfPresent(ENTRY_1_1));
 	}
 
 	@Test
