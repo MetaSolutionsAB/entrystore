@@ -53,7 +53,7 @@ stepdefinitions:
         - scp -v ${DOWNLOAD_NAME} ${DOWNLOAD_NAME}.sha256.asc deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
         - scp -rv modules/rest/integration-test/target/site/jacoco-aggregate/* deploy@meta1.metasolutions.se:/var/www/entrystore.org/test-coverage/
         - if [ $BITBUCKET_BRANCH == "develop" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/develop.version" ; elif [ $BITBUCKET_BRANCH == "master" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/latest.version" ; fi
-  # Snapshot images (develop, develop-spring): build and push only, no vulnerability scan.
+  # Snapshot images (develop): build and push only, no vulnerability scan.
   - dockerhub: &dockerhub
       name: Docker Hub
       script:
@@ -119,9 +119,6 @@ pipelines:
     develop:
       - step: *build
       - step: *deploy
-      - step: *dockerhub
-    develop-spring:
-      - step: *build
       - step: *dockerhub
 
 definitions:
