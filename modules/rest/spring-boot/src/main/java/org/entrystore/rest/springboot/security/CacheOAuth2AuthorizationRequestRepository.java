@@ -17,19 +17,19 @@
 package org.entrystore.rest.springboot.security;
 
 import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Ticker;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
-import org.entrystore.rest.springboot.util.CapacityEvictionWarning;
+import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration;
+import org.entrystore.rest.springboot.util.OldestFirstBoundedCache;
 import org.springframework.security.oauth2.client.web.AuthorizationRequestRepository;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Stores OAuth2/OIDC authorization requests in a Caffeine cache keyed by the {@code state}
@@ -38,33 +38,27 @@ import java.util.concurrent.TimeUnit;
  * back to the {@code /login/oauth2/code/{registrationId}} callback — the OIDC counterpart of
  * {@link CacheSaml2AuthenticationRequestRepository}.
  *
- * <p>The cache is written on the anonymous, un-rate-limited login-initiation path, so
- * {@code maximumSize} bounds the heap and {@link CapacityEvictionWarning} reports when the bound
- * bites.
+ * <p>The cache is written on the anonymous login-start path, which {@link SsoLoginRateLimitFilter} limits per client.
+ * Against a flood from many clients, {@link OldestFirstBoundedCache} bounds the heap and evicts the oldest login first.
  */
 @Slf4j
 @Component
 public class CacheOAuth2AuthorizationRequestRepository
 		implements AuthorizationRequestRepository<OAuth2AuthorizationRequest>, CaffeineCacheSource {
 
-	// Cardinality bound: every anonymous request to /oauth2/authorization/{registrationId} mints an
-	// entry, and expireAfterWrite bounds only lifetime — without a cap, request-rate × 120 s of
-	// entries could exhaust the heap. 10k entries ≈ a few MB, far above legitimate concurrent logins.
+	// 10k entries ≈ a few MB, far above legitimate concurrent logins
 	static final long MAX_ENTRIES = 10_000;
 
-	private final CapacityEvictionWarning capacityWarning =
-			new CapacityEvictionWarning(log, "OAuth2 authorization-request", MAX_ENTRIES + " entries");
+	private final OldestFirstBoundedCache<String, OAuth2AuthorizationRequest> cache;
 
-	private final Cache<String, OAuth2AuthorizationRequest> cache = Caffeine.newBuilder()
-			.expireAfterWrite(2, TimeUnit.MINUTES)
-			.maximumSize(MAX_ENTRIES)
-			.evictionListener(capacityWarning.listener())
-			.recordStats()
-			.build();
+	public CacheOAuth2AuthorizationRequestRepository(Ticker ticker) {
+		this.cache = new OldestFirstBoundedCache<>(OidcCustomConfiguration.REQUEST_LIFETIME, MAX_ENTRIES, ticker, log,
+				"OAuth2 authorization-request");
+	}
 
 	@Override
 	public Map<String, Cache<?, ?>> caffeineCaches() {
-		return Map.of("oauth2-authz-requests", cache);
+		return Map.of("oauth2-authz-requests", cache.caffeineCache());
 	}
 
 	@Override
@@ -94,6 +88,6 @@ public class CacheOAuth2AuthorizationRequestRepository
 		// Atomic retrieve-and-remove: a getIfPresent + invalidate pair would let two concurrent
 		// callbacks carrying the same state both observe the request, weakening the single-use
 		// replay guard to the IdP's code single-use alone.
-		return (state != null) ? cache.asMap().remove(state) : null;
+		return (state != null) ? cache.remove(state) : null;
 	}
 }

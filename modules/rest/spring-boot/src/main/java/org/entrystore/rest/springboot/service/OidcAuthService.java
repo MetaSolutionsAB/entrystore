@@ -60,6 +60,14 @@ public class OidcAuthService {
 	}
 
 	/**
+	 * Where a failed OIDC login goes: {@code requestedUrl} if the redirect whitelist admits it, else the configured
+	 * default failure URL.
+	 */
+	public String failureRedirectUrl(String requestedUrl) {
+		return isValidRedirectUrl(requestedUrl) ? requestedUrl : oidcConfiguration.redirectFailure().url();
+	}
+
+	/**
 	 * The selected registration id together with its provenance, so the caller can classify an
 	 * unknown id correctly: {@code fromRequestParameter} is true only when the id is the caller's
 	 * raw {@code ?provider=} value (a 400), never when it came from configuration — email-domain

@@ -39,7 +39,7 @@ import java.util.Map;
  * <p>Entries expire after {@link SamlCustomConfiguration#requestLifetime()}: Spring validates the response's
  * {@code InResponseTo} against the request loaded here, so a login that outlives its entry fails.
  *
- * <p>The cache is written on the anonymous login-start path, which {@link SamlLoginRateLimitFilter} limits per client.
+ * <p>The cache is written on the anonymous login-start path, which {@link SsoLoginRateLimitFilter} limits per client.
  * Against a flood from many clients, {@link OldestFirstBoundedCache} bounds the heap and evicts the oldest login first.
  */
 @Slf4j

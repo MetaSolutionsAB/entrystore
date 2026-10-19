@@ -24,6 +24,9 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -38,12 +41,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CacheOAuth2AuthorizationRequestRepositoryTest {
 
 	private static final String STATE = "state-token";
+	private static final int FLOOD_PER_SECOND = 100;
 
+	private final AtomicLong nanos = new AtomicLong();
 	private CacheOAuth2AuthorizationRequestRepository repository;
 
 	@BeforeEach
 	void setUp() {
-		repository = new CacheOAuth2AuthorizationRequestRepository();
+		repository = new CacheOAuth2AuthorizationRequestRepository(nanos::get);
 	}
 
 	private static OAuth2AuthorizationRequest authorizationRequest(String state) {
@@ -86,7 +91,34 @@ class CacheOAuth2AuthorizationRequestRepositoryTest {
 		assertNull(repository.loadAuthorizationRequest(callbackRequest("other-state")));
 	}
 
-	// The maximumSize bound and its throttled SIZE-eviction warn are the DoS defences on this
+	@Test
+	void requestExpiresTwoMinutesAfterItWasSaved() {
+		var authorizationRequest = authorizationRequest(STATE);
+		repository.saveAuthorizationRequest(authorizationRequest, callbackRequest(null), new MockHttpServletResponse());
+
+		nanos.addAndGet(Duration.ofSeconds(119).toNanos());
+		assertSame(authorizationRequest, repository.loadAuthorizationRequest(callbackRequest(STATE)));
+
+		nanos.addAndGet(Duration.ofSeconds(1).toNanos());
+		assertNull(repository.loadAuthorizationRequest(callbackRequest(STATE)));
+	}
+
+	// A flood from many clients keeps the cache full. Oldest-first eviction keeps a login started during it for
+	// MAX_ENTRIES ÷ rate, 100 s at 100 req/s; Caffeine's maximumSize would evict it within about a second.
+	@Test
+	void loginStartedDuringAFloodIsStillLoadedOneMinuteLater() {
+		var authorizationRequest = authorizationRequest(STATE);
+
+		flood(CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES);
+		repository.saveAuthorizationRequest(authorizationRequest, callbackRequest(null), new MockHttpServletResponse());
+		flood(60 * FLOOD_PER_SECOND);
+
+		assertSame(authorizationRequest, repository.loadAuthorizationRequest(callbackRequest(STATE)));
+		assertSame(authorizationRequest, repository.removeAuthorizationRequest(callbackRequest(STATE),
+				new MockHttpServletResponse()));
+	}
+
+	// The oldest-first bound and its throttled SIZE-eviction warn are the DoS defences on this
 	// anonymously writable cache — this pins both: the cache never grows past its cap, and
 	// sustained capacity eviction emits one throttled WARN rather than one line per eviction
 	// (which would trade the heap bound for log amplification).
@@ -98,19 +130,12 @@ class CacheOAuth2AuthorizationRequestRepositoryTest {
 			for (int i = 0; i < CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES + 100; i++) {
 				repository.saveAuthorizationRequest(authorizationRequest("state-" + i), request, response);
 			}
-			var cache = repository.caffeineCaches().get("oauth2-authz-requests");
-			cache.cleanUp();
 
-			assertTrue(cache.estimatedSize() <= CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES);
-			// Both bounds pinned against literals: the declared constant AND the effective builder
-			// cap must stay large enough for legitimate concurrent in-flight logins, or callbacks
-			// start failing with authorization_request_not_found. Only the estimatedSize bound
-			// catches a shrunken .maximumSize(...) wiring; only the constant bound catches a
-			// shrunken MAX_ENTRIES.
+			assertEquals(CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES,
+					repository.caffeineCaches().get("oauth2-authz-requests").estimatedSize());
+			// Below this, legitimate concurrent logins would fail with authorization_request_not_found
 			assertTrue(CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES >= 10_000,
-					"declared cap shrunk below legitimate login concurrency");
-			assertTrue(cache.estimatedSize() >= 9_900,
-					"effective cache cap shrunk below legitimate login concurrency");
+					"cap shrunk below legitimate login concurrency");
 			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
 		}
@@ -141,5 +166,15 @@ class CacheOAuth2AuthorizationRequestRepositoryTest {
 		repository.saveAuthorizationRequest(null, callbackRequest(STATE), new MockHttpServletResponse());
 
 		assertNull(repository.loadAuthorizationRequest(callbackRequest(STATE)));
+	}
+
+	/** Starts {@code logins} logins at {@link #FLOOD_PER_SECOND}, advancing the ticker. */
+	private void flood(long logins) {
+		var request = callbackRequest(null);
+		var response = new MockHttpServletResponse();
+		for (long i = 0; i < logins; i++) {
+			nanos.addAndGet(Duration.ofSeconds(1).toNanos() / FLOOD_PER_SECOND);
+			repository.saveAuthorizationRequest(authorizationRequest("flood-" + nanos.get()), request, response);
+		}
 	}
 }
