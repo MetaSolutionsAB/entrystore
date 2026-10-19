@@ -40,6 +40,7 @@ import org.entrystore.rest.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.springboot.service.OidcAuthService;
 import org.entrystore.rest.springboot.service.SamlAuthService;
 import org.entrystore.rest.springboot.service.auth.OidcAuthStateCache;
+import org.entrystore.rest.springboot.service.auth.OidcLoginRateLimiter;
 import org.entrystore.rest.springboot.service.auth.SamlLoginRateLimiter;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
@@ -69,6 +70,7 @@ import org.springframework.security.config.annotation.web.configurers.RequestCac
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
 import org.springframework.security.saml2.provider.service.web.DefaultRelyingPartyRegistrationResolver;
 import org.springframework.security.saml2.provider.service.web.OpenSaml5AuthenticationTokenConverter;
@@ -158,9 +160,10 @@ public class SecurityConfig {
 	private final Optional<TicketValidator> casTicketValidator;
 	private final Optional<CasLoginSuccessHandler> casLoginSuccessHandler;
 
-	// OIDC-auth related beans (success handler optional — only present when entrystore.auth.oidc.enabled=true)
+	// OIDC-auth related beans (success handler and limiter optional — only present when entrystore.auth.oidc.enabled=true)
 	private final OidcCustomConfiguration oidcConfiguration;
 	private final Optional<OidcLoginSuccessHandler> oidcLoginSuccessHandler;
+	private final Optional<OidcLoginRateLimiter> oidcLoginRateLimiter;
 	private final Optional<ClientRegistrationRepository> clientRegistrationRepository; // optional as it will be injected only when Spring's OAuth2 client registrations are configured
 	private final OidcAuthService oidcAuthService;
 	private final OidcAuthStateCache oidcAuthStateCache;
@@ -382,7 +385,7 @@ public class SecurityConfig {
 			var rateLimiter = samlLoginRateLimiter.orElseThrow(() -> new IllegalStateException(
 					"SAML is enabled but SamlLoginRateLimiter bean is missing — check the " +
 							"entrystore.auth.saml.enabled binding."));
-			http.addFilterBefore(new SamlLoginRateLimitFilter(rateLimiter, samlAuthService),
+			http.addFilterBefore(SsoLoginRateLimitFilter.forSaml(rateLimiter, samlAuthService),
 					Saml2WebSsoAuthenticationRequestFilter.class);
 		} else {
 			log.info("SAML Auth Disabled");
@@ -464,6 +467,11 @@ public class SecurityConfig {
 					.userInfoEndpoint(userInfo -> userInfo.oidcUserService(new UsernameClaimOidcUserService(oidcAuthService)))
 					.successHandler(oidcHandler)
 					.failureHandler(new SsoLoginFailureHandler("OIDC", oidcConfiguration.redirectFailure().url())));
+			var oidcRateLimiter = oidcLoginRateLimiter.orElseThrow(() -> new IllegalStateException(
+					"OIDC is enabled but OidcLoginRateLimiter bean is missing — check the " +
+							"entrystore.auth.oidc.enabled binding."));
+			http.addFilterBefore(SsoLoginRateLimitFilter.forOidc(oidcRateLimiter, oidcAuthService),
+					OAuth2AuthorizationRequestRedirectFilter.class);
 		} else {
 			log.info("OIDC Auth Disabled");
 		}

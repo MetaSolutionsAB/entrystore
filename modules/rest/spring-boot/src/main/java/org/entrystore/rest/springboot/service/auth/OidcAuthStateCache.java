@@ -17,47 +17,42 @@
 package org.entrystore.rest.springboot.service.auth;
 
 import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Ticker;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
+import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration;
 import org.entrystore.rest.springboot.model.auth.AuthState;
-import org.entrystore.rest.springboot.util.CapacityEvictionWarning;
+import org.entrystore.rest.springboot.util.OldestFirstBoundedCache;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * A cache service for storing and retrieving OIDC authentication state keyed by the OAuth2
  * {@code state} parameter — the OIDC counterpart of {@link SamlAuthStateCache}. Entries carry
  * the whitelist-validated success/failure redirect URLs through the provider round-trip and
- * expire after a fixed duration.
+ * expire after {@link OidcCustomConfiguration#REQUEST_LIFETIME}, as the authorization request saved under the same
+ * state does.
  *
- * <p>The cache is written on the anonymous login-initiation path, so {@code maximumSize} bounds the
- * heap and {@link CapacityEvictionWarning} reports when the bound bites.
+ * <p>The cache is written on the anonymous login-start path, which {@link OidcLoginRateLimiter} limits per client.
+ * Against a flood from many clients, {@link OldestFirstBoundedCache} bounds the heap and evicts the oldest login first.
  */
 @Slf4j
 @Service
 public class OidcAuthStateCache implements CaffeineCacheSource {
 
-	// Cardinality bound: anonymous logins with a whitelisted successurl/failureurl mint entries, and
-	// expireAfterWrite bounds only lifetime — cap the size so an initiation flood cannot exhaust the
-	// heap (mirrors CacheOAuth2AuthorizationRequestRepository).
 	static final long MAX_ENTRIES = 10_000;
 
-	private final CapacityEvictionWarning capacityWarning =
-			new CapacityEvictionWarning(log, "OIDC auth-state", MAX_ENTRIES + " entries");
+	private final OldestFirstBoundedCache<String, AuthState> requestCache;
 
-	private final Cache<String, AuthState> requestCache = Caffeine.newBuilder()
-			.expireAfterWrite(2, TimeUnit.MINUTES)
-			.maximumSize(MAX_ENTRIES)
-			.evictionListener(capacityWarning.listener())
-			.recordStats()
-			.build();
+	public OidcAuthStateCache(Ticker ticker) {
+		this.requestCache = new OldestFirstBoundedCache<>(OidcCustomConfiguration.REQUEST_LIFETIME, MAX_ENTRIES, ticker,
+				log, "OIDC auth-state");
+	}
 
 	@Override
 	public Map<String, Cache<?, ?>> caffeineCaches() {
-		return Map.of("oidc-auth-state", requestCache);
+		return Map.of("oidc-auth-state", requestCache.caffeineCache());
 	}
 
 	public AuthState getAuthState(String id) {

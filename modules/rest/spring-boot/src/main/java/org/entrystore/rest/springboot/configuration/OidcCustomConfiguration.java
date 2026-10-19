@@ -23,6 +23,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -43,6 +44,12 @@ public record OidcCustomConfiguration(
 		RedirectUrl redirectSuccess,
 		RedirectUrl redirectFailure
 ) {
+	/**
+	 * How long a started login may stay at the provider: the authorization request and its redirect URLs expire
+	 * after it.
+	 */
+	public static final Duration REQUEST_LIFETIME = Duration.ofMinutes(2);
+
 	/**
 	 * Normalizes and validates the bound values so misconfiguration fails at binding, naming the
 	 * key, instead of surfacing later and vaguer. The bound collections are copied so a consumer

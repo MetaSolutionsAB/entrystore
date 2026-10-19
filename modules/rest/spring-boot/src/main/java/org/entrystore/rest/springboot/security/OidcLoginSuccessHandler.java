@@ -108,13 +108,8 @@ public class OidcLoginSuccessHandler
 
 	@Override
 	protected String resolveFailureUrl(OidcContext context) {
-		// isValidRedirectUrl returns false for null, so the guard also covers the no-custom-URL case.
-		String customRedirectFailureUrl = context.cachedAuthState() != null
-				? context.cachedAuthState().failureUrl() : null;
-		if (oidcAuthService.isValidRedirectUrl(customRedirectFailureUrl)) {
-			return customRedirectFailureUrl;
-		}
-		return defaultFailureUrl();
+		return oidcAuthService.failureRedirectUrl(context.cachedAuthState() != null
+				? context.cachedAuthState().failureUrl() : null);
 	}
 
 	@Override
