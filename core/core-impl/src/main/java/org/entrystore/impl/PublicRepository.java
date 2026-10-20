@@ -49,6 +49,8 @@ import java.time.Duration;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
@@ -73,7 +75,7 @@ public class PublicRepository {
 	private Repository repository;
 
 	Thread entrySubmitter;
-
+						
 	// Wakes the EntrySubmitter when an entry is enqueued so it does not have to wait out its
 	// idle timeout. The 10 s timeout on wait() is defense against spurious wakeups (per
 	// Object.wait spec) and a heartbeat for programming errors elsewhere; in steady state the
@@ -97,11 +99,12 @@ public class PublicRepository {
 
 		/**
 		 * Sends queued removals and updates until interrupted. A RuntimeException from an iteration does not end the
-		 * thread, which would stop public-repository mirroring until a restart; its batch is dropped and the next one
-		 * waits for a backoff that grows with each consecutive failure ({@link PublicRepository#backoffMillis}). An
-		 * Error does end it, and is logged. The backoff is a sleep rather than a wait on {@code queueSignal}, so new
-		 * work cannot end it: entries queued meanwhile wait for the next attempt instead of being sent into a failing
-		 * one. Only an iteration that sent entries ends a run of failures.
+		 * thread, which would stop public-repository mirroring until a restart; the entries it could not write are
+		 * dropped and the next iteration waits for a backoff that grows with each consecutive failure
+		 * ({@link PublicRepository#backoffMillis}). An Error does end it, and is logged. The backoff is a sleep rather
+		 * than a wait on {@code queueSignal}, so new work cannot end it: entries queued meanwhile wait for the next
+		 * attempt instead of being sent into a failing one. Only an iteration that writes entries without throwing ends
+		 * a run of failures.
 		 */
 		@Override
 		public void run() {
@@ -141,7 +144,10 @@ public class PublicRepository {
 			}
 		}
 
-		/** Sends one batch of queued entries, or waits for work if there is none; returns whether it sent any. */
+		/**
+		 * Sends up to {@code BATCH_SIZE} queued entries, removals then updates in separate transactions, or waits for
+		 * work if there is none; returns whether it sent any. Removals stay committed if the updates then fail.
+		 */
 		private boolean runOnce() {
 			postQueue.cleanUp();
 			int batchCount = 0;
@@ -393,39 +399,100 @@ public class PublicRepository {
 	}
 
 	/**
-	 * Writes the entries in one transaction, as guest. A RuntimeException rolls the transaction back and is rethrown,
-	 * so that the submitter counts it and backs off.
+	 * Writes the entries in one transaction, as guest. If that fails, each entry of a larger batch is written in a
+	 * transaction of its own, so that an entry that always fails is dropped alone instead of together with everything
+	 * queued during the backoff. The RuntimeException is rethrown, so that the submitter counts it and backs off, when
+	 * the store itself fails or no entry could be written.
 	 */
 	private void writeBatch(Set<Entry> entries, BiConsumer<Entry, RepositoryConnection> write) {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 			synchronized (repository) {
-				RepositoryConnection rc = null;
 				try {
-					rc = repository.getConnection();
-					rc.begin();
-					for (Entry e : entries) {
-						write.accept(e, rc);
+					writeInOneTransaction(entries, write);
+				} catch (RuntimeException batchFailure) {
+					if (entries.size() < 2) {
+						throw batchFailure;
 					}
-					rc.commit();
-				} catch (RuntimeException e) {
-					if (rc != null) {
-						EntryImpl.rollbackQuietly(rc, e);
-					}
-					throw e;
-				} finally {
-					if (rc != null) {
-						try {
-							rc.close();
-						} catch (RepositoryException re2) {
-							log.error(re2.getMessage());
-						}
-					}
+					writeEachAlone(entries, write, batchFailure);
 				}
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
+		}
+	}
+
+	private void writeInOneTransaction(Set<Entry> entries, BiConsumer<Entry, RepositoryConnection> write) {
+		RepositoryConnection rc = repository.getConnection();
+		try {
+			rc.begin();
+			for (Entry e : entries) {
+				write.accept(e, rc);
+			}
+			rc.commit();
+		} catch (RuntimeException e) {
+			EntryImpl.rollbackQuietly(rc, e);
+			throw e;
+		} finally {
+			closeQuietly(rc);
+		}
+	}
+
+	/**
+	 * Writes each entry in a transaction of its own and logs the entries that fail, or {@code batchFailure} if none
+	 * does. A failing begin or commit is a store failure and, like a batch of which no entry could be written,
+	 * rethrows {@code batchFailure}.
+	 */
+	private void writeEachAlone(Set<Entry> entries, BiConsumer<Entry, RepositoryConnection> write,
+			RuntimeException batchFailure) {
+		Map<Entry, RuntimeException> dropped = new LinkedHashMap<>();
+		boolean anyWritten = false;
+		RepositoryConnection rc;
+		try {
+			rc = repository.getConnection();
+		} catch (RuntimeException storeFailure) {
+			batchFailure.addSuppressed(storeFailure);
+			throw batchFailure;
+		}
+		try {
+			for (Entry e : entries) {
+				rc.begin();
+				try {
+					write.accept(e, rc);
+				} catch (RuntimeException entryFailure) {
+					EntryImpl.rollbackQuietly(rc, entryFailure);
+					dropped.put(e, entryFailure);
+					continue;
+				}
+				rc.commit();
+				if (e != null) {
+					anyWritten = true;
+				}
+			}
+		} catch (RuntimeException storeFailure) {
+			EntryImpl.rollbackQuietly(rc, storeFailure);
+			batchFailure.addSuppressed(storeFailure);
+			throw batchFailure;
+		} finally {
+			closeQuietly(rc);
+		}
+		if (!anyWritten) {
+			throw batchFailure;
+		}
+		if (dropped.isEmpty()) {
+			log.warn("Public Repository batch of {} entries failed, but each entry was written on its own: {}",
+					entries.size(), batchFailure.getMessage(), batchFailure);
+		}
+		dropped.forEach((e, failure) -> log.error("Public Repository dropped entry {}, which fails on its own: {}",
+				e.getEntryURI(), failure.getMessage(), failure));
+	}
+
+	private void closeQuietly(RepositoryConnection rc) {
+		try {
+			rc.close();
+		} catch (RepositoryException re) {
+			log.error(re.getMessage());
 		}
 	}
 

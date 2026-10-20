@@ -179,6 +179,8 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 			Entry queuedDuringBackoff = publishableEntry("queued during backoff");
 			publicRepository.enqueue(entryFailingUpdate());
 			LogEvent failure = awaitEvent(Level.ERROR, "consecutive failures: 1,");
+			// enqueue inside the backoff, so that a backoff waiting on queueSignal would receive this notify
+			awaiting().until(this::isBackingOff);
 
 			publicRepository.enqueue(queuedDuringBackoff);
 
@@ -251,6 +253,52 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 			assertInstanceOf(RepositoryException.class, failure.getThrown());
 		}
 
+		/** The failure case cannot tell a removal from an update, which also removes the entry before re-adding it. */
+		@Test
+		public void removedEntry_isGoneFromPublicRepository() {
+			Entry published = publishableEntry("removed");
+			publicRepository.enqueue(published);
+			awaiting().until(() -> hasTitle("removed"));
+
+			publicRepository.remove(published);
+
+			awaiting().until(() -> !hasTitle("removed"));
+		}
+
+		/** An entry that always fails must not take the entries queued beside it during the backoff with it. */
+		@Test
+		public void failingEntryInBatch_dropsOnlyItself() {
+			Entry published = publishableEntry("sent beside a failing entry");
+			publicRepository.enqueue(entryFailingUpdate());
+			awaitEvent(Level.ERROR, "consecutive failures: 1,");
+			Entry failing = entryFailingUpdate();
+
+			publicRepository.enqueue(failing);
+			publicRepository.enqueue(published);
+
+			awaitEvent(Level.INFO, "recovered after 1 consecutive failures");
+			assertTrue(hasTitle("sent beside a failing entry"), "an entry batched with a failing one must be written");
+			assertEquals(1, logs.count(Level.ERROR, "dropped entry " + failing.getEntryURI()),
+				"the failing entry must be logged as dropped on its own");
+			assertEquals(0, logs.count(Level.ERROR, "consecutive failures: 2,"),
+				"a batch that was partly written is not a failure of the store");
+		}
+
+		/** A batch of which nothing can be written fails as a whole, and is not logged entry by entry. */
+		@Test
+		public void batchWhoseEntriesAllFail_countsAsFailure() {
+			publicRepository.enqueue(entryFailingUpdate());
+			awaitEvent(Level.ERROR, "consecutive failures: 1,");
+
+			publicRepository.enqueue(entryFailingUpdate());
+			publicRepository.enqueue(entryFailingUpdate());
+
+			LogEvent second = awaitEvent(Level.ERROR, "consecutive failures: 2,");
+			assertTrue(messageOf(second).contains("backing off 2000 ms"), messageOf(second));
+			assertEquals(1, logs.count(Level.ERROR, "updateEntries failed; dropped 2 entries"));
+			assertEquals(0, logs.count(Level.ERROR, "dropped entry"));
+		}
+
 		/** An Error is not isolated like a RuntimeException, so it must reach the log before the thread ends. */
 		@Test
 		public void errorInBatch_isLoggedAndStopsSubmitter() throws InterruptedException {
@@ -296,6 +344,13 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 			Thread submitter = publicRepository.entrySubmitter;
 			return submitter.getState() == Thread.State.TIMED_WAITING
 				&& Arrays.stream(submitter.getStackTrace()).anyMatch(frame -> frame.getMethodName().equals("runOnce"));
+		}
+
+		/** The only timed wait outside {@code runOnce()} is the failure backoff, whether it sleeps or waits. */
+		private boolean isBackingOff() {
+			Thread submitter = publicRepository.entrySubmitter;
+			return submitter.getState() == Thread.State.TIMED_WAITING
+				&& Arrays.stream(submitter.getStackTrace()).noneMatch(frame -> frame.getMethodName().equals("runOnce"));
 		}
 	}
 
