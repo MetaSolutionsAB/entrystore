@@ -92,8 +92,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import static java.lang.Thread.interrupted;
-
 
 /**
  * @author Hannes Ebner
@@ -410,8 +408,21 @@ public class SolrSearchIndex implements SearchIndex {
 			}
 		}
 
+		/**
+		 * Puts the documents of a failed batch back into the post queue, except those of entries with a queued
+		 * deletion or document: either was queued after the batch was drained, since queueing a document drops the
+		 * entry's queued deletion, and supersedes the batch's document.
+		 */
 		private void requeueAdds(Map<URI, SolrInputDocument> batch) {
-			batch.forEach((k, v) -> postQueue.asMap().putIfAbsent(k, v));
+			synchronized (postQueue) {
+				synchronized (deleteQueue) {
+					batch.forEach((entryURI, document) -> {
+						if (!deleteQueue.contains(entryURI)) {
+							postQueue.asMap().putIfAbsent(entryURI, document);
+						}
+					});
+				}
+			}
 		}
 
 		/**
