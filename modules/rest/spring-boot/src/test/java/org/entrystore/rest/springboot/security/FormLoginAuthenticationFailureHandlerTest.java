@@ -72,13 +72,24 @@ class FormLoginAuthenticationFailureHandlerTest {
 	}
 
 	@Test
-	void disabledUser_emitsUnified401WithoutLeakingState() throws Exception {
+	void disabledUserAfterPasswordCheck_emits403WithoutRecordingFailure() throws Exception {
+		// The provider throws this only after the password matched, so it is not counted as a guess
+		request.setParameter("auth_username", "alice@example.com");
+
+		handler.onAuthenticationFailure(request, response, new DisabledAfterPasswordCheckException());
+
+		verify(loginAttemptService, never()).recordFailure(anyString());
+		assertJsonError(403, "Login failed. The account is disabled.");
+	}
+
+	@Test
+	void plainDisabledException_recordsFailureAndEmitsUnified401() throws Exception {
+		// Spring's default provider throws it before the password check, so a 403 would leak the account state
 		request.setParameter("auth_username", "alice@example.com");
 
 		handler.onAuthenticationFailure(request, response, new DisabledException("account disabled"));
 
-		// Disabled accounts must produce the same response as bad credentials so the body
-		// cannot be used to enumerate account state.
+		verify(loginAttemptService).recordFailure("alice@example.com");
 		assertUnifiedUnauthorizedJson();
 	}
 
@@ -117,13 +128,17 @@ class FormLoginAuthenticationFailureHandlerTest {
 	}
 
 	private void assertUnifiedUnauthorizedJson() throws java.io.UnsupportedEncodingException {
-		assertEquals(401, response.getStatus());
+		assertJsonError(401, "Unauthorized");
+	}
+
+	private void assertJsonError(int status, String error) throws java.io.UnsupportedEncodingException {
+		assertEquals(status, response.getStatus());
 		String contentType = response.getContentType();
 		assertNotNull(contentType);
 		assertTrue(contentType.contains("application/json"), "Unexpected content type: " + contentType);
 		String body = response.getContentAsString();
-		assertTrue(body.contains("\"status\":401"), "Body missing status=401: " + body);
-		assertTrue(body.contains("\"error\":\"Unauthorized\""), "Body missing error=Unauthorized: " + body);
+		assertTrue(body.contains("\"status\":" + status), "Body missing status=" + status + ": " + body);
+		assertTrue(body.contains("\"error\":\"" + error + "\""), "Body missing error=" + error + ": " + body);
 		assertTrue(body.contains("\"path\":\"/auth/cookie\""), "Body missing path: " + body);
 	}
 }

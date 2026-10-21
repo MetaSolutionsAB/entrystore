@@ -20,13 +20,22 @@ import com.github.benmanes.caffeine.cache.Ticker;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.web.server.Cookie;
 import org.springframework.mock.env.MockEnvironment;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.LockedException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Duration;
+import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SecurityConfigTest {
@@ -126,5 +135,51 @@ class SecurityConfigTest {
 		PasswordEncoder encoder = SecurityConfig.buildPasswordEncoder(false, Duration.ofHours(1), 100L, Ticker.systemTicker());
 
 		assertFalse(encoder instanceof CachingPasswordEncoder);
+	}
+
+	@Test
+	void passwordAuthenticationProvider_disabledUserWithCorrectPassword_throwsDisabledAfterPasswordCheck() {
+		DaoAuthenticationProvider provider = passwordProviderForUser(user -> user.disabled(true));
+
+		assertThrows(DisabledAfterPasswordCheckException.class,
+				() -> provider.authenticate(UsernamePasswordAuthenticationToken.unauthenticated("alice", "secret")));
+	}
+
+	@Test
+	void passwordAuthenticationProvider_disabledUserWithWrongPassword_throwsBadCredentials() {
+		// Spring's default checks reject a disabled account here before checking the password
+		DaoAuthenticationProvider provider = passwordProviderForUser(user -> user.disabled(true));
+
+		assertThrows(BadCredentialsException.class,
+				() -> provider.authenticate(UsernamePasswordAuthenticationToken.unauthenticated("alice", "wrong")));
+	}
+
+	@Test
+	void passwordAuthenticationProvider_enabledUserWithCorrectPassword_authenticates() {
+		DaoAuthenticationProvider provider = passwordProviderForUser(UnaryOperator.identity());
+
+		Authentication result = provider.authenticate(
+				UsernamePasswordAuthenticationToken.unauthenticated("alice", "secret"));
+
+		assertTrue(result.isAuthenticated());
+	}
+
+	@Test
+	void passwordAuthenticationProvider_lockedUserWithCorrectPassword_throwsLocked() {
+		// With the pre-checks a no-op, the post-check is the only place a locked account is rejected
+		DaoAuthenticationProvider provider = passwordProviderForUser(user -> user.accountLocked(true));
+
+		assertThrows(LockedException.class,
+				() -> provider.authenticate(UsernamePasswordAuthenticationToken.unauthenticated("alice", "secret")));
+	}
+
+	private static DaoAuthenticationProvider passwordProviderForUser(UnaryOperator<User.UserBuilder> accountState) {
+		PasswordEncoder encoder = SecurityConfig.buildPasswordEncoder(false, Duration.ofHours(1), 100L,
+				Ticker.systemTicker());
+		UserDetails user = accountState.apply(User.withUsername("alice")
+				.password(encoder.encode("secret"))
+				.roles("USER"))
+				.build();
+		return SecurityConfig.passwordAuthenticationProvider(username -> user, encoder);
 	}
 }

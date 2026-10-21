@@ -114,3 +114,6 @@ mvc:
 logging:
   http:
     enabled: true   # Enabled by default when unset; set to "false" to disable request/response logging
+  level:
+    # Silences a startup WARN that SecurityConfig#passwordAuthenticationProvider triggers by design
+    "[org.springframework.security.config.annotation.authentication.configuration.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer]": ERROR

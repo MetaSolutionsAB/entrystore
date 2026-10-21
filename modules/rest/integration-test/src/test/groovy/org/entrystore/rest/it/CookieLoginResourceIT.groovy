@@ -463,7 +463,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		loginConnection.getErrorStream().text.contains('Unauthorized')
 	}
 
-	def "POST /auth/cookie should not log in the disabled user and respond with the same 401 as wrong credentials"() {
+	def "POST /auth/cookie with the correct password of a disabled user should not log in and respond 403 as in 5.x"() {
 		given:
 		def username = 'userForLoginDisabled@test.com'
 		def user = UserUtil.createUserWithPassword(username, password)
@@ -478,9 +478,29 @@ class CookieLoginResourceIT extends BaseSpec {
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
-		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
+		loginConnection.getResponseCode() == HTTP_FORBIDDEN
 		loginConnection.getContentType().contains('application/json')
-		loginConnection.getErrorStream().text.contains('Unauthorized')
+		loginConnection.getErrorStream().text.contains('Login failed. The account is disabled.')
+		EntryStoreClient.findSetCookies(loginConnection, 'auth_token').isEmpty()
+	}
+
+	def "POST /auth/cookie with the correct password of a disabled user should not count towards the lockout"() {
+		given:
+		def username = 'userForLoginDisabledNoLockout@test.com'
+		def user = UserUtil.createUserWithPassword(username, password)
+		assert EntryStoreClient.putRequest(user['resourceUri'].toString(), JsonOutput.toJson([disabled: true])).getResponseCode() == HTTP_NO_CONTENT
+		def bodyParams = createFormBody([auth_username: username, auth_password: password])
+		// 3 attempts, the lockout threshold
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_FORBIDDEN
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_FORBIDDEN
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_FORBIDDEN
+
+		when:
+		// a 4th failed attempt would be answered 429 if the earlier ones had been recorded
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+
+		then:
+		loginConnection.getResponseCode() == HTTP_FORBIDDEN
 	}
 
 	def "A logged-in user who is then disabled should lose the session and the cookie on the next request"() {
@@ -579,6 +599,20 @@ class CookieLoginResourceIT extends BaseSpec {
 		EntryStoreClient.findSetCookies(connection, 'auth_token').isEmpty()
 	}
 
+	def "HTTP Basic with the correct password of a disabled user should still answer 401"() {
+		given: 'form login answers this 403, but HTTP Basic answered 401 in 5.x too'
+		def username = 'userForBasicDisabled@test.com'
+		def user = UserUtil.createUserWithPassword(username, password)
+		assert EntryStoreClient.putRequest(user['resourceUri'].toString(), JsonOutput.toJson([disabled: true])).getResponseCode() == HTTP_NO_CONTENT
+		def basic = 'Basic ' + Base64.getEncoder().encodeToString((username + ':' + password).getBytes(UTF_8))
+
+		when:
+		def connection = EntryStoreClient.getRequest('/auth/user', '', null, [Authorization: basic])
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
 	def "a guest browser request to a protected page should not issue an auth_token cookie"() {
 		when: 'Spring Security would save an HTML GET in a new session to resume it after login'
 		def connection = EntryStoreClient.getRequest(path, '', 'text/html')
@@ -666,10 +700,10 @@ class CookieLoginResourceIT extends BaseSpec {
 		loginConnection.getErrorStream().text.contains('Too many login attempts. Please try again later.')
 	}
 
-	def "POST /auth/cookie wrong-password and disabled-user responses are byte-identical"() {
+	def "POST /auth/cookie wrong-password responses of an enabled and a disabled user are byte-identical"() {
 		given:
-		// Pins the normalization invariant against future regressions that might reintroduce
-		// a disabled-account discriminator (different status, body, or content type).
+		// Pins that without the password the response does not reveal that an account is disabled
+		// (different status, body, or content type); only the correct password gets the 403.
 		def enabledUsername = 'userForLoginEquality@test.com'
 		UserUtil.createUserWithPassword(enabledUsername, password)
 
@@ -678,32 +712,32 @@ class CookieLoginResourceIT extends BaseSpec {
 		def disabledUri = disabledUser['resourceUri'].toString()
 		assert EntryStoreClient.putRequest(disabledUri, JsonOutput.toJson([disabled: true])).getResponseCode() == HTTP_NO_CONTENT
 
-		def wrongPasswordBody = createFormBody([auth_username: enabledUsername, auth_password: 'wrongPass123'])
-		def disabledLoginBody = createFormBody([auth_username: disabledUsername, auth_password: password])
+		def enabledLoginBody = createFormBody([auth_username: enabledUsername, auth_password: 'wrongPass123'])
+		def disabledLoginBody = createFormBody([auth_username: disabledUsername, auth_password: 'wrongPass123'])
 
 		when:
-		def wrongPasswordConn = EntryStoreClient.postRequest('/auth/cookie', wrongPasswordBody, '', 'application/x-www-form-urlencoded')
+		def enabledConn = EntryStoreClient.postRequest('/auth/cookie', enabledLoginBody, '', 'application/x-www-form-urlencoded')
 		def disabledConn = EntryStoreClient.postRequest('/auth/cookie', disabledLoginBody, '', 'application/x-www-form-urlencoded')
 
 		then:
 		// Asserted explicitly, not merely equal across branches, so a regression returning 2xx
 		// reports as an auth bypass here rather than as an NPE on the null error stream below.
 		// getResponseCode() also makes the connection; before that, getErrorStream() returns null.
-		wrongPasswordConn.getResponseCode() == HTTP_UNAUTHORIZED
+		enabledConn.getResponseCode() == HTTP_UNAUTHORIZED
 		disabledConn.getResponseCode() == HTTP_UNAUTHORIZED
-		wrongPasswordConn.getContentType() == disabledConn.getContentType()
+		enabledConn.getContentType() == disabledConn.getContentType()
 
 		// The unified 401 envelope is byte-identical across branches: timestamp is nulled in
-		// ErrorResponseWriter.writeUnauthorizedAsJson so it cannot leak the bcrypt/no-bcrypt latency
-		// difference between branches, and the request URI (path) is the same for both calls.
-		def wrongPasswordBodyText = wrongPasswordConn.getErrorStream().text
+		// ErrorResponseWriter.writeUnauthorizedAsJson so it cannot leak a latency difference
+		// between branches, and the request URI (path) is the same for both calls.
+		def enabledBodyText = enabledConn.getErrorStream().text
 		def disabledBodyText = disabledConn.getErrorStream().text
-		wrongPasswordBodyText == disabledBodyText
+		enabledBodyText == disabledBodyText
 		// Asserted separately because equality alone also holds if the field disappeared from both
 		// bodies. The writer now serializes with the container's ObjectMapper, so a spring.jackson
 		// setting such as default-property-inclusion=non_null would drop it and silently restore the
 		// timestamp-based oracle. This is the only assertion covering that.
-		wrongPasswordBodyText.contains('"timestamp":null')
+		enabledBodyText.contains('"timestamp":null')
 	}
 
 	def "GET /_principals/entry/{id}?includeAll should expose disabledUntil while user is locked out"() {

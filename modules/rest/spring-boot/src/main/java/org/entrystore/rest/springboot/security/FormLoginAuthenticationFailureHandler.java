@@ -21,9 +21,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -40,11 +42,23 @@ public class FormLoginAuthenticationFailureHandler implements AuthenticationFail
 	private final LoginAttemptService loginAttemptService;
 	private final ErrorResponseWriter errorResponseWriter;
 
-	// Emits a single normalized 401 + JSON ErrorResponse for every authentication failure
-	// (bad credentials, unknown user, disabled account, etc.) so the response does not leak
-	// which condition occurred. The underlying reason is only logged.
+	/**
+	 * Answers {@link DisabledAfterPasswordCheckException}, a disabled account with the correct password, 403 as in
+	 * 5.x, so EntryScape can say the account is disabled, without counting towards the lockout. Every other failure
+	 * counts and gets one normalized 401 that does not say which condition occurred.
+	 */
 	@Override
 	public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response, AuthenticationException exception) throws ServletException, IOException {
+		if (exception instanceof DisabledAfterPasswordCheckException) {
+			log.info("Login failed at '{}': {}", request.getRequestURI(), exception.getMessage());
+			errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
+					.status(HttpStatus.FORBIDDEN.value())
+					.path(request.getRequestURI())
+					.error("Login failed. The account is disabled.")
+					.build());
+			return;
+		}
+
 		// Credential-style failures are routine (typo, brute-force probing); other AuthenticationException
 		// subclasses usually indicate an infrastructure fault and should reach an operator with the cause.
 		if (exception instanceof BadCredentialsException || exception instanceof UsernameNotFoundException) {

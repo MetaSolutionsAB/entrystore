@@ -55,7 +55,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.AccountStatusUserDetailsChecker;
 import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.cas.ServiceProperties;
 import org.springframework.security.cas.web.CasAuthenticationFilter;
 import org.springframework.security.config.Customizer;
@@ -67,6 +69,8 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.config.annotation.web.configurers.RequestCacheConfigurer;
 import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.userdetails.UserDetailsChecker;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
@@ -99,7 +103,6 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -528,6 +531,30 @@ public class SecurityConfig {
 				httpBasicConfig.cache().ttl(),
 				httpBasicConfig.cache().maxSize(),
 				ticker);
+	}
+
+	/**
+	 * The provider of form login and HTTP Basic. It checks the account status after the password, where Spring's
+	 * default checks it before, so only a disabled account's correct password throws
+	 * {@link DisabledAfterPasswordCheckException} (403 on form login, see
+	 * {@link FormLoginAuthenticationFailureHandler}; 401 on HTTP Basic) and a wrong one is rejected like any other. It
+	 * must stay the only {@code AuthenticationProvider} bean: Spring Security ignores them all when there are several
+	 * and falls back to its default provider.
+	 */
+	@Bean
+	public static DaoAuthenticationProvider passwordAuthenticationProvider(UserDetailsService userDetailsService,
+																		   PasswordEncoder passwordEncoder) {
+		DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
+		provider.setPasswordEncoder(passwordEncoder);
+		provider.setPreAuthenticationChecks(user -> {});
+		UserDetailsChecker accountStatusChecks = new AccountStatusUserDetailsChecker();
+		provider.setPostAuthenticationChecks(user -> {
+			if (!user.isEnabled()) {
+				throw new DisabledAfterPasswordCheckException();
+			}
+			accountStatusChecks.check(user);
+		});
+		return provider;
 	}
 
 	// Pure function of its arguments — no bean state — so it stays static and unit-testable
