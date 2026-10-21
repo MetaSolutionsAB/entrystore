@@ -68,6 +68,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
@@ -118,6 +119,8 @@ class SparqlServiceTest {
 	@BeforeEach
 	void setUp() throws MalformedURLException {
 		lenient().when(repositoryManager.getPublicRepository()).thenReturn(publicRepository);
+		// Tests re-stub this with doReturn: when(getConnection()) would run this answer and leak a connection,
+		// which backingRepository.shutDown() then waits 20 seconds for.
 		lenient().when(publicRepository.getConnection())
 				.thenAnswer(_ -> backingRepository.getConnection());
 		lenient().when(repositoryManager.getRepositoryURL())
@@ -268,7 +271,7 @@ class SparqlServiceTest {
 
 		RepositoryConnection mockConn = mock(RepositoryConnection.class);
 		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
-		when(publicRepository.getConnection()).thenReturn(mockConn);
+		doReturn(mockConn).when(publicRepository).getConnection();
 		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(mockQuery);
 		when(mockQuery.getParsedQuery()).thenReturn(QueryParserUtil.parseTupleQuery(QueryLanguage.SPARQL, SELECT_ALL, null));
 
@@ -287,7 +290,7 @@ class SparqlServiceTest {
 
 	@Test
 	void runQuery_publicRepositoryConnectionNull_throwsInternalServerError() {
-		when(publicRepository.getConnection()).thenReturn(null);
+		doReturn(null).when(publicRepository).getConnection();
 
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
 				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
@@ -300,7 +303,7 @@ class SparqlServiceTest {
 		// so the only realistically-reachable path through the RepositoryException catch is when
 		// prepareTupleQuery / evaluate / etc. fail mid-query against a live connection.
 		RepositoryConnection mockConn = mock(RepositoryConnection.class);
-		when(publicRepository.getConnection()).thenReturn(mockConn);
+		doReturn(mockConn).when(publicRepository).getConnection();
 		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString()))
 				.thenThrow(new RepositoryException("backing store offline; pool exhausted; secret-bucket"));
 
@@ -345,7 +348,7 @@ class SparqlServiceTest {
 	void runQuery_queryEvaluationException_withoutSizeCap_throwsInternalServerError() {
 		RepositoryConnection mockConn = mock(RepositoryConnection.class);
 		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
-		when(publicRepository.getConnection()).thenReturn(mockConn);
+		doReturn(mockConn).when(publicRepository).getConnection();
 		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(mockQuery);
 		when(mockQuery.getParsedQuery()).thenReturn(QueryParserUtil.parseTupleQuery(QueryLanguage.SPARQL, SELECT_ALL, null));
 		doThrow(new QueryEvaluationException("backend went away"))
@@ -360,7 +363,7 @@ class SparqlServiceTest {
 	void runQuery_queryInterruptedException_throwsGatewayTimeout() {
 		RepositoryConnection mockConn = mock(RepositoryConnection.class);
 		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
-		when(publicRepository.getConnection()).thenReturn(mockConn);
+		doReturn(mockConn).when(publicRepository).getConnection();
 		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(mockQuery);
 		when(mockQuery.getParsedQuery()).thenReturn(QueryParserUtil.parseTupleQuery(QueryLanguage.SPARQL, SELECT_ALL, null));
 		doThrow(new QueryInterruptedException("simulated timeout"))
@@ -376,7 +379,7 @@ class SparqlServiceTest {
 	void runQuery_tupleQueryResultHandlerException_throwsSerializationFailed() {
 		RepositoryConnection mockConn = mock(RepositoryConnection.class);
 		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
-		when(publicRepository.getConnection()).thenReturn(mockConn);
+		doReturn(mockConn).when(publicRepository).getConnection();
 		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(mockQuery);
 		when(mockQuery.getParsedQuery()).thenReturn(QueryParserUtil.parseTupleQuery(QueryLanguage.SPARQL, SELECT_ALL, null));
 		doThrow(new TupleQueryResultHandlerException("writer broke"))
@@ -393,7 +396,7 @@ class SparqlServiceTest {
 		// so an unrelated IOException with a coincidentally similar message must NOT trip the 413 path.
 		RepositoryConnection mockConn = mock(RepositoryConnection.class);
 		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
-		when(publicRepository.getConnection()).thenReturn(mockConn);
+		doReturn(mockConn).when(publicRepository).getConnection();
 		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(mockQuery);
 		when(mockQuery.getParsedQuery()).thenReturn(QueryParserUtil.parseTupleQuery(QueryLanguage.SPARQL, SELECT_ALL, null));
 		QueryEvaluationException outer = new QueryEvaluationException("writer aborted");
@@ -435,7 +438,7 @@ class SparqlServiceTest {
 		// SERVICE clauses, so FederatedQueryGuard refuses it; unlike the RDF4J-catch branches it wraps no cause.
 		RepositoryConnection mockConn = mock(RepositoryConnection.class);
 		TupleQuery nonSailQuery = mock(TupleQuery.class);
-		when(publicRepository.getConnection()).thenReturn(mockConn);
+		doReturn(mockConn).when(publicRepository).getConnection();
 		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(nonSailQuery);
 
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
@@ -520,7 +523,7 @@ class SparqlServiceTest {
 
 		RepositoryConnection mockConn = mock(RepositoryConnection.class);
 		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
-		when(publicRepository.getConnection()).thenReturn(mockConn);
+		doReturn(mockConn).when(publicRepository).getConnection();
 		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(mockQuery);
 		when(mockQuery.getParsedQuery()).thenReturn(QueryParserUtil.parseTupleQuery(QueryLanguage.SPARQL, SELECT_ALL, null));
 		ValueFactory vf = backingRepository.getValueFactory();

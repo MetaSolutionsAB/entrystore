@@ -83,6 +83,7 @@ import java.util.Set;
 import java.util.StringJoiner;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -122,6 +123,8 @@ public class SolrSearchIndex implements SearchIndex {
 	private static final long MAX_PURGE_WAIT_NANOS = TimeUnit.MINUTES.toNanos(5);
 
 	private static final long MAX_PURGE_TOTAL_WAIT_NANOS = TimeUnit.HOURS.toNanos(1);
+
+	private static final long PURGE_POLL_MILLIS = 5000;
 
 	static final int SENT_CHECK_CHUNK_SIZE = 1000;
 
@@ -174,6 +177,15 @@ public class SolrSearchIndex implements SearchIndex {
 
 	/** How long a purge after a reindex waits without Solr answering any document; a field so tests can shorten it. */
 	long purgeStallNanos = MAX_PURGE_WAIT_NANOS;
+
+	/** How often a waiting purge checks whether its documents were sent; a field so tests can shorten it. */
+	long purgePollMillis = PURGE_POLL_MILLIS;
+
+	/**
+	 * Opened by {@link #shutdown()} once the submitter has stopped, so that a waiting purge checks a last time
+	 * instead of sleeping until the purge executor is forced down.
+	 */
+	private final CountDownLatch submitterStopped = new CountDownLatch(1);
 
 	/**
 	 * Entries whose documents are to be removed from the index, in the order in which they were queued. A set, so
@@ -597,6 +609,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 		awaitOrForceShutdown(reindexExecutor, "Reindex executor");
 
+		submitterStopped.countDown();
 		// Purge executor shuts down only after reindex tasks have fully drained, so any
 		// purgeExecutor.submit(...) calls they make complete before shutdown begins.
 		purgeExecutor.shutdown();
@@ -896,7 +909,8 @@ public class SolrSearchIndex implements SearchIndex {
 	 * is awaited as that document. Documents Solr rejects are discarded and count as sent; the purge then warns that
 	 * entries of the context may be missing from search. The wait is given up when Solr has answered no document at
 	 * all for MAX_PURGE_WAIT_NANOS, so a large backlog ahead of the context is awaited but a stalled submitter is
-	 * not, and after MAX_PURGE_TOTAL_WAIT_NANOS in all. Nothing is purged if
+	 * not, and after MAX_PURGE_TOTAL_WAIT_NANOS in all. On shutdown, a waiting purge checks once more after the
+	 * submitter has stopped and ends if documents are still unsent. Nothing is purged if
 	 * <ul>
 	 *     <li>the context's URI index is incomplete, because the purge would remove the documents of the entries
 	 *     missing from its listing (ENTRYSTORE-1095),</li>
@@ -935,15 +949,18 @@ public class SolrSearchIndex implements SearchIndex {
 			long deadline = System.nanoTime() + purgeStallNanos;
 			long settledBefore = settledDocuments.get();
 			long rejectedBefore = rejectedDocuments.get();
+			boolean stopped = false;
 			try {
 				removeSentDocuments(pending);
 				while (!pending.isEmpty()
+						&& !stopped
 						&& System.nanoTime() < deadline
 						&& System.nanoTime() < giveUp
 						&& !Thread.currentThread().isInterrupted()) {
-					log.debug("{} documents of context {} are still queued or being sent, sleeping 5 seconds before"
-							+ " attempting new purge of expired entries", pending.size(), contextURI);
-					Thread.sleep(5000);
+					log.debug("{} documents of context {} are still queued or being sent, checking again in {} ms"
+							+ " before attempting new purge of expired entries", pending.size(), contextURI,
+							purgePollMillis);
+					stopped = submitterStopped.await(purgePollMillis, TimeUnit.MILLISECONDS);
 					removeSentDocuments(pending);
 					// The wait is bounded by a stalled submitter, not by the size of the backlog ahead of the context
 					long settled = settledDocuments.get();
@@ -958,7 +975,10 @@ public class SolrSearchIndex implements SearchIndex {
 					return;
 				}
 				if (!pending.isEmpty()) {
-					if (System.nanoTime() < giveUp) {
+					if (stopped) {
+						log.warn("Delayed purge of context {} ended by shutdown; {} of its documents were not sent and"
+								+ " expired entries were NOT removed", contextURI, pending.size());
+					} else if (System.nanoTime() < giveUp) {
 						log.warn("Delayed purge of context {} aborted after {} s without Solr answering any document;"
 								+ " {} of its documents are still queued or being sent", contextURI,
 								TimeUnit.NANOSECONDS.toSeconds(purgeStallNanos), pending.size());

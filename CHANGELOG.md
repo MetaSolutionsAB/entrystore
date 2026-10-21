@@ -4,6 +4,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1266](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1266) Shutdown no longer waits up to 10 seconds for a purge after a context reindex: a waiting purge checks once more when the Solr submitter has stopped, and runs if its documents were sent or ends otherwise.
+
 [ENTRYSTORE-1262](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1262) POST /auth/signup answers "A confirmation message was sent to \<email\>" again, as in 5.x, without the ", if the user exists." of password reset.
 
 [ENTRYSTORE-1119](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1119) GET /\{context-id\}/metadata/\{entry-id\} and its cached-external-metadata and merged-metadata variants answer 400 to a graphQuery with a SPARQL SERVICE clause, in any position and with a variable endpoint, before any request leaves EntryStore. Anyone who could read an entry's metadata, a guest for a public entry, could make EntryStore query any host it reaches, internal ones included, and read the answer in the response. 5.x has the same gap.
