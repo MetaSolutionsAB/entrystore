@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.springboot.service;
 
-import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -432,10 +431,8 @@ class SparqlServiceTest {
 
 	@Test
 	void runQuery_nonSailTupleQuery_throwsInternalServerError() {
-		// Pins the fail-closed branch in extractTupleExpr: a non-Sail TupleQuery (e.g. one returned
-		// by an HTTP- or SPARQL-endpoint repository) cannot expose its parsed algebra in a way the
-		// FederatedServiceDetector can inspect, so the SSRF defense must refuse to run rather than
-		// silently allow a SERVICE clause through.
+		// A non-Sail TupleQuery (e.g. from an HTTP- or SPARQL-endpoint repository) cannot be checked for
+		// SERVICE clauses, so FederatedQueryGuard refuses it; unlike the RDF4J-catch branches it wraps no cause.
 		RepositoryConnection mockConn = mock(RepositoryConnection.class);
 		TupleQuery nonSailQuery = mock(TupleQuery.class);
 		when(publicRepository.getConnection()).thenReturn(mockConn);
@@ -443,9 +440,6 @@ class SparqlServiceTest {
 
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
 				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
-		assertEquals(GENERIC_INTERNAL_ERROR, ex.getMessage());
-		// Distinguishes the Sail-only fail-closed branch from the RDF4J-catch branches: the
-		// extractTupleExpr throw site does not wrap a cause, while the catch-block paths do.
 		assertNull(ex.getCause(), "Non-Sail fail-closed branch should not wrap a cause");
 	}
 

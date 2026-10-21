@@ -69,7 +69,8 @@ public class MetadataController {
 			summary = "Returns an entry's metadata graph.",
 			description = "The {type} path segment selects the entry's local metadata, its cached external metadata " +
 					"or the merged graph of both. The RDF format follows the 'format' parameter, then the Accept " +
-					"header. 'graphQuery' filters the graph; 'recursive' lists traversal profiles or predicates to " +
+					"header. 'graphQuery' filters the graph with a SPARQL CONSTRUCT query, which may not contain " +
+					"SERVICE; 'recursive' lists traversal profiles or predicates to " +
 					"follow up to 'depth' levels within 'scope' (when given, {type} and 'rev' are ignored and the " +
 					"traversal merges local and cached external metadata); 'rev' selects a revision of the local " +
 					"metadata; 'download' answers with Content-Disposition: attachment.")
