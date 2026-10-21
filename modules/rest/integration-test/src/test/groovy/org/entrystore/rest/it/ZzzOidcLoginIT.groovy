@@ -192,7 +192,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		tokensConn.getResponseCode() == HTTP_OK
 	}
 
-	def '5. Replaying the consumed callback must not establish an authenticated session'() {
+	def '5. Replaying the consumed callback fails to the failure URL without starting a session'() {
 		given:
 		assert this.callbackUrlSaved: 'Callback URL not available, did the previous test step execute correctly?'
 
@@ -203,26 +203,8 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		replayConn.getResponseCode() in [302, 303, 307]
 		replayConn.getHeaderField('Location') == failureLoginUrl
 
-		when: 'Using any cookies set by the rejected response, query /auth/user'
-		def leakedCookies = replayConn.getHeaderFields()['Set-Cookie']
-		def userConn
-		if (leakedCookies != null && !leakedCookies.isEmpty()) {
-			userConn = EntryStoreClient.getRequest('/auth/user', '', null,
-				[Cookie: leakedCookies.collect { it.split(';')[0] }.join('; ')])
-		} else {
-			userConn = EntryStoreClient.getRequest('/auth/user', '')
-		}
-
-		then: 'Caller is not authenticated as the OIDC user (401, or 200 resolving to guest)'
-		// A Set-Cookie for auth_token may appear on the rejected response — the failure handler's
-		// saveException() creates a session for the error attribute. That session carries no
-		// authentication, so the replay signal is the session contents, not the presence of the
-		// cookie header (same rationale as ZzzCasLoginIT step 4). Only the guest identity is
-		// acceptable on a 200 — accepting any non-target user would let a leak under a derived
-		// identity ship green.
-		def responseCode = userConn.getResponseCode()
-		def responseUser = responseCode == HTTP_OK ? JSON_PARSER.parseText(userConn.inputStream.text)['user'] : null
-		responseCode == HTTP_UNAUTHORIZED || (responseCode == HTTP_OK && responseUser == 'guest')
+		and: 'no session is issued, as in 5.x'
+		EntryStoreClient.findSetCookie(replayConn, 'auth_token') == null
 	}
 
 	def '6. Second provider with preferred_username claim: reserved admin is denied to the per-request failureurl'() {
@@ -263,7 +245,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		callbackConn.getResponseCode() in [302, 303, 307]
 		callbackConn.getHeaderField('Location') == customFailureUrl
 
-		and: 'no authenticated session leaks (same rationale as step 5)'
+		and: 'no authenticated session leaks from the session the login started before the rejection'
 		def leakedCookies = callbackConn.getHeaderFields()['Set-Cookie']
 		def userConn
 		if (leakedCookies != null && !leakedCookies.isEmpty()) {

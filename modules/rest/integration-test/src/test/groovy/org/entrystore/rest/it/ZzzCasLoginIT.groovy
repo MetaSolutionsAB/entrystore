@@ -35,6 +35,7 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 	static def testUsername = 'testcasuser'
 	static def testUserPassword = 'caspassword'
 	static def successLoginUrl = EntryStoreClient.origin + '/GREAT-SUCCESS-2/'
+	static def failureLoginUrl = EntryStoreClient.origin + '/auth/login'
 
 	static def keycloakCasUrl = ''
 
@@ -60,7 +61,7 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 			'--entrystore.auth.cas.server.url=' + keycloakCasUrl,
 			'--entrystore.auth.cas.user-auto-provisioning=true',
 			'--entrystore.auth.cas.redirect-success.url=' + successLoginUrl,
-			'--entrystore.auth.cas.redirect-failure.url=' + EntryStoreClient.origin + '/auth/login',
+			'--entrystore.auth.cas.redirect-failure.url=' + failureLoginUrl,
 			// Override the IT default (httponly=off) so the auth_token HttpOnly assertion is meaningful
 			// for CAS sessions. Production default is HttpOnly=on.
 			'--entrystore.auth.cookie.httponly=on'
@@ -292,6 +293,17 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 
 		then: 'the session has ended, as 5.x removed a disabled user\'s tokens'
 		userConn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def '9. A CAS callback without a ticket redirects to the failure URL without starting a session'() {
+		// An empty ticket fails before validation; Keycloak answers an invalid ticket with 400, which ends in a 500.
+		when:
+		def callbackConn = EntryStoreClient.getRequest('/auth/cas?ticket=', '')
+
+		then: 'the failed login is sent to the failure URL, and no session is issued, as in 5.x'
+		callbackConn.getResponseCode() in [302, 303, 307]
+		callbackConn.getHeaderField('Location') == failureLoginUrl
+		EntryStoreClient.findSetCookie(callbackConn, 'auth_token') == null
 	}
 
 	/** Plays the browser and Keycloak side of a CAS login and returns the EntryStore callback URL with the ticket. */
