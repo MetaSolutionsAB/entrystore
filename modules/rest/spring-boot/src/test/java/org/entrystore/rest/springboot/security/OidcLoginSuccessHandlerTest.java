@@ -48,6 +48,7 @@ import java.util.Map;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -70,7 +71,6 @@ class OidcLoginSuccessHandlerTest {
 	@Mock
 	private ESUserDetailsService userService;
 
-	@Mock
 	private OidcAuthService oidcAuthService;
 
 	@Mock
@@ -102,9 +102,11 @@ class OidcLoginSuccessHandlerTest {
 	@BeforeEach
 	void setUp() {
 		var oidcConfiguration = new OidcCustomConfiguration(
-				true, null, List.of(), Map.of(),
+				true, null, List.of("localhost"), Map.of(),
 				new OidcCustomConfiguration.RedirectUrl(SUCCESS_URL),
 				new OidcCustomConfiguration.RedirectUrl(FAILURE_URL));
+		// A spy, not a mock: the real redirect whitelist decides the custom URLs; provider lookups are stubbed
+		oidcAuthService = spy(new OidcAuthService(oidcConfiguration));
 		handler = new OidcLoginSuccessHandler(userService, oidcAuthService, oidcAuthStateCache,
 				principalManager, new ErrorResponseWriter(JsonMapper.builder().build()), authTokenCookies,
 				oidcConfiguration);
@@ -147,7 +149,6 @@ class OidcLoginSuccessHandlerTest {
 		// 'admin' short-circuits to the failure path, carrying the cached (attacker-supplied) failure URL.
 		when(request.getParameter("state")).thenReturn(STATE);
 		when(oidcAuthStateCache.getAuthState(STATE)).thenReturn(new AuthState(null, EVIL_URL));
-		when(oidcAuthService.isValidRedirectUrl(EVIL_URL)).thenReturn(false);
 
 		handler.onAuthenticationSuccess(request, response, oidcAuthentication("admin"));
 
@@ -159,7 +160,6 @@ class OidcLoginSuccessHandlerTest {
 	void whitelistedCachedFailureUrlIsHonored() throws Exception {
 		when(request.getParameter("state")).thenReturn(STATE);
 		when(oidcAuthStateCache.getAuthState(STATE)).thenReturn(new AuthState(null, CUSTOM_FAILURE_URL));
-		when(oidcAuthService.isValidRedirectUrl(CUSTOM_FAILURE_URL)).thenReturn(true);
 
 		handler.onAuthenticationSuccess(request, response, oidcAuthentication("admin"));
 
@@ -170,7 +170,6 @@ class OidcLoginSuccessHandlerTest {
 	void nonWhitelistedCachedSuccessUrlIsNotHonoredAndUserStillLogsInToDefault() throws Exception {
 		when(request.getParameter("state")).thenReturn(STATE);
 		when(oidcAuthStateCache.getAuthState(STATE)).thenReturn(new AuthState(EVIL_URL, null));
-		when(oidcAuthService.isValidRedirectUrl(EVIL_URL)).thenReturn(false);
 		givenEnabledUserIsLoaded("jane");
 
 		handler.onAuthenticationSuccess(request, response, oidcAuthentication("jane"));
@@ -184,7 +183,6 @@ class OidcLoginSuccessHandlerTest {
 	void whitelistedCachedSuccessUrlIsHonored() throws Exception {
 		when(request.getParameter("state")).thenReturn(STATE);
 		when(oidcAuthStateCache.getAuthState(STATE)).thenReturn(new AuthState(CUSTOM_SUCCESS_URL, null));
-		when(oidcAuthService.isValidRedirectUrl(CUSTOM_SUCCESS_URL)).thenReturn(true);
 		givenEnabledUserIsLoaded("jane");
 
 		handler.onAuthenticationSuccess(request, response, oidcAuthentication("jane"));

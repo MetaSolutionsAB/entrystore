@@ -417,6 +417,10 @@ entrystore.auth.temp.lockout.duration=0ms
 ## (default: /auth/user for both).
 # entrystore.auth.oidc.redirect-success.url=https://app.example.com/
 # entrystore.auth.oidc.redirect-failure.url=https://app.example.com/login
+## OIDC login starts allowed per client address and window (default: 60 per 1m, 0 = no limit); users behind one
+## NAT address share a budget. A start over the limit is redirected to its failureurl or the default failure URL.
+# entrystore.auth.oidc.rate.limit.max=60
+# entrystore.auth.oidc.rate.limit.window=1m
 ## Client id/secret, scopes and issuer are configured via Spring Boot's native properties. The
 ## issuer-uri drives OIDC discovery (.well-known/openid-configuration) including JWKS key rotation.
 # spring.security.oauth2.client.registration.myProvider.client-id=entrystore
