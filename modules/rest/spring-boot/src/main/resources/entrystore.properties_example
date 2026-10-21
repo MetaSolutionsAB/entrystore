@@ -140,10 +140,10 @@ entrystore.data.folder=/srv/entrystore/files/
 ## can occupy its thread for this many times the whole SMTP exchange. Note that read-timeout above
 ## bounds each individual read, not the exchange, and one exchange makes seven or so blocking reads
 ## (greeting, EHLO, MAIL FROM, RCPT TO, DATA, end-of-data, QUIT) — plus DNS resolution, which no
-## timeout covers. Which thread depends on the path: sign-up, POST /message, the /auth/pwreset
-## confirmation and a user password change all send on the request thread, while password-reset mail
-## runs on the passwordResetExecutor (2 threads, queue of 100, abort policy), so raising this value
-## there fills that queue until dispatches are rejected rather than slowing individual requests.
+## timeout covers. Which thread depends on the path: POST /message, the /auth/pwreset confirmation
+## and a user password change all send on the request thread, while sign-up and password-reset mail
+## run on an executor each (2 threads, queue of 100, abort policy), so raising this value there fills
+## that queue until dispatches are rejected rather than slowing individual requests.
 ## A permanent failure is not retried at all — a message that will not parse, an address the server
 ## rejected, or an authentication failure the server did not report with a 4xx code. A message the
 ## transport reports as partially delivered is never re-sent, so that path cannot produce a duplicate
@@ -235,6 +235,13 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.auth.signup=on|off
 # entrystore.auth.signup.email.subject=User sign-up request
 # entrystore.auth.signup.email.template=/path/to/template.html
+## A sign-up with the address of an existing account mails that account a notice instead of a confirmation
+## link. The template holds both mails: the confirmation between <!--BEGIN new-account--> and
+## <!--END new-account-->, the notice between <!--BEGIN existing-account--> and <!--END existing-account-->;
+## the rest is in both. A template without markers is the confirmation mail, and without an existing-account
+## section no notice is sent. A malformed template is not loaded, so no sign-up mail is sent until it is fixed.
+## The notice subject falls back to entrystore.auth.signup.email.subject.
+# entrystore.auth.signup.existing-account.email.subject=User sign-up request
 ## Whitelist of email-domains that are allowed to perform sign-up
 ## Any domain is allowed if no whitelist is provided here
 ## An empty bare value ("whitelist=") is a one-entry list that admits no domain, as in 5.x.

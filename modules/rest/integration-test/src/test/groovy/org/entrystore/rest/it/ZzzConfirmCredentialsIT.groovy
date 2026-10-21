@@ -23,6 +23,7 @@ import org.entrystore.rest.it.util.UserUtil
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_CONFLICT
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
@@ -151,6 +152,21 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def loginBody = createFormBody([auth_username: username, auth_password: newPassword])
 		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
 		loginConn.getResponseCode() == HTTP_OK
+	}
+
+	def "POST /auth/signup/confirm answers 409 when the account was created after the sign-up"() {
+		given:
+		def username = 'newSignupCreatedMeanwhile@test.com'
+		def token = startSignup(username)
+		UserUtil.createUser(username)
+
+		when:
+		def body = 'confirm=' + token + '&email=' + username + '&password=' + newPassword
+		def conn = EntryStoreClient.postRequest('/auth/signup/confirm', body, null, formUrlEncoded)
+
+		then:
+		conn.getResponseCode() == HTTP_CONFLICT
+		conn.errorStream.text.contains('User with submitted email address exists already.')
 	}
 
 	def "POST /auth/signup/confirm with a wrong password does not create the user"() {

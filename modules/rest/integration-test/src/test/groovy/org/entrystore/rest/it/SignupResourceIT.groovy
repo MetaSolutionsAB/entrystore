@@ -108,7 +108,8 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_OK
 		signupConn.getContentType().contains('text/html')
-		signupConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase())
+		signupConn.inputStream.text.contains('<div>A confirmation message was sent to ' + username.toLowerCase() + '</div>')
+		greenMail.waitForIncomingEmail(5000, 1)
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 1
 		def message = messages[0]
@@ -118,7 +119,10 @@ class SignupResourceIT extends BaseSpec {
 		def token = extractConfirmationToken(greenMail)
 		token ==~ /[a-zA-Z0-9]{16}/
 		// No entrystore.auth.confirmation.url.signup in the IT config: the link stays on the backend page.
-		message.getContent().toString().contains(EntryStoreClient.baseUrl + '/auth/signup?confirm=' + token)
+		def content = message.getContent().toString()
+		content.contains(EntryStoreClient.baseUrl + '/auth/signup?confirm=' + token)
+		content.contains('Welcome to EntryStore TEST!')
+		!content.contains('already exists')
 	}
 
 	def "POST /auth/signup should send an email with generated token to a new user when posted as an html form"() {
@@ -133,6 +137,7 @@ class SignupResourceIT extends BaseSpec {
 		signupConn.getResponseCode() == HTTP_OK
 		signupConn.getContentType().contains('text/html')
 		signupConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase())
+		greenMail.waitForIncomingEmail(5000, 1)
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 1
 		def message = messages[0]
@@ -425,20 +430,89 @@ class SignupResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 0
 	}
 
-	def "POST /auth/signup should send an email also if the user already exists"() {
-		given:
+	def "POST /auth/signup should answer as for a new user and send an account-exists notice without a link if the user already exists"() {
+		given: 'an account made by sign-up, so it carries the name given then'
 		def username = 'userSignupExisting@test.com'
-		UserUtil.createUser(username)
-		def requestBody = signupBody(username)
+		assert EntryStoreClient.postRequest('/auth/signup', signupBody(username)).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.getRequest('/auth/signup?confirm=' + extractConfirmationToken(greenMail)).getResponseCode() == HTTP_CREATED
+		def newUsername = 'userSignupNotExisting@test.com'
+		def newUserConn = EntryStoreClient.postRequest('/auth/signup', signupBody(newUsername))
+		def newUserBody = newUserConn.inputStream.text.replace(newUsername.toLowerCase(), '<EMAIL>')
+		assert greenMail.waitForIncomingEmail(5000, 2)
+		greenMail.purgeEmailFromAllMailboxes()
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', signupBody(username, [firstname: 'Mallory', lastname: 'Someone']))
+
+		then:
+		signupConn.getResponseCode() == newUserConn.getResponseCode()
+		signupConn.getContentType() == newUserConn.getContentType()
+		signupConn.inputStream.text.replace(username.toLowerCase(), '<EMAIL>') == newUserBody
+		newUserBody.contains('<div>A confirmation message was sent to <EMAIL></div>')
+		greenMail.waitForIncomingEmail(5000, 1)
+		!greenMail.waitForIncomingEmail(500, 2)
+		def message = greenMail.getReceivedMessages()[0]
+		message.getSubject() == 'Account already exists'
+		message.getAllRecipients().contains(new InternetAddress(username.toLowerCase()))
+		def content = message.getContent().toString()
+		content.contains('Hi ' + firstName + ' ' + lastName + ',')
+		content.contains('tried to sign up for EntryStore TEST with this email address')
+		!content.contains('Mallory')
+		!content.contains('?confirm=')
+	}
+
+	def "POST /auth/signup should answer as for a new user and send nothing if the user is disabled"() {
+		given:
+		def username = 'userSignupExistingDisabled@test.com'
+		def user = UserUtil.createUser(username)
+		assert EntryStoreClient.putRequest(user['resourceUri'].toString(), JsonOutput.toJson([disabled: 'true'])).getResponseCode() == HTTP_NO_CONTENT
+
+		when:
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', signupBody(username))
+
+		then: 'a disabled account can neither log in nor reset its password, which is all the notice suggests'
+		signupConn.getResponseCode() == HTTP_OK
+		signupConn.inputStream.text.contains('<div>A confirmation message was sent to ' + username.toLowerCase() + '</div>')
+		!greenMail.waitForIncomingEmail(1000, 1)
+	}
+
+	def "POST /auth/signup should greet a nameless existing account with its address"() {
+		given:
+		def username = 'userSignupExistingNameless@test.com'
+		UserUtil.createUser(username)
+
+		when:
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', signupBody(username))
 
 		then:
 		signupConn.getResponseCode() == HTTP_OK
-		signupConn.getContentType().contains('text/html')
-		signupConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase())
-		greenMail.getReceivedMessages().size() == 1
+		greenMail.waitForIncomingEmail(5000, 1)
+		def message = greenMail.getReceivedMessages()[0]
+		message.getSubject() == 'Account already exists'
+		def content = message.getContent().toString()
+		content.contains('Hi ' + username.toLowerCase() + ',')
+		!content.contains('?confirm=')
+	}
+
+	def "POST /auth/signup should answer 200 and send nothing when the mail server is down"() {
+		given:
+		def username = 'userSignupSmtpFailure@test.com'
+		greenMail.stop()
+
+		when:
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', signupBody(username))
+
+		then:
+		signupConn.getResponseCode() == HTTP_OK
+		signupConn.inputStream.text.contains('<div>A confirmation message was sent to ' + username.toLowerCase() + '</div>')
+
+		cleanup:
+		// The background send fails fast with ECONNREFUSED against the closed port; see the same test in
+		// PasswordResetResourceIT for the timing.
+		Thread.sleep(2_000)
+		greenMail.start()
+		assert !greenMail.waitForIncomingEmail(200, 1)
+		assert greenMail.getReceivedMessages().size() == 0
 	}
 
 	def "GET /auth/signup should respond with a HTML login page"() {
@@ -507,6 +581,8 @@ class SignupResourceIT extends BaseSpec {
 		def username = 'userSignupConfirmBadToken@test.com'
 		def requestBody = signupBody(username)
 		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		// Waited for, so it cannot arrive after cleanup() and land in the next test's mailbox.
+		assert greenMail.waitForIncomingEmail(5000, 1)
 		def token = 'something123'
 
 		when:
@@ -537,14 +613,13 @@ class SignupResourceIT extends BaseSpec {
 		confirmConn.errorStream.text.contains('Invalid confirmation link.')
 	}
 
-	def "GET /auth/signup should not confirm if the user already exists"() {
+	def "GET /auth/signup should not confirm if the user was created after the sign-up"() {
 		given:
 		def username = 'userSignupConfirmExisting@test.com'
-		UserUtil.createUser(username)
-
 		def requestBody = signupBody(username)
 		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def token = extractConfirmationToken(greenMail)
+		UserUtil.createUser(username)
 
 		when:
 		def confirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + token)
@@ -628,13 +703,13 @@ class SignupResourceIT extends BaseSpec {
 	}
 
 	def "GET /auth/signup should not confirm user signup and redirect to failure url"() {
-		given:
+		given: 'the user was created after the sign-up'
 		def username = 'userSignupFailureUrl@test.com'
-		UserUtil.createUser(username)
 		def urlfailure = EntryStoreClient.origin + '/123'
 		def requestBody = signupBody(username, [urlfailure: urlfailure])
 		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def token = extractConfirmationToken(greenMail)
+		UserUtil.createUser(username)
 
 		when:
 		def confirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + token)
@@ -680,6 +755,7 @@ class SignupResourceIT extends BaseSpec {
 
 		then:
 		signupConn.getResponseCode() == HTTP_OK
+		greenMail.waitForIncomingEmail(5000, 1)
 		greenMail.getReceivedMessages().size() == 1
 	}
 

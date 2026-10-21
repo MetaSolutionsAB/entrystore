@@ -347,12 +347,17 @@ abstract class BaseSpec extends Specification {
 
 	/**
 	 * Extracts the 16-character confirmation token following the '?confirm=' marker in a received
-	 * email (sign-up and password-reset confirmation mails share this link format).
+	 * email (sign-up and password-reset confirmation mails share this link format), first waiting for
+	 * that mail, since both flows send in the background.
+	 *
+	 * <p>Two workers send, so two mails triggered back to back can arrive in either order: wait for each
+	 * mail, for example with this method, before triggering the next one whose index you rely on.
 	 *
 	 * @param mail the GreenMail instance holding the message
 	 * @param index index into the received-messages array (defaults to the first message)
 	 */
 	protected static String extractConfirmationToken(GreenMail mail, int index = 0) {
+		assert mail.waitForIncomingEmail(5000, index + 1): 'no confirmation mail #' + (index + 1) + ' arrived'
 		def content = mail.getReceivedMessages()[index].getContent().toString()
 		def marker = '?confirm='
 		def markerIndex = content.indexOf(marker)

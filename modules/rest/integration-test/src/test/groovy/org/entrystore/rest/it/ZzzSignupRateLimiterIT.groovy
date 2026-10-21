@@ -80,6 +80,7 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_OK
+		greenMail.waitForIncomingEmail(5000, 1)
 		greenMail.getReceivedMessages().length == 1
 	}
 
@@ -90,6 +91,7 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_OK
+		greenMail.waitForIncomingEmail(5000, 1)
 		greenMail.getReceivedMessages().length == 1
 	}
 
@@ -123,6 +125,7 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_OK
+		greenMail.waitForIncomingEmail(5000, 1)
 		greenMail.getReceivedMessages().length == 1
 	}
 
@@ -134,6 +137,7 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_OK
+		greenMail.waitForIncomingEmail(5000, 1)
 		greenMail.getReceivedMessages().length == 1
 	}
 }

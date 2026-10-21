@@ -37,6 +37,7 @@ import org.entrystore.User;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.springboot.configuration.IndexedListSettings;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
@@ -63,6 +64,7 @@ import org.entrystore.rest.springboot.service.auth.SignupTokenCache;
 import org.entrystore.rest.springboot.util.EmailSender;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
+import org.jetbrains.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
@@ -77,7 +79,9 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.SecureRandom;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -95,7 +99,9 @@ public class AuthService {
 	/** Password reset's only rule, as in 5.x; sign-up applies the configured password rules instead. */
 	private static final int MIN_PASSWORD_LENGTH = 8;
 
-	private static final String POST_SUCCESS_MESSAGE = "A confirmation message was sent to {}, if the user exists.";
+	private static final String PWRESET_POST_SUCCESS_MESSAGE = "A confirmation message was sent to {}, if the user exists.";
+	// The same for a new and an existing account, so the answer does not tell them apart.
+	private static final String SIGNUP_POST_SUCCESS_MESSAGE = "A confirmation message was sent to {}";
 	private static final String CONFIRM_PASSWORD_RESET_SUCCESS_MESSAGE = "Password reset was successful.";
 	private static final String CONFIRM_SIGNUP_SUCCESS_MESSAGE = "Sign-up successful.";
 	private static final String PARAMETERS_MISSING_MESSAGE = AuthValidationMessages.PARAMETERS_MISSING;
@@ -114,7 +120,6 @@ public class AuthService {
 			"At most " + MAX_CUSTOM_PROPERTIES + " custom properties are accepted.";
 	private static final String RECAPTCHA_MISSING_MESSAGE = "reCaptcha information missing.";
 	private static final String RECAPTCHA_INVALID_MESSAGE = "Invalid reCaptcha received.";
-	private static final String FAILED_TO_SEND_SIGNUP_EMAIL_MESSAGE = "Failed to send confirmation request to {}.";
 	private static final String INVALID_TOKEN_MESSAGE = "The confirmation token is invalid or has been used already.";
 	private static final String USER_NOT_FOUND_MESSAGE = "User with provided email address does not exist.";
 	private static final String USER_ALREADY_EXISTS_MESSAGE = "User with submitted email address exists already.";
@@ -156,17 +161,19 @@ public class AuthService {
 	@Value("${entrystore.auth.signup.create-home-context:false}")
 	private boolean signupCreateHomeContext;
 
-	// Shared SecureRandom (thread-safe) — used for all token generation, both from the executor's
-	// worker threads and from the request-thread signup path. Reseeding a fresh SecureRandom every
-	// request is an unnecessary entropy hit and was also a residual timing discriminator before
-	// password-reset token generation moved off the request thread (see dispatchPasswordResetEmail).
+	// Shared SecureRandom (thread-safe) — used for all token generation on the executors' worker threads.
+	// Reseeding a fresh SecureRandom per dispatch is an unnecessary entropy hit.
 	private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-	// Sizing, rejection policy and shutdown-drain semantics are documented on the bean definition in
-	// PasswordResetExecutorConfiguration; submitPasswordResetDispatch depends on them.
+	// Sizing, rejection policy and shutdown-drain semantics are documented on the factory in
+	// AuthEmailExecutorConfiguration; submitDispatch depends on them.
 	private final AsyncTaskExecutor passwordResetExecutor;
+	private final AsyncTaskExecutor signupExecutor;
 	private final Set<String> domainWhitelist;
 	private final Counter passwordResetRejectedCounter;
+	private final Counter passwordResetFailedCounter;
+	private final Counter signupRejectedCounter;
+	private final Counter signupFailedCounter;
 
 	public AuthService(RepositoryManagerImpl repositoryManager,
 					   PrincipalManager principalManager,
@@ -183,7 +190,8 @@ public class AuthService {
 					   ConfirmationLinkBuilder confirmationLinkBuilder,
 					   MeterRegistry meterRegistry,
 					   Environment environment,
-					   @Qualifier("passwordResetTaskExecutor") AsyncTaskExecutor passwordResetExecutor) {
+					   @Qualifier("passwordResetTaskExecutor") AsyncTaskExecutor passwordResetExecutor,
+					   @Qualifier("signupTaskExecutor") AsyncTaskExecutor signupExecutor) {
 		this.repositoryManager = repositoryManager;
 		this.principalManager = principalManager;
 		this.contextManager = contextManager;
@@ -198,6 +206,7 @@ public class AuthService {
 		this.passwordResetRateLimiter = passwordResetRateLimiter;
 		this.confirmationLinkBuilder = confirmationLinkBuilder;
 		this.passwordResetExecutor = passwordResetExecutor;
+		this.signupExecutor = signupExecutor;
 
 		// Lower-cased so the domain check matches regardless of how the config spelled it. No null
 		// filter needed: the Environment never returns a null list entry.
@@ -212,6 +221,15 @@ public class AuthService {
 
 		this.passwordResetRejectedCounter = Counter.builder("auth.pwreset.rejected")
 				.description("Password-reset dispatches dropped because the executor queue was saturated or shutting down")
+				.register(meterRegistry);
+		this.passwordResetFailedCounter = Counter.builder("auth.pwreset.failed")
+				.description("Password-reset confirmation mails dispatched but not sent")
+				.register(meterRegistry);
+		this.signupRejectedCounter = Counter.builder("auth.signup.rejected")
+				.description("Sign-up dispatches dropped because the executor queue was saturated or shutting down")
+				.register(meterRegistry);
+		this.signupFailedCounter = Counter.builder("auth.signup.failed")
+				.description("Sign-up confirmation mails dispatched but not sent")
 				.register(meterRegistry);
 	}
 
@@ -456,54 +474,66 @@ public class AuthService {
 			submitPasswordResetDispatch(ci, password);
 		}
 
-		return POST_SUCCESS_MESSAGE.replace("{}", ci.getEmail());
+		return PWRESET_POST_SUCCESS_MESSAGE.replace("{}", ci.getEmail());
 	}
 
 	// Package-private for unit testing the rejected-execution path.
 	void submitPasswordResetDispatch(SignupInfo ci, String password) {
+		submitDispatch(passwordResetExecutor, passwordResetRejectedCounter, "password reset", ci.getEmail(),
+				() -> dispatchConfirmationMail(ci, password, "password reset", passwordResetFailedCounter,
+						confirmationLinkBuilder::passwordResetLink,
+						link -> emailSender.sendPasswordResetConfirmation(ci.getEmail(), link)));
+	}
+
+	/**
+	 * Hands a mail dispatch to its executor. A saturated queue (likely an SMTP outage backing up dispatches) or an
+	 * executor shutting down drops it: the answer stays the generic one, so attackers cannot tell "account exists,
+	 * queue full" from "no such account", and the user can retry. The drop is counted and logged at ERROR so
+	 * operators can alert on sustained drops.
+	 */
+	private void submitDispatch(AsyncTaskExecutor executor, Counter rejectedCounter, String flow, String email,
+								Runnable dispatch) {
 		try {
-			passwordResetExecutor.execute(() -> dispatchPasswordResetEmail(ci, password));
+			executor.execute(dispatch);
 		} catch (RejectedExecutionException rex) {
-			// Bounded queue saturated (likely SMTP outage backing up dispatches) or executor
-			// shutting down. We stay on the generic 200 path so attackers cannot distinguish
-			// "user exists, queue full" from "user does not exist"; the user can retry. The
-			// rejection is recorded in a Micrometer counter and logged at ERROR so operators
-			// can alert on sustained drops.
-			passwordResetRejectedCounter.increment();
-			log.error("Password reset executor rejected dispatch for {} (queue saturated or shutting down)",
-					HttpUtil.sanitizeForLog(ci.getEmail()), rex);
+			rejectedCounter.increment();
+			log.error("Rejected {} dispatch for {} (queue saturated or shutting down)", flow,
+					HttpUtil.sanitizeForLog(email), rex);
 		}
 	}
 
-	// Runs on the passwordResetExecutor. Storing the token in the cache BEFORE sending the email
-	// guarantees the link is usable by the time it lands in the recipient's inbox; if the SMTP send
-	// fails we remove the token so an attacker who somehow learned it cannot complete the reset.
-	private void dispatchPasswordResetEmail(SignupInfo ci, String password) {
+	/**
+	 * Runs on a dispatch executor. Storing the token in the cache BEFORE sending the email guarantees the link is
+	 * usable by the time it lands in the recipient's inbox; if the send fails the token is removed, so an attacker
+	 * who somehow learned it cannot use it. A failed send is only logged and counted: the answer was returned
+	 * before this task ran.
+	 *
+	 * @param password hashed and stored with the token when not null; a new-mode password reset has none, as the
+	 *                 password is chosen on the confirmation form instead
+	 */
+	private void dispatchConfirmationMail(SignupInfo ci, @Nullable String password, String flow, Counter failedCounter,
+										  UnaryOperator<String> linkForToken, Predicate<String> sendLink) {
 		String emailLog = HttpUtil.sanitizeForLog(ci.getEmail());
 		String token = RandomStringUtils.random(16, 0, 0, true, true, null, SECURE_RANDOM);
-		String confirmationLink = confirmationLinkBuilder.passwordResetLink(token);
-		log.info("Generated password reset token for {}", emailLog);
+		String confirmationLink = linkForToken.apply(token);
+		log.info("Generated {} token for {}", flow, emailLog);
 
-		// Bcrypt and putToken run outside the try block — a Throwable here propagates to the worker's
+		// Hashing and putToken run outside the try block — a Throwable here propagates to the worker's
 		// UncaughtExceptionHandler (which already logs at ERROR) and no cleanup is needed because the
 		// token was never stored. Once we reach the try block, putToken has returned successfully, so
 		// the catch can unconditionally remove the token without an extra flag.
-		// In new mode the password is null here — it is chosen on the confirmation form instead, so we
-		// only hash and store it for legacy mode.
 		if (password != null) {
 			ci.setSaltedHashedPassword(Password.getSaltedHash(password));
 		}
 		signupTokenCache.putToken(token, ci);
 
 		try {
-			boolean sendSuccessful = emailSender.sendPasswordResetConfirmation(ci.getEmail(), confirmationLink);
-			if (sendSuccessful) {
-				log.info("Sent confirmation request to {}", emailLog);
+			if (sendLink.test(confirmationLink)) {
+				log.info("Sent {} confirmation request to {}", flow, emailLog);
 			} else {
 				signupTokenCache.removeToken(token);
-				// Stays in the generic success response so attackers cannot distinguish
-				// "user exists AND mail failed" from "user does not exist".
-				log.error("Failed to send password reset email to {}", emailLog);
+				failedCounter.increment();
+				log.error("Failed to send {} email to {}", flow, emailLog);
 			}
 		} catch (Throwable t) {
 			// Catch Throwable so an Error subclass (OOM, NoClassDefFoundError, StackOverflowError) is
@@ -511,7 +541,8 @@ public class AuthService {
 			// normal handling continues — on `-XX:+ExitOnOutOfMemoryError` the JVM terminates; otherwise
 			// the worker thread dies and ThreadPoolExecutor spawns a replacement on the next submit.
 			signupTokenCache.removeToken(token);
-			log.error("Async password reset dispatch failed for {}", emailLog, t);
+			failedCounter.increment();
+			log.error("Async {} dispatch failed for {}", flow, emailLog, t);
 			if (t instanceof Error err) {
 				throw err;
 			}
@@ -551,10 +582,8 @@ public class AuthService {
 
 	private String createUserFromSignup(SignupInfo signupInfo, String title) {
 		PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
-			Entry userEntry = principalManager.getPrincipalEntry(signupInfo.getEmail());
-
-			if ((userEntry != null && GraphType.User.equals(userEntry.getGraphType())) ||
-					principalManager.getUserByExternalID(signupInfo.getEmail()) != null) {
+			// Sign-up already sent no link for an existing account; this catches one created since.
+			if (findAccount(signupInfo.getEmail()) != null) {
 				throw failWithRedirectOr(signupInfo.getUrlFailure(),
 						() -> new DataConflictHtmlException(USER_ALREADY_EXISTS_MESSAGE, title));
 			}
@@ -771,20 +800,55 @@ public class AuthService {
 
 		verifyRecaptcha(request, requestBody.rcResponseV2(), ci.getEmail(), title);
 
-		String token = RandomStringUtils.random(16, 0, 0, true, true, null, SECURE_RANDOM);
-		String confirmationLink = confirmationLinkBuilder.signupLink(token);
-		log.info("Generated sign-up token for {}", ci.getEmail());
+		// Both branches end in one executor submit and the same answer, so neither the response nor its timing
+		// tells a new address from an existing account. Do not add synchronous work to either branch.
+		String email = ci.getEmail();
+		User account = PrincipalManagerUtil.runAsAdmin(principalManager, () -> findAccount(email));
+		Runnable dispatch = account == null
+				? () -> dispatchConfirmationMail(ci, password, "sign-up", signupFailedCounter,
+						confirmationLinkBuilder::signupLink,
+						link -> emailSender.sendSignupConfirmation(ci.getFirstName() + " " + ci.getLastName(), email, link))
+				: () -> dispatchExistingAccountNotice(account, email);
+		submitDispatch(signupExecutor, signupRejectedCounter, "sign-up", email, dispatch);
 
-		boolean sendSuccessful = emailSender.sendSignupConfirmation(ci.getFirstName() + " " + ci.getLastName(), ci.getEmail(), confirmationLink);
-		if (sendSuccessful) {
-			ci.setSaltedHashedPassword(Password.getSaltedHash(password));
-			signupTokenCache.putToken(token, ci);
-			log.info("Sent confirmation request to {}", ci.getEmail());
-		} else {
-			throw new BadRequestHtmlException(FAILED_TO_SEND_SIGNUP_EMAIL_MESSAGE.replace("{}", ci.getEmail()), title);
+		return SIGNUP_POST_SUCCESS_MESSAGE.replace("{}", email);
+	}
+
+	/**
+	 * The account whose name or external ID is {@code email}, disabled ones included, or null. Must run as admin.
+	 * Runs both lookups even when the first one matches, so sign-up does the same store work for a new and an
+	 * existing address.
+	 */
+	private @Nullable User findAccount(String email) {
+		Entry byName = principalManager.getPrincipalEntry(email);
+		User byExternalId = principalManager.getUserByExternalID(email);
+		if (byName != null && GraphType.User.equals(byName.getGraphType())) {
+			return (User) byName.getResource();
 		}
+		return byExternalId;
+	}
 
-		return POST_SUCCESS_MESSAGE.replace("{}", ci.getEmail());
+	// Runs on the signupExecutor. Stores no token, since the notice carries no link. A disabled account gets no
+	// notice: it can neither log in nor reset its password, which is all the notice suggests. An Error reaches the
+	// worker's UncaughtExceptionHandler.
+	private void dispatchExistingAccountNotice(User account, String email) {
+		String emailLog = HttpUtil.sanitizeForLog(email);
+		log.info("Sign-up for {} matches an existing account", emailLog);
+		try {
+			if (PrincipalManagerUtil.runAsAdmin(principalManager, account::isDisabled)) {
+				log.info("The account of {} is disabled; no account-exists notice is sent", emailLog);
+				return;
+			}
+			String name = PrincipalManagerUtil.runAsAdmin(principalManager, () -> EntryUtil.getName(account.getEntry()));
+			if (emailSender.sendExistingAccountNotice(StringUtils.defaultIfBlank(name, email), email)) {
+				log.info("Sent account-exists notice to {}", emailLog);
+			} else {
+				log.warn("No account-exists notice was sent to {}; see the sign-up template or SMTP errors logged "
+						+ "before", emailLog);
+			}
+		} catch (RuntimeException e) {
+			log.error("Async account-exists notice failed for {}", emailLog, e);
+		}
 	}
 
 	private void validateAndSetEmail(String email, SignupInfo ci, String title) {

@@ -207,9 +207,9 @@ public record SmtpProperties(
 			log.warn("entrystore.smtp.max-send-attempts={} combined with the configured timeouts "
 							+ "({}/{}/{} connect/read/write) lets a single send block for at least {}s — the "
 							+ "read timeout bounds each of the {} or so reads in one SMTP exchange, not the "
-							+ "exchange — plus DNS resolution, which no timeout covers. Signup, POST /message "
-							+ "and both password-change confirmations send on the request thread; password-reset "
-							+ "mail occupies a passwordResetExecutor slot for the same duration.",
+							+ "exchange — plus DNS resolution, which no timeout covers. POST /message and both "
+							+ "password-change confirmations send on the request thread; sign-up and password-reset "
+							+ "mail occupy a signupTaskExecutor or passwordResetTaskExecutor slot for the same duration.",
 					maxSendAttempts, connectionTimeout, readTimeout, writeTimeout, worstCase.toSeconds(),
 					BLOCKING_READS_PER_SEND);
 		}

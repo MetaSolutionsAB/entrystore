@@ -16,7 +16,9 @@
 
 package org.entrystore.rest.springboot.util;
 
+import org.apache.logging.log4j.Level;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.springboot.util.EmailTemplate.Section;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
@@ -40,6 +42,7 @@ import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -69,9 +72,130 @@ class MailTemplateRendererTest {
 						.getResourceAsStream(template.getClasspathResource()),
 				template.getClasspathResource() + " must be on the classpath");
 
-		assertNotNull(new MailTemplateRenderer(new MockEnvironment())
-						.render(template, Collections.emptyMap()),
-				"the bundled fallback for " + template + " must render");
+		String rendered = new MailTemplateRenderer(new MockEnvironment()).render(template, Collections.emptyMap());
+
+		assertNotNull(rendered, "the bundled fallback for " + template + " must render");
+		assertFalse(rendered.contains("<!--BEGIN") || rendered.contains("<!--END"),
+				"the bundled fallback for " + template + " must not mail section markers");
+	}
+
+	@Test
+	void bundledSignupTemplate_putsTheConfirmationLinkInTheNewAccountMailOnly() {
+		MailTemplateRenderer renderer = new MailTemplateRenderer(new MockEnvironment());
+
+		String confirmation = renderer.render(EmailTemplate.SIGNUP, Collections.emptyMap());
+		String notice = renderer.render(Section.EXISTING_ACCOUNT, Collections.emptyMap());
+
+		assertTrue(confirmation.contains("__CONFIRMATION_LINK__"));
+		assertFalse(confirmation.contains("already exists"));
+		assertFalse(notice.contains("__CONFIRMATION_LINK__"));
+		assertFalse(notice.contains("<!--BEGIN") || notice.contains("<!--END"));
+		assertTrue(notice.contains("an account with this address already exists"));
+	}
+
+	@Test
+	void render_sectionedTemplate_keepsTheRequestedMailAndTheSharedParts(@TempDir Path tmp) throws IOException {
+		MailTemplateRenderer renderer = new MailTemplateRenderer(environmentWithTemplate(tmp, EmailTemplate.SIGNUP,
+				"<p>Hi __NAME__</p><!--BEGIN new-account--><a href=\"__CONFIRMATION_LINK__\">Confirm</a><!--END new-account-->"
+						+ "<!--BEGIN existing-account--><p>You have an account</p><!--END existing-account--><p>Bye</p>"));
+		Map<String, String> substitutions = Map.of("__NAME__", "Ada", "__CONFIRMATION_LINK__", "https://x/confirm");
+
+		assertEquals("<p>Hi Ada</p><a href=\"https://x/confirm\">Confirm</a><p>Bye</p>",
+				renderer.render(EmailTemplate.SIGNUP, substitutions));
+		assertEquals("<p>Hi Ada</p><a href=\"https://x/confirm\">Confirm</a><p>Bye</p>",
+				renderer.render(Section.NEW_ACCOUNT, substitutions));
+		assertEquals("<p>Hi Ada</p><p>You have an account</p><p>Bye</p>",
+				renderer.render(Section.EXISTING_ACCOUNT, substitutions));
+	}
+
+	@Test
+	void render_templateWithoutMarkers_isTheWholeConfirmationMail(@TempDir Path tmp) throws IOException {
+		MailTemplateRenderer renderer = new MailTemplateRenderer(environmentWithTemplate(tmp, EmailTemplate.SIGNUP,
+				"<p>Hi __NAME__, confirm <a href=\"__CONFIRMATION_LINK__\">here</a></p>"));
+
+		assertEquals("<p>Hi Ada, confirm <a href=\"https://x/confirm\">here</a></p>",
+				renderer.render(EmailTemplate.SIGNUP,
+						Map.of("__NAME__", "Ada", "__CONFIRMATION_LINK__", "https://x/confirm")));
+	}
+
+	@Test
+	void render_templateWithoutExistingAccountSection_rendersNoNoticeAndWarnsOnce(@TempDir Path tmp) throws IOException {
+		MailTemplateRenderer renderer = new MailTemplateRenderer(environmentWithTemplate(tmp, EmailTemplate.SIGNUP,
+				"<p>Hi __NAME__, confirm <a href=\"__CONFIRMATION_LINK__\">here</a></p>"));
+
+		try (CapturingAppender appender = CapturingAppender.attachTo(MailTemplateRenderer.class)) {
+			assertNull(renderer.render(Section.EXISTING_ACCOUNT, Collections.emptyMap()));
+			assertNull(renderer.render(Section.EXISTING_ACCOUNT, Collections.emptyMap()));
+
+			assertEquals(1, appender.countAt(Level.WARN), "a standing configuration choice is reported once, not per sign-up");
+			assertEquals(0, appender.countAt(Level.ERROR));
+		}
+	}
+
+	@Test
+	void render_malformedSections_rendersNothingAndIsRetriedOnceFixed(@TempDir Path tmp) throws IOException {
+		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.SIGNUP,
+				"<!--BEGIN new-account-->Confirm");
+		MailTemplateRenderer renderer = new MailTemplateRenderer(environment);
+
+		try (CapturingAppender appender = CapturingAppender.attachTo(MailTemplateRenderer.class)) {
+			assertNull(renderer.render(EmailTemplate.SIGNUP, Collections.emptyMap()));
+			assertTrue(appender.messagesAt(Level.ERROR).anyMatch(message -> message.contains("is malformed")));
+		}
+
+		Files.writeString(Path.of(environment.getProperty(EmailTemplate.SIGNUP.getTemplatePathKey())),
+				"<!--BEGIN new-account-->Confirm<!--END new-account-->");
+
+		assertEquals("Confirm", renderer.render(EmailTemplate.SIGNUP, Collections.emptyMap()),
+				"a rejected template must not have been cached");
+	}
+
+	@Test
+	void render_confirmationLinkOutsideTheNewAccountSection_isRejected(@TempDir Path tmp) throws IOException {
+		// The notice would show the owner of the existing account a confirmation button that can only fail.
+		MailTemplateRenderer renderer = new MailTemplateRenderer(environmentWithTemplate(tmp, EmailTemplate.SIGNUP,
+				"<!--BEGIN new-account-->Confirm<!--END new-account-->"
+						+ "<!--BEGIN existing-account--><a href=\"__CONFIRMATION_LINK__\">x</a><!--END existing-account-->"));
+
+		assertNull(renderer.render(Section.EXISTING_ACCOUNT, Collections.emptyMap()));
+		assertNull(renderer.render(EmailTemplate.SIGNUP, Collections.emptyMap()));
+	}
+
+	@Test
+	void render_existingAccountSectionWithoutNewAccountSection_isRejected(@TempDir Path tmp) throws IOException {
+		// Everything outside the sections is in every mail, so the confirmation link left outside would also
+		// reach the owner of the existing account.
+		MailTemplateRenderer renderer = new MailTemplateRenderer(environmentWithTemplate(tmp, EmailTemplate.SIGNUP,
+				"<a href=\"__CONFIRMATION_LINK__\">Confirm</a><!--BEGIN existing-account-->Exists<!--END existing-account-->"));
+
+		assertNull(renderer.render(Section.EXISTING_ACCOUNT, Collections.emptyMap()));
+		assertNull(renderer.render(EmailTemplate.SIGNUP, Collections.emptyMap()));
+	}
+
+
+	@Test
+	void subject_existingAccount_prefersItsOwnKey() {
+		MockEnvironment environment = new MockEnvironment();
+		environment.setProperty(EmailTemplate.SIGNUP.getSubjectKey(), "Welcome aboard");
+		environment.setProperty(Section.EXISTING_ACCOUNT.getSubjectKey(), "You already have an account");
+
+		assertEquals("You already have an account",
+				new MailTemplateRenderer(environment).subject(Section.EXISTING_ACCOUNT));
+	}
+
+	@Test
+	void subject_existingAccount_fallsBackToTheSignupSubject() {
+		MockEnvironment environment = new MockEnvironment();
+		environment.setProperty(EmailTemplate.SIGNUP.getSubjectKey(), "Welcome aboard");
+
+		assertEquals("Welcome aboard",
+				new MailTemplateRenderer(environment).subject(Section.EXISTING_ACCOUNT));
+	}
+
+	@Test
+	void subject_existingAccount_fallsBackToTheDocumentedDefault() {
+		assertEquals(EmailTemplate.SIGNUP.getDefaultSubject(),
+				new MailTemplateRenderer(new MockEnvironment()).subject(Section.EXISTING_ACCOUNT));
 	}
 
 	@Test
@@ -123,22 +247,22 @@ class MailTemplateRendererTest {
 		// Guards the replaceAll -> replace change: with the regex form, "$1" in the *replacement* is a
 		// group reference (IllegalArgumentException here, since the pattern has no groups) and a
 		// backslash escapes the next character. Both must now survive verbatim.
-		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.SIGNUP, "Hello __NAME__!");
+		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.PASSWORD_RESET, "Hello __NAME__!");
 
 		String rendered = new MailTemplateRenderer(environment)
-				.render(EmailTemplate.SIGNUP, Map.of("__NAME__", "$1 \\ backslash"));
+				.render(EmailTemplate.PASSWORD_RESET, Map.of("__NAME__", "$1 \\ backslash"));
 
 		assertEquals("Hello $1 \\ backslash!", rendered);
 	}
 
 	@Test
 	void render_nullSubstitutionValue_leavesThePlaceholderInPlace(@TempDir Path tmp) throws IOException {
-		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.SIGNUP, "Hello __NAME__ at __EMAIL__");
+		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.PASSWORD_RESET, "Hello __NAME__ at __EMAIL__");
 		Map<String, String> substitutions = new HashMap<>();
 		substitutions.put("__NAME__", null);
 		substitutions.put("__EMAIL__", "ada@example.com");
 
-		String rendered = new MailTemplateRenderer(environment).render(EmailTemplate.SIGNUP, substitutions);
+		String rendered = new MailTemplateRenderer(environment).render(EmailTemplate.PASSWORD_RESET, substitutions);
 
 		assertEquals("Hello __NAME__ at ada@example.com", rendered);
 	}
@@ -147,29 +271,29 @@ class MailTemplateRendererTest {
 	void render_unreadableTemplate_returnsNullAndIsRetriedOnTheNextCall(@TempDir Path tmp) throws IOException {
 		// A failed load must not be cached: the previous implementation left its static cache field null
 		// so the next send tried again, and an operator fixing the path should not need a restart.
-		Path template = tmp.resolve("signup.html");
+		Path template = tmp.resolve("pwreset.html");
 		MockEnvironment environment = new MockEnvironment();
-		environment.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(), template.toString());
+		environment.setProperty(EmailTemplate.PASSWORD_RESET.getTemplatePathKey(), template.toString());
 		MailTemplateRenderer renderer = new MailTemplateRenderer(environment);
 
-		assertNull(renderer.render(EmailTemplate.SIGNUP, Collections.emptyMap()),
+		assertNull(renderer.render(EmailTemplate.PASSWORD_RESET, Collections.emptyMap()),
 				"a template path that cannot be read must render to null");
 
 		Files.writeString(template, "now readable");
 
-		assertEquals("now readable", renderer.render(EmailTemplate.SIGNUP, Collections.emptyMap()),
+		assertEquals("now readable", renderer.render(EmailTemplate.PASSWORD_RESET, Collections.emptyMap()),
 				"the failed load must not have been cached");
 	}
 
 	@Test
 	void render_readableTemplate_isCachedAndSurvivesTheSourceDisappearing(@TempDir Path tmp) throws IOException {
-		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.SIGNUP, "cached body");
+		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.PASSWORD_RESET, "cached body");
 		MailTemplateRenderer renderer = new MailTemplateRenderer(environment);
 
-		assertEquals("cached body", renderer.render(EmailTemplate.SIGNUP, Collections.emptyMap()));
-		Files.delete(Path.of(environment.getProperty(EmailTemplate.SIGNUP.getTemplatePathKey())));
+		assertEquals("cached body", renderer.render(EmailTemplate.PASSWORD_RESET, Collections.emptyMap()));
+		Files.delete(Path.of(environment.getProperty(EmailTemplate.PASSWORD_RESET.getTemplatePathKey())));
 
-		assertEquals("cached body", renderer.render(EmailTemplate.SIGNUP, Collections.emptyMap()),
+		assertEquals("cached body", renderer.render(EmailTemplate.PASSWORD_RESET, Collections.emptyMap()),
 				"a successfully loaded template must be served from the cache");
 	}
 
@@ -202,16 +326,16 @@ class MailTemplateRendererTest {
 		server.start();
 		try {
 			MockEnvironment environment = new MockEnvironment();
-			environment.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(),
+			environment.setProperty(EmailTemplate.PASSWORD_RESET.getTemplatePathKey(),
 					"http://127.0.0.1:" + server.getAddress().getPort() + "/template.html");
 			MailTemplateRenderer renderer = new MailTemplateRenderer(environment);
 
 			assertEquals("Hello Ada from HTTP",
-					renderer.render(EmailTemplate.SIGNUP, Map.of("__NAME__", "Ada")));
+					renderer.render(EmailTemplate.PASSWORD_RESET, Map.of("__NAME__", "Ada")));
 
 			server.stop(0);
 			assertEquals("Hello Grace from HTTP",
-					renderer.render(EmailTemplate.SIGNUP, Map.of("__NAME__", "Grace")),
+					renderer.render(EmailTemplate.PASSWORD_RESET, Map.of("__NAME__", "Grace")),
 					"the fetched template must be cached rather than re-fetched per send");
 		} finally {
 			server.stop(0);
@@ -234,11 +358,11 @@ class MailTemplateRendererTest {
 		server.start();
 		try {
 			MockEnvironment environment = new MockEnvironment();
-			environment.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(),
+			environment.setProperty(EmailTemplate.PASSWORD_RESET.getTemplatePathKey(),
 					"http://127.0.0.1:" + server.getAddress().getPort() + "/stalled.html");
 
 			long startedAt = System.nanoTime();
-			assertNull(new MailTemplateRenderer(environment).render(EmailTemplate.SIGNUP, Collections.emptyMap()),
+			assertNull(new MailTemplateRenderer(environment).render(EmailTemplate.PASSWORD_RESET, Collections.emptyMap()),
 					"a template that cannot be fetched must render to null");
 			long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
 

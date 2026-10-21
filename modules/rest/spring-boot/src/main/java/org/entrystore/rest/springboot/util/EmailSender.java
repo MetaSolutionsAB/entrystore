@@ -30,6 +30,7 @@ import org.entrystore.User;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.springboot.configuration.DeprecatedEmailAddressProperties;
 import org.entrystore.rest.springboot.configuration.SmtpProperties;
+import org.entrystore.rest.springboot.util.EmailTemplate.Section;
 import org.jetbrains.annotations.Nullable;
 import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.MailException;
@@ -50,9 +51,9 @@ import java.util.stream.Stream;
  * Sends the transactional emails.
  *
  * <p>Sending returns {@code false} rather than throwing, and each caller decides what that means:
- * {@code MessageService} turns it into a 503, signup into a 400, and the password-reset dispatch
- * swallows it so the response stays byte-identical whether or not the account exists. Keeping that
- * contract is why the send loop catches {@code MailException} — see {@link #sendMessage}.
+ * {@code MessageService} turns it into a 503, while the sign-up and password-reset dispatches, which run after
+ * the answer was returned, only log it. Keeping that contract is why the send loop catches
+ * {@code MailException} — see {@link #sendMessage}.
  *
  * <p>Transport settings are fixed when the {@code JavaMailSender} bean is built, not re-read per send,
  * so a runtime mutation of the legacy {@code Config} does not affect SMTP. Message <em>content</em>
@@ -285,13 +286,13 @@ public class EmailSender {
 				if (delivered.length > 0) {
 					// Some recipient already has this message. The MimeMessage is built once above and
 					// AuthService generates one token per dispatch, so re-sending would deliver a
-					// byte-identical duplicate — on the password-reset path, a second copy of the same
-					// still-valid link — and the loop stops regardless of the outcome reported.
+					// byte-identical duplicate — on the sign-up and password-reset paths, a second copy of
+					// the same still-valid link — and the loop stops regardless of the outcome reported.
 					//
 					// Returning true when the intended recipient was among the delivered addresses is the
-					// load-bearing part: a false return makes AuthService.dispatchPasswordResetEmail call
-					// signupTokenCache.removeToken, leaving the recipient holding a delivered mail whose
-					// link is already dead.
+					// load-bearing part: a false return makes AuthService's sign-up and password-reset
+					// dispatches call signupTokenCache.removeToken, leaving the recipient holding a
+					// delivered mail whose link is already dead.
 					log.error("Email to {} was only partially delivered on attempt {}/{} ({} recipient(s) "
 									+ "reached); not retrying, because a retry would duplicate it",
 							HttpUtil.sanitizeForLog(msgTo), attempt, attempts, delivered.length, e);
@@ -420,6 +421,17 @@ public class EmailSender {
 				"__EMAIL__", escape(recipientEmail)));
 	}
 
+	/**
+	 * Tells the owner of an existing account that someone signed up with its address. Returns false without
+	 * sending when the template has no existing-account section or cannot be loaded.
+	 */
+	public boolean sendExistingAccountNotice(String greetingName, String recipientEmail) {
+		String body = templates.render(Section.EXISTING_ACCOUNT, substitutions(
+				"__NAME__", escape(greetingName),
+				"__EMAIL__", escape(recipientEmail)));
+		return body != null && sendMessage(recipientEmail, templates.subject(Section.EXISTING_ACCOUNT), body);
+	}
+
 	public boolean sendPasswordResetConfirmation(String recipientEmail, String confirmationLink) {
 		return sendTemplateMessage(EmailTemplate.PASSWORD_RESET, recipientEmail, substitutions(
 				"__CONFIRMATION_LINK__", confirmationLink,
@@ -434,7 +446,7 @@ public class EmailSender {
 	 * name to {@code ""}, so the placeholder is substituted away rather than left visible, which is what
 	 * {@code EmailSenderTest} asserts. The null tolerance exists so that a future caller which does pass
 	 * null gets {@link MailTemplateRenderer#render}'s skip-and-leave-the-placeholder behaviour instead of
-	 * an NPE on the signup path, which has no surrounding catch.
+	 * an NPE inside a dispatch, where it would drop the mail.
 	 */
 	private static Map<String, String> substitutions(@Nullable String... keysAndValues) {
 		Map<String, String> substitutions = new LinkedHashMap<>();

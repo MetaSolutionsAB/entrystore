@@ -201,6 +201,7 @@ public interface Settings {
 
 	String SIGNUP = "entrystore.auth.signup";
 	String SIGNUP_SUBJECT = "entrystore.auth.signup.email.subject";
+	String SIGNUP_EXISTING_ACCOUNT_SUBJECT = "entrystore.auth.signup.existing-account.email.subject";
 	String SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.signup.email.template";
 	String SIGNUP_WHITELIST = "entrystore.auth.signup.whitelist";
 	String SIGNUP_CREATE_HOME_CONTEXT = "entrystore.auth.signup.create-home-context";

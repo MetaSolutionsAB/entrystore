@@ -35,15 +35,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins the properties of this executor that {@code AuthService} depends on but cannot observe,
+ * Pins the properties of these executors that {@code AuthService} depends on but cannot observe,
  * because its own tests stub the executor out: a saturated queue aborts rather than running the task
  * on the caller's thread, shutdown discards the backlog instead of draining it — including on the
  * real container close path, which {@code executor.shutdown()} alone does not exercise — and worker
- * threads carry the uncaught-exception handler {@code dispatchPasswordResetEmail} relies on.
+ * threads carry the uncaught-exception handler the dispatch methods rely on.
  */
-class PasswordResetExecutorConfigurationTest {
+class AuthEmailExecutorConfigurationTest {
 
-	// Mirrors the bean's own (private) sizing.
+	// Mirrors the factory's own (private) sizing.
 	private static final int POOL_SIZE = 2;
 	private static final int QUEUE_CAPACITY = 100;
 
@@ -52,7 +52,7 @@ class PasswordResetExecutorConfigurationTest {
 
 	@BeforeEach
 	void setUp() {
-		executor = new PasswordResetExecutorConfiguration().passwordResetTaskExecutor();
+		executor = AuthEmailExecutorConfiguration.authEmailExecutor("test-async-", "test");
 		executor.afterPropertiesSet();
 	}
 
@@ -63,18 +63,18 @@ class PasswordResetExecutorConfigurationTest {
 	}
 
 	@Test
-	void passwordResetTaskExecutor_queueSaturated_abortsInsteadOfRunningOnTheCallerThread() throws Exception {
+	void authEmailExecutor_queueSaturated_abortsInsteadOfRunningOnTheCallerThread() throws Exception {
 		occupyWorkersAndFillQueue();
 
 		AtomicReference<Thread> ranOn = new AtomicReference<>();
 		assertThrows(TaskRejectedException.class, () -> executor.execute(() -> ranOn.set(Thread.currentThread())),
 				"a saturated queue must abort the dispatch so AuthService can count it and stay on the generic 200");
 		assertNull(ranOn.get(), "a rejected dispatch must never run on the request thread — CallerRunsPolicy "
-				+ "would reopen the bcrypt+SMTP timing oracle this executor exists to close");
+				+ "would reopen the hashing+SMTP timing oracle this executor exists to close");
 	}
 
 	@Test
-	void passwordResetTaskExecutor_shutdown_dropsTheQueuedBacklog() throws Exception {
+	void authEmailExecutor_shutdown_dropsTheQueuedBacklog() throws Exception {
 		AtomicInteger queuedRuns = new AtomicInteger();
 		occupyWorkers();
 		for (int i = 0; i < 10; i++) {
@@ -90,40 +90,9 @@ class PasswordResetExecutorConfigurationTest {
 	}
 
 	@Test
-	void passwordResetTaskExecutor_containerClose_dropsTheQueuedBacklogWithoutDrainingIt() throws Exception {
-		// Drives the real lifecycle path — ContextClosedEvent, SmartLifecycle stop phase, destroy() —
-		// which the direct executor.shutdown() above bypasses. Without acceptTasksAfterContextClose
-		// the stop phase parks on the lifecycle latch while the workers keep pulling the queue:
-		// markShutdown() defeats the beforeExecute pause guard and initiateEarlyShutdown() is a no-op
-		// on ThreadPoolTaskExecutor, so every queued task below would run before close() returned.
-		AtomicInteger queuedRuns = new AtomicInteger();
-		try (var context = new AnnotationConfigApplicationContext(PasswordResetExecutorConfiguration.class)) {
-			ThreadPoolTaskExecutor containerManaged =
-					context.getBean("passwordResetTaskExecutor", ThreadPoolTaskExecutor.class);
-			CountDownLatch workersStarted = new CountDownLatch(POOL_SIZE);
-			for (int i = 0; i < POOL_SIZE; i++) {
-				containerManaged.execute(() -> {
-					workersStarted.countDown();
-					// Timed rather than indefinite, so the broken path drains instead of deadlocking:
-					// its workers wake up mid-stop-phase and pull the queue below.
-					awaitQuietly(release, 2);
-				});
-			}
-			assertTrue(workersStarted.await(5, TimeUnit.SECONDS), "workers should have picked up the blocking tasks");
-			for (int i = 0; i < 10; i++) {
-				containerManaged.execute(queuedRuns::incrementAndGet);
-			}
-
-			context.close();
-		}
-
-		assertEquals(0, queuedRuns.get(), "container close must drop the queued dispatches, not drain them");
-	}
-
-	@Test
-	void passwordResetTaskExecutor_workerThreads_carryAnUncaughtExceptionHandler() {
-		// dispatchPasswordResetEmail deliberately runs bcrypt and putToken outside its own try/catch
-		// and relies on this handler to get a Throwable from that stretch into the logs instead of
+	void authEmailExecutor_workerThreads_carryAnUncaughtExceptionHandler() {
+		// The dispatch methods deliberately run the hashing and putToken outside their own try/catch
+		// and rely on this handler to get a Throwable from that stretch into the logs instead of
 		// being swallowed by ThreadPoolExecutor's default Worker.run path.
 		Thread thread = executor.newThread(() -> {
 		});
@@ -132,6 +101,58 @@ class PasswordResetExecutorConfigurationTest {
 		// against the group is what distinguishes the installed handler from the default.
 		assertNotSame(thread.getThreadGroup(), thread.getUncaughtExceptionHandler(),
 				"worker threads must carry the log-and-continue handler, not the thread-group default");
+	}
+
+	@Test
+	void passwordResetTaskExecutor_isBuiltByTheSharedFactoryWithItsOwnThreadNames() {
+		ThreadPoolTaskExecutor bean = new AuthEmailExecutorConfiguration().passwordResetTaskExecutor();
+
+		assertEquals(POOL_SIZE, bean.getMaxPoolSize());
+		assertEquals(QUEUE_CAPACITY, bean.getQueueCapacity());
+		assertTrue(bean.newThread(() -> {
+		}).getName().startsWith("password-reset-async-"));
+	}
+
+	@Test
+	void signupTaskExecutor_isBuiltByTheSharedFactoryWithItsOwnThreadNames() {
+		ThreadPoolTaskExecutor bean = new AuthEmailExecutorConfiguration().signupTaskExecutor();
+
+		assertEquals(POOL_SIZE, bean.getMaxPoolSize());
+		assertEquals(QUEUE_CAPACITY, bean.getQueueCapacity());
+		assertTrue(bean.newThread(() -> {
+		}).getName().startsWith("signup-async-"));
+	}
+
+	@Test
+	void containerClose_dropsTheQueuedBacklogOfBothExecutorsWithoutDrainingIt() throws Exception {
+		// Drives the real lifecycle path — ContextClosedEvent, SmartLifecycle stop phase, destroy() —
+		// which the direct executor.shutdown() above bypasses. Without acceptTasksAfterContextClose
+		// the stop phase parks on the lifecycle latch while the workers keep pulling the queue:
+		// markShutdown() defeats the beforeExecute pause guard and initiateEarlyShutdown() is a no-op
+		// on ThreadPoolTaskExecutor, so every queued task below would run before close() returned.
+		AtomicInteger queuedRuns = new AtomicInteger();
+		try (var context = new AnnotationConfigApplicationContext(AuthEmailExecutorConfiguration.class)) {
+			for (String beanName : new String[]{"passwordResetTaskExecutor", "signupTaskExecutor"}) {
+				ThreadPoolTaskExecutor containerManaged = context.getBean(beanName, ThreadPoolTaskExecutor.class);
+				// Timed rather than indefinite, so the broken path drains instead of deadlocking: its
+				// workers wake up mid-stop-phase and pull the queue below.
+				CountDownLatch workersStarted = new CountDownLatch(POOL_SIZE);
+				for (int i = 0; i < POOL_SIZE; i++) {
+					containerManaged.execute(() -> {
+						workersStarted.countDown();
+						awaitQuietly(release, 2);
+					});
+				}
+				assertTrue(workersStarted.await(5, TimeUnit.SECONDS), beanName + " workers should have picked up the blocking tasks");
+				for (int i = 0; i < 10; i++) {
+					containerManaged.execute(queuedRuns::incrementAndGet);
+				}
+			}
+
+			context.close();
+		}
+
+		assertEquals(0, queuedRuns.get(), "container close must drop the queued dispatches, not drain them");
 	}
 
 	private void occupyWorkersAndFillQueue() throws InterruptedException {

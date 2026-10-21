@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.util;
 
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import org.entrystore.repository.config.Settings;
 
 /**
@@ -25,6 +26,9 @@ import org.entrystore.repository.config.Settings;
  * three through a single path.
  *
  * <p>{@code description} is the phrase used in the "Unable to load email template for …" error.
+ *
+ * <p>The sign-up template also holds the account-exists notice; see {@link Section}. The others are rendered as
+ * they are and never parsed for markers.
  */
 @Getter
 public enum EmailTemplate {
@@ -60,5 +64,28 @@ public enum EmailTemplate {
 		this.templatePathKey = templatePathKey;
 		this.classpathResource = classpathResource;
 		this.description = description;
+	}
+
+	/**
+	 * A mail of the {@link #SIGNUP} template, between {@code <!--BEGIN name-->} and {@code <!--END name-->}.
+	 * Everything outside the sections is in both mails.
+	 */
+	@Getter
+	@RequiredArgsConstructor
+	public enum Section {
+
+		/**
+		 * The confirmation. A template without markers is this mail as a whole, which keeps templates written
+		 * before sections existed working; a template with sections must have this one, or the confirmation text
+		 * it leaves outside would also reach the notice.
+		 */
+		NEW_ACCOUNT("new-account", Settings.SIGNUP_SUBJECT),
+
+		/** The account-exists notice, only sent when the template has this section. */
+		EXISTING_ACCOUNT("existing-account", Settings.SIGNUP_EXISTING_ACCOUNT_SUBJECT);
+
+		private final String markerName;
+		/** Falls back to the sign-up subject when not configured. */
+		private final String subjectKey;
 	}
 }

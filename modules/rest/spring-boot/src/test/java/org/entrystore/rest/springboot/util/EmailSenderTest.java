@@ -29,6 +29,7 @@ import org.entrystore.Entry;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.configuration.DeprecatedEmailAddressProperties;
 import org.entrystore.rest.springboot.configuration.SmtpProperties;
+import org.entrystore.rest.springboot.util.EmailTemplate.Section;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -266,6 +267,34 @@ class EmailSenderTest {
 		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environment);
 
 		assertFalse(sender.sendSignupConfirmation("Ada", "ada@example.com", "https://entrystore.example/c"));
+		verifyNoInteractions(mailSender);
+	}
+
+	@Test
+	void sendExistingAccountNotice_sendsTheNoticeSectionWithItsSubjectAndTheEscapedName(@TempDir Path tmp) throws Exception {
+		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.SIGNUP, "<p>Hi __NAME__</p>"
+				+ "<!--BEGIN new-account--><a href=\"__CONFIRMATION_LINK__\">confirm</a><!--END new-account-->"
+				+ "<!--BEGIN existing-account--><p>__EMAIL__ has an account</p><!--END existing-account-->");
+		environment.setProperty(EmailTemplate.SIGNUP.getSubjectKey(), "Confirm your sign-up");
+		environment.setProperty(Section.EXISTING_ACCOUNT.getSubjectKey(), "You already have an account");
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environment);
+
+		assertTrue(sender.sendExistingAccountNotice("Ada <b>Lovelace</b>", "ada@example.com"));
+
+		MimeMessage message = captureSentMessage();
+		assertEquals("ada@example.com", message.getRecipients(Message.RecipientType.TO)[0].toString());
+		assertEquals("You already have an account", message.getSubject());
+		assertEquals("<p>Hi Ada &lt;b&gt;Lovelace&lt;/b&gt;</p><p>ada@example.com has an account</p>",
+				message.getContent().toString());
+	}
+
+	@Test
+	void sendExistingAccountNotice_templateWithoutExistingAccountSection_sendsNothing(@TempDir Path tmp) throws Exception {
+		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.SIGNUP,
+				"<p>Hi __NAME__</p><a href=\"__CONFIRMATION_LINK__\">confirm</a>");
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environment);
+
+		assertFalse(sender.sendExistingAccountNotice("Ada", "ada@example.com"));
 		verifyNoInteractions(mailSender);
 	}
 

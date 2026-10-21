@@ -20,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.springboot.util.EmailTemplate.Section;
 import org.jetbrains.annotations.Nullable;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
@@ -33,8 +34,11 @@ import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Year;
+import java.util.Arrays;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * Loads, caches and renders the transactional email templates. Owns everything content-related —
@@ -57,33 +61,61 @@ public class MailTemplateRenderer {
 
 	private static final int TEMPLATE_FETCH_TIMEOUT_MS = 5_000;
 
+	private static final Set<String> SECTION_NAMES = Arrays.stream(Section.values())
+			.map(Section::getMarkerName)
+			.collect(Collectors.toUnmodifiableSet());
+
 	// The Spring Environment rather than @Value fields: the subject and template-path keys are
 	// carried by the EmailTemplate constants, keeping the enum the single source of key names,
 	// defaults and bundled resources.
 	private final Environment environment;
 
-	private final Map<EmailTemplate, String> templateCache = new ConcurrentHashMap<>();
+	private final Map<EmailTemplate, LoadedTemplate> templateCache = new ConcurrentHashMap<>();
+
+	/** A template as it is rendered: its mail, and for the sign-up template the account-exists notice, if any. */
+	private record LoadedTemplate(String mail, @Nullable String existingAccountNotice) {}
 
 	/** The configured subject for {@code template}, or its documented default. */
 	public String subject(EmailTemplate template) {
 		return environment.getProperty(template.getSubjectKey(), template.getDefaultSubject());
 	}
 
+	/** The configured subject for the sign-up mail of {@code section}, falling back to the sign-up subject. */
+	public String subject(Section section) {
+		return environment.getProperty(section.getSubjectKey(), subject(EmailTemplate.SIGNUP));
+	}
+
 	/**
-	 * Renders {@code template} with the shared {@code __YEAR__} / {@code __DOMAIN__} substitutions plus
-	 * the supplied ones, or returns null when the template cannot be loaded — the same failure signal
-	 * the callers turned into a {@code false} return before.
+	 * Renders {@code template} — the confirmation, for the sign-up template — with the shared {@code __YEAR__} /
+	 * {@code __DOMAIN__} substitutions plus the supplied ones, or returns null when the template cannot be loaded,
+	 * the same failure signal the callers turn into a {@code false} return.
 	 *
 	 * <p>Substitution values are inserted literally. Entries with a null value are skipped, leaving the
 	 * placeholder in place, matching the per-placeholder null guards of the previous implementation.
 	 */
 	public @Nullable String render(EmailTemplate template, Map<String, String> substitutions) {
-		String body = resolveCached(template);
-		if (body == null) {
-			log.error("Unable to load email template for {}", template.getDescription());
+		LoadedTemplate loaded = resolveCached(template);
+		return loaded == null ? null : substitute(loaded.mail(), substitutions);
+	}
+
+	/**
+	 * Renders the sign-up mail of {@code section} as {@link #render(EmailTemplate, Map)} does, or returns null when
+	 * the template cannot be loaded, which is logged per call, or has no such section, which is logged when the
+	 * template is loaded.
+	 */
+	public @Nullable String render(Section section, Map<String, String> substitutions) {
+		LoadedTemplate loaded = resolveCached(EmailTemplate.SIGNUP);
+		if (loaded == null) {
 			return null;
 		}
+		String mail = switch (section) {
+			case NEW_ACCOUNT -> loaded.mail();
+			case EXISTING_ACCOUNT -> loaded.existingAccountNotice();
+		};
+		return mail == null ? null : substitute(mail, substitutions);
+	}
 
+	private String substitute(String body, Map<String, String> substitutions) {
 		String rendered = body
 				// Year.now(), not Calendar.getInstance(): the latter honours the default locale's calendar
 				// system, so __YEAR__ renders as 2569 under a th-TH default rather than the Gregorian year.
@@ -100,13 +132,14 @@ public class MailTemplateRenderer {
 		return rendered;
 	}
 
-	private @Nullable String resolveCached(EmailTemplate template) {
-		String cached = templateCache.get(template);
+	private @Nullable LoadedTemplate resolveCached(EmailTemplate template) {
+		LoadedTemplate cached = templateCache.get(template);
 		if (cached != null) {
 			return cached;
 		}
-		String loaded = resolveTemplate(template);
+		LoadedTemplate loaded = resolveTemplate(template);
 		if (loaded == null) {
+			log.error("Unable to load email template for {}", template.getDescription());
 			return null;
 		}
 		templateCache.putIfAbsent(template, loaded);
@@ -115,15 +148,57 @@ public class MailTemplateRenderer {
 
 	/**
 	 * Loads the template from the configured path, or the bundled classpath template when no path is
-	 * configured. Returns null when the chosen source cannot be loaded — a configured path that fails
-	 * to load does not fall back to the classpath template.
+	 * configured, and splits the sign-up template into its mails. Returns null when the chosen source cannot be
+	 * loaded or its sections are malformed — a configured path that fails does not fall back to the classpath
+	 * template.
 	 */
-	private @Nullable String resolveTemplate(EmailTemplate template) {
+	private @Nullable LoadedTemplate resolveTemplate(EmailTemplate template) {
 		String templatePath = environment.getProperty(template.getTemplatePathKey());
-		if (templatePath != null) {
-			return loadTemplate(templatePath);
+		String body = templatePath != null
+				? loadTemplate(templatePath)
+				: loadClasspathTemplate(template.getClasspathResource());
+		if (body == null) {
+			return null;
 		}
-		return loadClasspathTemplate(template.getClasspathResource());
+		if (template != EmailTemplate.SIGNUP) {
+			return new LoadedTemplate(body, null);
+		}
+		try {
+			return splitSections(template, body);
+		} catch (IllegalArgumentException e) {
+			log.error("The {} email template from {} is malformed: {}", template.getDescription(),
+					templatePath != null ? templatePath : "the classpath", e.getMessage());
+			return null;
+		}
+	}
+
+	/**
+	 * A template without markers is the confirmation as a whole. A missing notice is logged here, so once per
+	 * loaded template rather than per sign-up: it is a standing configuration choice, not a failure.
+	 */
+	private static LoadedTemplate splitSections(EmailTemplate template, String body) {
+		Map<String, String> byName = TemplateSections.split(body, SECTION_NAMES);
+		if (byName.isEmpty()) {
+			log.warn("The {} email template has no sections, so sign-ups of existing accounts get no notice",
+					template.getDescription());
+			return new LoadedTemplate(body, null);
+		}
+		String confirmation = byName.get(Section.NEW_ACCOUNT.getMarkerName());
+		if (confirmation == null) {
+			throw new IllegalArgumentException("A template with sections needs a <!--BEGIN new-account--> section, "
+					+ "or the confirmation text outside it also reaches the notice");
+		}
+		String notice = byName.get(Section.EXISTING_ACCOUNT.getMarkerName());
+		if (notice == null) {
+			log.warn("The {} email template has no <!--BEGIN existing-account--> section, so sign-ups of existing "
+					+ "accounts get no notice", template.getDescription());
+			return new LoadedTemplate(confirmation, null);
+		}
+		if (notice.contains("__CONFIRMATION_LINK__")) {
+			throw new IllegalArgumentException("__CONFIRMATION_LINK__ is outside the <!--BEGIN new-account--> section, "
+					+ "so the notice would carry a confirmation button");
+		}
+		return new LoadedTemplate(confirmation, notice);
 	}
 
 	/**

@@ -16,18 +16,35 @@
 
 package org.entrystore.rest.springboot.service;
 
+import com.github.benmanes.caffeine.cache.Ticker;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.validation.Validation;
 import jakarta.validation.ValidatorFactory;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.security.Password;
+import org.entrystore.repository.util.NS;
+import org.entrystore.rest.springboot.configuration.ConfirmationUrlProperties;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
+import org.entrystore.rest.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.springboot.model.auth.SignupInfo;
 import org.entrystore.rest.springboot.model.exception.BadRequestHtmlException;
+import org.entrystore.rest.springboot.model.exception.CustomResponseException;
+import org.entrystore.rest.springboot.model.exception.ExpectationFailedHtmlException;
 import org.entrystore.rest.springboot.security.ESUserSessionDetails;
+import org.entrystore.rest.springboot.service.auth.ConfirmationLinkBuilder;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
+import org.entrystore.rest.springboot.service.auth.RecaptchaSettings;
+import org.entrystore.rest.springboot.service.auth.SignupRateLimiter;
+import org.entrystore.rest.springboot.service.auth.SignupTokenCache;
+import org.entrystore.rest.springboot.util.EmailSender;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -39,7 +56,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.task.AsyncTaskExecutor;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.env.MockEnvironment;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -47,26 +66,37 @@ import org.springframework.security.saml2.provider.service.authentication.Defaul
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
+
+	private static final String ADA = "ada@example.org";
+	// Meets the default password rules and any plausible custom one: long, mixed case, digits, no whitespace.
+	private static final String PASSWORD = "Secret-Pass12345";
 
 	@Mock
 	private AsyncTaskExecutor executor;
@@ -202,7 +232,7 @@ class AuthServiceTest {
 				null, null, null, null, null, meterRegistry,
 				new MockEnvironment()
 						.withProperty("entrystore.auth.signup.whitelist.1", "Example.COM")
-						.withProperty("entrystore.auth.signup.whitelist.2", "OTHER.example.org"), executor);
+						.withProperty("entrystore.auth.signup.whitelist.2", "OTHER.example.org"), executor, executor);
 
 		var whitelist = (Set<String>) ReflectionTestUtils.getField(service, "domainWhitelist");
 
@@ -214,7 +244,7 @@ class AuthServiceTest {
 		SessionRegistry sessionRegistry = mock(SessionRegistry.class);
 		PrincipalManager principalManager = mock(PrincipalManager.class);
 		AuthService service = new AuthService(null, principalManager, null, null, null, null, null, emailValidator,
-				null, sessionRegistry, null, null, null, meterRegistry, new MockEnvironment(), executor);
+				null, sessionRegistry, null, null, null, meterRegistry, new MockEnvironment(), executor, executor);
 		URI userUri = URI.create("https://example.org/store/_principals/resource/7");
 		User user = mock(User.class);
 		when(user.getURI()).thenReturn(userUri);
@@ -243,6 +273,187 @@ class AuthServiceTest {
 		verify(sessionRegistry, never()).getAllSessions(otherSsoLogin, false);
 	}
 
+	@Test
+	void signup_newAddress_storesTheTokenBeforeTheConfirmationLinkIsSent() throws Exception {
+		SignupTokenCache tokens = new SignupTokenCache(Ticker.systemTicker());
+		EmailSender emailSender = mock(EmailSender.class);
+		AtomicReference<SignupInfo> storedWhenSent = new AtomicReference<>();
+		when(emailSender.sendSignupConfirmation(eq("Ada Lovelace"), eq(ADA), anyString())).thenAnswer(invocation -> {
+			storedWhenSent.set(tokens.getTokenValue(tokenOf(invocation.getArgument(2))));
+			return true;
+		});
+		AuthService service = signupService(principalManagerWithAdmin(), emailSender, tokens, Runnable::run);
+
+		String message = service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+		assertEquals("A confirmation message was sent to " + ADA, message);
+		assertNotNull(storedWhenSent.get(), "the link must work by the time the mail arrives");
+		assertTrue(Password.check(PASSWORD, storedWhenSent.get().getSaltedHashedPassword()));
+	}
+
+	@Test
+	void signup_confirmationNotSent_removesTheTokenAndStillAnswersAsForASentOne() throws Exception {
+		SignupTokenCache tokens = new SignupTokenCache(Ticker.systemTicker());
+		EmailSender emailSender = mock(EmailSender.class);
+		AtomicReference<String> link = new AtomicReference<>();
+		when(emailSender.sendSignupConfirmation(eq("Ada Lovelace"), eq(ADA), anyString())).thenAnswer(invocation -> {
+			link.set(invocation.getArgument(2));
+			return false;
+		});
+		AuthService service = signupService(principalManagerWithAdmin(), emailSender, tokens, Runnable::run);
+
+		String message = service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+		assertEquals("A confirmation message was sent to " + ADA, message);
+		assertNull(tokens.getTokenValue(tokenOf(link.get())));
+	}
+
+	@Test
+	void signup_existingAccountByName_sendsTheNoticeWithTheStoredNameAndStoresNoToken() throws Exception {
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		Entry account = userEntryNamed("Ada", "Lovelace");
+		when(principalManager.getPrincipalEntry(ADA)).thenReturn(account);
+		SignupTokenCache tokens = new SignupTokenCache(Ticker.systemTicker());
+		EmailSender emailSender = mock(EmailSender.class);
+		AuthService service = signupService(principalManager, emailSender, tokens, Runnable::run);
+
+		String message = service.signup(new MockHttpServletRequest(), signupBody(ADA, "Mallory", "Someone"), "Sign-up");
+
+		assertEquals("A confirmation message was sent to " + ADA, message);
+		verify(emailSender).sendExistingAccountNotice("Ada Lovelace", ADA);
+		verify(emailSender, never()).sendSignupConfirmation(any(), any(), any());
+		assertEquals(0, tokens.caffeineCaches().get("signup-tokens").estimatedSize());
+	}
+
+	@Test
+	void signup_existingAccountByName_stillRunsTheExternalIdLookup() throws Exception {
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		Entry account = userEntryNamed("Ada", "Lovelace");
+		when(principalManager.getPrincipalEntry(ADA)).thenReturn(account);
+		AuthService service = signupService(principalManager, mock(EmailSender.class),
+				new SignupTokenCache(Ticker.systemTicker()), Runnable::run);
+
+		service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+		// A new address runs both lookups, so an existing one must too, or the response time tells them apart.
+		verify(principalManager).getUserByExternalID(ADA);
+	}
+
+	@Test
+	void signup_existingAccountByExternalIdWithoutName_greetsWithTheAddress() throws Exception {
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		User account = mock(User.class);
+		when(account.getEntry()).thenReturn(mock(Entry.class));
+		when(principalManager.getUserByExternalID(ADA)).thenReturn(account);
+		EmailSender emailSender = mock(EmailSender.class);
+		AuthService service = signupService(principalManager, emailSender,
+				new SignupTokenCache(Ticker.systemTicker()), Runnable::run);
+
+		service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+		verify(emailSender).sendExistingAccountNotice(ADA, ADA);
+		verify(emailSender, never()).sendSignupConfirmation(any(), any(), any());
+	}
+
+	@Test
+	void signup_principalNameOfAGroup_isNotAnAccountAndGetsTheConfirmationLink() throws Exception {
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		Entry group = mock(Entry.class);
+		when(group.getGraphType()).thenReturn(GraphType.Group);
+		when(principalManager.getPrincipalEntry(ADA)).thenReturn(group);
+		EmailSender emailSender = mock(EmailSender.class);
+		AuthService service = signupService(principalManager, emailSender,
+				new SignupTokenCache(Ticker.systemTicker()), Runnable::run);
+
+		service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+		verify(emailSender).sendSignupConfirmation(eq("Ada Lovelace"), eq(ADA), anyString());
+		verify(emailSender, never()).sendExistingAccountNotice(any(), any());
+	}
+
+	@Test
+	void signup_confirmationNotSent_isCountedAsFailed() throws Exception {
+		EmailSender emailSender = mock(EmailSender.class);
+		when(emailSender.sendSignupConfirmation(eq("Ada Lovelace"), eq(ADA), anyString())).thenReturn(false);
+		AuthService service = signupService(principalManagerWithAdmin(), emailSender,
+				new SignupTokenCache(Ticker.systemTicker()), Runnable::run);
+
+		service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+		assertEquals(1.0, meterRegistry.counter("auth.signup.failed").count());
+	}
+
+	@Test
+	void signup_existingDisabledAccount_getsNoNoticeAndTheSameAnswer() throws Exception {
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		Entry account = mock(Entry.class);
+		User user = mock(User.class);
+		when(account.getGraphType()).thenReturn(GraphType.User);
+		when(account.getResource()).thenReturn(user);
+		when(user.isDisabled()).thenReturn(true);
+		when(principalManager.getPrincipalEntry(ADA)).thenReturn(account);
+		SignupTokenCache tokens = new SignupTokenCache(Ticker.systemTicker());
+		EmailSender emailSender = mock(EmailSender.class);
+		AuthService service = signupService(principalManager, emailSender, tokens, Runnable::run);
+
+		String message = service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+		assertEquals("A confirmation message was sent to " + ADA, message);
+		verify(emailSender, never()).sendExistingAccountNotice(any(), any());
+		verify(emailSender, never()).sendSignupConfirmation(any(), any(), any());
+		assertEquals(0, tokens.caffeineCaches().get("signup-tokens").estimatedSize());
+	}
+
+	@Test
+	void signup_domainOutsideTheWhitelist_isRejectedBeforeAnyMailIsDispatched() throws Exception {
+		AuthService service = signupService(mock(PrincipalManager.class), mock(EmailSender.class),
+				new SignupTokenCache(Ticker.systemTicker()), executor,
+				new MockEnvironment().withProperty("entrystore.auth.signup.whitelist.1", "example.com"),
+				new RecaptchaSettings(false, null, null), new SignupRateLimiter(0, Duration.ofHours(1), Ticker.systemTicker()));
+
+		assertThrows(ExpectationFailedHtmlException.class,
+				() -> service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up"));
+		verify(executor, never()).execute(any());
+	}
+
+	@Test
+	void signup_missingRecaptcha_isRejectedBeforeAnyMailIsDispatched() throws Exception {
+		AuthService service = signupService(mock(PrincipalManager.class), mock(EmailSender.class),
+				new SignupTokenCache(Ticker.systemTicker()), executor, new MockEnvironment(),
+				new RecaptchaSettings(true, "site-key", "secret"),
+				new SignupRateLimiter(0, Duration.ofHours(1), Ticker.systemTicker()));
+
+		assertThrows(BadRequestHtmlException.class,
+				() -> service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up"));
+		verify(executor, never()).execute(any());
+	}
+
+	@Test
+	void signup_overTheRateLimit_isRejectedBeforeItsMailIsDispatched() throws Exception {
+		AuthService service = signupService(principalManagerWithAdmin(), mock(EmailSender.class),
+				new SignupTokenCache(Ticker.systemTicker()), executor, new MockEnvironment(),
+				new RecaptchaSettings(false, null, null), new SignupRateLimiter(1, Duration.ofHours(1), Ticker.systemTicker()));
+		service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+		CustomResponseException thrown = assertThrows(CustomResponseException.class,
+				() -> service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up"));
+
+		assertEquals(HttpStatus.TOO_MANY_REQUESTS, thrown.getStatus());
+		verify(executor, times(1)).execute(any());
+	}
+
+	@Test
+	void signup_rejectedExecution_incrementsTheCounterAndStillAnswersAsForASentMail() throws Exception {
+		doThrow(new RejectedExecutionException("queue saturated")).when(executor).execute(any());
+		AuthService service = signupService(principalManagerWithAdmin(), mock(EmailSender.class),
+				new SignupTokenCache(Ticker.systemTicker()), executor);
+
+		String message = service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+		assertEquals("A confirmation message was sent to " + ADA, message);
+		assertEquals(1.0, meterRegistry.counter("auth.signup.rejected").count());
+	}
+
 	private static UserDetails springUser(String username) {
 		return org.springframework.security.core.userdetails.User.withUsername(username).password("N/A").build();
 	}
@@ -251,7 +462,60 @@ class AuthServiceTest {
 		// Only the collaborators reached before pwReset's email check and by submitPasswordResetDispatch are real.
 		return new AuthService(null, null, null, null, null, null, null, emailValidator,
 				null, sessionRegistry, null, null, null, meterRegistry,
-				new MockEnvironment(), executor);
+				new MockEnvironment(), executor, executor);
+	}
+
+	/** Only the collaborators signup() and its dispatches reach are set; reCAPTCHA and the rate limit are off. */
+	private AuthService signupService(PrincipalManager principalManager, EmailSender emailSender,
+									  SignupTokenCache tokens, AsyncTaskExecutor signupExecutor) throws Exception {
+		return signupService(principalManager, emailSender, tokens, signupExecutor, new MockEnvironment(),
+				new RecaptchaSettings(false, null, null), new SignupRateLimiter(0, Duration.ofHours(1), Ticker.systemTicker()));
+	}
+
+	private AuthService signupService(PrincipalManager principalManager, EmailSender emailSender,
+									  SignupTokenCache tokens, AsyncTaskExecutor signupExecutor, MockEnvironment environment,
+									  RecaptchaSettings recaptcha, SignupRateLimiter rateLimiter) throws Exception {
+		RepositoryManagerImpl repositoryManager = mock(RepositoryManagerImpl.class);
+		when(repositoryManager.getRepositoryURL()).thenReturn(URI.create("https://example.org/store/").toURL());
+		var links = new ConfirmationLinkBuilder(new ConfirmationUrlProperties(null, null), repositoryManager);
+		return new AuthService(null, principalManager, null, null, recaptcha, tokens, null, emailValidator,
+				emailSender, null, rateLimiter, null, links, meterRegistry, environment, executor, signupExecutor);
+	}
+
+	private static PrincipalManager principalManagerWithAdmin() {
+		PrincipalManager principalManager = mock(PrincipalManager.class);
+		User admin = mock(User.class);
+		when(admin.getURI()).thenReturn(URI.create("https://example.org/store/_principals/resource/_admin"));
+		when(principalManager.getAdminUser()).thenReturn(admin);
+		return principalManager;
+	}
+
+	private static Entry userEntryNamed(String givenName, String familyName) {
+		URI resourceUri = URI.create("https://example.org/store/_principals/resource/7");
+		var vf = SimpleValueFactory.getInstance();
+		Model metadata = new LinkedHashModel();
+		metadata.add(vf.createIRI(resourceUri.toString()), vf.createIRI(NS.foaf, "givenName"), vf.createLiteral(givenName));
+		metadata.add(vf.createIRI(resourceUri.toString()), vf.createIRI(NS.foaf, "familyName"), vf.createLiteral(familyName));
+		Entry entry = mock(Entry.class);
+		User user = mock(User.class);
+		when(entry.getGraphType()).thenReturn(GraphType.User);
+		when(entry.getResource()).thenReturn(user);
+		when(entry.getResourceURI()).thenReturn(resourceUri);
+		when(entry.getMetadataGraph()).thenReturn(metadata);
+		when(user.getEntry()).thenReturn(entry);
+		return entry;
+	}
+
+	private static SignupRequestBody signupBody(String email) {
+		return signupBody(email, "Ada", "Lovelace");
+	}
+
+	private static SignupRequestBody signupBody(String email, String firstName, String lastName) {
+		return new SignupRequestBody(email, PASSWORD, firstName, lastName, null, null, null, Map.of());
+	}
+
+	private static String tokenOf(String confirmationLink) {
+		return confirmationLink.substring(confirmationLink.indexOf("confirm=") + "confirm=".length());
 	}
 
 	private static UserDetails principalFor(String username) {

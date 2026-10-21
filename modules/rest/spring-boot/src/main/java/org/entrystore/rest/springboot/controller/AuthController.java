@@ -317,7 +317,7 @@ public class AuthController {
 				paramMap.getFirst("email"), paramMap.getFirst("password"));
 	}
 
-	@Operation(summary = "Generates new link for user sign-up confirmation and sends an email to provided email address.")
+	@Operation(summary = "Sends a sign-up confirmation link, or an account-exists notice when the address has an account, to the provided email address.")
 	@PostMapping(path = "/auth/signup",
 			consumes = {MediaType.APPLICATION_JSON_VALUE}
 	)
@@ -343,7 +343,7 @@ public class AuthController {
 		return "auth";
 	}
 
-	@Operation(summary = "Generates new link for user sign-up confirmation and sends an email to provided email address. Request is an html form.")
+	@Operation(summary = "Sends a sign-up confirmation link, or an account-exists notice when the address has an account, to the provided email address. Request is an html form.")
 	@PostMapping(path = "/auth/signup",
 			consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE}
 	)
