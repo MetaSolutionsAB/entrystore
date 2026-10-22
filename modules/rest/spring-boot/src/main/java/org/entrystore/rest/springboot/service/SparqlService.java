@@ -25,8 +25,6 @@ import org.eclipse.rdf4j.query.QueryLanguage;
 import org.eclipse.rdf4j.query.TupleQuery;
 import org.eclipse.rdf4j.query.TupleQueryResultHandler;
 import org.eclipse.rdf4j.query.TupleQueryResultHandlerException;
-import org.eclipse.rdf4j.query.algebra.TupleExpr;
-import org.eclipse.rdf4j.query.algebra.helpers.AbstractQueryModelVisitor;
 import org.eclipse.rdf4j.query.impl.SimpleDataset;
 import org.eclipse.rdf4j.query.resultio.binary.BinaryQueryResultWriter;
 import org.eclipse.rdf4j.query.resultio.sparqljson.SPARQLResultsJSONWriter;
@@ -35,7 +33,6 @@ import org.eclipse.rdf4j.query.resultio.text.csv.SPARQLResultsCSVWriter;
 import org.eclipse.rdf4j.query.resultio.text.tsv.SPARQLResultsTSVWriter;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
-import org.eclipse.rdf4j.repository.sail.SailTupleQuery;
 import org.entrystore.Context;
 import org.entrystore.impl.PublicRepository;
 import org.entrystore.impl.RepositoryManagerImpl;
@@ -43,6 +40,7 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
+import org.entrystore.rest.springboot.security.FederatedQueryGuard;
 import org.entrystore.rest.springboot.util.SparqlResultFormat;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -156,7 +154,8 @@ public class SparqlService {
 
 		try (RepositoryConnection rc = acquireConnection(publicRepository)) {
 			TupleQuery query = rc.prepareTupleQuery(QueryLanguage.SPARQL, queryString);
-			rejectFederatedServices(extractTupleExpr(query));
+			FederatedQueryGuard.rejectServiceClauses(query,
+					"SPARQL SERVICE clauses are not permitted on the public endpoint");
 			query.setMaxExecutionTime(maxExecutionTime);
 			query.setIncludeInferred(false);
 
@@ -199,23 +198,6 @@ public class SparqlService {
 		}
 	}
 
-	private static TupleExpr extractTupleExpr(TupleQuery query) {
-		// SailTupleQuery exposes the already-parsed algebra so the federated-service detector
-		// runs against exactly what the executor will run. A non-Sail backend (e.g. an HTTP-
-		// or SPARQL-endpoint repository) could produce a different algebra at prepare time,
-		// weakening the SERVICE-clause prohibition — fail closed so a future config change
-		// cannot silently undermine the SSRF defense.
-		if (query instanceof SailTupleQuery sailQuery) {
-			return sailQuery.getParsedQuery().getTupleExpr();
-		}
-		// Generic client message; log the actual class name so an operator can diagnose
-		// without source-diving.
-		log.error("Public repository TupleQuery is not Sail-backed (got {}); refusing to run query "
-						+ "because the federated-service detector cannot inspect its algebra",
-				query.getClass().getName());
-		throw new InternalServerErrorException(INTERNAL_ERROR_MESSAGE);
-	}
-
 	private String resolveNamedGraphUri(String contextId) {
 		if (contextId == null) {
 			return null;
@@ -238,14 +220,6 @@ public class SparqlService {
 			base += "/";
 		}
 		return base + contextId;
-	}
-
-	private static void rejectFederatedServices(TupleExpr expr) {
-		FederatedServiceDetector detector = new FederatedServiceDetector();
-		expr.visit(detector);
-		if (detector.found) {
-			throw new BadRequestException("SPARQL SERVICE clauses are not permitted on the public endpoint");
-		}
 	}
 
 	private static SparqlResultTooLargeException findSizeCap(Throwable root) {
@@ -302,15 +276,6 @@ public class SparqlService {
 			case TSV -> new SPARQLResultsTSVWriter(out);
 			case BINARY -> new BinaryQueryResultWriter(out);
 		};
-	}
-
-	private static final class FederatedServiceDetector extends AbstractQueryModelVisitor<RuntimeException> {
-		boolean found;
-
-		@Override
-		public void meet(org.eclipse.rdf4j.query.algebra.Service node) {
-			found = true;
-		}
 	}
 
 	private static final class SparqlResultTooLargeException extends IOException {

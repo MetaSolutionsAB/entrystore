@@ -50,6 +50,7 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.MethodNotAllowedException;
+import org.entrystore.rest.springboot.security.FederatedQueryGuard;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.springframework.stereotype.Service;
 
@@ -229,16 +230,22 @@ public class MetadataService {
 		);
 	}
 
+	/**
+	 * Evaluates the client's graph query on an in-memory copy of {@code graph}. A query with a SERVICE clause is
+	 * rejected before evaluation, and the store resolves no SERVICE endpoint.
+	 */
 	private Model applyGraphQuery(String query, Model graph) {
 		Date before = new Date();
 		MemoryStore ms = new MemoryStore();
+		ms.setFederatedServiceResolver(FederatedQueryGuard.DENY_ALL);
 		Repository sr = new SailRepository(ms);
 		RepositoryConnection rc = null;
 		try {
 			sr.init();
 			rc = sr.getConnection();
-			rc.add(graph);
 			GraphQuery gq = rc.prepareGraphQuery(QueryLanguage.SPARQL, query);
+			FederatedQueryGuard.rejectServiceClauses(gq, "SPARQL SERVICE clauses are not permitted in graphQuery");
+			rc.add(graph);
 			gq.setMaxExecutionTime(10); // 10 seconds, TODO: make this configurable
 			Model result = Iterations.addAll(gq.evaluate(), new LinkedHashModel());
 			log.info("Graph query took {} ms", new Date().getTime() - before.getTime());

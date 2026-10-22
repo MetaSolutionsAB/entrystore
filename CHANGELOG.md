@@ -4,6 +4,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1119](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1119) GET /\{context-id\}/metadata/\{entry-id\} and its cached-external-metadata and merged-metadata variants answer 400 to a graphQuery with a SPARQL SERVICE clause, in any position and with a variable endpoint, before any request leaves EntryStore. Anyone who could read an entry's metadata, a guest for a public entry, could make EntryStore query any host it reaches, internal ones included, and read the answer in the response. 5.x has the same gap.
+
 [ENTRYSTORE-1203](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1203) A CAS or OIDC callback that fails authentication no longer starts a session or sets an auth_token cookie, as in 5.x; each such callback kept a session in memory until it idled out. A failed login in a browser that is already logged in keeps its session.
 
 [ENTRYSTORE-1217](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1217) POST /auth/cookie answers 403 when the password of a disabled account is correct, as in 5.x, so EntryScape says the account is disabled instead of "wrong username or password". 6.x answered 401. A wrong password is still answered 401, and a disabled account now goes through the same password check as any other, so it is no longer answered faster. As in 5.x, the 403 does not count towards the temporary lockout, and HTTP Basic still answers 401.
