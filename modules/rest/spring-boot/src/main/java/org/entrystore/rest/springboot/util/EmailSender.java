@@ -51,8 +51,8 @@ import java.util.stream.Stream;
  * Sends the transactional emails.
  *
  * <p>Sending returns {@code false} rather than throwing, and each caller decides what that means:
- * {@code MessageService} turns it into a 503, while the sign-up and password-reset dispatches, which run after
- * the answer was returned, only log it. Keeping that contract is why the send loop catches
+ * {@code MessageService} turns it into a 503, while the sign-up and password-reset dispatches, which the answer
+ * does not wait for, only log and count it. Keeping that contract is why the send loop catches
  * {@code MailException} — see {@link #sendMessage}.
  *
  * <p>Transport settings are fixed when the {@code JavaMailSender} bean is built, not re-read per send,

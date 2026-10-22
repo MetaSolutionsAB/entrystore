@@ -505,8 +505,8 @@ public class AuthService {
 	/**
 	 * Runs on a dispatch executor. Storing the token in the cache BEFORE sending the email guarantees the link is
 	 * usable by the time it lands in the recipient's inbox; if the send fails the token is removed, so an attacker
-	 * who somehow learned it cannot use it. A failed send is only logged and counted: the answer was returned
-	 * before this task ran.
+	 * who somehow learned it cannot use it. A failed send is only logged and counted, as the answer does not wait for
+	 * this task. The task sets {@code ci}'s password hash, so the caller must not use that field after the submit.
 	 *
 	 * @param password hashed and stored with the token when not null; a new-mode password reset has none, as the
 	 *                 password is chosen on the confirmation form instead
