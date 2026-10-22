@@ -28,9 +28,10 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 
 /**
- * Loads the sign-up email template once the application is ready, so that a template that cannot be used is
- * reported at deploy time: sign-up is answered alike whether or not its mail is sent, so otherwise only the ERROR
- * lines of later sign-ups would tell. A template that loads is cached for the sign-ups to come.
+ * Loads the sign-up email template once the application is ready, so that a template that cannot be loaded,
+ * malformed or unreachable, is reported at deploy time: sign-up is answered alike whether or not its mail is sent,
+ * so otherwise only the ERROR lines of later sign-ups would tell. A template that loads is cached for the sign-ups
+ * to come; a failed load is not, so a sign-up loads a template whose host was briefly down at startup.
  */
 @Slf4j
 @Component
@@ -43,7 +44,8 @@ public class SignupTemplateStartupCheck {
 	@EventListener(ApplicationReadyEvent.class)
 	public void checkSignupTemplate() {
 		if (Boolean.TRUE.equals(features.signup()) && templates.render(EmailTemplate.SIGNUP, Map.of()) == null) {
-			log.error("The sign-up email template cannot be used, so sign-ups get no mail until it is fixed");
+			log.error("The sign-up email template could not be loaded, so sign-ups get no mail until it loads; "
+					+ "each sign-up tries again");
 		}
 	}
 }

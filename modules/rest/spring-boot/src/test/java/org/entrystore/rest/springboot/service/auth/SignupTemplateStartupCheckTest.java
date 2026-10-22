@@ -49,6 +49,24 @@ class SignupTemplateStartupCheckTest {
 	}
 
 	@Test
+	void checkSignupTemplate_unreadableTemplate_isReportedAndLoadedByTheNextSignup(@TempDir Path tmp)
+			throws IOException {
+		Path file = tmp.resolve(EmailTemplate.SIGNUP.getClasspathResource());
+		MockEnvironment environment = new MockEnvironment();
+		environment.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(), file.toString());
+		MailTemplateRenderer renderer = new MailTemplateRenderer(environment);
+		var check = new SignupTemplateStartupCheck(new AuthFeatureProperties(true, false), renderer);
+
+		try (CapturingAppender appender = CapturingAppender.attachTo(SignupTemplateStartupCheck.class)) {
+			check.checkSignupTemplate();
+
+			assertEquals(1, appender.countAt(Level.ERROR));
+		}
+		Files.writeString(file, "<!--BEGIN new-account-->Confirm<!--END new-account-->");
+		assertNotNull(renderer.render(EmailTemplate.SIGNUP, Map.of()), "a failed load at startup must not stick");
+	}
+
+	@Test
 	void checkSignupTemplate_withSignupOff_doesNotLoadTheTemplate(@TempDir Path tmp) throws IOException {
 		var check = new SignupTemplateStartupCheck(new AuthFeatureProperties(false, false), renderer(tmp, MALFORMED));
 
