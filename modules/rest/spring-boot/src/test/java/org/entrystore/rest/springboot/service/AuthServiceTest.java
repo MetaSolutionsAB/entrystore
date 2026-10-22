@@ -33,6 +33,7 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.NS;
+import org.entrystore.rest.springboot.configuration.AuthEmailExecutorConfiguration.QueuedDispatch;
 import org.entrystore.rest.springboot.configuration.ConfirmationUrlProperties;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.springboot.model.api.SignupRequestBody;
@@ -82,6 +83,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -590,6 +592,30 @@ class AuthServiceTest {
 
 		assertEquals("A confirmation message was sent to " + ADA, message);
 		assertEquals(1.0, meterRegistry.counter("auth.signup.rejected").count());
+	}
+
+	@Test
+	void signup_dispatch_carriesTheRequestedAddressForTheShutdownLog() throws Exception {
+		AuthService service = signupService(mock(PrincipalManager.class), mock(EmailSender.class),
+				new SignupTokenCache(Ticker.systemTicker()), executor);
+
+		service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+		ArgumentCaptor<Runnable> task = ArgumentCaptor.forClass(Runnable.class);
+		verify(executor).execute(task.capture());
+		assertEquals(ADA, assertInstanceOf(QueuedDispatch.class, task.getValue()).recipient());
+	}
+
+	@Test
+	void submitPasswordResetDispatch_dispatch_carriesTheRequestedAddressForTheShutdownLog() {
+		SignupInfo ci = new SignupInfo();
+		ci.setEmail(ADA);
+
+		authService.submitPasswordResetDispatch(ci, PASSWORD);
+
+		ArgumentCaptor<Runnable> task = ArgumentCaptor.forClass(Runnable.class);
+		verify(executor).execute(task.capture());
+		assertEquals(ADA, assertInstanceOf(QueuedDispatch.class, task.getValue()).recipient());
 	}
 
 	@Test

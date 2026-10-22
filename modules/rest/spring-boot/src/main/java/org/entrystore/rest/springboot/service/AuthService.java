@@ -39,6 +39,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.NS;
+import org.entrystore.rest.springboot.configuration.AuthEmailExecutorConfiguration.QueuedDispatch;
 import org.entrystore.rest.springboot.configuration.IndexedListSettings;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.springboot.model.api.SignupRequestBody;
@@ -494,7 +495,7 @@ public class AuthService {
 	private void submitDispatch(AsyncTaskExecutor executor, Counter rejectedCounter, String flow, String email,
 								Runnable dispatch) {
 		try {
-			executor.execute(dispatch);
+			executor.execute(new QueuedDispatch(email, dispatch));
 		} catch (RejectedExecutionException rex) {
 			rejectedCounter.increment();
 			log.error("Rejected {} dispatch for {} (queue saturated or shutting down)", flow,

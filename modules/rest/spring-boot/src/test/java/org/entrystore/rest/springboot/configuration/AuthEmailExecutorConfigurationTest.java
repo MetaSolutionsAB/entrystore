@@ -16,6 +16,9 @@
 
 package org.entrystore.rest.springboot.configuration;
 
+import org.apache.logging.log4j.Level;
+import org.entrystore.rest.springboot.configuration.AuthEmailExecutorConfiguration.QueuedDispatch;
+import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -87,6 +91,48 @@ class AuthEmailExecutorConfigurationTest {
 		executor.shutdown();
 
 		assertEquals(0, queuedRuns.get(), "queued dispatches must be dropped, not drained, on shutdown");
+	}
+
+	@Test
+	void authEmailExecutor_shutdown_logsTheAddressOfEachDroppedDispatch() throws Exception {
+		AtomicInteger queuedRuns = new AtomicInteger();
+		occupyWorkers();
+		executor.execute(new QueuedDispatch("ada@example.org", queuedRuns::incrementAndGet));
+
+		try (CapturingAppender appender = CapturingAppender.attachTo(AuthEmailExecutorConfiguration.class)) {
+			executor.shutdown();
+
+			assertTrue(appender.messagesAt(Level.WARN).anyMatch(message -> message.contains("for ada@example.org")),
+					"the drop must name the user who was told the mail was sent: " + appender);
+		}
+		assertEquals(0, queuedRuns.get());
+	}
+
+	@Test
+	void authEmailExecutor_shutdown_logsADroppedRecipientSanitized() throws Exception {
+		occupyWorkers();
+		executor.execute(new QueuedDispatch("ada@example.org\r\nforged entry", () -> {
+		}));
+
+		try (CapturingAppender appender = CapturingAppender.attachTo(AuthEmailExecutorConfiguration.class)) {
+			executor.shutdown();
+
+			assertTrue(appender.messagesAt(Level.WARN).anyMatch(message -> message.contains("ada@example.org??forged")),
+					"a requested address must not forge log lines: " + appender);
+		}
+	}
+
+	@Test
+	void authEmailExecutor_queueSaturated_rejectionMessageOmitsTheRecipient() throws Exception {
+		occupyWorkersAndFillQueue();
+
+		TaskRejectedException rejected = assertThrows(TaskRejectedException.class,
+				() -> executor.execute(new QueuedDispatch("ada@example.org\r\nforged entry", () -> {
+				})));
+
+		// AuthService logs this exception, and an address in its message would not be sanitized
+		assertFalse(rejected.getMessage().contains("ada@example.org"));
+		assertFalse(rejected.getCause().getMessage().contains("ada@example.org"));
 	}
 
 	@Test

@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.configuration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -46,6 +47,24 @@ public class AuthEmailExecutorConfiguration {
 	@Bean
 	ThreadPoolTaskExecutor signupTaskExecutor() {
 		return authEmailExecutor("signup-async-", "sign-up");
+	}
+
+	/**
+	 * A queued mail dispatch with its recipient, so that a dispatch dropped on shutdown is logged with its address.
+	 * {@code toString} omits the recipient, which is not sanitized: the rejection message of a full queue names the
+	 * task.
+	 */
+	public record QueuedDispatch(String recipient, Runnable dispatch) implements Runnable {
+
+		@Override
+		public void run() {
+			dispatch.run();
+		}
+
+		@Override
+		public String toString() {
+			return "QueuedDispatch";
+		}
 	}
 
 	/**
@@ -89,7 +108,8 @@ public class AuthEmailExecutorConfiguration {
 	 * finish, and on timeout Spring only logs a warning without following up with {@code shutdownNow()}. Those
 	 * tasks would then keep running past context close, storing tokens in a cache the restart is about to discard
 	 * and mailing links that are already dead. Dropping a queued dispatch is the outcome the submit methods already
-	 * accept on rejection; {@code cancelRemainingTask} logs each one so the drop is not silent.
+	 * accept on rejection; {@code cancelRemainingTask} logs each one, with the address {@code AuthService} queues in a
+	 * {@link QueuedDispatch}, so the drop is not silent.
 	 * <p>
 	 * {@code newThread} is overridden to install an {@code UncaughtExceptionHandler}:
 	 * {@code AuthService.dispatchConfirmationMail} deliberately runs the hashing and {@code putToken} outside its
@@ -111,7 +131,10 @@ public class AuthEmailExecutorConfiguration {
 
 			@Override
 			protected void cancelRemainingTask(Runnable task) {
-				log.warn("Dropping queued {} dispatch on shutdown; the user must request it again", flow);
+				String recipient = task instanceof QueuedDispatch queued
+						? HttpUtil.sanitizeForLog(queued.recipient()) : "an unknown address";
+				log.warn("Dropping queued {} dispatch for {} on shutdown; the user must request it again", flow,
+						recipient);
 				super.cancelRemainingTask(task);
 			}
 		};
