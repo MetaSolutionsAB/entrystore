@@ -881,6 +881,37 @@ class ResourceIT extends BaseSpec {
 		JSON_PARSER.parseText(resourceConn2.inputStream.text) == []
 	}
 
+	def "PUT /{context-id}/resource/{entry-id} as Turtle should not add an entry of another context to a List-resource"() {
+		given:
+		// ENTRYSTORE-1112: an entry just created is in the in-memory cache, which let it pass as a member of a list
+		// in another context
+		def listId = createEntry(contextId, [graphtype: 'list'], [resource: []])
+		def listResourceUri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + listId
+		def otherContextId = 'resForeignMember'
+		getOrCreateContext([contextId: otherContextId])
+		def foreignEntryId = createEntry(otherContextId, [:])
+		def foreignEntryUri = EntryStoreClient.baseUrl + '/' + otherContextId + '/entry/' + foreignEntryId
+		def turtleBody = """\
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+<${listResourceUri}> rdf:type rdf:Seq ;
+    rdf:_1 <${foreignEntryUri}> .
+"""
+
+		when:
+		def conn = EntryStoreClient.putRequest('/' + contextId + '/resource/' + listId, turtleBody, 'admin',
+			'text/turtle')
+
+		then:
+		conn.getResponseCode() == HTTP_CONFLICT
+		def listConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + listId)
+		listConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(listConn.inputStream.text) == []
+		def relationsConn = EntryStoreClient.getRequest('/' + otherContextId + '/relations/' + foreignEntryId)
+		relationsConn.getResponseCode() == HTTP_OK
+		// empty json = the entry was not told it is a member of the list
+		(JSON_PARSER.parseText(relationsConn.inputStream.text) as Map).isEmpty()
+	}
+
 	def "PUT /{context-id}/resource/{entry-id} should edit name and password of User-resource"() {
 		given:
 		def username = 'Resource Test User name 2'

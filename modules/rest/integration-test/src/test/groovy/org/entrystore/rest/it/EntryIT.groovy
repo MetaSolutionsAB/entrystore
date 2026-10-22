@@ -962,6 +962,97 @@ class EntryIT extends BaseSpec {
 		createEntry(writerContextId, [entrytype: 'link', resource: resourceUrl]) as long == generatedEntryId + 1
 	}
 
+	def "POST /{context-id}?list={list of another context} as USER with write access to that list only should respond with Forbidden and leave the list unchanged"() {
+		given:
+		// ENTRYSTORE-1112: a list just created is in the in-memory cache, which let it lend its write access to a
+		// context the user cannot write
+		def targetContextId = 'foreign-list-target'
+		def listContextId = 'foreign-list-owner'
+		getOrCreateContext([contextId: targetContextId])
+		getOrCreateContext([contextId: listContextId])
+		def listId = createEntry(listContextId, [graphtype: 'list'])
+		def listResourceUri = EntryStoreClient.baseUrl + '/' + listContextId + '/resource/' + listId
+		def userResourceUri = EntryStoreClient.createdEsUsers['user']['resourceUri']
+		def aclBody = JsonOutput.toJson([(listResourceUri): [
+				(NameSpaceConst.TERM_WRITE): [[type: 'uri', value: userResourceUri]]
+		]])
+		def aclConn = EntryStoreClient.putRequest('/' + listContextId + '/entry/' + listId, aclBody, 'admin')
+		assert aclConn.getResponseCode() == HTTP_NO_CONTENT
+		def params = [entrytype: 'link', resource: resourceUrl, list: listResourceUri]
+		// the grant is real: the list takes an entry of its own context from the user
+		def ownContextConn = EntryStoreClient.postRequest('/' + listContextId + convertMapToQueryParams(params), '',
+			'user')
+		assert ownContextConn.getResponseCode() == HTTP_CREATED
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + targetContextId + convertMapToQueryParams(params), '',
+			'user')
+
+		then:
+		connection.getResponseCode() == HTTP_FORBIDDEN
+		def listConn = EntryStoreClient.getRequest('/' + listContextId + '/resource/' + listId)
+		listConn.getResponseCode() == HTTP_OK
+		(JSON_PARSER.parseText(listConn.inputStream.text) as List).size() == 1
+	}
+
+	def "POST /{context-id}?list={list of another context} as owner should respond with Bad Request and leave the list unchanged"() {
+		given:
+		def targetContextId = 'foreign-list-target'
+		def listContextId = 'foreign-list-owner'
+		getOrCreateContext([contextId: targetContextId])
+		getOrCreateContext([contextId: listContextId])
+		def listId = createEntry(listContextId, [graphtype: 'list'])
+		def listResourceUri = EntryStoreClient.baseUrl + '/' + listContextId + '/resource/' + listId
+		def previousEntryId = createEntry(targetContextId, [entrytype: 'link', resource: resourceUrl]) as long
+		def params = [entrytype: 'link', resource: resourceUrl, list: listResourceUri]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + targetContextId + convertMapToQueryParams(params), '')
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(connection.errorStream.text)['error'].toString().contains('No entry found for list URI')
+		def listConn = EntryStoreClient.getRequest('/' + listContextId + '/resource/' + listId)
+		listConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(listConn.inputStream.text) == []
+
+		and: 'no entry was created in the context'
+		createEntry(targetContextId, [entrytype: 'link', resource: resourceUrl]) as long == previousEntryId + 1
+	}
+
+	def "POST /{context-id}?template={entry of another context} should not copy the template's metadata"() {
+		given:
+		// ENTRYSTORE-1112: a template just created is in the in-memory cache, which let another context's metadata
+		// be copied into the new entry
+		def targetContextId = 'foreign-list-target'
+		def templateContextId = 'foreign-list-owner'
+		getOrCreateContext([contextId: targetContextId])
+		getOrCreateContext([contextId: templateContextId])
+		def templateCreator = 'Cross-context template creator'
+		def templateBody = [metadata: [(EntryStoreClient.baseUrl + '/' + templateContextId + '/resource/_newId'): [
+				(NameSpaceConst.DC_TERM_CREATOR): [[type: 'literal', value: templateCreator]]
+		]]]
+		def templateEntryId = createEntry(templateContextId, [entrytype: 'link', resource: resourceUrl], templateBody)
+		def params = [entrytype: 'link', resource: resourceUrl,
+					  template : EntryStoreClient.baseUrl + '/' + templateContextId + '/entry/' + templateEntryId]
+		def body = [metadata: [(EntryStoreClient.baseUrl + '/' + targetContextId + '/resource/_newId'): [
+				(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: 'Own title']]
+		]]]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + targetContextId + convertMapToQueryParams(params),
+			JsonOutput.toJson(body))
+
+		then:
+		connection.getResponseCode() == HTTP_CREATED
+		def entryId = JSON_PARSER.parseText(connection.inputStream.text)['entryId']
+		def metadataConn = EntryStoreClient.getRequest('/' + targetContextId + '/metadata/' + entryId)
+		metadataConn.getResponseCode() == HTTP_OK
+		def metadata = metadataConn.inputStream.text
+		metadata.contains('Own title')
+		!metadata.contains(templateCreator)
+	}
+
 	def "POST /{context-id}?entrytype=link with an invalid IRI in the metadata should respond with Bad Request and not take an entry ID"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]

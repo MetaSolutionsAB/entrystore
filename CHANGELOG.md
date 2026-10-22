@@ -4,6 +4,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1112](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1112) POST /\{context-id\}?list= naming a list of another context is answered as for a missing list: 403 without write access to the context, 400 with it. While that list was in the in-memory cache, write access to it was enough to create an entry in the context, added to that list and given its ACL. A PUT of a list as RDF naming an entry of another context is answered 409, and DELETE ?recursive of a list no longer deletes such an entry. Deleting a list, or a context holding one, whose member no longer exists no longer fails with 500. 5.x has the same gap. **Behaviour note:** ?template= and recursive metadata without repository=true no longer reach an entry of another context, which they did only while it was cached, and a pipeline whose transformDestination is in another context is answered 400.
+
 [ENTRYSTORE-1266](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1266) Shutdown no longer waits up to 10 seconds for a purge after a context reindex: a waiting purge checks once more when the Solr submitter has stopped, and runs if its documents were sent or ends otherwise.
 
 [ENTRYSTORE-1262](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1262) POST /auth/signup answers "A confirmation message was sent to \<email\>" again, as in 5.x, without the ", if the user exists." of password reset.

@@ -455,20 +455,6 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		assertFalse(links.contains(unreadable));
 	}
 
-	/**
-	 * Adds a resHasEntry triple naming the given object into the context's own named graph, the way
-	 * ContextImpl writes the index, so a stale or unusable index entry can be observed.
-	 */
-	private void addIndexTriple(Entry contextEntry, URI subject, String object) {
-		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
-			ValueFactory vf = rc.getValueFactory();
-			rc.add(vf.createIRI(subject.toString()),
-				RepositoryProperties.resHasEntry,
-				vf.createIRI(object),
-				vf.createIRI(contextEntry.getResourceURI().toString()));
-		}
-	}
-
 	@Test
 	public void getLinks_skipsIndexTriplesThatResolveToNoEntry() {
 		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);

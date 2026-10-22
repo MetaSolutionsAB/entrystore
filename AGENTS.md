@@ -56,6 +56,7 @@ entrystore/
 - A **principal's URI** (used in ACLs) is the **resource** URI of their entry, not the entry URI. Example: guest user URI = `{baseUrl}/_principals/resource/_guest` (not `_principals/entry/_guest`)
 - A **context's resource URI** is `{baseUrl}/{contextId}` (the context itself), not `{baseUrl}/_contexts/resource/{contextId}`
 - ACL triples use `es:read`/`es:write` predicates with the principal's resource URI as the object, and the entry's metadata/resource URI as the subject (e.g., `<metadataURI> es:read <principalResourceURI>` grants ReadMetadata)
+- `Context.getByEntryURI` answers only for that context's own entries; use `ContextManager.getEntry` for a repository-wide lookup
 
 ### Spring Boot Module (`modules/rest/spring-boot/`)
 

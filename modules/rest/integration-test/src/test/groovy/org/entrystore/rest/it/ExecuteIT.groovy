@@ -148,6 +148,32 @@ class ExecuteIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
+	def "POST /{context-id}/execute as admin with a transformDestination in another context should return Bad-Request 400"() {
+		given:
+		// ENTRYSTORE-1112: the destination is resolved in the pipeline's own context only, even while an entry of
+		// another context, such as one just created, is in the in-memory cache
+		def otherContextId = 'execute-it-other'
+		getOrCreateContext([contextId: otherContextId])
+		def foreignEntryId = createEntry(otherContextId, [:])
+		def pipelineId = createEntry(CONTEXT_ID, [graphtype: 'pipeline'])
+		def pipelineTurtle = """\
+@prefix es: <http://entrystore.org/terms/> .
+[] es:transform [ es:transformType "empty" ] ;
+    es:transformDestination <${EntryStoreClient.baseUrl}/${otherContextId}/entry/${foreignEntryId}> .
+"""
+		def putPipelineGraph = EntryStoreClient.putRequest('/' + CONTEXT_ID + '/resource/' + pipelineId,
+			pipelineTurtle, 'admin', 'text/turtle')
+		assert putPipelineGraph.getResponseCode() >= 200 && putPipelineGraph.getResponseCode() < 300
+		def body = JsonOutput.toJson([pipeline: EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/entry/' + pipelineId])
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + CONTEXT_ID + '/execute', body, 'admin', 'application/json')
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(connection.errorStream.text)['error'].toString().contains('not an entry of this context')
+	}
+
 	def "POST /{context-id}/execute as admin with non-Pipeline entry as pipeline should return Conflict 409"() {
 		given:
 		def body = JsonOutput.toJson([pipeline: plainEntryUri])

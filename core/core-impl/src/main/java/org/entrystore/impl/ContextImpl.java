@@ -961,7 +961,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	/**
 	 * @param listURI the resource URI of a list, or null.
-	 * @return the entry named by listURI, or null when listURI is null or names no entry.
+	 * @return the entry named by listURI, or null when listURI is null or names no entry of this context.
 	 * @throws IllegalArgumentException if listURI does not sit under the repository base URL.
 	 */
 	private Entry getListEntry(URI listURI) {
@@ -1123,7 +1123,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	public Entry getByEntryURI(URI entryURI) {
 		Entry entry = softCache.getByEntryURI(entryURI);
 		if (entry != null) {
-			return entry;
+			return isOwnEntry(entry) ? entry : null;
 		}
 
 		try {
@@ -1132,6 +1132,15 @@ public class ContextImpl extends ResourceImpl implements Context {
 			log.error(e.getMessage(), e);
 		}
 		return null;
+	}
+
+	/**
+	 * Whether a {@link SoftCache} hit belongs to this context. The cache is repository-wide, so a hit is held to
+	 * the same-context rule {@link #getByMMdURIDirect} applies on a miss. Compares ids rather than instances,
+	 * because a context can be reloaded as a new instance while its entries stay cached.
+	 */
+	private boolean isOwnEntry(Entry entry) {
+		return entry.getContext() instanceof ContextImpl owner && this.id.equals(owner.id);
 	}
 
 	private Entry getByMMdURIDirect(URI entryURI) throws RepositoryException {
@@ -1221,14 +1230,18 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	/**
-	 * Resolves one index value — a single entry URI or a {@code Set} of them — to the entries it names.
+	 * Resolves one index value — a single entry URI or a {@code Set} of them — to the entries it names, leaving
+	 * out any that does not resolve in this context, so callers never iterate a null.
 	 */
 	private Set<Entry> entriesFor(Object indexValue) {
 		Set<URI> entryURIs = new HashSet<>();
 		addEntryURIs(indexValue, entryURIs);
 		Set<Entry> entries = new HashSet<>();
 		for (URI entryURI : entryURIs) {
-			entries.add(getByEntryURI(entryURI));
+			Entry entry = getByEntryURI(entryURI);
+			if (entry != null) {
+				entries.add(entry);
+			}
 		}
 		return entries;
 	}
@@ -1510,10 +1523,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 			// left to keep in step, and `deleted` above has already taken this context out of service.
 			List<IndexOp> discardedOps = new ArrayList<>();
 			for (IRI childEntryIRI : childEntryIRIs) {
-				// Ownership is checked before anything is resolved or cleared, and for every child rather
-				// than only the unresolvable ones. resolveChild cannot be trusted to reject a foreign
-				// entry: SoftCache is repository-wide, so getByEntryURI answers from it for any context's
-				// entry and only the cache-miss path reaches getByMMdURIDirect's same-context check.
+				// Ownership is checked before anything is resolved or cleared: resolveChild answers null for a
+				// foreign entry just as for an unloadable one of ours, and the null branch clears its graphs.
 				URISplit childSplit = childSplitIfOwned(childEntryIRI);
 				if (childSplit == null) {
 					continue;
@@ -1547,10 +1558,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 *
 	 * <p>Objects that are not IRIs, and children that do not belong to this context, are reported and
 	 * skipped. The ownership filter lives here rather than in each caller because both of them act
-	 * destructively on what this returns — {@code importContext} removes it, the public-repository
-	 * rebuild republishes it — and {@code SoftCache} being repository-wide means a caller cannot detect
-	 * a foreign child by getting null back from {@code getByEntryURI}: a cached one comes back live. See
-	 * {@link #childSplitIfOwned}.
+	 * destructively on what this returns: {@code importContext} removes it, and the public-repository
+	 * rebuild republishes it. See {@link #childSplitIfOwned}.
 	 *
 	 * <p>Holds no monitor. It is a read-only enumeration on its own connection and the lock protocol on
 	 * {@link #res2entry} already has scans holding nothing, so taking the store-wide monitor here would
@@ -1597,10 +1606,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * <p>Deleting a context must not touch another context's data, and the index graph can name one
 	 * without any attacker involved: {@code ContextManagerImpl.importContext} copies index-graph objects
 	 * verbatim unless they carry the old context namespace, so restoring an export into the same
-	 * repository is enough to plant one. Neither {@link #resolveChild} nor the {@code systemEntries}
-	 * guard catches it — {@code SoftCache} is repository-wide, so {@code getByEntryURI} happily returns
-	 * another context's entry (or {@code _principals/entry/_admin}) whenever it is cached, and the
-	 * deletion would then run the full removal against it.
+	 * repository is enough to plant one.
 	 */
 	private URISplit childSplitIfOwned(IRI childEntryIRI) {
 		URISplit split;
@@ -1664,10 +1670,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * {@code java.net.URI} rejects, or an entry whose graph is gone. This deletion path used to
 	 * dereference that null immediately, rolling back after {@code deleted = true} had already been set.
 	 *
-	 * <p>It does <em>not</em> reject another context's entry, which is why {@link #childSplitIfOwned}
-	 * runs first and for every child. Only {@code getByMMdURIDirect} applies the same-context check, and
-	 * {@code SoftCache} is repository-wide, so a foreign entry that happens to be cached comes back live
-	 * and the caller would run the full removal against it.
+	 * <p>Also null for another context's entry; see {@link #childSplitIfOwned}.
 	 */
 	private EntryImpl resolveChild(IRI childEntryIRI) {
 		try {
@@ -1859,6 +1862,11 @@ public class ContextImpl extends ResourceImpl implements Context {
 		Set<URI> entries = getEntries();
 		for (URI uri : entries) {
 			Entry e = getByEntryURI(uri);
+			if (e == null) {
+				log.warn("Context {} lists entry {}, which does not resolve in it; not counting it towards the quota",
+						this.id, uri);
+				continue;
+			}
 			if (EntryType.Local.equals(e.getEntryType())) {
 				if (e.getResource() instanceof Data) {
 					File f = ((Data) e.getResource()).getDataFile();

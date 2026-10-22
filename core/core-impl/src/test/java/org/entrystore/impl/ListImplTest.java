@@ -1030,6 +1030,88 @@ public class ListImplTest extends AbstractCoreTest {
 		assertTrue(list.getChildren().isEmpty());
 	}
 
+	/** ENTRYSTORE-1112. A mouse entry held by the repository-wide SoftCache is still not an entry of duck. */
+	@Test
+	public void setChildrenRefusesAChildOfAnotherContext() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Context mouse = cm.getContext("mouse"); // Donald writes it as one of friendsOfMickey
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry foreign = mouse.createLink(null, URI.create("https://slashdot.org/"), null);
+		List list = (List) listEntry.getResource();
+
+		RepositoryException thrown = assertThrows(RepositoryException.class,
+			() -> list.setChildren(java.util.List.of(foreign.getEntryURI())));
+
+		assertTrue(thrown.getMessage().contains("does not exist"), thrown.getMessage());
+		assertTrue(list.getChildren().isEmpty());
+		assertTrue(foreign.getReferringListsInSameContext().isEmpty());
+	}
+
+	/**
+	 * ENTRYSTORE-1112. A duck list naming a mouse entry, as the cross-context bug could leave behind, is removed
+	 * recursively without removing the mouse entry: Administer on duck says nothing about mouse.
+	 */
+	@Test
+	public void removeTreeLeavesAChildOfAnotherContextAlone() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Context mouse = cm.getContext("mouse"); // Donald writes it as one of friendsOfMickey
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry foreign = mouse.createLink(null, URI.create("https://slashdot.org/"), null);
+		ListImpl list = withPlantedMember(listEntry, foreign.getEntryURI());
+
+		list.removeTree();
+
+		assertNull(duck.getByEntryURI(listEntry.getEntryURI()));
+		assertNotNull(mouse.getByEntryURI(foreign.getEntryURI()));
+	}
+
+	/** ENTRYSTORE-1112. Removing a list skips a member that is not an entry of its context instead of failing. */
+	@Test
+	public void removingAListThatNamesAChildOfAnotherContextSucceeds() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Context mouse = cm.getContext("mouse"); // Donald writes it as one of friendsOfMickey
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry foreign = mouse.createLink(null, URI.create("https://slashdot.org/"), null);
+		withPlantedMember(listEntry, foreign.getEntryURI());
+
+		duck.remove(listEntry.getEntryURI());
+
+		assertNull(duck.getByEntryURI(listEntry.getEntryURI()));
+		assertNotNull(mouse.getByEntryURI(foreign.getEntryURI()));
+	}
+
+	/** ENTRYSTORE-1112. Removing a list skips a member whose entry graph is gone instead of failing. */
+	@Test
+	public void removingAListWhoseMemberIsGoneSucceeds() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry member = duck.createLink(null, URI.create("https://slashdot.org/"), listEntry.getResourceURI());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.clear(((EntryImpl) member).getSesameEntryURI());
+		}
+		evictFromSoftCache(member);
+
+		duck.remove(listEntry.getEntryURI());
+
+		assertNull(duck.getByEntryURI(listEntry.getEntryURI()));
+	}
+
+	/** Writes {@code member} into the stored sequence of the list directly, past the membership checks. */
+	private ListImpl withPlantedMember(Entry listEntry, URI member) {
+		ValueFactory vf = rm.getRepository().getValueFactory();
+		IRI listResource = vf.createIRI(listEntry.getResourceURI().toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.add(listResource, vf.createIRI(RDF.NAMESPACE + "_1"), vf.createIRI(member.toString()), listResource);
+		}
+		ListImpl list = (ListImpl) listEntry.getResource();
+		list.invalidateChildren();
+		return list;
+	}
+
 	/**
 	 * The moved member must itself be a member: otherwise the move would persist a non-member past the existence,
 	 * single-parent and referring-list steps an addition goes through — on a group, adding a member.
