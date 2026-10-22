@@ -29,6 +29,7 @@ import org.entrystore.Entry;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.configuration.DeprecatedEmailAddressProperties;
 import org.entrystore.rest.springboot.configuration.SmtpProperties;
+import org.entrystore.rest.springboot.util.EmailSender.NoticeOutcome;
 import org.entrystore.rest.springboot.util.EmailTemplate.Section;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -279,7 +280,7 @@ class EmailSenderTest {
 		environment.setProperty(Section.EXISTING_ACCOUNT.getSubjectKey(), "You already have an account");
 		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environment);
 
-		assertTrue(sender.sendExistingAccountNotice("Ada <b>Lovelace</b>", "ada@example.com"));
+		assertEquals(NoticeOutcome.SENT, sender.sendExistingAccountNotice("Ada <b>Lovelace</b>", "ada@example.com"));
 
 		MimeMessage message = captureSentMessage();
 		assertEquals("ada@example.com", message.getRecipients(Message.RecipientType.TO)[0].toString());
@@ -289,13 +290,35 @@ class EmailSenderTest {
 	}
 
 	@Test
-	void sendExistingAccountNotice_templateWithoutExistingAccountSection_sendsNothing(@TempDir Path tmp) throws Exception {
+	void sendExistingAccountNotice_templateWithoutExistingAccountSection_sendsNothingAndIsNoFailure(@TempDir Path tmp)
+			throws Exception {
 		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.SIGNUP,
 				"<p>Hi __NAME__</p><a href=\"__CONFIRMATION_LINK__\">confirm</a>");
 		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environment);
 
-		assertFalse(sender.sendExistingAccountNotice("Ada", "ada@example.com"));
+		assertEquals(NoticeOutcome.NO_NOTICE_SECTION, sender.sendExistingAccountNotice("Ada", "ada@example.com"));
 		verifyNoInteractions(mailSender);
+	}
+
+	@Test
+	void sendExistingAccountNotice_unreadableTemplate_failsWithoutSending(@TempDir Path tmp) {
+		MockEnvironment environment = new MockEnvironment();
+		environment.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(), tmp.resolve("missing.html").toString());
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environment);
+
+		assertEquals(NoticeOutcome.FAILED, sender.sendExistingAccountNotice("Ada", "ada@example.com"));
+		verifyNoInteractions(mailSender);
+	}
+
+	@Test
+	void sendExistingAccountNotice_mailNotSent_fails(@TempDir Path tmp) throws Exception {
+		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.SIGNUP,
+				"<!--BEGIN new-account--><a href=\"__CONFIRMATION_LINK__\">confirm</a><!--END new-account-->"
+						+ "<!--BEGIN existing-account--><p>__EMAIL__ has an account</p><!--END existing-account-->");
+		EmailSender sender = senderWith(smtp("smtp.example.com", FROM, null, null), environment);
+		doThrow(new MailSendException("down")).when(mailSender).send(any(MimeMessage.class));
+
+		assertEquals(NoticeOutcome.FAILED, sender.sendExistingAccountNotice("Ada", "ada@example.com"));
 	}
 
 	@Test

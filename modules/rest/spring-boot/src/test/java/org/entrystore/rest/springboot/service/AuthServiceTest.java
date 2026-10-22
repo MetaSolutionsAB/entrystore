@@ -21,6 +21,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.validation.Validation;
 import jakarta.validation.ValidatorFactory;
+import org.apache.logging.log4j.Level;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
@@ -45,7 +46,9 @@ import org.entrystore.rest.springboot.service.auth.EmailValidator;
 import org.entrystore.rest.springboot.service.auth.RecaptchaSettings;
 import org.entrystore.rest.springboot.service.auth.SignupRateLimiter;
 import org.entrystore.rest.springboot.service.auth.SignupTokenCache;
+import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.entrystore.rest.springboot.util.EmailSender;
+import org.entrystore.rest.springboot.util.EmailSender.NoticeOutcome;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -317,6 +320,7 @@ class AuthServiceTest {
 		when(principalManager.getPrincipalEntry(ADA)).thenReturn(account);
 		SignupTokenCache tokens = new SignupTokenCache(Ticker.systemTicker());
 		EmailSender emailSender = mock(EmailSender.class);
+		when(emailSender.sendExistingAccountNotice("Ada Lovelace", ADA)).thenReturn(NoticeOutcome.SENT);
 		AuthService service = signupService(principalManager, emailSender, tokens, Runnable::run);
 
 		String message = service.signup(new MockHttpServletRequest(), signupBody(ADA, "Mallory", "Someone"), "Sign-up");
@@ -332,7 +336,9 @@ class AuthServiceTest {
 		PrincipalManager principalManager = principalManagerWithAdmin();
 		Entry account = userEntryNamed("Ada", "Lovelace");
 		when(principalManager.getPrincipalEntry(ADA)).thenReturn(account);
-		AuthService service = signupService(principalManager, mock(EmailSender.class),
+		EmailSender emailSender = mock(EmailSender.class);
+		when(emailSender.sendExistingAccountNotice("Ada Lovelace", ADA)).thenReturn(NoticeOutcome.SENT);
+		AuthService service = signupService(principalManager, emailSender,
 				new SignupTokenCache(Ticker.systemTicker()), Runnable::run);
 
 		service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
@@ -348,6 +354,7 @@ class AuthServiceTest {
 		when(account.getEntry()).thenReturn(mock(Entry.class));
 		when(principalManager.getUserByExternalID(ADA)).thenReturn(account);
 		EmailSender emailSender = mock(EmailSender.class);
+		when(emailSender.sendExistingAccountNotice(ADA, ADA)).thenReturn(NoticeOutcome.SENT);
 		AuthService service = signupService(principalManager, emailSender,
 				new SignupTokenCache(Ticker.systemTicker()), Runnable::run);
 
@@ -382,6 +389,55 @@ class AuthServiceTest {
 
 		service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
 
+		assertEquals(1.0, meterRegistry.counter("auth.signup.failed").count());
+	}
+
+	@Test
+	void signup_existingAccountNoticeNotSent_isCountedAsFailed() throws Exception {
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		Entry account = userEntryNamed("Ada", "Lovelace");
+		when(principalManager.getPrincipalEntry(ADA)).thenReturn(account);
+		EmailSender emailSender = mock(EmailSender.class);
+		when(emailSender.sendExistingAccountNotice("Ada Lovelace", ADA)).thenReturn(NoticeOutcome.FAILED);
+		AuthService service = signupService(principalManager, emailSender,
+				new SignupTokenCache(Ticker.systemTicker()), Runnable::run);
+
+		service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+		assertEquals(1.0, meterRegistry.counter("auth.signup.failed").count());
+	}
+
+	@Test
+	void signup_templateWithoutNoticeSection_isNoFailureAndIsNotWarnedPerSignup() throws Exception {
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		Entry account = userEntryNamed("Ada", "Lovelace");
+		when(principalManager.getPrincipalEntry(ADA)).thenReturn(account);
+		EmailSender emailSender = mock(EmailSender.class);
+		when(emailSender.sendExistingAccountNotice("Ada Lovelace", ADA)).thenReturn(NoticeOutcome.NO_NOTICE_SECTION);
+		AuthService service = signupService(principalManager, emailSender,
+				new SignupTokenCache(Ticker.systemTicker()), Runnable::run);
+
+		try (CapturingAppender appender = CapturingAppender.attachTo(AuthService.class)) {
+			service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+			assertEquals(0, appender.countAt(Level.WARN), "the renderer warns once, when it loads the template");
+		}
+		assertEquals(0.0, meterRegistry.counter("auth.signup.failed").count());
+	}
+
+	@Test
+	void signup_existingAccountNoticeThrows_isCountedAsFailedAndAnsweredAsForASentMail() throws Exception {
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		Entry account = userEntryNamed("Ada", "Lovelace");
+		when(principalManager.getPrincipalEntry(ADA)).thenReturn(account);
+		EmailSender emailSender = mock(EmailSender.class);
+		when(emailSender.sendExistingAccountNotice("Ada Lovelace", ADA)).thenThrow(new IllegalStateException("boom"));
+		AuthService service = signupService(principalManager, emailSender,
+				new SignupTokenCache(Ticker.systemTicker()), Runnable::run);
+
+		String message = service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+		assertEquals("A confirmation message was sent to " + ADA, message);
 		assertEquals(1.0, meterRegistry.counter("auth.signup.failed").count());
 	}
 

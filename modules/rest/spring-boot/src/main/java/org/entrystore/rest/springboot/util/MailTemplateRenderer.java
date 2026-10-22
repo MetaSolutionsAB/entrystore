@@ -115,6 +115,16 @@ public class MailTemplateRenderer {
 		return mail == null ? null : substitute(mail, substitutions);
 	}
 
+	/**
+	 * Whether the sign-up template is loaded and lacks {@code section}, which tells a missing section from a template
+	 * that cannot be loaded once {@link #render(Section, Map)} returned null. Reads the cache only, so it neither
+	 * loads nor logs.
+	 */
+	boolean isLoadedWithout(Section section) {
+		LoadedTemplate loaded = templateCache.get(EmailTemplate.SIGNUP);
+		return loaded != null && section == Section.EXISTING_ACCOUNT && loaded.existingAccountNotice() == null;
+	}
+
 	private String substitute(String body, Map<String, String> substitutions) {
 		String rendered = body
 				// Year.now(), not Calendar.getInstance(): the latter honours the default locale's calendar

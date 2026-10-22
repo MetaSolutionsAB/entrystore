@@ -133,6 +133,39 @@ class MailTemplateRendererTest {
 	}
 
 	@Test
+	void isLoadedWithout_loadedTemplateWithoutExistingAccountSection_isTrue(@TempDir Path tmp) throws IOException {
+		MailTemplateRenderer renderer = new MailTemplateRenderer(environmentWithTemplate(tmp, EmailTemplate.SIGNUP,
+				"<p>Hi __NAME__, confirm <a href=\"__CONFIRMATION_LINK__\">here</a></p>"));
+		assertNull(renderer.render(Section.EXISTING_ACCOUNT, Collections.emptyMap()));
+
+		assertTrue(renderer.isLoadedWithout(Section.EXISTING_ACCOUNT));
+		assertFalse(renderer.isLoadedWithout(Section.NEW_ACCOUNT));
+	}
+
+	@Test
+	void isLoadedWithout_loadedTemplateWithExistingAccountSection_isFalse(@TempDir Path tmp) throws IOException {
+		MailTemplateRenderer renderer = new MailTemplateRenderer(environmentWithTemplate(tmp, EmailTemplate.SIGNUP,
+				"<!--BEGIN new-account--><a href=\"__CONFIRMATION_LINK__\">Confirm</a><!--END new-account-->"
+						+ "<!--BEGIN existing-account--><p>You have an account</p><!--END existing-account-->"));
+		assertNotNull(renderer.render(Section.EXISTING_ACCOUNT, Collections.emptyMap()));
+
+		assertFalse(renderer.isLoadedWithout(Section.EXISTING_ACCOUNT));
+	}
+
+	@Test
+	void isLoadedWithout_templateThatCannotBeLoaded_isFalseAndLogsNothing(@TempDir Path tmp) {
+		MockEnvironment environment = new MockEnvironment();
+		environment.setProperty(EmailTemplate.SIGNUP.getTemplatePathKey(), tmp.resolve("missing.html").toString());
+		MailTemplateRenderer renderer = new MailTemplateRenderer(environment);
+		assertNull(renderer.render(Section.EXISTING_ACCOUNT, Collections.emptyMap()));
+
+		try (CapturingAppender appender = CapturingAppender.attachTo(MailTemplateRenderer.class)) {
+			assertFalse(renderer.isLoadedWithout(Section.EXISTING_ACCOUNT));
+			assertEquals(0, appender.allMessages().count(), "the probe must not load the template again");
+		}
+	}
+
+	@Test
 	void render_malformedSections_rendersNothingAndIsRetriedOnceFixed(@TempDir Path tmp) throws IOException {
 		MockEnvironment environment = environmentWithTemplate(tmp, EmailTemplate.SIGNUP,
 				"<!--BEGIN new-account-->Confirm");

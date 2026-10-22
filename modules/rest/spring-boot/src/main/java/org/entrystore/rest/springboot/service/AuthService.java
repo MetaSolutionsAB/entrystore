@@ -229,7 +229,7 @@ public class AuthService {
 				.description("Sign-up dispatches dropped because the executor queue was saturated or shutting down")
 				.register(meterRegistry);
 		this.signupFailedCounter = Counter.builder("auth.signup.failed")
-				.description("Sign-up confirmation mails dispatched but not sent")
+				.description("Sign-up mails dispatched but not sent")
 				.register(meterRegistry);
 	}
 
@@ -854,13 +854,18 @@ public class AuthService {
 				return;
 			}
 			String name = PrincipalManagerUtil.runAsAdmin(principalManager, () -> EntryUtil.getName(account.getEntry()));
-			if (emailSender.sendExistingAccountNotice(StringUtils.defaultIfBlank(name, email), email)) {
-				log.info("Sent account-exists notice to {}", emailLog);
-			} else {
-				log.warn("No account-exists notice was sent to {}; see the sign-up template or SMTP errors logged "
-						+ "before", emailLog);
+			switch (emailSender.sendExistingAccountNotice(StringUtils.defaultIfBlank(name, email), email)) {
+				case SENT -> log.info("Sent account-exists notice to {}", emailLog);
+				// The renderer warned once when it loaded the template
+				case NO_NOTICE_SECTION -> log.info("No account-exists notice is sent to {}: the sign-up template has "
+						+ "no existing-account section", emailLog);
+				case FAILED -> {
+					signupFailedCounter.increment();
+					log.error("Failed to send account-exists notice to {}", emailLog);
+				}
 			}
 		} catch (RuntimeException e) {
+			signupFailedCounter.increment();
 			log.error("Async account-exists notice failed for {}", emailLog, e);
 		}
 	}

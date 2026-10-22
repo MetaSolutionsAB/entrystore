@@ -421,15 +421,26 @@ public class EmailSender {
 				"__EMAIL__", escape(recipientEmail)));
 	}
 
-	/**
-	 * Tells the owner of an existing account that someone signed up with its address. Returns false without
-	 * sending when the template has no existing-account section or cannot be loaded.
-	 */
-	public boolean sendExistingAccountNotice(String greetingName, String recipientEmail) {
+	/** What became of an account-exists notice. */
+	public enum NoticeOutcome {
+		SENT,
+		/** The loaded sign-up template has no existing-account section: a configuration choice, not a failure. */
+		NO_NOTICE_SECTION,
+		/** The template could not be loaded, or the mail could not be sent. */
+		FAILED
+	}
+
+	/** Tells the owner of an existing account that someone signed up with its address. */
+	public NoticeOutcome sendExistingAccountNotice(String greetingName, String recipientEmail) {
 		String body = templates.render(Section.EXISTING_ACCOUNT, substitutions(
 				"__NAME__", escape(greetingName),
 				"__EMAIL__", escape(recipientEmail)));
-		return body != null && sendMessage(recipientEmail, templates.subject(Section.EXISTING_ACCOUNT), body);
+		if (body == null) {
+			return templates.isLoadedWithout(Section.EXISTING_ACCOUNT) ? NoticeOutcome.NO_NOTICE_SECTION
+					: NoticeOutcome.FAILED;
+		}
+		return sendMessage(recipientEmail, templates.subject(Section.EXISTING_ACCOUNT), body)
+				? NoticeOutcome.SENT : NoticeOutcome.FAILED;
 	}
 
 	public boolean sendPasswordResetConfirmation(String recipientEmail, String confirmationLink) {
