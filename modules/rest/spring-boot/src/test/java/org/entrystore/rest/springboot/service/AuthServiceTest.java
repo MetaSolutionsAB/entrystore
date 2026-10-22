@@ -185,6 +185,27 @@ class AuthServiceTest {
 	}
 
 	@Test
+	void submitPasswordResetDispatch_confirmationNotSent_removesTheTokenAndCountsAPasswordResetFailure()
+			throws Exception {
+		SignupTokenCache tokens = new SignupTokenCache(Ticker.systemTicker());
+		EmailSender emailSender = mock(EmailSender.class);
+		AtomicReference<String> link = new AtomicReference<>();
+		when(emailSender.sendPasswordResetConfirmation(eq(ADA), anyString())).thenAnswer(invocation -> {
+			link.set(invocation.getArgument(1));
+			return false;
+		});
+		SignupInfo ci = new SignupInfo();
+		ci.setEmail(ADA);
+		ci.setExpirationDate(new Date(System.currentTimeMillis() + Duration.ofDays(1).toMillis()));
+
+		passwordResetService(emailSender, tokens).submitPasswordResetDispatch(ci, PASSWORD);
+
+		assertNull(tokens.getTokenValue(tokenOf(link.get())));
+		assertEquals(1.0, meterRegistry.counter("auth.pwreset.failed").count());
+		assertEquals(0.0, meterRegistry.counter("auth.signup.failed").count());
+	}
+
+	@Test
 	void expireUserSessions_nullExceptSessionId_expiresAllSessions() {
 		SessionRegistry sessionRegistry = mock(SessionRegistry.class);
 		AuthService service = authServiceWithSessionRegistry(sessionRegistry);
@@ -607,11 +628,21 @@ class AuthServiceTest {
 	private AuthService signupService(PrincipalManager principalManager, EmailSender emailSender,
 									  SignupTokenCache tokens, AsyncTaskExecutor signupExecutor, MockEnvironment environment,
 									  RecaptchaSettings recaptcha, SignupRateLimiter rateLimiter) throws Exception {
+		return new AuthService(null, principalManager, null, null, recaptcha, tokens, null, emailValidator,
+				emailSender, null, rateLimiter, null, confirmationLinks(), meterRegistry, environment, executor,
+				signupExecutor);
+	}
+
+	/** Only the collaborators the password-reset dispatch reaches are set; it runs on the calling thread. */
+	private AuthService passwordResetService(EmailSender emailSender, SignupTokenCache tokens) throws Exception {
+		return new AuthService(null, null, null, null, null, tokens, null, emailValidator, emailSender, null, null, null,
+				confirmationLinks(), meterRegistry, new MockEnvironment(), Runnable::run, executor);
+	}
+
+	private static ConfirmationLinkBuilder confirmationLinks() throws Exception {
 		RepositoryManagerImpl repositoryManager = mock(RepositoryManagerImpl.class);
 		when(repositoryManager.getRepositoryURL()).thenReturn(URI.create("https://example.org/store/").toURL());
-		var links = new ConfirmationLinkBuilder(new ConfirmationUrlProperties(null, null), repositoryManager);
-		return new AuthService(null, principalManager, null, null, recaptcha, tokens, null, emailValidator,
-				emailSender, null, rateLimiter, null, links, meterRegistry, environment, executor, signupExecutor);
+		return new ConfirmationLinkBuilder(new ConfirmationUrlProperties(null, null), repositoryManager);
 	}
 
 	private static PrincipalManager principalManagerWithAdmin() {
