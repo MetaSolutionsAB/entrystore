@@ -29,6 +29,7 @@ import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.springboot.configuration.ConfirmationUrlProperties;
@@ -89,6 +90,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -335,7 +337,7 @@ class AuthServiceTest {
 
 		service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
 
-		// A new address runs both lookups, so an existing one must too, or the response time tells them apart.
+		// A new address runs both lookups, so an existing one does too: the lookup's store work does not depend on it.
 		verify(principalManager).getUserByExternalID(ADA);
 	}
 
@@ -430,7 +432,7 @@ class AuthServiceTest {
 
 	@Test
 	void signup_overTheRateLimit_isRejectedBeforeItsMailIsDispatched() throws Exception {
-		AuthService service = signupService(principalManagerWithAdmin(), mock(EmailSender.class),
+		AuthService service = signupService(mock(PrincipalManager.class), mock(EmailSender.class),
 				new SignupTokenCache(Ticker.systemTicker()), executor, new MockEnvironment(),
 				new RecaptchaSettings(false, null, null), new SignupRateLimiter(1, Duration.ofHours(1), Ticker.systemTicker()));
 		service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
@@ -445,13 +447,28 @@ class AuthServiceTest {
 	@Test
 	void signup_rejectedExecution_incrementsTheCounterAndStillAnswersAsForASentMail() throws Exception {
 		doThrow(new RejectedExecutionException("queue saturated")).when(executor).execute(any());
-		AuthService service = signupService(principalManagerWithAdmin(), mock(EmailSender.class),
+		AuthService service = signupService(mock(PrincipalManager.class), mock(EmailSender.class),
 				new SignupTokenCache(Ticker.systemTicker()), executor);
 
 		String message = service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
 
 		assertEquals("A confirmation message was sent to " + ADA, message);
 		assertEquals(1.0, meterRegistry.counter("auth.signup.rejected").count());
+	}
+
+	@Test
+	void signup_accountLookupFails_isCountedAsFailedAndAnsweredAsForASentMail() throws Exception {
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		when(principalManager.getPrincipalEntry(ADA)).thenThrow(new RepositoryException("not a principal"));
+		EmailSender emailSender = mock(EmailSender.class);
+		AuthService service = signupService(principalManager, emailSender,
+				new SignupTokenCache(Ticker.systemTicker()), Runnable::run);
+
+		String message = service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+		assertEquals("A confirmation message was sent to " + ADA, message);
+		assertEquals(1.0, meterRegistry.counter("auth.signup.failed").count());
+		verifyNoInteractions(emailSender);
 	}
 
 	private static UserDetails springUser(String username) {

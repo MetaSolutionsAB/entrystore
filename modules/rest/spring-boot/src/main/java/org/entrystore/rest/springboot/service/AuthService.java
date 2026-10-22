@@ -800,24 +800,38 @@ public class AuthService {
 
 		verifyRecaptcha(request, requestBody.rcResponseV2(), ci.getEmail(), title);
 
-		// Both branches end in one executor submit and the same answer, so neither the response nor its timing
-		// tells a new address from an existing account. Do not add synchronous work to either branch.
+		// The account lookup runs in the dispatch, so the request path and the answer are the same for a new address
+		// and an existing account. Do not add work that depends on the address before the submit.
 		String email = ci.getEmail();
-		User account = PrincipalManagerUtil.runAsAdmin(principalManager, () -> findAccount(email));
-		Runnable dispatch = account == null
-				? () -> dispatchConfirmationMail(ci, password, "sign-up", signupFailedCounter,
-						confirmationLinkBuilder::signupLink,
-						link -> emailSender.sendSignupConfirmation(ci.getFirstName() + " " + ci.getLastName(), email, link))
-				: () -> dispatchExistingAccountNotice(account, email);
-		submitDispatch(signupExecutor, signupRejectedCounter, "sign-up", email, dispatch);
+		submitDispatch(signupExecutor, signupRejectedCounter, "sign-up", email,
+				() -> dispatchSignupMail(ci, password, email));
 
 		return SIGNUP_POST_SUCCESS_MESSAGE.replace("{}", email);
 	}
 
+	// Runs on the signupExecutor. A failed lookup is counted like a mail that could not be sent: the sign-up was
+	// answered as for a sent one either way.
+	private void dispatchSignupMail(SignupInfo ci, String password, String email) {
+		User account;
+		try {
+			account = PrincipalManagerUtil.runAsAdmin(principalManager, () -> findAccount(email));
+		} catch (RuntimeException e) {
+			signupFailedCounter.increment();
+			log.error("Account lookup for the sign-up of {} failed; no sign-up mail is sent",
+					HttpUtil.sanitizeForLog(email), e);
+			return;
+		}
+		if (account == null) {
+			dispatchConfirmationMail(ci, password, "sign-up", signupFailedCounter, confirmationLinkBuilder::signupLink,
+					link -> emailSender.sendSignupConfirmation(ci.getFirstName() + " " + ci.getLastName(), email, link));
+		} else {
+			dispatchExistingAccountNotice(account, email);
+		}
+	}
+
 	/**
 	 * The account whose name or external ID is {@code email}, disabled ones included, or null. Must run as admin.
-	 * Runs both lookups even when the first one matches, so sign-up does the same store work for a new and an
-	 * existing address.
+	 * Runs both lookups even when the first one matches, so its store work does not depend on the address.
 	 */
 	private @Nullable User findAccount(String email) {
 		Entry byName = principalManager.getPrincipalEntry(email);
