@@ -57,7 +57,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.http.HttpStatus;
@@ -88,8 +90,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -294,6 +298,61 @@ class AuthServiceTest {
 		assertEquals("A confirmation message was sent to " + ADA, message);
 		assertNotNull(storedWhenSent.get(), "the link must work by the time the mail arrives");
 		assertTrue(Password.check(PASSWORD, storedWhenSent.get().getSaltedHashedPassword()));
+	}
+
+	@Test
+	void signup_newAddress_answersBeforeHashingStoringOrSendingAnything() throws Exception {
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		SignupTokenCache tokens = new SignupTokenCache(Ticker.systemTicker());
+		EmailSender emailSender = mock(EmailSender.class);
+		when(emailSender.sendSignupConfirmation(eq("Ada Lovelace"), eq(ADA), anyString())).thenReturn(true);
+		AuthService service = signupService(principalManager, emailSender, tokens, executor);
+
+		String message;
+		try (MockedStatic<Password> password = mockStatic(Password.class, CALLS_REAL_METHODS)) {
+			message = service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+			password.verify(() -> Password.getSaltedHash(anyString()), never());
+		}
+
+		assertEquals("A confirmation message was sent to " + ADA, message);
+		verifyNoInteractions(emailSender);
+		verify(principalManager, never()).getPrincipalEntry(any());
+		verify(principalManager, never()).getUserByExternalID(any());
+		assertEquals(0, tokens.caffeineCaches().get("signup-tokens").estimatedSize());
+		ArgumentCaptor<Runnable> task = ArgumentCaptor.forClass(Runnable.class);
+		verify(executor).execute(task.capture());
+
+		task.getValue().run();
+
+		ArgumentCaptor<String> link = ArgumentCaptor.forClass(String.class);
+		verify(emailSender).sendSignupConfirmation(eq("Ada Lovelace"), eq(ADA), link.capture());
+		assertTrue(Password.check(PASSWORD, tokens.getTokenValue(tokenOf(link.getValue())).getSaltedHashedPassword()));
+	}
+
+	@Test
+	void signup_existingAccount_answersBeforeLookingUpTheAccountOrSendingTheNotice() throws Exception {
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		Entry account = userEntryNamed("Ada", "Lovelace");
+		User user = (User) account.getResource();
+		when(principalManager.getPrincipalEntry(ADA)).thenReturn(account);
+		EmailSender emailSender = mock(EmailSender.class);
+		when(emailSender.sendExistingAccountNotice("Ada Lovelace", ADA)).thenReturn(NoticeOutcome.SENT);
+		AuthService service = signupService(principalManager, emailSender,
+				new SignupTokenCache(Ticker.systemTicker()), executor);
+
+		String message = service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
+
+		assertEquals("A confirmation message was sent to " + ADA, message);
+		verifyNoInteractions(emailSender);
+		verify(principalManager, never()).getPrincipalEntry(any());
+		verify(principalManager, never()).getUserByExternalID(any());
+		verify(user, never()).isDisabled();
+		ArgumentCaptor<Runnable> task = ArgumentCaptor.forClass(Runnable.class);
+		verify(executor).execute(task.capture());
+
+		task.getValue().run();
+
+		verify(emailSender).sendExistingAccountNotice("Ada Lovelace", ADA);
 	}
 
 	@Test
