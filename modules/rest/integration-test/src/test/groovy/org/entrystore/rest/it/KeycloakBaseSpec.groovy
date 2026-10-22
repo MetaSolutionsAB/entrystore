@@ -25,6 +25,8 @@ import spock.lang.Shared
 
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ExecutionException
 
 import static java.net.HttpURLConnection.HTTP_OK
 
@@ -48,12 +50,42 @@ abstract class KeycloakBaseSpec extends BaseSpec {
 			'/opt/keycloak/providers/keycloak-protocol-cas.jar'
 		)
 
-	static void startKeycloakIfNeeded() {
+	/** Set by {@link KeycloakStartExtension} when the run includes a spec of this class. */
+	static volatile boolean includedInRun
+
+	private static CompletableFuture<Void> backgroundStart
+
+	/**
+	 * Starts Keycloak on a background thread if the run includes a spec of this class, so that its startup overlaps
+	 * the shared-app ITs, which run first. {@link #startKeycloakIfNeeded} waits for it.
+	 */
+	static synchronized void startKeycloakInBackgroundIfIncluded() {
+		if (includedInRun && backgroundStart == null && !keycloakContainer.isRunning()) {
+			log.info('Starting Keycloak container in the background')
+			backgroundStart = CompletableFuture.runAsync { startKeycloak() }
+		}
+	}
+
+	/** Waits for a background start, and starts Keycloak if it is not running, e.g. because that start failed. */
+	static synchronized void startKeycloakIfNeeded() {
+		if (backgroundStart != null) {
+			try {
+				backgroundStart.get()
+			} catch (ExecutionException e) {
+				log.warn('Starting Keycloak in the background failed, starting it again', e.cause)
+			} finally {
+				backgroundStart = null
+			}
+		}
 		if (keycloakContainer.isRunning()) {
 			log.info('Reusing Keycloak container at: {}:{}',
 				keycloakContainer.getHost(), keycloakContainer.getMappedPort(8080))
 			return
 		}
+		startKeycloak()
+	}
+
+	protected static void startKeycloak() {
 		log.info('Starting Keycloak container')
 		keycloakContainer.start()
 		keycloakContainer.followOutput(new Slf4jLogConsumer(log))

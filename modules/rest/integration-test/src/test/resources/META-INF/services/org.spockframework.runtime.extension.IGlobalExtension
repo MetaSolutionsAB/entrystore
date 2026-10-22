@@ -1,1 +1,2 @@
 org.entrystore.rest.it.DataFolderCleanupExtension
+org.entrystore.rest.it.KeycloakStartExtension
