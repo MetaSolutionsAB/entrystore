@@ -113,8 +113,10 @@ public interface Context extends Resource{
 	Entry get(String entryId);
 	
 	/**
+	 * Looks up an entry of this context only; {@link ContextManager#getEntry(URI)} is the repository-wide lookup.
+	 *
 	 * @param entryURI is the URI to the entry.
-	 * @return the Entry that has this entryURI.
+	 * @return the Entry of this context that has this entryURI, or null if there is none.
 	 */
 	Entry getByEntryURI(URI entryURI);
 

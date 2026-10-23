@@ -740,6 +740,11 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				Set<URI> portfolioResources = pfContext.getEntries();
 				for (URI uri : portfolioResources) {
 					Entry e = pfContext.getByEntryURI(uri);
+					if (e == null) {
+						log.warn("Context {} lists entry {}, which does not resolve in it; leaving it out of the "
+								+ "backup", contexturi, uri);
+						continue;
+					}
 					conn.export(entryHandler, f.createIRI(e.getEntryURI().toString()));
 					if (e.getEntryType() == EntryType.Local || e.getEntryType() == EntryType.Link
 							|| e.getEntryType() == EntryType.LinkReference) {

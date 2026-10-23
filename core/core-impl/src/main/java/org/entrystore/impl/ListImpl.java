@@ -999,7 +999,12 @@ public class ListImpl extends RDFResource implements List {
 			Vector<URI> currentChildren = loadChildren();
 			rc.clear(this.resourceURI);
 			for (URI uri : currentChildren) {
-				EntryImpl childEntry = ((EntryImpl) this.entry.getContext().getByEntryURI(uri));
+				EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
+				if (childEntry == null) {
+					log.warn("List {} names member {}, which does not resolve in its context; skipping it",
+							entry.getEntryURI(), uri);
+					continue;
+				}
 				childEntry.removeReferringList(this, rc);
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 			}

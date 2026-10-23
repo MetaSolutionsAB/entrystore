@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -108,6 +108,10 @@ public class Pipeline {
 			destination = toEntryStmts.next().getObject().stringValue();
 			if (destination.startsWith("http")) {
 				Entry toEntryEntry = this.entry.getContext().getByEntryURI(URI.create(destination));
+				if (toEntryEntry == null) {
+					throw new PipelineConfigurationException(
+							"Transform destination " + destination + " is not an entry of this context");
+				}
 				destination = toEntryEntry.getId();
 			}
 		}

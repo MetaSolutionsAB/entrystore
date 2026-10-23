@@ -142,6 +142,20 @@ public abstract class AbstractCoreTest {
 	}
 
 	/**
+	 * Adds a resHasEntry triple naming the given object into the context's own named graph, the way
+	 * ContextImpl writes the index, so a stale or unusable index entry can be observed.
+	 */
+	protected void addIndexTriple(Entry contextEntry, URI subject, String object) {
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			rc.add(vf.createIRI(subject.toString()),
+				RepositoryProperties.resHasEntry,
+				vf.createIRI(object),
+				vf.createIRI(contextEntry.getResourceURI().toString()));
+		}
+	}
+
+	/**
 	 * Evicts an entry from the soft cache, so that it is loaded from the store again.
 	 */
 	protected static void evictFromSoftCache(Entry entry) {
@@ -179,7 +193,7 @@ public abstract class AbstractCoreTest {
 	 * Runs {@code action} as {@code user} and restores the previously authenticated principal, so an impersonating
 	 * helper cannot leak its principal into the tests that follow.
 	 */
-	private <T> T asUser(User user, java.util.function.Supplier<T> action) {
+	protected <T> T asUser(User user, java.util.function.Supplier<T> action) {
 		URI previous = pm.getAuthenticatedUserURI();
 		pm.setAuthenticatedUserURI(user.getURI());
 		try {

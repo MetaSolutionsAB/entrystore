@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -53,6 +54,7 @@ import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -61,6 +63,7 @@ import org.entrystore.GraphType;
 import org.entrystore.List;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
+import org.entrystore.User;
 import org.entrystore.repository.CorruptEntryException;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.config.Settings;
@@ -186,6 +189,73 @@ public class ContextImplTest extends AbstractCoreTest {
 		assertTrue(created.getReferringListsInSameContext().isEmpty());
 	}
 
+	/**
+	 * ENTRYSTORE-1112. A list of another context must not open the list tier of the authorization, even while
+	 * the repository-wide SoftCache holds it. Mickey administers mouse, so he may write its list, while duck
+	 * grants him nothing.
+	 */
+	@Test
+	public void create_listOfAnotherContext_isDeniedToAUserWhoCannotWriteThisContext() {
+		Context duck = cm.getContext("duck");
+		Entry mouseList = cm.getContext("mouse").createResource(null, GraphType.List, null, null);
+		int duckEntries = duck.getEntries().size();
+		assertSame(mouseList, context.softCache.getByEntryURI(mouseList.getEntryURI()),
+			"the list must be cached for this test to mean anything");
+
+		AuthorizationException denial = assertThrows(AuthorizationException.class,
+			() -> asUserWithAuthorization((User) pm.getPrincipalEntry("Mickey").getResource(),
+				() -> duck.createLink(null, URI.create("http://example.com/smuggled"), mouseList.getResourceURI())));
+
+		assertSame(duck.getEntry(), denial.getEntry(), "denied on the context, as for a missing list");
+		assertTrue(((List) mouseList.getResource()).getChildren().isEmpty());
+		assertEquals(duckEntries, duck.getEntries().size());
+	}
+
+	/** ENTRYSTORE-1112. Uncached, the same list is denied the same way, so a denial does not tell whether it exists. */
+	@Test
+	public void create_listOfAnotherContextNotInTheCache_isDeniedTheSameWay() {
+		Context duck = cm.getContext("duck");
+		Entry mouseList = cm.getContext("mouse").createResource(null, GraphType.List, null, null);
+		evictFromSoftCache(mouseList);
+
+		AuthorizationException denial = assertThrows(AuthorizationException.class,
+			() -> asUserWithAuthorization((User) pm.getPrincipalEntry("Mickey").getResource(),
+				() -> duck.createLink(null, URI.create("http://example.com/smuggled"), mouseList.getResourceURI())));
+
+		assertSame(duck.getEntry(), denial.getEntry());
+	}
+
+	/**
+	 * ENTRYSTORE-1112. With write access to this context the list tier is not needed, so a list of another context
+	 * is rejected as a missing one instead of receiving an entry of this context and lending it its ACL.
+	 */
+	@Test
+	public void create_listOfAnotherContext_isRejectedAsBadInputForAnOwner() {
+		ContextImpl neighbour = (ContextImpl) cm.createResource(null, GraphType.Context, null, null).getResource();
+		Entry foreignList = neighbour.createResource(null, GraphType.List, null, null);
+		int entries = context.getEntries().size();
+
+		// authorization is off in this class, so the caller writes this context as an owner does
+		assertThrows(IllegalArgumentException.class,
+			() -> context.createLink(null, URI.create("http://example.com/misfiled"), foreignList.getResourceURI()));
+
+		assertTrue(((List) foreignList.getResource()).getChildren().isEmpty());
+		assertEquals(entries, context.getEntries().size());
+	}
+
+	/** Runs {@code action} as {@code user} with authorization checked, then restores this class's unchecked default. */
+	private void asUserWithAuthorization(User user, Runnable action) {
+		rm.setCheckForAuthorization(true);
+		try {
+			asUser(user, () -> {
+				action.run();
+				return null;
+			});
+		} finally {
+			rm.setCheckForAuthorization(false);
+		}
+	}
+
 	@Test
 	public void createResource_userGrantsWriteOnItselfAndReadToTheUserGroup() {
 		Entry userEntry = pm.createResource(null, GraphType.User, null, null);
@@ -273,6 +343,18 @@ public class ContextImplTest extends AbstractCoreTest {
 		String baseUrl = rm.getRepositoryURL().toString();
 		URI unknown = URI.create(baseUrl + context.getEntry().getId() + "/entry/does-not-exist");
 		assertNull(context.getByEntryURI(unknown));
+	}
+
+	/** ENTRYSTORE-1112. The SoftCache is repository-wide, but a lookup answers only for the context's own entries. */
+	@Test
+	public void getByEntryURI_cachedEntryOfAnotherContext_returnsNull() {
+		ContextImpl neighbour = (ContextImpl) cm.createResource(null, GraphType.Context, null, null).getResource();
+		Entry foreign = neighbour.createLink(null, URI.create("http://example.com/foreign"), null);
+		assertSame(foreign, context.softCache.getByEntryURI(foreign.getEntryURI()),
+			"the entry must be cached for this test to mean anything");
+
+		assertNull(context.getByEntryURI(foreign.getEntryURI()));
+		assertSame(foreign, neighbour.getByEntryURI(foreign.getEntryURI()));
 	}
 
 	@Test
@@ -752,8 +834,9 @@ public class ContextImplTest extends AbstractCoreTest {
 	 * goes through the real {@code remove(URI)} transaction and forces it to fail after
 	 * {@code removeFromIndex} has recorded its pop, so it pins the production path.
 	 *
-	 * <p>The failure is arranged by giving a list a member whose entry graph is gone: {@code ListImpl}
-	 * dereferences {@code getByEntryURI} for each child while unlinking itself.
+	 * <p>The failure is arranged by giving a list a member whose entry graph is corrupt: {@code ListImpl}
+	 * loads each child while unlinking itself, and a corrupt one fails to load. A member whose graph is
+	 * gone would not do, since it resolves to null and is skipped.
 	 *
 	 * <p>What it does <b>not</b> catch, stated rather than implied: moving {@code applyIndexOps} back
 	 * above {@code rc.commit()}. The only failure this transaction can be made to throw lands at
@@ -769,9 +852,7 @@ public class ContextImplTest extends AbstractCoreTest {
 		((List) list.getResource()).addChild(member.getEntryURI());
 		assertTrue(context.getEntries().contains(list.getEntryURI()), "starting from a published index");
 
-		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
-			rc.clear(((EntryImpl) member).getSesameEntryURI());
-		}
+		removeFromEntryGraph(member.getEntryURI(), RepositoryProperties.resource);
 		evictFromSoftCache(member);
 
 		assertThrows(org.entrystore.repository.RepositoryException.class,
@@ -1002,11 +1083,7 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		Entry doomedContextEntry = cm.createResource(null, GraphType.Context, null, null);
 		ContextImpl doomed = (ContextImpl) doomedContextEntry.getResource();
-		// Plant a resHasEntry in the doomed context whose object names the neighbour's entry. resolveChild
-		// does NOT answer null for it: the bystander was created moments ago, so the repository-wide
-		// SoftCache still holds it and getByEntryURI returns it live — only getByMMdURIDirect, on the
-		// cache-miss path, applies the same-context check. That is exactly why childSplitIfOwned has to
-		// run before anything is resolved, and why this test is a real guard rather than a formality.
+		// Plant a resHasEntry in the doomed context whose object names the neighbour's entry.
 		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
 			rc.add(rc.getValueFactory().createIRI("http://example.com/foreign-resource"),
 				RepositoryProperties.resHasEntry, bystanderEntryIRI, doomed.resourceURI);
@@ -1022,6 +1099,29 @@ public class ContextImplTest extends AbstractCoreTest {
 		}
 		assertNotNull(neighbour.getByEntryURI(bystander.getEntryURI()),
 			"and the bystander must still be loadable from its own context");
+	}
+
+	/**
+	 * ENTRYSTORE-1112. Deleting a context that holds a list whose member's entry graph is gone succeeds: removing the
+	 * list skips the member that does not resolve.
+	 */
+	@Test
+	public void removeContext_holdingAListWhoseMemberIsGone_succeeds() {
+		Entry doomedContextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl doomed = (ContextImpl) doomedContextEntry.getResource();
+		EntryImpl list = (EntryImpl) doomed.createResource(null, GraphType.List, null, null);
+		Entry member = doomed.createLink(null, URI.create("http://example.com/gone-member"), list.getResourceURI());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.clear(((EntryImpl) member).getSesameEntryURI());
+		}
+		evictFromSoftCache(member);
+
+		cm.remove(doomedContextEntry.getEntryURI());
+
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			assertFalse(rc.hasStatement(null, null, null, false, list.getSesameEntryURI()),
+				"the list must have been removed with its context");
+		}
 	}
 
 	/**
@@ -1109,10 +1209,7 @@ public class ContextImplTest extends AbstractCoreTest {
 	/**
 	 * ENTRYSTORE-1095. The store-backed enumeration bypasses the index, so it also bypasses whatever the
 	 * index would have refused to parse — including a {@code resHasEntry} object naming another context's
-	 * entry. Both consumers act destructively on what it returns: {@code importContext} removes it before
-	 * importing, and {@code PublicRepository.rebuildRepository} republishes it. Neither can detect a
-	 * foreign child on its own, because {@code SoftCache} is repository-wide and hands back a cached one
-	 * live rather than null, so the ownership filter belongs here where both inherit it.
+	 * entry. See {@link ContextImpl#getChildEntryURIsFromStore()} for why the ownership filter lives there.
 	 */
 	@Test
 	public void getChildEntryURIsFromStore_skipsAChildNamedInAnotherContext() {
@@ -1136,6 +1233,59 @@ public class ContextImplTest extends AbstractCoreTest {
 		assertFalse(enumerated.contains(bystander.getEntryURI()),
 			"an entry belonging to another context must not be handed to callers that delete or "
 				+ "republish what this returns");
+	}
+
+	/**
+	 * ENTRYSTORE-1112. An index entry naming another context's entry resolves to nothing, rather than to a null
+	 * element that callers of the lookup would dereference.
+	 */
+	@Test
+	public void getByResourceURI_skipsAnIndexedEntryOfAnotherContext() {
+		ContextImpl neighbour = (ContextImpl) cm.createResource(null, GraphType.Context, null, null).getResource();
+		Entry bystander = neighbour.createLink(null, URI.create("http://example.com/indexed-bystander"), null);
+		URI plantedResource = URI.create("http://example.com/planted-resource");
+		ContextImpl owner = reloadedWithIndexEntry(cm.createResource(null, GraphType.Context, null, null),
+			plantedResource, bystander);
+
+		assertTrue(owner.getByResourceURI(plantedResource).isEmpty());
+	}
+
+	/**
+	 * ENTRYSTORE-1112. The quota recalculation sums the entries the index names; one of another context does not
+	 * resolve there, and must be left out rather than dereferenced or counted.
+	 */
+	@Test
+	public void quotaRecalculation_skipsAnIndexedEntryOfAnotherContext(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		ContextImpl neighbour = (ContextImpl) cm.createResource(null, GraphType.Context, null, null).getResource();
+		Entry foreignData = neighbour.createResource(null, GraphType.None, ResourceType.InformationResource, null);
+		((Data) foreignData.getResource()).setData(
+			new ByteArrayInputStream("not this context's".getBytes(StandardCharsets.UTF_8)));
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Entry ownData = ((Context) contextEntry.getResource())
+			.createResource(null, GraphType.None, ResourceType.InformationResource, null);
+		byte[] ownBytes = "counted".getBytes(StandardCharsets.UTF_8);
+		((Data) ownData.getResource()).setData(new ByteArrayInputStream(ownBytes));
+		ContextImpl owner = reloadedWithIndexEntry(contextEntry, URI.create("http://example.com/planted-data"),
+			foreignData);
+
+		owner.getQuotaFillLevel();
+
+		// the field, not the getter, which answers VALUE_UNKNOWN right after it recalculates (ENTRYSTORE-1269)
+		assertEquals(ownBytes.length, owner.quotaFillLevel);
+	}
+
+	/**
+	 * Plants a {@code resHasEntry} statement naming {@code named} in the context of {@code contextEntry}, as
+	 * {@code importContext} can, and returns that context reloaded so that its index holds the statement.
+	 */
+	private ContextImpl reloadedWithIndexEntry(Entry contextEntry, URI resource, Entry named) {
+		addIndexTriple(contextEntry, resource, named.getEntryURI().toString());
+		evictFromSoftCache(contextEntry);
+		ContextImpl reloaded = (ContextImpl) cm.getContext(contextEntry.getId());
+		assertTrue(reloaded.getEntries().contains(named.getEntryURI()),
+			"the index must name the entry for the test to mean anything");
+		return reloaded;
 	}
 
 	/**

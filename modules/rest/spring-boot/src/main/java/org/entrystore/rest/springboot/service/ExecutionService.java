@@ -33,6 +33,7 @@ import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.transforms.Pipeline;
+import org.entrystore.transforms.PipelineConfigurationException;
 import org.entrystore.transforms.TransformException;
 import org.entrystore.transforms.UpstreamServiceException;
 import org.springframework.http.HttpStatus;
@@ -99,6 +100,8 @@ public class ExecutionService {
 		Set<Entry> processed;
 		try {
 			processed = new Pipeline(pipelineEntry).run(sourceEntry, listURI);
+		} catch (PipelineConfigurationException e) {
+			throw new BadRequestException(e.getMessage());
 		} catch (IllegalStateException e) {
 			throw new BadRequestException("Pipeline execution failed", e);
 		} catch (UpstreamServiceException e) {
