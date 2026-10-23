@@ -44,7 +44,7 @@ abstract class KeycloakBaseSpec extends BaseSpec {
 		.withRealmImportFile('test-realm-keycloak.json')
 		.withEnv('KC_DB', 'dev-file')
 		.withCopyFileToContainer(
-			MountableFile.forClasspathResource('libs/keycloak-protocol-cas-26.5.6.jar'),
+			MountableFile.forClasspathResource('libs/keycloak-protocol-cas-26.8.0.jar'),
 			'/opt/keycloak/providers/keycloak-protocol-cas.jar'
 		)
 
