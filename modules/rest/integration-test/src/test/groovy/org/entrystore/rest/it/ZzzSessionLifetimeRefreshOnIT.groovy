@@ -28,8 +28,8 @@ import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 /**
  * With {@code entrystore.auth.cookie.refresh-expiration-on-access} on (the default), a login lasts max-age after the
- * last request, as in 5.x: active users stay logged in, idle ones are logged out. Runs with a 10-second max-age; each
- * probe keeps a margin of at least 2 seconds.
+ * last request, as in 5.x: active users stay logged in, idle ones are logged out. Runs with a 5-second max-age; each
+ * probe keeps a margin of at least 1 second.
  */
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 class ZzzSessionLifetimeRefreshOnIT extends BaseSpec {
@@ -38,7 +38,7 @@ class ZzzSessionLifetimeRefreshOnIT extends BaseSpec {
 		stopPreexistingAppIfRunning()
 		def args = [
 			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
-			'--entrystore.auth.cookie.max-age=10'
+			'--entrystore.auth.cookie.max-age=5'
 		] as String[]
 		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
 		appStarted = true
@@ -53,7 +53,7 @@ class ZzzSessionLifetimeRefreshOnIT extends BaseSpec {
 		then:
 		login.getResponseCode() == HTTP_OK
 		EntryStoreClient.findSetCookie(login, 'auth_token').contains('Max-Age=31536000')
-		secondsUntil(authTokenExpires(cookieOf(login))) in 7..10
+		secondsUntil(authTokenExpires(cookieOf(login))) in 2..5
 	}
 
 	def "an active login should outlive max-age and its expiry should move forward"() {
@@ -63,13 +63,13 @@ class ZzzSessionLifetimeRefreshOnIT extends BaseSpec {
 
 		when: 'the client keeps making requests for longer than max-age'
 		def statuses = (1..4).collect {
-			sleep(4000)
+			sleep(2000)
 			EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie]).getResponseCode()
 		}
 
 		then:
 		statuses.every { it == HTTP_OK }
-		authTokenExpires(cookie).isAfter(firstExpiry.plusSeconds(12))
+		authTokenExpires(cookie).isAfter(firstExpiry.plusSeconds(6))
 	}
 
 	def "an idle login should end after max-age"() {
@@ -77,7 +77,7 @@ class ZzzSessionLifetimeRefreshOnIT extends BaseSpec {
 		def cookie = cookieOf(login())
 
 		when:
-		sleep(12000)
+		sleep(6000)
 		def request = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie])
 
 		then:

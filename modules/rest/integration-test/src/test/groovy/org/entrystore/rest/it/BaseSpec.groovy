@@ -157,6 +157,8 @@ abstract class BaseSpec extends Specification {
 			// guarding against override logic resolving entrystore.data.folder to a different path.
 			verifyGuardedDataFolderUnchanged(guardedDataFolder, appInstance.getEnvironment().getProperty('entrystore.data.folder'))
 			createCommonUserAccounts()
+			// After the shared app is up, so that Keycloak competes with the shared-app ITs rather than the startup
+			KeycloakBaseSpec.startKeycloakInBackgroundIfIncluded()
 			appStarted = true
 		} else {
 			assert appInstance != null: 'Invariant #2 violated — see BaseSpec comment on appStarted.'

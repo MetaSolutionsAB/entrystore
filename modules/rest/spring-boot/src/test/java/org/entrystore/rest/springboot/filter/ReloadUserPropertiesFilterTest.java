@@ -26,6 +26,8 @@ import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -35,6 +37,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.session.SessionInformation;
+import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.session.SessionRegistryImpl;
 
 import tools.jackson.databind.json.JsonMapper;
@@ -339,6 +342,22 @@ class ReloadUserPropertiesFilterTest {
 		assertTrue(e.getMessage().contains("entrystore.auth.session.reload-interval"));
 	}
 
+	@Test
+	void requestNineSecondsAfterTheLastReload_keepsTheSessionsUserByDefault() {
+		filterWithTheDefaultReloadInterval(9);
+
+		verify(userDetailsService, never()).loadUserByUsername(any());
+	}
+
+	@Test
+	void requestTenSecondsAfterTheLastReload_reloadsTheUserByDefault() {
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenReturn(sessionDetails());
+
+		filterWithTheDefaultReloadInterval(10);
+
+		verify(userDetailsService).loadUserByUsername(USERNAME);
+	}
+
 	/** Runs a request of the same session while the test's request is in the filter. */
 	private static void runParallel(ReloadUserPropertiesFilter filter, MockHttpServletRequest parallelRequest) {
 		try {
@@ -353,6 +372,25 @@ class ReloadUserPropertiesFilterTest {
 		var reloadClock = new AtomicReference<>(lastReload);
 		request.getSession().setAttribute(LAST_RELOAD, reloadClock);
 		return reloadClock;
+	}
+
+	/**
+	 * Sends the request through the filter as the application context creates it without
+	 * {@code entrystore.auth.session.reload-interval}, the session's user having been loaded the given time before.
+	 */
+	private void filterWithTheDefaultReloadInterval(long secondsSinceTheLastReload) {
+		new ApplicationContextRunner()
+				.withBean(PropertySourcesPlaceholderConfigurer.class)
+				.withBean(ESUserDetailsService.class, () -> userDetailsService)
+				.withBean(SessionRegistry.class, () -> sessionRegistry)
+				.withBean(ErrorResponseWriter.class, () -> new ErrorResponseWriter(JsonMapper.builder().build()))
+				.withBean(AuthTokenCookies.class, () -> authTokenCookies)
+				.withUserConfiguration(ReloadUserPropertiesFilter.class)
+				.run(context -> {
+					reloadedAt(Instant.now().minusSeconds(secondsSinceTheLastReload));
+					context.getBean(ReloadUserPropertiesFilter.class)
+							.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+				});
 	}
 
 	private ReloadUserPropertiesFilter filterWithReloadInterval(int seconds) {

@@ -549,7 +549,7 @@ class CookieLoginResourceIT extends BaseSpec {
 	}
 
 	def "A logged-in user removed from the admin group keeps the admin role until the reload interval has passed"() {
-		given: 'the default entrystore.auth.session.reload-interval of 10 seconds'
+		given: 'the entrystore.auth.session.reload-interval of 2 seconds in entrystore-it.properties'
 		def username = 'userForAdminRoleReload@test.com'
 		def user = UserUtil.createUserWithPassword(username, password, null, true)
 		def cookie = EntryStoreClient.loginIsolated(username).authCookie
@@ -558,7 +558,7 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		when:
 		def withinTheInterval = adminOnlyStatus(cookie)
-		Thread.sleep(10_500)
+		Thread.sleep(2_500)
 		def afterTheInterval = adminOnlyStatus(cookie)
 		def nextAfterTheInterval = adminOnlyStatus(cookie)
 
