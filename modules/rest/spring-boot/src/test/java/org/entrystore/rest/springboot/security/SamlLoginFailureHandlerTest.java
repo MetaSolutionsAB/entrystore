@@ -57,26 +57,45 @@ class SamlLoginFailureHandlerTest {
 		authStateCache.storeAuthState(RELAY_STATE, new AuthState(null, WHITELISTED_FAILURE_URL));
 		var response = new MockHttpServletResponse();
 
-		try (var appender = CapturingAppender.attachTo(SsoLoginFailureHandler.class)) {
+		try (var appender = CapturingAppender.attachTo(SsoLoginFailureHandler.class);
+			 var dropAppender = CapturingAppender.attachTo(SamlLoginFailureHandler.class)) {
 			handler.onAuthenticationFailure(acsPost(RELAY_STATE), response, invalidSignature());
 
 			assertEquals(List.of("SAML authentication failed at '/store/login/saml2/sso/keycloak': Invalid signature"),
 					appender.messagesAt(Level.WARN).toList(), appender::toString);
+			assertEquals(List.of(), dropAppender.messagesAt(Level.INFO).toList(), dropAppender::toString);
 		}
 		assertEquals(WHITELISTED_FAILURE_URL, response.getRedirectedUrl());
 		assertEquals(CacheControlFilter.CACHE_CONTROL_CREDENTIALS, response.getHeader(HttpHeaders.CACHE_CONTROL));
 	}
 
-	// The resolver drops non-whitelisted URLs before storing, so this guards a whitelist change after the store.
+	// Defence in depth: the resolver stores only whitelisted URLs and the whitelist is fixed at startup.
 	@Test
-	void cachedFailureUrlNoLongerWhitelisted_fallsBackToTheDefault() throws Exception {
+	void cachedFailureUrlNoLongerWhitelisted_fallsBackToTheDefault_andLogsAtInfo() throws Exception {
 		authStateCache.storeAuthState(RELAY_STATE, new AuthState(null, "https://evil.example.com/phishing"));
 		var response = new MockHttpServletResponse();
 
-		handler.onAuthenticationFailure(acsPost(RELAY_STATE), response, invalidSignature());
+		try (var appender = CapturingAppender.attachTo(SamlLoginFailureHandler.class)) {
+			handler.onAuthenticationFailure(acsPost(RELAY_STATE), response, invalidSignature());
 
+			assertEquals(
+					List.of("Dropping non-whitelisted SAML failure redirect URL: https://evil.example.com/phishing"),
+					appender.messagesAt(Level.INFO).toList(), appender::toString);
+		}
 		assertEquals("/store/auth/failed", response.getRedirectedUrl());
 		assertEquals(CacheControlFilter.CACHE_CONTROL_CREDENTIALS, response.getHeader(HttpHeaders.CACHE_CONTROL));
+	}
+
+	// The ACS endpoint is anonymous: a failureurl on the request must never be followed, even a whitelisted one.
+	@Test
+	void failureUrlOnTheAcsRequest_isIgnored() throws Exception {
+		var request = acsPost("never-issued");
+		request.setParameter("failureurl", WHITELISTED_FAILURE_URL);
+		var response = new MockHttpServletResponse();
+
+		handler.onAuthenticationFailure(request, response, invalidSignature());
+
+		assertEquals("/store/auth/failed", response.getRedirectedUrl());
 	}
 
 	// An expired login (request-lifetime passed) has no entry left.

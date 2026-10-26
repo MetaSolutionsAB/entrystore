@@ -16,9 +16,11 @@
 
 package org.entrystore.rest.springboot.controller;
 
+import org.apache.logging.log4j.Level;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.security.RefreshableRelyingPartyRegistrationRepository;
 import org.entrystore.rest.springboot.service.SamlAuthService;
+import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
@@ -33,8 +35,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * GET /auth/saml when the chosen IdP's metadata is unavailable: the login cannot start, so the caller goes to the
- * failure URL as for any other failed SAML login.
+ * GET /auth/saml: when the chosen IdP's metadata is unavailable the login cannot start, so the caller goes to the
+ * failure URL as for any other failed SAML login; otherwise only whitelisted redirect URLs are passed on.
  */
 class AuthControllerSamlLoginTest {
 
@@ -60,22 +62,59 @@ class AuthControllerSamlLoginTest {
 	void unavailableIdp_redirectsToTheDefaultFailureUrl_whenTheRequestedOneIsNotWhitelisted() {
 		when(registrations.isConfiguredButUnavailable("keycloak")).thenReturn(true);
 
-		String view = controller().startSamlLogin(null, "keycloak", null, "https://evil.example.com/",
-				new RedirectAttributesModelMap());
+		try (var appender = CapturingAppender.attachTo(AuthController.class)) {
+			String view = controller().startSamlLogin(null, "keycloak", null, "https://evil.example.com/",
+					new RedirectAttributesModelMap());
 
-		assertEquals("redirect:/auth/failed", view);
+			assertEquals("redirect:/auth/failed", view);
+			assertEquals(List.of("Dropping non-whitelisted SAML failure redirect URL: https://evil.example.com/"),
+					appender.messagesAt(Level.INFO).toList(), appender::toString);
+		}
 	}
 
 	@Test
 	void availableIdp_startsTheLoginAtTheIdp() {
 		var redirectAttributes = new RedirectAttributesModelMap();
 
-		String view = controller().startSamlLogin(null, "keycloak", WHITELISTED_SUCCESS_URL, WHITELISTED_FAILURE_URL,
-				redirectAttributes);
+		try (var appender = CapturingAppender.attachTo(AuthController.class)) {
+			String view = controller().startSamlLogin(null, "keycloak", WHITELISTED_SUCCESS_URL,
+					WHITELISTED_FAILURE_URL, redirectAttributes);
 
-		assertEquals("redirect:/saml2/authenticate/{idpId}", view);
+			assertEquals("redirect:/saml2/authenticate/{idpId}", view);
+			assertEquals(List.of(), appender.messagesAt(Level.INFO).toList(), appender::toString);
+		}
 		assertEquals(Map.of("idpId", "keycloak", "successurl", WHITELISTED_SUCCESS_URL,
 				"failureurl", WHITELISTED_FAILURE_URL), redirectAttributes);
+	}
+
+	@Test
+	void availableIdp_withoutRedirectUrls_passesOnlyTheIdp_andLogsNothing() {
+		var redirectAttributes = new RedirectAttributesModelMap();
+
+		try (var appender = CapturingAppender.attachTo(AuthController.class)) {
+			controller().startSamlLogin(null, "keycloak", null, null, redirectAttributes);
+
+			assertEquals(List.of(), appender.messagesAt(Level.INFO).toList(), appender::toString);
+		}
+		assertEquals(Map.of("idpId", "keycloak"), redirectAttributes);
+	}
+
+	// SamlRelayStateResolver never sees a URL dropped here, so the drop has to be logged here; the URL is the
+	// caller's, so a line break in it must not start a forged log line.
+	@Test
+	void availableIdp_dropsNonWhitelistedRedirectUrls_andLogsAtInfo() {
+		var redirectAttributes = new RedirectAttributesModelMap();
+
+		try (var appender = CapturingAppender.attachTo(AuthController.class)) {
+			controller().startSamlLogin(null, "keycloak", "https://evil.example.com/welcome\r\nforged",
+					"https://evil.example.com/failed", redirectAttributes);
+
+			assertEquals(List.of(
+					"Dropping non-whitelisted SAML success redirect URL: https://evil.example.com/welcome??forged",
+					"Dropping non-whitelisted SAML failure redirect URL: https://evil.example.com/failed"),
+					appender.messagesAt(Level.INFO).toList(), appender::toString);
+		}
+		assertEquals(Map.of("idpId", "keycloak"), redirectAttributes);
 	}
 
 	private AuthController controller() {

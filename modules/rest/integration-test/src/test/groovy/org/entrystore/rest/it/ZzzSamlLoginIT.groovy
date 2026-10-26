@@ -287,7 +287,22 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		EntryStoreClient.findSetCookie(spCallbackConn, 'auth_token') == null
 	}
 
-	def '7. Other form POSTs keep the 32 KB form limit'() {
+	def '7. A rejected ACS POST that carries its own failureurl redirects to the default failure URL'() {
+		given: 'a forged ACS POST: an unknown RelayState, an undecodable response and a whitelisted failureurl'
+		def spPostData = [SAMLResponse: 'not-a-saml-response', RelayState: 'never-issued', failureurl: failureLoginUrl]
+
+		when:
+		def spCallbackConn = EntryStoreClient.postRequest('/login/saml2/sso/keycloak', createFormBody(spPostData),
+			null, 'application/x-www-form-urlencoded')
+
+		then: 'the posted failureurl is not followed and no session is issued'
+		spCallbackConn.getResponseCode() in [302, 303, 307]
+		spCallbackConn.getHeaderField('Location').endsWith(EntryStoreClient.contextPath + '/auth/user')
+		spCallbackConn.getHeaderField('Cache-Control') == CACHE_CONTROL_CREDENTIALS
+		EntryStoreClient.findSetCookie(spCallbackConn, 'auth_token') == null
+	}
+
+	def '8. Other form POSTs keep the 32 KB form limit'() {
 		given: 'a login form over 32 KB, small enough that CheckUsernamePasswordFilter would answer 413 if Jetty parsed it'
 		def body = createFormBody([auth_username: testUsername, auth_password: testUserPassword,
 								   padding      : 'x' * (40 * 1024)])
@@ -299,7 +314,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		connection.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
-	def '8. Disabling the SAML-authenticated user should end the session, even if re-enabled before the next request'() {
+	def '9. Disabling the SAML-authenticated user should end the session, even if re-enabled before the next request'() {
 		given: 'the session from the login is still valid'
 		assert EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: ssoCookie]).getResponseCode() == HTTP_OK
 

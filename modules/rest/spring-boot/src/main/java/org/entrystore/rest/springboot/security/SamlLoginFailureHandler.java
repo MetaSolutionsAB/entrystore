@@ -18,11 +18,13 @@ package org.entrystore.rest.springboot.security;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.configuration.ConditionalOnBooleanConfig;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.service.SamlAuthService;
 import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.stereotype.Component;
 
@@ -37,6 +39,7 @@ import java.io.IOException;
  * {@link SamlCustomConfiguration#requestLifetime()} has no entry left and lands on the default. The redirect goes
  * through {@link CacheAwareRedirectStrategy}: the 302 commits the response before {@code CacheControlFilter} runs.
  */
+@Slf4j
 @Component
 @ConditionalOnBooleanConfig("entrystore.auth.saml.enabled")
 public class SamlLoginFailureHandler extends SsoLoginFailureHandler {
@@ -57,7 +60,11 @@ public class SamlLoginFailureHandler extends SsoLoginFailureHandler {
 										AuthenticationException exception) throws IOException {
 		String relayState = request.getParameter("RelayState");
 		AuthState authState = relayState != null ? samlAuthStateCache.getAuthState(relayState) : null;
-		String failureUrl = samlAuthService.failureRedirectUrl(authState != null ? authState.failureUrl() : null);
+		String requestedUrl = authState != null ? authState.failureUrl() : null;
+		String failureUrl = samlAuthService.failureRedirectUrl(requestedUrl);
+		if (requestedUrl != null && !requestedUrl.equals(failureUrl)) {
+			log.info("Dropping non-whitelisted SAML failure redirect URL: {}", HttpUtil.sanitizeForLog(requestedUrl));
+		}
 		logFailure(request, exception);
 		getRedirectStrategy().sendRedirect(request, response, failureUrl);
 	}

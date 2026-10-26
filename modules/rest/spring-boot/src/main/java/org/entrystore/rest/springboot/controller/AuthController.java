@@ -57,6 +57,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 @Slf4j
 @Controller
@@ -150,16 +151,14 @@ public class AuthController {
 		String idpId = samlAuthService.findIdpIdForRequest(username, idp);
 		if (samlRegistrationRepository.map(repository -> repository.isConfiguredButUnavailable(idpId)).orElse(false)) {
 			log.debug("SAML login with IdP '{}' cannot start: no usable registration", idpId);
-			return "redirect:" + samlAuthService.failureRedirectUrl(failureUrl);
+			return "redirect:" + samlAuthService.failureRedirectUrl(
+					whitelistedOrNull(failureUrl, samlAuthService::isValidRedirectUrl, "SAML failure"));
 		}
 
-		if (successUrl != null && samlAuthService.isValidRedirectUrl(successUrl)) {
-			redirectAttributes.addAttribute("successurl", successUrl);
-		}
-
-		if (failureUrl != null && samlAuthService.isValidRedirectUrl(failureUrl)) {
-			redirectAttributes.addAttribute("failureurl", failureUrl);
-		}
+		passRedirectUrl(redirectAttributes, "successurl", successUrl, samlAuthService::isValidRedirectUrl,
+				"SAML success");
+		passRedirectUrl(redirectAttributes, "failureurl", failureUrl, samlAuthService::isValidRedirectUrl,
+				"SAML failure");
 
 		redirectAttributes.addAttribute("idpId", idpId);
 
@@ -193,13 +192,10 @@ public class AuthController {
 			throw new EntityNotFoundException("Not Found");
 		}
 
-		if (successUrl != null && oidcAuthService.isValidRedirectUrl(successUrl)) {
-			redirectAttributes.addAttribute("successurl", successUrl);
-		}
-
-		if (failureUrl != null && oidcAuthService.isValidRedirectUrl(failureUrl)) {
-			redirectAttributes.addAttribute("failureurl", failureUrl);
-		}
+		passRedirectUrl(redirectAttributes, "successurl", successUrl, oidcAuthService::isValidRedirectUrl,
+				"OIDC success");
+		passRedirectUrl(redirectAttributes, "failureurl", failureUrl, oidcAuthService::isValidRedirectUrl,
+				"OIDC failure");
 
 		var selection = oidcAuthService.findProviderIdForRequest(username, provider);
 		// With a provider id selected, no repository bean is config-shaped (see method Javadoc).
@@ -221,6 +217,27 @@ public class AuthController {
 		// Spring Security's OAuth2AuthorizationRequestRedirectFilter serves this path;
 		// OidcAuthorizationRequestResolver re-validates and caches the redirect URLs there.
 		return "redirect:/oauth2/authorization/{providerId}";
+	}
+
+	/** Passes a whitelisted redirect URL on to the login-start filter, whose resolver stores it for the callback. */
+	private static void passRedirectUrl(RedirectAttributes redirectAttributes, String parameter, String url,
+										Predicate<String> isWhitelisted, String urlKind) {
+		String whitelistedUrl = whitelistedOrNull(url, isWhitelisted, urlKind);
+		if (whitelistedUrl != null) {
+			redirectAttributes.addAttribute(parameter, whitelistedUrl);
+		}
+	}
+
+	/**
+	 * {@code url} if the whitelist admits it, else null. A rejected URL is logged here as the resolvers log it, since
+	 * they never see it.
+	 */
+	private static String whitelistedOrNull(String url, Predicate<String> isWhitelisted, String urlKind) {
+		if (url == null || isWhitelisted.test(url)) {
+			return url;
+		}
+		log.info("Dropping non-whitelisted {} redirect URL: {}", urlKind, HttpUtil.sanitizeForLog(url));
+		return null;
 	}
 
 	@Operation(
