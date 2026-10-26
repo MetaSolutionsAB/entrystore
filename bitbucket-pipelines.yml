@@ -51,7 +51,9 @@ stepdefinitions:
         - sha256sum ${DOWNLOAD_NAME} > ${DOWNLOAD_NAME}.sha256
         - gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 ${DOWNLOAD_NAME}.sha256
         - scp -v ${DOWNLOAD_NAME} ${DOWNLOAD_NAME}.sha256.asc deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
-        - scp -rv modules/rest/integration-test/target/site/jacoco-aggregate/* deploy@meta1.metasolutions.se:/var/www/entrystore.org/test-coverage/
+        # One tar stream: scp uses SFTP, which needs several round trips per file, and the report has ~800 files.
+        # Staging folders are per build, as the Deploys of back-to-back merges overlap.
+        - set -o pipefail && tar czf - -C modules/rest/integration-test/target/site/jacoco-aggregate . | ssh deploy@meta1.metasolutions.se "cd /var/www/entrystore.org && rm -rf test-coverage.new.$BITBUCKET_BUILD_NUMBER test-coverage.old.$BITBUCKET_BUILD_NUMBER && mkdir test-coverage.new.$BITBUCKET_BUILD_NUMBER && tar xzf - -C test-coverage.new.$BITBUCKET_BUILD_NUMBER && { test -f test-coverage.new.$BITBUCKET_BUILD_NUMBER/index.html || { echo Coverage report has no index.html, keeping the published report >&2; exit 1; }; } && { ! test -e test-coverage || mv -T test-coverage test-coverage.old.$BITBUCKET_BUILD_NUMBER; } && mv -T test-coverage.new.$BITBUCKET_BUILD_NUMBER test-coverage && rm -rf test-coverage.old.$BITBUCKET_BUILD_NUMBER"
         - if [ $BITBUCKET_BRANCH == "develop" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/develop.version" ; elif [ $BITBUCKET_BRANCH == "master" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/latest.version" ; fi
   # Snapshot images (develop): build and push only, no vulnerability scan.
   - dockerhub: &dockerhub
