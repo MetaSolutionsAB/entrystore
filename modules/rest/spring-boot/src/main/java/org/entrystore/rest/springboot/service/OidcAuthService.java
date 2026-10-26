@@ -60,9 +60,8 @@ public class OidcAuthService {
 	}
 
 	/**
-	 * Where a login start over the rate limit, or a user that {@code OidcLoginSuccessHandler} denies (reserved, not
-	 * provisioned or disabled), is sent: {@code requestedUrl} if the redirect whitelist admits it, else the configured
-	 * default failure URL. Other failures, such as an IdP {@code access_denied}, go to the default failure URL.
+	 * Where a failed OIDC login goes: {@code requestedUrl} if the redirect whitelist admits it, else the configured
+	 * default failure URL.
 	 */
 	public String failureRedirectUrl(String requestedUrl) {
 		return isValidRedirectUrl(requestedUrl) ? requestedUrl : oidcConfiguration.redirectFailure().url();

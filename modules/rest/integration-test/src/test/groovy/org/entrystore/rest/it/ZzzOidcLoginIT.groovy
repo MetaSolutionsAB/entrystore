@@ -22,6 +22,7 @@ import spock.lang.Stepwise
 
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
+import static java.nio.charset.StandardCharsets.UTF_8
 import static org.entrystore.rest.springboot.filter.CacheControlFilter.CACHE_CONTROL_CREDENTIALS
 
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
@@ -259,5 +260,63 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		// Only the guest identity is acceptable on a 200 — accepting any non-admin user would let a
 		// leak under a derived identity (e.g. the email claim admin@test.com) ship green.
 		responseCode == HTTP_UNAUTHORIZED || (responseCode == HTTP_OK && responseUser == 'guest')
+	}
+
+	def '7. An IdP access_denied redirects to the failureurl given at login start'() {
+		given: 'a login started with a whitelisted failureurl, sent on to the IdP with a state'
+		def authorizationUrl = redirectTarget('/auth/oidc' + convertMapToQueryParams([failureurl: customFailureUrl]))
+		def state = queryParameter(redirectTarget(authorizationUrl), 'state')
+
+		when: 'the IdP refuses the login, as Keycloak does when the user declines consent'
+		def callbackConn = EntryStoreClient.getRequest(accessDeniedCallback(state), '')
+
+		then: 'the rejected login is sent to the caller\'s failureurl, not to the default, and no session is issued'
+		callbackConn.getResponseCode() in [302, 303, 307]
+		callbackConn.getHeaderField('Location') == customFailureUrl
+		callbackConn.getHeaderField('Cache-Control') == CACHE_CONTROL_CREDENTIALS
+		EntryStoreClient.findSetCookie(callbackConn, 'auth_token') == null
+	}
+
+	def '8. An IdP access_denied on a login with a non-whitelisted failureurl redirects to the default failure URL'() {
+		given: 'a login started at the authorization endpoint itself, so only the resolver can drop the failureurl'
+		def state = queryParameter(redirectTarget('/oauth2/authorization/keycloak'
+			+ convertMapToQueryParams([failureurl: 'https://evil.example.com/phishing'])), 'state')
+
+		when:
+		def callbackConn = EntryStoreClient.getRequest(accessDeniedCallback(state), '')
+
+		then:
+		callbackConn.getResponseCode() in [302, 303, 307]
+		callbackConn.getHeaderField('Location') == failureLoginUrl
+	}
+
+	def '9. An IdP error callback with a state no login started redirects to the default failure URL'() {
+		when: 'the forged callback carries its own whitelisted failureurl, which must not be followed'
+		def callbackConn = EntryStoreClient.getRequest(accessDeniedCallback('never-issued') + '&' +
+			createFormBody([failureurl: customFailureUrl]), '')
+
+		then:
+		callbackConn.getResponseCode() in [302, 303, 307]
+		callbackConn.getHeaderField('Location') == failureLoginUrl
+		EntryStoreClient.findSetCookie(callbackConn, 'auth_token') == null
+	}
+
+	/** The Location of the redirect EntryStore answers a guest's GET of {@code url} with. */
+	private static String redirectTarget(String url) {
+		def conn = EntryStoreClient.getRequest(url, '')
+		assert conn.getResponseCode() in [302, 303]
+		return conn.getHeaderField('Location')
+	}
+
+	/** The redirect Keycloak sends back to EntryStore when it refuses the login started with {@code state}. */
+	private static String accessDeniedCallback(String state) {
+		return EntryStoreClient.baseUrl + '/login/oauth2/code/keycloak' +
+			convertMapToQueryParams([error: 'access_denied', state: state])
+	}
+
+	private static String queryParameter(String url, String name) {
+		def pair = new URI(url).rawQuery.split('&').find { it.startsWith(name + '=') }
+		assert pair: "no ${name} in ${url}"
+		return URLDecoder.decode(pair.substring(name.length() + 1), UTF_8)
 	}
 }

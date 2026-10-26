@@ -89,7 +89,7 @@ class SsoLoginFailureHandlerTest {
 		}
 	}
 
-	// The CAS and OIDC callbacks are anonymous; a session started on failure would set an auth_token cookie.
+	// The CAS callback is anonymous; a session started on failure would set an auth_token cookie.
 	@Test
 	void failure_withoutSession_startsNoSession() throws Exception {
 		var request = new MockHttpServletRequest("GET", "/auth/cas");

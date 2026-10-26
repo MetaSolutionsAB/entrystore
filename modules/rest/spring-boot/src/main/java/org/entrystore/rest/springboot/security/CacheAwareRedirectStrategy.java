@@ -28,11 +28,11 @@ import java.io.IOException;
  * response before delegating to {@link DefaultRedirectStrategy#sendRedirect}, through
  * {@link CacheControlFilter#markSessionCookieResponse}.
  * <p>
- * Used by the SAML, CAS and OIDC login-success handlers and the SAML login-failure
- * handler, where the 302 would otherwise commit the response before {@code CacheControlFilter}'s
- * post-chain check can run, leaving the response with no {@code Cache-Control}. For the
- * success handlers, that 302 carries the session {@code Set-Cookie} header, which a
- * misconfigured intermediary could then cache (CWE-525). Yields to any {@code Cache-Control}
+ * Used by the SAML, CAS and OIDC login-success handlers, the SAML and OIDC login-failure
+ * handlers and {@code SsoLoginRateLimitFilter}, where the 302 would otherwise commit the response
+ * before {@code CacheControlFilter}'s post-chain check can run, leaving the response with no
+ * {@code Cache-Control}. For the success handlers, that 302 carries the session {@code Set-Cookie}
+ * header, which a misconfigured intermediary could then cache (CWE-525). Yields to any {@code Cache-Control}
  * an earlier filter or handler has already set, except the filter's own value for authenticated requests.
  */
 public final class CacheAwareRedirectStrategy extends DefaultRedirectStrategy {

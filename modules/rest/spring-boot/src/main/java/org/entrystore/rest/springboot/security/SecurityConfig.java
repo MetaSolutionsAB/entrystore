@@ -163,9 +163,10 @@ public class SecurityConfig {
 	private final Optional<TicketValidator> casTicketValidator;
 	private final Optional<CasLoginSuccessHandler> casLoginSuccessHandler;
 
-	// OIDC-auth related beans (success handler and limiter optional — only present when entrystore.auth.oidc.enabled=true)
+	// OIDC-auth related beans (handlers and limiter optional — only present when entrystore.auth.oidc.enabled=true)
 	private final OidcCustomConfiguration oidcConfiguration;
 	private final Optional<OidcLoginSuccessHandler> oidcLoginSuccessHandler;
+	private final Optional<OidcLoginFailureHandler> oidcLoginFailureHandler;
 	private final Optional<OidcLoginRateLimiter> oidcLoginRateLimiter;
 	private final Optional<ClientRegistrationRepository> clientRegistrationRepository; // optional as it will be injected only when Spring's OAuth2 client registrations are configured
 	private final OidcAuthService oidcAuthService;
@@ -451,6 +452,9 @@ public class SecurityConfig {
 			oidcHandler.setDefaultTargetUrl(oidcConfiguration.redirectSuccess().url());
 			// See the SAML branch above for the Cache-Control rationale.
 			oidcHandler.setRedirectStrategy(cacheAwareRedirectStrategy);
+			var oidcFailureHandler = oidcLoginFailureHandler.orElseThrow(() -> new IllegalStateException(
+					"OIDC is enabled but OidcLoginFailureHandler bean is missing — check the " +
+							"entrystore.auth.oidc.enabled binding."));
 
 			var registrations = clientRegistrationRepository.orElseThrow(() -> new IllegalStateException(
 					"OIDC is enabled but no ClientRegistrationRepository is available — configure at least " +
@@ -469,7 +473,7 @@ public class SecurityConfig {
 					// success handler and SetUserURIAfterAuthenticationFilter.
 					.userInfoEndpoint(userInfo -> userInfo.oidcUserService(new UsernameClaimOidcUserService(oidcAuthService)))
 					.successHandler(oidcHandler)
-					.failureHandler(new SsoLoginFailureHandler("OIDC", oidcConfiguration.redirectFailure().url())));
+					.failureHandler(oidcFailureHandler));
 			var oidcRateLimiter = oidcLoginRateLimiter.orElseThrow(() -> new IllegalStateException(
 					"OIDC is enabled but OidcLoginRateLimiter bean is missing — check the " +
 							"entrystore.auth.oidc.enabled binding."));
