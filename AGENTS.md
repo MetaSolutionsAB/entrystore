@@ -98,7 +98,7 @@ springboot/
 
 ### Solr configset (`solr/conf/`)
 
-- A change to how a field is stored in the index (adding `docValues`, or changing a field type's `class`) is rejected by Lucene on an existing index, even after all documents are deleted. The startup reindex only deletes documents and the startup schema check passes, so Solr rejects every document and the version markers are still written, which leaves an empty index. Such a change needs a deployment note in its JIRA issue, for the release CHANGELOG: empty the index before the upgrade (dedicated: the core's data directory; cluster: `ecli solr-collection-rotate`). Analyzer changes don't need this; they take effect with the next reindex.
+- A change to how a field is stored in the index (adding `docValues`, or changing a field type's `class`) is rejected by Lucene on an existing index, even after all documents are deleted. The startup reindex only deletes documents and the startup schema check passes, so Solr rejects every document and the version markers are still written, which leaves an empty index. Such a change needs a `Deployment note:` (see Git Conventions): empty the index before the upgrade (dedicated: the core's data directory; cluster: `ecli solr-collection-rotate`). Analyzer changes don't need this; they take effect with the next reindex.
 - Clients query the `text_ngram` fields through entrystore.js. It splits a search term on whitespace into one AND clause per word, cuts each word to 15 characters, and appends `*` to words shorter than 3 characters. Facets on `metadata.predicate.literal.*` are rewritten to `literal_s.*` (5.x and 6.x). Check analyzer changes against these query shapes.
 
 ## Code Style
@@ -192,7 +192,8 @@ Example config: `modules/rest/spring-boot/src/main/resources/entrystore.properti
 
 - **PR target branch:** `develop`. Fixes for a release being stabilised target its `release/*` branch, which is merged back into `develop`; 5.x fixes target `develop-5.x`
 - Commit messages reference JIRA issues: `ENTRYSTORE-####: Description`
-- Do not edit `CHANGELOG.md` in a branch or PR for a JIRA issue: it is updated on the `release/*` branch. Put a deployment, config or behaviour note the release needs in the JIRA issue instead
+- Do not edit `CHANGELOG.md` in a branch or PR for a JIRA issue that targets `develop`: it is updated on the `release/*` branch. A JIRA-issue PR that targets `release/*` adds its own entry
+- A PR into `develop` that adds, renames or removes a config key, changes a key's default or accepted values, changes an HTTP status, header or response body, or needs an operator step before or after the upgrade (Solr index, reverse proxy, templates, `ecli`) puts a note for the release CHANGELOG in its description and in a JIRA comment, starting with `Config note:`, `Behaviour note:`, `Deployment note:` or `Upgrade note:`
 - Do not include AI/agent attribution in commit messages (no Co-Authored-By or similar)
 - Issue tracker: https://metasolutions.atlassian.net/browse/ENTRYSTORE-*
 - **JIRA priorities:** Blocker, Critical, Major, Minor, Trivial
