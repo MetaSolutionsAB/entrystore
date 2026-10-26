@@ -35,6 +35,7 @@ import static java.net.HttpURLConnection.HTTP_BAD_GATEWAY
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CONFLICT
 import static java.net.HttpURLConnection.HTTP_CREATED
+import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
@@ -696,6 +697,69 @@ class ResourceIT extends BaseSpec {
 		expect:
 		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/resource/' + entryId, 'user') ==
 				HTTP_FORBIDDEN
+	}
+
+	// The entrystore.data.max-resource-size default; the shared app leaves the key unset.
+	static final long DEFAULT_RESOURCE_CAP = 10L * 1024 * 1024
+
+	def "PUT /{context-id}/resource/{entry-id} String resource with Expect: 100-continue from a writer is answered 100 Continue"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'stringExpectContinueId', graphtype: 'string'])
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/resource/' + entryId, 'admin',
+				DEFAULT_RESOURCE_CAP, 'text/plain') == 100
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} String resource with Expect: 100-continue and a Content-Length above the default entrystore.data.max-resource-size is answered 413 instead of 100 Continue"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'stringExpectContinueId', graphtype: 'string'])
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/resource/' + entryId, 'admin',
+				DEFAULT_RESOURCE_CAP + 1, 'text/plain') == HTTP_ENTITY_TOO_LARGE
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} String resource with Expect: 100-continue from a guest is answered 401 instead of 100 Continue"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'stringExpectContinueId', graphtype: 'string'])
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/resource/' + entryId, '', 1024,
+				'text/plain') == HTTP_UNAUTHORIZED
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} String resource with Expect: 100-continue from a user without write access is answered 403 instead of 100 Continue"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'stringExpectContinueId', graphtype: 'string'])
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/resource/' + entryId, 'user', 1024,
+				'text/plain') == HTTP_FORBIDDEN
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} String resource from a guest who sends all of a large body before reading the response is answered 401"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'stringExpectContinueId', graphtype: 'string'])
+
+		when: 'the body is denied unread, so the server must discard it for the client to see the 401'
+		def conn = EntryStoreClient.putRequestStreamed('/' + contextId + '/resource/' + entryId, 3L * 1024 * 1024,
+				false, '')
+
+		then: 'HttpURLConnection drops the body of a 401 to a streamed request, so only the status is checked'
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} raw upload from a guest who sends all of a large body before reading the response is answered 401"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'expectContinueId'], [resource: [name: 'Expect-continue entry']])
+
+		when: 'the body is denied unread, so the server must discard it for the client to see the 401'
+		def conn = EntryStoreClient.putRequestStreamed('/' + contextId + '/resource/' + entryId, 3L * 1024 * 1024,
+				false, '')
+
+		then: 'HttpURLConnection drops the body of a 401 to a streamed request, so only the status is checked'
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	// Above Jetty's form size limit, which would reject the body if it were parsed as form fields.
