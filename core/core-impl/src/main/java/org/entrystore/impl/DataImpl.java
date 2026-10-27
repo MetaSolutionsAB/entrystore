@@ -282,36 +282,14 @@ public class DataImpl extends ResourceImpl implements Data {
 		}
 	}
 
-	public void useData(File file) throws IOException {
+	/** Replaces the data with a copy of {@code file}, as {@link #setData} does with a stream. */
+	public void useData(File file) throws QuotaException, IOException {
 		if (file == null) {
 			throw new IllegalArgumentException("File must not be null");
 		}
-
-		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
-
-		long sizeBefore = 0;
-		long sizeAfter = 0;
-		if (entry.getRepositoryManager().hasQuotas()) {
-			if (getFile() != null && getFile().exists()) {
-				sizeBefore = getFile().length();
-			}
-			if (file.exists()) {
-				sizeAfter = file.length();
-			}
+		try (InputStream is = Files.newInputStream(file.toPath())) {
+			setData(is);
 		}
-
-		FileOperations.copyFile(file, getFile());
-
-		if (entry.getRepositoryManager().hasQuotas()) {
-			entry.getContext().decreaseQuotaFillLevel(sizeBefore);
-			try {
-				entry.getContext().increaseQuotaFillLevel(sizeAfter);
-			} catch (QuotaException qe) {
-				getFile().delete();
-			}
-		}
-
-		entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 	}
 
 	@Override

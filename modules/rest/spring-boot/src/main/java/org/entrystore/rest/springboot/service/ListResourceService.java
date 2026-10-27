@@ -165,6 +165,8 @@ public class ListResourceService {
 				movedEntry = dest.moveEntryHere(movableEntry, movableEntrySource, removeAll);
 			} catch (QuotaException qe) {
 				throw new EntityTooLargeException(qe.getMessage(), qe);
+			} catch (IOException e) {
+				throw new InternalServerErrorException("Failed to copy the data of the moved entry", e);
 			}
 
 			return movedEntry;

@@ -26,8 +26,6 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.QuotaException;
 import org.entrystore.ResourceType;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.test.TestSuite;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -42,7 +40,6 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -70,7 +67,6 @@ public class DataImplTest extends AbstractCoreTest {
 	private Context context;
 	private Entry entry;
 	private Data data;
-	private final DataImpl.FileMover originalFileMover = DataImpl.fileMover;
 
 	@BeforeEach
 	@Override
@@ -291,9 +287,7 @@ public class DataImplTest extends AbstractCoreTest {
 
 	@Test
 	public void setData_replacementAboveTheQuota_keepsThePreviousDataAndDigest() throws Exception {
-		rm.shutdown();
-		setUpEnvironment(Map.of(Settings.DATA_QUOTA, "on", Settings.DATA_FOLDER, tempDataDir.toString()));
-		TestSuite.initDisneySuite(rm);
+		restartWithQuotas(tempDataDir);
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		Context quotaContext = (Context) cm.createResource(null, GraphType.Context, null, null).getResource();
 		quotaContext.setQuota(20);
@@ -325,11 +319,6 @@ public class DataImplTest extends AbstractCoreTest {
 		}
 	}
 
-	@AfterEach
-	public void restoreFileMover() {
-		DataImpl.fileMover = originalFileMover;
-	}
-
 	/** Makes moves onto a name ending with {@code suffix} fail, as an interruption before them would. */
 	private void failMovesTo(String suffix) {
 		DataImpl.fileMover = (source, target) -> {
@@ -347,10 +336,16 @@ public class DataImplTest extends AbstractCoreTest {
 		}
 	}
 
-	@Disabled("To be implemented")
 	@Test
-	public void testUseData() throws Exception {
-		// TODO
+	public void useData_copiesTheDataAndWritesItsDigest(@TempDir Path sourceDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		Path source = Files.writeString(sourceDir.resolve("source"), "test content");
+
+		((DataImpl) data).useData(source.toFile());
+
+		assertEquals("test content", Files.readString(data.getDataFile().toPath()));
+		assertEquals(DigestUtils.sha256Hex("test content"), ((DataImpl) data).readDigest());
+		assertEquals("test content", Files.readString(source), "the source must be left as it was");
 	}
 
 	@Disabled("To be implemented")

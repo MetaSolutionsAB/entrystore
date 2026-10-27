@@ -232,6 +232,22 @@ class ListResourceServiceTest {
 	}
 
 	@Test
+	void moveEntry_dataCopyFails_throwsInternalServerError() throws Exception {
+		ListImpl list = mock(ListImpl.class);
+		when(entry.getGraphType()).thenReturn(GraphType.List);
+		when(entry.getResource()).thenReturn(list);
+		when(repositoryManager.getRepositoryURL()).thenReturn(URI.create("https://host/").toURL());
+		IOException failure = new IOException("No space left on device");
+		when(list.moveEntryHere(URI.create("https://host/1/entry/2"), URI.create("https://host/1/resource/3"), true))
+				.thenThrow(failure);
+
+		InternalServerErrorException thrown = assertThrows(InternalServerErrorException.class,
+				() -> service.moveEntry(entry, "1/entry/2", "1/resource/3", true));
+
+		assertEquals(failure, thrown.getCause());
+	}
+
+	@Test
 	void serializeChildrenIds_listSortedBranch_missingChildSkipped() {
 		// "b" is referenced by the list but does not resolve in the context — it is logged
 		// and dropped from the sorted output (unlike the unsorted branch, which keeps raw IDs).

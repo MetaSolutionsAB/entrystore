@@ -37,12 +37,12 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.QuotaException;
 import org.entrystore.Resource;
-import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.util.ModelUtil;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -324,7 +324,7 @@ public class ListImpl extends RDFResource implements List {
 		entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 	}
 
-	public Entry moveEntryHere(URI entry, URI fromList, boolean removeFromAllLists) throws QuotaException {
+	public Entry moveEntryHere(URI entry, URI fromList, boolean removeFromAllLists) throws QuotaException, IOException {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
 		pm.checkAuthenticatedUserAuthorized(this.entry, AccessProperty.WriteResource);
 		EntryImpl e = ((EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(entry));
@@ -373,95 +373,139 @@ public class ListImpl extends RDFResource implements List {
 			if (bt == GraphType.SystemContext || bt == GraphType.Context || bt == GraphType.User || bt == GraphType.Group) {
 				throw new org.entrystore.repository.RepositoryException("Cannot move SystemContexts, Contexts, Users or Groups.");
 			}
-			EntryImpl newEntry = null;
 			if (bt == GraphType.List) {
+				// removeTree's check, made before anything is copied
+				pm.checkAuthenticatedUserAuthorized(e.getContext().getEntry(), AccessProperty.Administer);
+				EntryImpl newEntry;
 				try {
 					newEntry = this.copyEntryHere(e);
+				} catch (org.entrystore.repository.RepositoryException re) {
+					throw new org.entrystore.repository.RepositoryException("Failed copying the folder structure: " + re.getMessage(), re);
+				}
+				try {
 					((List) e.getResource()).removeTree();
 				} catch (org.entrystore.repository.RepositoryException re) {
-					if (newEntry != null) {
-						throw new org.entrystore.repository.RepositoryException("Succeeded in copying folder structure (leaving it there), but failed to remove the old structure (remove manually): " + re.getMessage());
-					} else {
-						throw new org.entrystore.repository.RepositoryException("Failed copying the folder structure, nothing is changed: " + re.getMessage());
-					}
+					throw new org.entrystore.repository.RepositoryException("Succeeded in copying folder structure (leaving it there), but failed to remove the old structure (remove manually): " + re.getMessage(), re);
 				}
 				return newEntry;
 			}
-			newEntry = createCopyHere(e);
-			copyGraphs(e, newEntry);
-			if (removeFromAllLists || (nrOfRefLists == 1 && e.getReferringListsInSameContext().isEmpty())) {
-				e.getContext().remove(e.getEntryURI()); //Remove the old entry, it has been successfully copied into the new list in the new context.
-			} else {
-				ListImpl fromListR = (ListImpl) fromListEntry.getResource();
-				fromListR.removeChild(entry, false);
+			if (removeFromAllLists) {
+				// ContextImpl.remove's check, made before anything is copied
+				((ContextImpl) e.getContext()).checkAccess(e, AccessProperty.Administer);
+			}
+			EntryImpl newEntry = copyEntryHere(e);
+			try {
+				if (removeFromAllLists || (nrOfRefLists == 1 && e.getReferringListsInSameContext().isEmpty())) {
+					e.getContext().remove(e.getEntryURI()); //Remove the old entry, it has been successfully copied into the new list in the new context.
+				} else {
+					ListImpl fromListR = (ListImpl) fromListEntry.getResource();
+					fromListR.removeChild(entry, false);
+				}
+			} catch (org.entrystore.repository.RepositoryException re) {
+				throw new org.entrystore.repository.RepositoryException("Succeeded in copying the entry to " + newEntry.getEntryURI() + " (leaving it there), but failed to remove the original (remove manually): " + re.getMessage(), re);
 			}
 			return newEntry;
 		}
 	}
 
 	/**
-	 * Creates an entry of the same kind as the given one as a child of this list, without copying any
-	 * graphs — the caller does that through {@link #copyGraphs}.
-	 * <p>
-	 * For a local information resource the new entry gets its own byte copy of the source's data file
-	 * (DataImpl.useData copies it), charged against this list's context quota.
+	 * Creates an entry of the same kind as the given one as a child of this list, without copying any data or
+	 * graphs — {@link #_copyEntryHere} does that.
 	 *
 	 * @return the new entry, never null.
 	 */
 	private EntryImpl createCopyHere(EntryImpl source) {
 		Context c = this.entry.getContext();
 		return switch (source.getEntryType()) {
-			case Local -> {
-				EntryImpl newEntry = (EntryImpl) c.createResource(null, source.getGraphType(), source.getResourceType(), getURI());
-				if (source.getGraphType() == GraphType.None
-					&& source.getResourceType() == ResourceType.InformationResource) {
-					try {
-						((DataImpl) newEntry.getResource()).useData(((DataImpl) source.getResource()).getDataFile());
-					} catch (IOException ex) {
-						// FIXME data loss on the move path: this leaves the copy empty and _moveEntryHere
-						// then removes the source. Propagate instead of logging (_copyEntryHere is safe).
-						log.error(ex.getMessage(), ex);
-					}
-				}
-				yield newEntry;
-			}
+			case Local -> (EntryImpl) c.createResource(null, source.getGraphType(), source.getResourceType(), getURI());
 			case Link -> (EntryImpl) c.createLink(null, source.getResourceURI(), getURI());
 			case LinkReference -> (EntryImpl) c.createLinkReference(null, source.getResourceURI(), source.getExternalMetadataURI(), getURI());
 			case Reference -> (EntryImpl) c.createReference(null, source.getResourceURI(), source.getExternalMetadataURI(), getURI());
 		};
 	}
 
-	protected EntryImpl copyEntryHere(EntryImpl entryToCopy) {
-		return this._copyEntryHere(entryToCopy, true);
+	/**
+	 * Copies the source's data file, if it has one, into the copy, charged against the copy's context quota. Reading
+	 * the data needs ReadResource on the source, so a source without data is not checked.
+	 */
+	private static void copyData(EntryImpl source, EntryImpl copy) throws QuotaException, IOException {
+		if (source.getResource() instanceof DataImpl sourceData && sourceData.hasFile()) {
+			File data = sourceData.getDataFile();
+			if (data != null) {
+				((DataImpl) copy.getResource()).useData(data);
+			}
+		}
 	}
 
-	private EntryImpl _copyEntryHere(EntryImpl entryToCopy, boolean first) {
-		EntryImpl newEntry = null;
+	/**
+	 * Copies the given entry into this list, with the members of a list recursively. A copy that fails part-way is
+	 * removed again, see {@link #removeCopies}.
+	 */
+	protected EntryImpl copyEntryHere(EntryImpl entryToCopy) throws QuotaException, IOException {
+		java.util.List<EntryImpl> copies = new ArrayList<>();
 		try {
-			GraphType bt = entryToCopy.getGraphType();
-			if (bt == GraphType.User || bt == GraphType.Context || bt == GraphType.Group || bt == GraphType.SystemContext) {
-				return null;
-			}
+			return this._copyEntryHere(entryToCopy, copies);
+		} catch (Exception e) {
+			removeCopies(copies, e);
+			throw e;
+		}
+	}
 
-			newEntry = createCopyHere(entryToCopy);
+	/**
+	 * Copies the given entry into this list with its data and graphs, and the members of a list recursively, adding
+	 * every entry it creates to {@code copies}; users, groups and contexts are not copied, returning null. An
+	 * authorization failure keeps its type, so that it is answered as such; any other runtime failure is rethrown as
+	 * a RepositoryException, while QuotaException and IOException propagate unchanged.
+	 */
+	private EntryImpl _copyEntryHere(EntryImpl entryToCopy, java.util.List<EntryImpl> copies) throws QuotaException, IOException {
+		GraphType bt = entryToCopy.getGraphType();
+		if (bt == GraphType.User || bt == GraphType.Context || bt == GraphType.Group || bt == GraphType.SystemContext) {
+			return null;
+		}
+
+		try {
+			EntryImpl newEntry = createCopyHere(entryToCopy);
+			copies.add(newEntry);
+			// before the graphs, which give the copy the source's ACL and so may revoke the caller's write access
+			copyData(entryToCopy, newEntry);
 			copyGraphs(entryToCopy, newEntry);
 			if (bt == GraphType.List) {
 				ListImpl newList = (ListImpl) newEntry.getResource();
 				List oldList = (List) entryToCopy.getResource();
-				java.util.List<URI> children = oldList.getChildren();
-				for (URI uri : children) {
+				for (URI uri : oldList.getChildren()) {
 					EntryImpl childEntryToCopy = ((EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(uri));
-					newList._copyEntryHere(childEntryToCopy, false);
+					newList._copyEntryHere(childEntryToCopy, copies);
 				}
 			}
-		} catch (Exception e) {
-			if (first && newEntry != null && newEntry.getGraphType() == GraphType.List) {
-				((List) newEntry.getResource()).removeTree();
-			}
-			throw new org.entrystore.repository.RepositoryException("Failed to copy entry (" + entryToCopy.getEntryURI() + "):" + e.getMessage());
+			return newEntry;
+		} catch (AuthorizationException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			throw new org.entrystore.repository.RepositoryException("Failed to copy entry (" + entryToCopy.getEntryURI() + "):" + e.getMessage(), e);
 		}
+	}
 
-		return newEntry;
+	/**
+	 * Removes the entries a failed copy created, members before their list, as admin: the caller may add to this
+	 * list without being allowed to remove from its context. Only these entries are removed; anything else added to
+	 * a copied list meanwhile is unlinked when the list is removed. A failed removal is added to {@code failure}.
+	 */
+	private void removeCopies(java.util.List<EntryImpl> copies, Exception failure) {
+		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
+		URI caller = pm.getAuthenticatedUserURI();
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		try {
+			for (EntryImpl copy : copies.reversed()) {
+				try {
+					copy.getContext().remove(copy.getEntryURI());
+				} catch (RuntimeException e) {
+					failure.addSuppressed(e);
+					log.error("Failed to remove the partial copy {}, remove it manually: {}", copy.getEntryURI(), e.getMessage(), e);
+				}
+			}
+		} finally {
+			pm.setAuthenticatedUserURI(caller);
+		}
 	}
 
 
