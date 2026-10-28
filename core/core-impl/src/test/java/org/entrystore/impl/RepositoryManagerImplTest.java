@@ -39,6 +39,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
@@ -87,6 +88,19 @@ public class RepositoryManagerImplTest {
 		assertFalse(complete);
 		assertFalse(waitedForQueue.get(),
 				"Waiting for the queue has no timeout and must be skipped after an interruption");
+	}
+
+	@ParameterizedTest(name = "\"{0}\" has a context-first index: {1}")
+	@CsvSource(nullValues = "NULL", value = {
+			"NULL, false",
+			"'spoc,posc', false",
+			"'', false",
+			"'cspo,posc', true",
+			"'spoc,posc,cosp', true",
+			"' spoc , cspo ', true",
+	})
+	public void hasContextFirstIndex(String indexes, boolean expected) {
+		assertEquals(expected, RepositoryManagerImpl.hasContextFirstIndex(indexes));
 	}
 
 	@Disabled("To be implemented")

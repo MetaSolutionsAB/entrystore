@@ -59,7 +59,8 @@ public class LocalMetadataWrapper implements Metadata {
 			return new LinkedHashModel();
 		}
 		Entry e = ((ContextImpl) entry.getContext()).getSoftCache().getByEntryURI(refEntryURI);
-		if (e == null) {
+		// an entry of a removed context stays cached while the context's graphs are being deleted
+		if (e == null || e.getContext().isDeleted()) {
 			try {
 				e = entry.getRepositoryManager().getContextManager().getEntry(refEntryURI);
 			} catch (RuntimeException failure) {

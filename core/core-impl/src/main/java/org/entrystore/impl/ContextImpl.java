@@ -28,6 +28,7 @@ import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.RepositoryResult;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
+import org.entrystore.ContextManager;
 import org.entrystore.Data;
 import org.entrystore.DeletedEntryInfo;
 import org.entrystore.Entry;
@@ -42,6 +43,7 @@ import org.entrystore.exception.EntryMissingException;
 import org.entrystore.exception.InvalidExternalMetadataURIException;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
+import org.entrystore.repository.security.ContextRemovalPendingException;
 import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.test.TestSuite;
 import org.entrystore.repository.util.NS;
@@ -133,8 +135,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * committed write is missing from a published index. It does <em>not</em> make a read plus a
 	 * dependent write atomic, so a listing can be missing an entry that a concurrent
 	 * {@code updateResource2EntryIndex} has popped but not yet pushed. Callers needing more must
-	 * coordinate. {@code remove(RepositoryConnection)} is the one caller that genuinely needed to, and it
-	 * no longer reads these indexes to decide what to delete.
+	 * coordinate. No caller decides what to delete from these indexes: context removal lists the context's
+	 * graphs, and {@code removeNonSystemEntries} its index graph, from the store.
 	 */
 	private volatile ConcurrentMap<URI, Object> extMdUri2entry;
 	private volatile ConcurrentMap<URI, Object> res2entry;
@@ -256,7 +258,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	protected long quotaFillLevel = Quota.VALUE_UNCACHED;
 	protected long quota = Quota.VALUE_UNCACHED;
 
-	@Getter
+	/** Set on the instance that was removed; see {@link #isDeleted()}. */
 	private volatile boolean deleted = false;
 
 	static {
@@ -421,9 +423,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 		if (oldResourceURI == null || newResourceURI == null || entryURI == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
-		// Two operations, each atomic on its own key, so a reader can still observe the gap between them —
-		// stated in the field javadoc rather than fixed here, because the one caller that could not
-		// tolerate it, remove(RepositoryConnection), no longer reads these indexes at all.
+		// Two operations, each atomic on its own key, so a reader can observe the gap between them; tolerated,
+		// see the field javadoc.
 		log.debug("Removing resource to entry mapping: {} -> {}", oldResourceURI, entryURI);
 		applyIndexOp(IndexKind.RESOURCE, false, oldResourceURI, entryURI);
 		log.debug("Adding resource to entry mapping: {} -> {}", newResourceURI, entryURI);
@@ -550,8 +551,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 					// again, reIndex() could not repair it (it ends in this method), and
 					// ContextManagerImpl's constructor would turn one bad triple in the _contexts graph
 					// into a startup failure. ENTRYSTORE-839 established this tolerance deliberately, and
-					// remove(RepositoryConnection) reads its child list from the repository rather than
-					// from this index, so an incomplete index cannot orphan data.
+					// context removal lists the context's graphs from the repository rather than from
+					// this index, so an incomplete index cannot orphan data.
 					//
 					// It can still mislead, which is what indexIncomplete below exists for: an
 					// unresolvable principal is fail-open in PrincipalManagerImpl.hasAccess, and both the
@@ -850,7 +851,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 						identity = Long.toString(counter);
 						IRI entryUri = vf.createIRI(base + this.id + "/" + RepositoryProperties.ENTRY_PATH + "/" + counter);
 						infoRecord = rc.getStatements(null, null, null, false, entryUri).stream().toList();
-					} while (!infoRecord.isEmpty()); // keep counting if a candidate is taken
+					} while (!infoRecord.isEmpty() || isIdReserved(identity)); // keep counting if a candidate is taken
 				}
 
 				// resURI - resourceURI
@@ -1025,6 +1026,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 */
 	private EntryImpl create(String entryId, URI resourceURI, URI metadataURI, EntryType entryType,
 							 GraphType graphType, ResourceType resourceType, URI listURI) {
+		// also before the list lookup, which finds nothing in a removed context; repeated under the monitor
+		checkCreateAllowed(entryId);
 		Entry listItem = getListEntry(listURI);
 		ListImpl list = asLocalList(listItem);
 		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
@@ -1032,6 +1035,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			throw new IllegalArgumentException("No entry found for list URI " + listURI);
 		}
 		synchronized (this.entry.repository) {
+			checkCreateAllowed(entryId);
 			EntryImpl newEntry = createNewMinimalItem(resourceURI, metadataURI, entryType, graphType, resourceType, entryId);
 			if (list != null) {
 				list.addChild(newEntry.getEntryURI());
@@ -1043,6 +1047,24 @@ public class ContextImpl extends ResourceImpl implements Context {
 			initializeBuiltinResource(newEntry, graphType);
 			return newEntry;
 		}
+	}
+
+	/**
+	 * Refuses a create in a removed context, so no graph lands under it once its removal job may have passed
+	 * over it. Called holding the repository monitor, which the removal holds while it marks the context.
+	 *
+	 * @param entryId the requested id, or null for a generated one
+	 * @throws ContextRemovalPendingException if the create is refused
+	 */
+	protected void checkCreateAllowed(String entryId) {
+		if (isDeleted()) {
+			throw new ContextRemovalPendingException("Context " + id + " has been removed");
+		}
+	}
+
+	/** Whether a generated id must be skipped although its entry graph is empty; see {@link ContextManagerImpl}. */
+	protected boolean isIdReserved(String id) {
+		return false;
 	}
 
 	public Entry createLinkReference(String entryId, URI resourceURI, URI metadataURI, URI listURI) throws AuthorizationException {
@@ -1121,6 +1143,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	public Entry getByEntryURI(URI entryURI) {
+		// also keeps an entry of a removed context from being loaded and cached again from its remaining graphs
+		if (isDeleted()) {
+			return null;
+		}
 		Entry entry = softCache.getByEntryURI(entryURI);
 		if (entry != null) {
 			return isOwnEntry(entry) ? entry : null;
@@ -1313,6 +1339,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 				throw new org.entrystore.repository.RepositoryException("An error occurred when removing the entry from one or more lists", e);
 			}
 
+			// Read now: EntryImpl.remove drops the entry's resource, and reading it after the commit would
+			// build a new resource object instead of returning the one other threads hold.
+			org.entrystore.Resource removedResource = removeEntry.getResource();
 			RepositoryConnection rc = null;
 			// See createNewMinimalItem: a failure after the commit must not be answered with a rollback of
 			// an already committed transaction, whose own failure would replace the original exception.
@@ -1329,6 +1358,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 				this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
 				rc.commit();
 				committed = true;
+				afterRemoveCommitted(removedResource);
 				applyIndexOps(txOps);
 				softCache.remove(removeEntry);
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(removeEntry, RepositoryEvent.EntryDeleted));
@@ -1354,6 +1384,14 @@ public class ContextImpl extends ResourceImpl implements Context {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Called by {@link #remove(URI)} right after the removal has committed, still holding the repository monitor
+	 * and before any in-memory update, so a failure in those cannot skip it, with the resource the removed entry
+	 * had. Must not throw: the removal already stands, and an exception would report it as failed.
+	 */
+	protected void afterRemoveCommitted(org.entrystore.Resource removedResource) {
 	}
 
 	/**
@@ -1487,61 +1525,38 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
+	/**
+	 * Marks this context for removal, as part of the transaction that removes its entry from {@code _contexts}.
+	 * Its own graphs are left to {@link ContextRemover}, which deletes them in chunks once that transaction has
+	 * committed, so the transaction stays as short as the removal of any other entry.
+	 */
+	@Override
 	public void remove(RepositoryConnection rc) throws Exception {
-		synchronized (this.entry.repository) {
-			// The child list comes from the transaction, not from the in-memory index. That index is
-			// weakly consistent: updateResource2EntryIndex pops and pushes as two separate compute()
-			// calls, so an entry observed in that gap would keep its entry, metadata and resource graphs
-			// while the rc.clear(this.resourceURI) below destroys the graph that named them — permanently
-			// orphaned data. A statement the index could not parse would be skipped for the same effect. Reading
-			// resHasEntry through rc sees this transaction's own view and cannot miss an entry.
-			//
-			// Collected as RDF4J IRIs rather than java.net.URIs: this enumeration is fed straight from the
-			// store, so unlike the index it once replaced it also sees objects that java.net.URI.create
-			// rejects. Round-tripping them would abort the whole deletion on the very statements this
-			// change exists to stop the index from hiding.
-			Set<IRI> childEntryIRIs = new HashSet<>();
-			for (Statement statement : rc
-					.getStatements(null, RepositoryProperties.resHasEntry, null, false, this.resourceURI)
-					.stream()
-					.toList()) {
-				if (statement.getObject() instanceof IRI childEntryIRI) {
-					childEntryIRIs.add(childEntryIRI);
-				} else {
-					// Reported rather than dropped silently: such a child is neither cleared here nor
-					// visible to any listing, so without this line it leaves no trace anywhere.
-					log.error("Index statement {} in context {} names a child that is not an IRI; it cannot "
-							+ "be cleared and needs manual cleanup", statement, this.id);
-				}
-			}
+		IRI contextsIndexGraph = ((ContextImpl) this.entry.getContext()).resourceURI;
+		rc.add(this.resourceURI, RepositoryProperties.removalPending, rc.getValueFactory().createLiteral(new Date()),
+				contextsIndexGraph);
+	}
 
-			// do not move this boolean from here, this is needed to avoid adding
-			// entries to solr after they have been removed from solr (race condition)
-			deleted = true;
-
-			// Collected and then discarded: this deletes the whole context graph, so there is no index
-			// left to keep in step, and `deleted` above has already taken this context out of service.
-			List<IndexOp> discardedOps = new ArrayList<>();
-			for (IRI childEntryIRI : childEntryIRIs) {
-				// Ownership is checked before anything is resolved or cleared: resolveChild answers null for a
-				// foreign entry just as for an unloadable one of ours, and the null branch clears its graphs.
-				URISplit childSplit = childSplitIfOwned(childEntryIRI);
-				if (childSplit == null) {
-					continue;
-				}
-				EntryImpl removeEntry = resolveChild(childEntryIRI);
-				if (removeEntry == null) {
-					clearUnresolvableChild(childEntryIRI, childSplit, rc);
-					continue;
-				}
-				removeFromIndex(removeEntry, rc, discardedOps);
-				rc.clear(removeEntry.getSesameEntryURI());
-				if (!systemEntries.contains(removeEntry.getEntryURI())) {
-					removeEntry.remove(rc);
-				}
-			}
-			rc.clear(this.resourceURI);
+	/**
+	 * True on the instance whose removal committed, and on any other instance of the same context once it has been
+	 * seen while the context's graphs were being deleted: a cached child can hold an older instance than the one
+	 * that was removed. Latched, since the id is freed when the deletion ends.
+	 */
+	@Override
+	public boolean isDeleted() {
+		if (deleted) {
+			return true;
 		}
+		ContextManager cm = entry.getRepositoryManager().getContextManager();
+		if (cm != null && cm.isRemovalPending(id)) {
+			deleted = true;
+			return true;
+		}
+		return false;
+	}
+
+	void markDeleted() {
+		deleted = true;
 	}
 
 	/**
@@ -1559,7 +1574,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * <p>Objects that are not IRIs, and children that do not belong to this context, are reported and
 	 * skipped. The ownership filter lives here rather than in each caller because both of them act
 	 * destructively on what this returns: {@code importContext} removes it, and the public-repository
-	 * rebuild republishes it. See {@link #childSplitIfOwned}.
+	 * rebuild republishes it. See {@link #isOwnedChild}.
 	 *
 	 * <p>Holds no monitor. It is a read-only enumeration on its own connection and the lock protocol on
 	 * {@link #res2entry} already has scans holding nothing, so taking the store-wide monitor here would
@@ -1590,7 +1605,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 							+ "be enumerated and needs manual cleanup", statement, this.id);
 					continue;
 				}
-				if (childSplitIfOwned(childEntryIRI) == null) {
+				if (!isOwnedChild(childEntryIRI)) {
 					continue;
 				}
 				children.add(URI.create(childEntryIRI.toString()));
@@ -1600,25 +1615,24 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	/**
-	 * The parsed child URI when this context's index graph names a child that really belongs to this
-	 * context, or null — having logged why — when it does not.
+	 * Whether a child this context's index graph names really belongs to this context; logs why not.
 	 *
-	 * <p>Deleting a context must not touch another context's data, and the index graph can name one
-	 * without any attacker involved: {@code ContextManagerImpl.importContext} copies index-graph objects
+	 * <p>Removing a context's children must not touch another context's data, and the index graph can name
+	 * one without any attacker involved: {@code ContextManagerImpl.importContext} copies index-graph objects
 	 * verbatim unless they carry the old context namespace, so restoring an export into the same
 	 * repository is enough to plant one.
 	 */
-	private URISplit childSplitIfOwned(IRI childEntryIRI) {
+	private boolean isOwnedChild(IRI childEntryIRI) {
 		URISplit split;
 		try {
 			split = new URISplit(URI.create(childEntryIRI.toString()),
 					entry.getRepositoryManager().getRepositoryURL());
 		} catch (IllegalArgumentException e) {
-			// Cannot be attributed to any context, so it cannot be shown to be ours. Clearing an
-			// unattributable graph is the one outcome worse than leaving it: it can belong to anyone.
+			// Cannot be attributed to any context, so it cannot be shown to be ours. Removing an
+			// unattributable entry is the one outcome worse than leaving it: it can belong to anyone.
 			log.error("Child {} named by context {}'s index graph is not a usable EntryStore URI ({}); "
 					+ "leaving its graphs alone, they need manual cleanup", childEntryIRI, this.id, e.getMessage());
-			return null;
+			return false;
 		}
 		// Ids, not URIs. split.getContextURI() is base + contextId, which equals this.resourceURI only
 		// while a context's resource URI is base + its own id — false for ContextManagerImpl, whose
@@ -1628,58 +1642,16 @@ public class ContextImpl extends ResourceImpl implements Context {
 			log.error("Child {} named by context {}'s index graph belongs to context {}; leaving it alone. "
 							+ "The index graph of this context should not name it and needs manual cleanup",
 					childEntryIRI, this.id, split.getContextId());
-			return null;
+			return false;
 		}
-		// Owning the context is not enough: the caller derives graph names from the split, and URISplit
-		// has an early-return branch (a query string after the context id) that leaves path and id null
-		// while still setting contextId. Such a URI would pass the check above and yield ".../metadata/null"
-		// and siblings, so require the split to actually name an entry.
+		// Owning the context is not enough: for a query string after the context id, URISplit sets contextId
+		// but leaves path and id null, so require the split to name an entry.
 		if (split.getUriType() != URIType.MetaMetadata) {
 			log.error("Child {} named by context {}'s index graph does not name an entry of it; leaving its "
 					+ "graphs alone, they need manual cleanup", childEntryIRI, this.id);
-			return null;
+			return false;
 		}
-		return split;
-	}
-
-	/**
-	 * Clears the graphs of a child this context owns but {@link #resolveChild} could not load. Leaving it
-	 * behind is what orphans data; ownership has already been established by {@link #childSplitIfOwned}.
-	 *
-	 * <p>Every graph the entry occupies is cleared, via {@link URISplit#getEntryGraphURIs()} rather than
-	 * a hand-picked list. {@code removeEntry.remove(rc)} normally clears them and is exactly the call
-	 * this path skips, so clearing a subset destroys the graph that <em>names</em> the rest and leaves
-	 * the rest behind as unreachable data — the orphan this method exists to prevent. The resource graph
-	 * is the one that gets forgotten: {@code EntryImpl.remove} reaches it through
-	 * {@code resource.remove(rc)}, and a {@code Link} has no resource graph, so a {@code List},
-	 * {@code Graph} or {@code Pipeline} child is the only kind that shows the difference.
-	 */
-	private void clearUnresolvableChild(IRI childEntryIRI, URISplit split, RepositoryConnection rc) {
-		log.error("Child {} of context {} could not be loaded as an entry; clearing its entry, metadata, "
-						+ "cached-external-metadata, relation and resource graphs so the deletion does not "
-						+ "leave it orphaned. Inverse relations held by other contexts, and the data file of "
-						+ "a Data entry, were NOT removed and need manual cleanup", childEntryIRI, this.id);
-		ValueFactory vf = rc.getValueFactory();
-		rc.clear(split.getEntryGraphURIs().stream()
-				.map(uri -> vf.createIRI(uri.toString()))
-				.toArray(IRI[]::new));
-	}
-
-	/**
-	 * Loads a child named by the context's index graph, or null when it names nothing loadable — a URI
-	 * {@code java.net.URI} rejects, or an entry whose graph is gone. This deletion path used to
-	 * dereference that null immediately, rolling back after {@code deleted = true} had already been set.
-	 *
-	 * <p>Also null for another context's entry; see {@link #childSplitIfOwned}.
-	 */
-	private EntryImpl resolveChild(IRI childEntryIRI) {
-		try {
-			return (EntryImpl) getByEntryURI(URI.create(childEntryIRI.toString()));
-		} catch (IllegalArgumentException | ClassCastException e) {
-			log.error("Child {} of context {} is not a usable entry URI: {}",
-					childEntryIRI, this.id, e.getMessage());
-			return null;
-		}
+		return true;
 	}
 
 	/**

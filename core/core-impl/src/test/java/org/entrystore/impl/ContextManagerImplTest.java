@@ -34,6 +34,7 @@ import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryListener;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.ContextRemovalPendingException;
 import org.entrystore.repository.util.CommonQueries;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -248,6 +249,19 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		}
 		assertTrue(dataFile.exists(), "A failed import must not delete data files from disk");
 		assertEquals(modifiedBefore, contextEntry.getModifiedDate());
+	}
+
+	@Test
+	public void importContext_intoARemovedContext_isRefused(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		File importZip = createMinimalImportZip(tempDataDir);
+
+		cm.remove(contextEntry.getEntryURI());
+		awaitContextRemovals();
+
+		assertThrows(ContextRemovalPendingException.class, () -> cm.importContext(contextEntry, importZip));
 	}
 
 	@Test

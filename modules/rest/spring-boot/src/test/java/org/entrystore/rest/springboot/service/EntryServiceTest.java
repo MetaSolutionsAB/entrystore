@@ -44,6 +44,7 @@ import java.net.URI;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -92,6 +93,29 @@ class EntryServiceTest {
 		service = new EntryService(
 				principalManager, repositoryManager, contextService,
 				reservedNamesService, resourceSerializationService, new JsonMapper());
+	}
+
+	@Test
+	void deleteEntry_ofAContext_finishesInTheBackground() {
+		URI entryURI = URI.create("http://localhost:8181/_contexts/entry/5");
+		when(entry.getResource()).thenReturn(mock(Context.class));
+		when(entry.getGraphType()).thenReturn(GraphType.Context);
+		when(entry.getContext()).thenReturn(context);
+		when(entry.getEntryURI()).thenReturn(entryURI);
+
+		assertTrue(service.deleteEntry(entry, false), "a context's graphs are deleted after the response (202)");
+		verify(context).remove(entryURI);
+	}
+
+	@Test
+	void deleteEntry_ofAnEntryThatIsNoContext_finishesAtOnce() {
+		URI entryURI = URI.create("http://localhost:8181/1/entry/5");
+		when(entry.getGraphType()).thenReturn(GraphType.None);
+		when(entry.getContext()).thenReturn(context);
+		when(entry.getEntryURI()).thenReturn(entryURI);
+
+		assertFalse(service.deleteEntry(entry, false), "an entry is gone when the response is sent (204)");
+		verify(context).remove(entryURI);
 	}
 
 	@Test

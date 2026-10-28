@@ -1522,7 +1522,8 @@ public class EntryImpl implements Entry {
 		return !Models.isomorphic(oldGraph.filter(null, projectTypeProperty, null), newGraph.filter(null, projectTypeProperty, null));
 	}
 
-	private boolean isStatementInvRelationCandidate(Statement statement, String base) {
+	/** Package-private for {@code ContextRemover}, which removes these copies without loading the entries. */
+	static boolean isStatementInvRelationCandidate(Statement statement, String base) {
 		IRI predicate = statement.getPredicate();
         if (!predicate.equals(RepositoryProperties.resource)
                 && !predicate.equals(RepositoryProperties.metadata)
@@ -1728,6 +1729,11 @@ public class EntryImpl implements Entry {
 	 */
 	protected void resetDeleted() {
 		deleted = false;
+	}
+
+	/** Flags an entry removed together with its context, whose graphs are deleted without loading it. */
+	void markDeleted() {
+		deleted = true;
 	}
 
 	/**

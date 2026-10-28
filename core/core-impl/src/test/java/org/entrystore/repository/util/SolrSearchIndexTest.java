@@ -1366,28 +1366,56 @@ public class SolrSearchIndexTest {
 	}
 
 	@Test
-	public void clearSolrIndexBuildsContextOnlyDeleteQuery() throws Exception {
-		SolrClient client = mock(SolrClient.class);
-		Entry contextEntry = mock(Entry.class);
-		when(contextEntry.getResourceURI()).thenReturn(URI.create("http://localhost:8181/1"));
+	public void removeContextBuildsContextOnlyDeleteQuery() throws Exception {
+		assertTrue(index.removeContext(URI.create("http://localhost:8181/1")));
 
-		assertTrue(index.clearSolrIndex(client, null, contextEntry));
+		assertEquals("context:http\\:\\/\\/localhost\\:8181\\/1", sentDeleteQuery());
+	}
 
-		ArgumentCaptor<UpdateRequest> captor = ArgumentCaptor.forClass(UpdateRequest.class);
-		verify(client).request(captor.capture(), any());
-		assertEquals(
-			"context:http\\:\\/\\/localhost\\:8181\\/1",
-			captor.getValue().getDeleteQuery().getFirst());
+	@Test
+	public void removeContextDropsTheQueuedDocumentsOfTheContextOnly() throws Exception {
+		stopDocumentSubmitter(); // keeps queued documents in their queue
+		URI entryOfContext10 = URI.create("http://localhost:8181/10/entry/1");
+		postQueue().put(ENTRY_1_1, new SolrInputDocument()); // would otherwise be sent after the purge
+		postQueue().put(ENTRY_2_1, new SolrInputDocument());
+		postQueue().put(entryOfContext10, new SolrInputDocument()); // its URI starts with that of context 1
+
+		index.removeContext(URI.create("http://localhost:8181/1"));
+
+		assertEquals(Set.of(ENTRY_2_1, entryOfContext10), postQueue().asMap().keySet());
+	}
+
+	@Test
+	public void removeContextKeepsAFailedBatchFromQueuingTheContextsDocumentsAgain() throws Exception {
+		stopDocumentSubmitter(); // keeps queued documents in their queue
+		postQueue().put(ENTRY_1_1, new SolrInputDocument());
+		Method drainPostQueue = SolrSearchIndex.SolrInputDocumentSubmitter.class.getDeclaredMethod("drainPostQueue");
+		drainPostQueue.setAccessible(true);
+		Method requeueAdds = SolrSearchIndex.SolrInputDocumentSubmitter.class
+				.getDeclaredMethod("requeueAdds", Map.class);
+		requeueAdds.setAccessible(true);
+
+		Object batch = drainPostQueue.invoke(documentSubmitter());
+		index.removeContext(URI.create("http://localhost:8181/1")); // removed while the batch was being sent
+		requeueAdds.invoke(documentSubmitter(), batch); // the batch failed
+
+		assertTrue(postQueue().asMap().isEmpty(), "the removed context's document must not be sent after the purge");
+		assertTrue(inFlightAdds().isEmpty());
+	}
+
+	@Test
+	public void removeContextReturnsFalseWhenSolrRequestFails() throws Exception {
+		when(solrServer.request(any(), any())).thenThrow(new SolrServerException("solr down"));
+
+		assertFalse(index.removeContext(URI.create("http://localhost:8181/1")));
 	}
 
 	@Test
 	public void clearSolrIndexCombinesDateAndContextClausesWithAnd() throws Exception {
 		SolrClient client = mock(SolrClient.class);
-		Entry contextEntry = mock(Entry.class);
-		when(contextEntry.getResourceURI()).thenReturn(URI.create("http://localhost:8181/1"));
 		Date expiration = Date.from(Instant.parse("2024-01-15T10:30:00.123Z"));
 
-		assertTrue(index.clearSolrIndex(client, expiration, contextEntry));
+		assertTrue(index.clearSolrIndex(client, expiration, URI.create("http://localhost:8181/1")));
 
 		ArgumentCaptor<UpdateRequest> captor = ArgumentCaptor.forClass(UpdateRequest.class);
 		verify(client).request(captor.capture(), any());

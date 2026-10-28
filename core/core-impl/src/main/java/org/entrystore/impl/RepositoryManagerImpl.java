@@ -75,6 +75,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.EnumMap;
@@ -192,6 +193,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				String indexes = configuration.getString(Settings.STORE_INDEXES);
 				checkAndUpgradeNativeStore(path, indexes);
 				log.info("Main repository: using Native Store at {} with indexes {}", path, indexes);
+				warnIfNoContextFirstIndex(indexes);
 				NativeStore store;
 				if (indexes != null) {
 					store = new NativeStore(path, indexes);
@@ -238,6 +240,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				File path = new File(configuration.getURI(Settings.STORE_PATH));
 				String indexes = configuration.getString(Settings.STORE_INDEXES);
 				log.info("Main repository: using LMDB Store at {} with indexes {}", path, indexes);
+				warnIfNoContextFirstIndex(indexes);
 				LmdbStore store;
 				if (indexes != null) {
 					store = new LmdbStore(path, new LmdbStoreConfig().setTripleIndexes(indexes));
@@ -344,6 +347,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			publicRepository = new PublicRepository(this);
 			registerPublicRepositoryListeners();
 		}
+
+		// after initSolr: a removal resumed without the index would skip purging the context's documents
+		contextManager.contextRemover.resumePending();
 
 		log.info("Adding shutdown hook");
 		Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
@@ -473,6 +479,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		synchronized (mutex) {
 			if (!shutdown) {
 				shutdownQuietly("Quartz scheduler", () -> StdSchedulerFactory.getDefaultScheduler().shutdown());
+				// before Solr and the store, which a context removal still uses until it stops
+				if (contextManager != null) {
+					shutdownQuietly("context removal", contextManager.contextRemover::shutdown);
+				}
 				log.info("Shutting down repository listeners and executor");
 				//listenerExecutor.shutdown();
 				repositoryListeners.clear();
@@ -845,6 +855,27 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			return repository.getValueFactory();
 		}
 		return null;
+	}
+
+	/**
+	 * Warns when the main store may lack a triple index starting with the context: removing a context then reads
+	 * each of its graphs with a scan of the whole store.
+	 */
+	private static void warnIfNoContextFirstIndex(String indexes) {
+		if (indexes == null) {
+			log.warn("{} is not set, so the main store keeps the triple indexes it was created with; RDF4J creates "
+					+ "spoc,posc, which has no index starting with the context (c) and makes removing a context "
+					+ "scan the whole store for each of its graphs. Set it to cspo,posc", Settings.STORE_INDEXES);
+		} else if (!hasContextFirstIndex(indexes)) {
+			log.warn("The main store has no triple index starting with the context (c) in {}={}, which makes "
+					+ "removing a context scan the whole store for each of its graphs. Add cspo, e.g. cspo,posc",
+					Settings.STORE_INDEXES, indexes);
+		}
+	}
+
+	/** Whether a comma-separated list of RDF4J triple indexes has one starting with the context. */
+	static boolean hasContextFirstIndex(String indexes) {
+		return indexes != null && Arrays.stream(indexes.split(",")).anyMatch(index -> index.trim().startsWith("c"));
 	}
 
 	protected void checkAndUpgradeNativeStore(File path, String indexes) {

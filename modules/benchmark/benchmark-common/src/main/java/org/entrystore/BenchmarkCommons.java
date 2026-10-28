@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore;
 
 import org.apache.commons.cli.CommandLine;
@@ -61,6 +77,13 @@ public class BenchmarkCommons {
 		Option isWithAclOption = createOption("a", "acl", "ACL", "Run with ACL: @boolean.", false);
 		Option storePathOption = createOption("p", "path", "PATH", "Store path: @string.", false);
 		Option baseUrlOption = createOption("b", "base", "BASE", "Base URL: @string.", false);
+		Option indexesOption = createOption("x", "indexes", "INDEXES", "Triple indexes of a native or lmdb store, "
+				+ "e.g. 'spoc,posc' (RDF4J's default) or 'cspo,posc': @string. Default: " + INDEXES + " for native, "
+				+ "RDF4J's default for lmdb.", false);
+		Option contextRemovalOption = Option.builder("R")
+				.longOpt("remove-context")
+				.desc("Afterwards, time removing the benchmark context while another context is written to.")
+				.build();
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -72,6 +95,8 @@ public class BenchmarkCommons {
 		options.addOption(isWithAclOption);
 		options.addOption(storePathOption);
 		options.addOption(baseUrlOption);
+		options.addOption(indexesOption);
+		options.addOption(contextRemovalOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -159,6 +184,18 @@ public class BenchmarkCommons {
 			boolean isWithAcl = !commandLine.hasOption("a") || "false".equals(commandLine.getOptionValue(isWithTransactionsOption));
 			arguments.setWithAcl(isWithAcl);
 			System.setProperty("log.acl", arguments.isWithAcl() ? "on" : "off");
+
+			arguments.setIndexes(commandLine.getOptionValue(indexesOption));
+
+			if (commandLine.hasOption("R")) {
+				if (MEMORY.equals(storeType)) {
+					// a memory store has no triple indexes, which are what removing a context depends on
+					System.err.println("Removing the context is measured on a native or lmdb store only.");
+					printHelp(options);
+					System.exit(1);
+				}
+				arguments.setWithContextRemoval(true);
+			}
 
 			// welcome message
 			LogUtils.logWelcome(storeType, arguments.isWithTransactions(), arguments.getSizeToGenerate());

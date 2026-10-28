@@ -21,6 +21,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -133,6 +135,20 @@ class GroupServiceTest {
 		when(userService.isAdmin(requestingUser)).thenReturn(true);
 
 		assertThrows(BadRequestException.class, () -> service.createGroup("ctx", "bad**name"));
+	}
+
+	@Test
+	void contextIdStillBeingRemoved_isRejectedBeforeTheGroupIsCreated() {
+		// The group is created before its context, so leaving this to the context create would orphan the group.
+		gate(true);
+		authenticatedNonGuest();
+		ContextManager cm = mock(ContextManager.class);
+		when(repositoryManager.getContextManager()).thenReturn(cm);
+		when(principalManager.getAdminUser()).thenReturn(mock(User.class));
+		when(cm.isRemovalPending("reused")).thenReturn(true);
+
+		assertThrows(DataConflictException.class, () -> service.createGroup("reused", null));
+		verify(cm, never()).getContext("_principals");
 	}
 
 	@ParameterizedTest(name = "gate binds from the configured key with value \"{0}\"")

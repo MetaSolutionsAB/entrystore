@@ -100,7 +100,7 @@ public class GroupService {
 				throw new DataConflictException("Requested value of the name parameter: '" + groupName + "' is already used");
 			}
 
-			if (groupContextId != null && cm.getContext(groupContextId) != null) {
+			if (groupContextId != null && (cm.getContext(groupContextId) != null || cm.isRemovalPending(groupContextId))) {
 				throw new DataConflictException("Requested value of the contextId parameter: '" + groupContextId + "' is already used");
 			}
 

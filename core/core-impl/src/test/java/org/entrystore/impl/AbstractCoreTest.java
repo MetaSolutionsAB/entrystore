@@ -171,6 +171,11 @@ public abstract class AbstractCoreTest {
 		}
 	}
 
+	/** Waits until the removed contexts' graphs, search documents and files have been deleted in the background. */
+	protected void awaitContextRemovals() throws Exception {
+		((ContextManagerImpl) cm).contextRemover.awaitIdle();
+	}
+
 	/**
 	 * Evicts an entry from the soft cache, so that it is loaded from the store again.
 	 */

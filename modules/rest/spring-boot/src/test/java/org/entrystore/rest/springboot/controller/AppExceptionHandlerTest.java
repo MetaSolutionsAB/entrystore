@@ -21,6 +21,7 @@ import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
+import org.entrystore.repository.security.ContextRemovalPendingException;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
@@ -49,10 +50,12 @@ import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.ExceptionHandlerMethodResolver;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 
+import java.lang.reflect.Method;
 import java.net.URI;
 import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
@@ -86,6 +89,20 @@ class AppExceptionHandlerTest {
 		assertEquals(503, body.status());
 		assertEquals("/sparql", body.path());
 		assertEquals("Server temporarily overloaded; retry later", body.error());
+	}
+
+	@Test
+	void contextRemovalPendingException_isAnsweredAsAConflict() throws Exception {
+		// Resolved as Spring does, so dropping the class from the @ExceptionHandler list fails here: its superclass
+		// DisallowedException has no handler, and the generic one would answer 500.
+		ContextRemovalPendingException ex = new ContextRemovalPendingException("Context reused is still being removed");
+		Method mapped = new ExceptionHandlerMethodResolver(AppExceptionHandler.class).resolveMethod(ex);
+		assertNotNull(mapped, "Expected a handler for ContextRemovalPendingException");
+
+		ResponseEntity<?> response = (ResponseEntity<?>) mapped.invoke(handler, ex,
+				new MockHttpServletRequest("POST", "/_contexts"));
+
+		assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
 	}
 
 	@Test

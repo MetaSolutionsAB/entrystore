@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore;
 
 import org.entrystore.config.Config;
@@ -19,7 +35,9 @@ public class Benchmark {
 		config.setProperty(Settings.STORE_TYPE, arguments.getStoreType());
 		config.addProperty(Settings.STORE_PATH, "file:///" + arguments.getStorePath().getAbsolutePath().replace('\\', '/'));
 
-		if (arguments.getStoreType().equalsIgnoreCase("native")) {
+		if (arguments.getIndexes() != null && !arguments.getStoreType().equalsIgnoreCase(BenchmarkCommons.MEMORY)) {
+			config.addProperty(Settings.STORE_INDEXES, arguments.getIndexes());
+		} else if (arguments.getStoreType().equalsIgnoreCase(BenchmarkCommons.NATIVE)) {
 			config.addProperty(Settings.STORE_INDEXES, BenchmarkCommons.INDEXES);
 		}
 
@@ -95,6 +113,10 @@ public class Benchmark {
 				if (!arguments.isWithInterContexts()) {
 					Context context = repositoryManager.getContextManager().getContext(BenchmarkCommons.CONTEXT_ALIAS + "_1");
 					readAllFromDatabase(context, arguments.getSizeToGenerate());
+				}
+
+				if (arguments.isWithContextRemoval()) {
+					ContextRemovalBenchmark.runBenchmark(repositoryManager);
 				}
 			} finally {
 				// close the connection and shutDown the database

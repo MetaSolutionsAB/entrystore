@@ -56,6 +56,7 @@ import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.ContextRemovalPendingException;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.URISplit;
@@ -110,12 +111,16 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	/** C0/C1 controls, format characters such as bidi overrides, and the Unicode line separators. */
 	private static final Pattern CONTROL_CHARACTERS = Pattern.compile("[\\p{Cc}\\p{Cf}\\u2028\\u2029]");
 
+	/** Deletes the graphs of removed contexts. Package-private for RepositoryManagerImpl and tests. */
+	final ContextRemover contextRemover;
+
 	public ContextManagerImpl(RepositoryManagerImpl rman, Repository repo) {
 		super(new EntryImpl(rman,repo), URISplit.createURI(rman.getRepositoryURL().toString(),
 				RepositoryProperties.SYSTEM_CONTEXTS_ID,
 				RepositoryProperties.DATA_PATH,
 				RepositoryProperties.SYSTEM_CONTEXTS_ID).toString(),
 				rman.getSoftCache());
+		contextRemover = new ContextRemover(rman, this.resourceURI);
 		//First try to load the ContextManager.
 		EntryImpl e = (EntryImpl) getByEntryURI(URISplit.createURI(rman.getRepositoryURL().toString(),
 				RepositoryProperties.SYSTEM_CONTEXTS_ID,
@@ -130,103 +135,36 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		loadIndex();
 	}
 
+	@Override
+	public boolean isRemovalPending(String contextId) {
+		return contextRemover.isPending(contextId);
+	}
+
 	/**
-	 * Removes all triples in this context (i.e. all triples within all named
-	 * graphs which start with the given parameter). Removes even all local
-	 * files which belong to this context.
-	 *
-	 * @param contextURI
-	 *            The resource URI of the context to be deleted. E.g. http://baseuri/512
-	 * @throws RepositoryException
-	 *
-	 * @deprecated Use Context.remove(RepositoryConnection) instead.
+	 * Marks a removed context deleted and starts deleting its graphs. Runs under the repository monitor, so a
+	 * create in the context, or of a context with its id, either completes before or is refused after.
 	 */
-	@Deprecated
-	public void deleteContext(URI contextURI) throws RepositoryException {
-		if (contextURI == null) {
-			throw new IllegalArgumentException("Context URI must not be null");
+	@Override
+	protected void afterRemoveCommitted(Resource removedResource) {
+		if (removedResource instanceof ContextImpl removedContext) {
+			removedContext.markDeleted();
+			contextRemover.schedule(removedContext.id);
 		}
+	}
 
-		String contextURIStr = contextURI.toString();
-		if (!contextURIStr.endsWith("/")) {
-			contextURIStr += "/";
+	/** Also refuses a context with the id of one whose graphs are still being deleted. */
+	@Override
+	protected void checkCreateAllowed(String entryId) {
+		super.checkCreateAllowed(entryId);
+		if (isRemovalPending(entryId)) {
+			throw new ContextRemovalPendingException("Context " + entryId + " is still being removed");
 		}
+	}
 
-		Entry contextEntry = getEntry(contextURI);
-		String contextId = contextEntry.getId();
-
-		synchronized (this.entry.repository) {
-			RepositoryConnection rc = null;
-
-			try {
-				log.info("Removing context {} from index", contextURI);
-				remove(contextURI);
-
-				rc = entry.getRepository().getConnection();
-				rc.begin();
-
-				ValueFactory vf = rc.getValueFactory();
-
-				RepositoryResult<org.eclipse.rdf4j.model.Resource> availableNGs = rc.getContextIDs();
-				List<org.eclipse.rdf4j.model.Resource> filteredNGs = new ArrayList<>();
-				while (availableNGs.hasNext()) {
-					org.eclipse.rdf4j.model.Resource ng = availableNGs.next();
-					if (ng.toString().startsWith(contextURIStr)) {
-						filteredNGs.add(ng);
-					}
-				}
-				availableNGs.close();
-
-				org.eclipse.rdf4j.model.Resource[] filteredNGsArray = filteredNGs.toArray(new org.eclipse.rdf4j.model.Resource[filteredNGs.size()]);
-				if (filteredNGsArray == null || filteredNGsArray.length == 0) {
-					log.warn("No named graphs match this context");
-					return;
-				}
-
-				IRI contextURISesame = vf.createIRI(contextURI.toString());
-				IRI baseURI = vf.createIRI(entry.getRepositoryManager().getRepositoryURL().toString());
-				String baseURIStr = baseURI.toString();
-
-				// remove all triples belonging to the context
-				log.info("Removing triples contained in context {}", contextURI);
-				rc.remove(rc.getStatements(null, null, null, false, filteredNGsArray));
-				rc.remove(rc.getStatements(null, null, contextURISesame, false));
-				rc.remove(rc.getStatements(contextURISesame, null, null, false));
-
-				// remove all triples in named graphs which look like: http://base/_contexts/{kind}/{context-id}
-				log.info("Removing references to context " + contextURI);
-				rc.remove(rc.getStatements(null, null, null, false, vf.createIRI(URISplit.createURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString())));
-				rc.remove(rc.getStatements(null, null, null, false, vf.createIRI(URISplit.createURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, contextId).toString())));
-				rc.remove(rc.getStatements(null, null, null, false, vf.createIRI(URISplit.createURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.DATA_PATH, contextId).toString())));
-				rc.remove(rc.getStatements(vf.createIRI(URISplit.createURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString()), null, null, false));
-
-				rc.commit();
-
-				// recursively remove the file directory on the hard disk
-				String contextPath = this.entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER);
-	            if (contextPath != null) {
-	            	File contextPathFile = new File(contextPath);
-	            	File contextFolder = new File(contextPathFile, contextId);
-	            	if (contextFolder.exists() && contextFolder.isDirectory() && contextFolder.canWrite()) {
-						log.info("Removing all local files referenced by context {}", contextURI);
-	            		FileOperations.deleteAllFilesInDir(contextFolder);
-	            		contextFolder.delete();
-	            	} else {
-						log.error("The data path of context {} is not a folder or not writable: {}", contextId, contextFolder);
-	            	}
-	            } else {
-	            	log.error("No data folder configured");
-	            }
-			} catch (RepositoryException e) {
-				rc.rollback();
-				log.error("Error when deleting context", e);
-				throw e;
-			} finally {
-				if (rc != null) {
-					rc.close();
-				}
-			}
-		}
+	/** A removed context's entry graph is gone at once, but its id stays taken until its graphs are deleted. */
+	@Override
+	protected boolean isIdReserved(String id) {
+		return isRemovalPending(id);
 	}
 
 	public void exportContext(Entry contextEntry, File destFile, Set<URI> users, boolean metadataOnly, Class<? extends RDFWriter> writer) throws RepositoryException {
@@ -402,6 +340,10 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		List<EntryImpl> survivingLists = new ArrayList<>();
 
 		synchronized (this.entry.repository) {
+			// checked under the monitor: a removal that committed while the import was being read must win
+			if (cont == null || cont.isDeleted()) {
+				throw new ContextRemovalPendingException("Context " + contextEntry.getId() + " has been removed");
+			}
 			log.info("Importing context from stream");
 			RepositoryConnection rc = null;
 			try {
@@ -975,6 +917,10 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			log.warn("Unable to construct entry URI based on likely incorrect URI [{}]", uri);
 			return null;
 		}
+		// Before the cache: entries of a removed context stay cached while its graphs are being deleted.
+		if (isRemovalPending(split.get().getContextId())) {
+			return null;
+		}
 		Entry item = softCache.getByEntryURI(entryURI);
 		if (item != null) {
 			if (withACL) {
@@ -1113,6 +1059,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	protected Entry getItemInRepositoryByMMdURI(URI mmdURI) {
 		Entry entry = softCache.getByEntryURI(mmdURI);
 		if (entry != null) {
+			if (entry.getContext().isDeleted()) {
+				return null;
+			}
 			((ContextImpl) entry.getContext()).checkAccess(entry, AccessProperty.ReadMetadata);
 			return entry;
 		}

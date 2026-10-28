@@ -24,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.AuthorizationException;
+import org.entrystore.repository.security.ContextRemovalPendingException;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
@@ -182,10 +183,13 @@ public class AppExceptionHandler {
 		return jsonResponse(responseBody);
 	}
 
-	@ExceptionHandler(DataConflictException.class)
-	public ResponseEntity<ErrorResponse> handleDataConflictException(DataConflictException ex,
+	// ContextRemovalPendingException comes from core: a create in a removed context, or of a context with the id
+	// of one still being removed.
+	@ExceptionHandler({DataConflictException.class, ContextRemovalPendingException.class})
+	public ResponseEntity<ErrorResponse> handleDataConflictException(RuntimeException ex,
 																	 HttpServletRequest request) {
-		log.warn("DataConflictException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
+		log.warn("{} at endpoint '{}': {}", ex.getClass().getSimpleName(), request.getRequestURI(), ex.getMessage(),
+				ex);
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.CONFLICT.value())
 				.path(request.getRequestURI())

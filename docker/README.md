@@ -69,6 +69,7 @@ Key settings to configure:
 | `entrystore.baseurl.folder` | External base URL | - |
 | `entrystore.repository.store.type` | Store type (`native`, `memory`) | - |
 | `entrystore.repository.store.path` | Path to RDF store | `file:///srv/entrystore/data/store/` |
+| `entrystore.repository.store.indexes` | Triple indexes; keep one starting with `c`, e.g. `cspo,posc`, or removing a context scans the whole store | - |
 | `entrystore.data.folder` | Path to uploaded files | `/srv/entrystore/data/files/` |
 | `entrystore.solr.url` | Solr URL | - |
 | `entrystore.auth.adminpw` | Admin password override | - |

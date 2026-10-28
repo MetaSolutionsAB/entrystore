@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,6 +68,8 @@ public class RepositoryProperties {
 	public static final IRI counter;
 	public static final IRI mdHasEntry;
 	public static final IRI resHasEntry;
+	/** Marks, in the _contexts index graph, a removed context whose graphs are still being deleted. */
+	public static final IRI removalPending;
 
 	public static final IRI resource;
 	public static final IRI metadata;
@@ -151,6 +153,7 @@ public class RepositoryProperties {
 		counter = vf.createIRI(NSbase + "counter");
 		mdHasEntry = vf.createIRI(NSbase + "mdHasMMd");
 		resHasEntry = vf.createIRI(NSbase + "resHasMMd");
+		removalPending = vf.createIRI(NSbase + "removalPending");
 		alias = vf.createIRI(NSbase + "alias");
 		
 		metadata = vf.createIRI(NSbase + "metadata");
