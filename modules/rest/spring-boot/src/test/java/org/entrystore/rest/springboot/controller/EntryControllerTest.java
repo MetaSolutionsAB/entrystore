@@ -52,6 +52,28 @@ class EntryControllerTest {
 	private final EntryController controller = new EntryController(entryService, objectMapper);
 
 	@Test
+	void deleteEntry_whoseRemovalFinishesInTheBackground_answersAccepted() {
+		Entry entry = mock(Entry.class);
+		when(entryService.getEntryByContextIdAndEntryId("_contexts", "5")).thenReturn(entry);
+		when(entryService.deleteEntry(entry, false)).thenReturn(true);
+
+		ResponseEntity<Void> response = controller.deleteEntry("_contexts", "5", null);
+
+		assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
+	}
+
+	@Test
+	void deleteEntry_whoseRemovalIsDoneAtOnce_answersNoContent() {
+		Entry entry = mock(Entry.class);
+		when(entryService.getEntryByContextIdAndEntryId("1", "2")).thenReturn(entry);
+		when(entryService.deleteEntry(entry, false)).thenReturn(false);
+
+		ResponseEntity<Void> response = controller.deleteEntry("1", "2", null);
+
+		assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
+	}
+
+	@Test
 	void headEntry_answersWithTheValidatorsOfTheModificationDate_withoutSerializingTheEntry() throws Exception {
 		Entry entry = mock(Entry.class);
 		when(entry.getModifiedDate()).thenReturn(MODIFIED);

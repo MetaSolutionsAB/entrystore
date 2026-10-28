@@ -915,10 +915,10 @@ public class ContextImplTest extends AbstractCoreTest {
 	/**
 	 * ENTRYSTORE-1095. Deleting a context must clear every child graph, including one the in-memory index
 	 * never saw. Pins the two halves of that guarantee together: an unparseable statement no longer
-	 * aborts the index load, and {@code remove(RepositoryConnection)} reads its child list from the
-	 * transaction instead of from the index that skipped it. Deriving it from the index left the child's
-	 * entry, metadata and resource graphs in the store while {@code rc.clear(this.resourceURI)} destroyed
-	 * the graph that named them — permanently orphaned data.
+	 * aborts the index load, and the removal lists the context's graphs from the store instead of
+	 * deriving them from the index that skipped the child. Deriving them from the index left the child's
+	 * entry, metadata and resource graphs in the store while the graph that named them was cleared —
+	 * permanently orphaned data.
 	 *
 	 * <p>The child's only {@code resHasEntry} triple gets a subject {@code java.net.URI.create} rejects,
 	 * and the context is then re-resolved from a cold cache so its index is built from the store — which
@@ -959,13 +959,13 @@ public class ContextImplTest extends AbstractCoreTest {
 			"and the context must know its index is short");
 
 		cm.remove(contextEntry.getEntryURI());
+		awaitContextRemovals();
 
 		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
 			assertFalse(rc.hasStatement(null, null, null, false, childEntryIRI),
 				"the child entry graph must be cleared even though the index did not list it");
-			// The graphs this javadoc names are cleared by the separate removeEntry.remove(rc) call, not by
-			// rc.clear(entryURI) — so asserting only the entry graph left a regression that dropped that
-			// call passing, while leaving behind exactly the orphaned data this test claims to pin.
+			// Asserting only the entry graph would let a removal that misses the other graphs pass, while it
+			// leaves behind exactly the orphaned data this test claims to pin.
 			assertFalse(rc.hasStatement(null, null, null, false, childMetadataIRI),
 				"the child metadata graph must be cleared too");
 			assertFalse(rc.hasStatement(null, null, null, false, childRelationIRI),
@@ -1057,12 +1057,10 @@ public class ContextImplTest extends AbstractCoreTest {
 	}
 
 	/**
-	 * ENTRYSTORE-1095. Deleting a context must not clear a graph belonging to a different context.
-	 * {@code resolveChild} answers null for an id belonging to another context as well as for an
-	 * unparseable one, and the branch that handles null used to clear whatever the statement named — so a
-	 * {@code resHasEntry} object pointing into a neighbouring context destroyed that entry's graph, with
-	 * the {@code systemEntries} guard skipped. {@code importContext} copies index-graph objects verbatim,
-	 * so restoring an export into the same repository is enough to plant one.
+	 * ENTRYSTORE-1095. Deleting a context must not clear a graph belonging to a different context, even one
+	 * its index graph names: a {@code resHasEntry} object pointing into a neighbouring context once destroyed
+	 * that entry's graph. {@code importContext} copies index-graph objects verbatim, so restoring an export
+	 * into the same repository is enough to plant one.
 	 */
 	@Test
 	public void removeContext_leavesAChildNamedInAnotherContextAlone() throws Exception {
@@ -1090,6 +1088,7 @@ public class ContextImplTest extends AbstractCoreTest {
 		}
 
 		cm.remove(doomedContextEntry.getEntryURI());
+		awaitContextRemovals();
 
 		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
 			assertTrue(rc.hasStatement(null, null, null, false, bystanderEntryIRI),
@@ -1102,11 +1101,11 @@ public class ContextImplTest extends AbstractCoreTest {
 	}
 
 	/**
-	 * ENTRYSTORE-1112. Deleting a context that holds a list whose member's entry graph is gone succeeds: removing the
-	 * list skips the member that does not resolve.
+	 * ENTRYSTORE-1112. Deleting a context that holds a list whose member's entry graph is gone succeeds and removes
+	 * the list with the context.
 	 */
 	@Test
-	public void removeContext_holdingAListWhoseMemberIsGone_succeeds() {
+	public void removeContext_holdingAListWhoseMemberIsGone_succeeds() throws Exception {
 		Entry doomedContextEntry = cm.createResource(null, GraphType.Context, null, null);
 		ContextImpl doomed = (ContextImpl) doomedContextEntry.getResource();
 		EntryImpl list = (EntryImpl) doomed.createResource(null, GraphType.List, null, null);
@@ -1117,6 +1116,7 @@ public class ContextImplTest extends AbstractCoreTest {
 		evictFromSoftCache(member);
 
 		cm.remove(doomedContextEntry.getEntryURI());
+		awaitContextRemovals();
 
 		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
 			assertFalse(rc.hasStatement(null, null, null, false, list.getSesameEntryURI()),
@@ -1126,18 +1126,12 @@ public class ContextImplTest extends AbstractCoreTest {
 
 	/**
 	 * ENTRYSTORE-1095. Deleting a context must clear <b>every</b> graph of a child it owns but cannot
-	 * load, not just the ones that are easy to name. {@code clearUnresolvableChild} stands in for
-	 * {@code removeEntry.remove(rc)}, which clears five: entry, metadata, cached external metadata,
-	 * relations and — through {@code resource.remove(rc)} — the resource graph. Clearing four of them
-	 * leaves the fifth behind while {@code rc.clear(this.resourceURI)} destroys the index graph that
-	 * named it, which is the orphan this whole path exists to prevent.
+	 * load: entry, metadata, cached external metadata, relations and resource. Leaving one behind while the
+	 * index graph that named it is cleared is the orphan this test exists to prevent.
 	 *
 	 * <p>The child is a {@code List}, deliberately. A {@code Link} has no resource graph, so the two
 	 * sibling tests could not have caught the omission — and a {@code List}'s resource graph is where its
 	 * member list lives, which is the data that would actually survive.
-	 *
-	 * <p>The graph URIs are spelled out here rather than derived through {@code URISplit}, so the test
-	 * pins the naming convention independently of the helper the production code uses to rebuild it.
 	 */
 	@Test
 	public void removeContext_clearsEveryGraphOfAnUnresolvableChild() throws Exception {
@@ -1160,14 +1154,13 @@ public class ContextImplTest extends AbstractCoreTest {
 			for (String path : new String[]{"metadata", "cached-external-metadata", "relations"}) {
 				rc.add(subject, predicate, vf.createLiteral(path), vf.createIRI(base + path + "/" + childId));
 			}
-			// And make the entry unloadable, which is the branch under test. The resHasEntry triple naming
-			// it lives in the context graph, so the deletion still finds the child.
+			// And make the entry unloadable, which is the case under test.
 			rc.clear(childEntryIRI);
 		}
-		// Force the load path; a cached entry would resolve and take the normal removal branch instead.
 		doomed.softCache.remove(child);
 
 		cm.remove(doomedContextEntry.getEntryURI());
+		awaitContextRemovals();
 
 		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
 			ValueFactory vf = rc.getValueFactory();
