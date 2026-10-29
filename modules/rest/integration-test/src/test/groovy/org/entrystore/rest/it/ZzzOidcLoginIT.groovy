@@ -48,6 +48,8 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 	def idpCookieHeaderSaved = ''
 	@Shared
 	def callbackUrlSaved = ''
+	@Shared
+	def accessDeniedCallbackSaved = ''
 
 	def setupSpec() {
 		stopPreexistingAppIfRunning()
@@ -265,19 +267,36 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 	def '7. An IdP access_denied redirects to the failureurl given at login start'() {
 		given: 'a login started with a whitelisted failureurl, sent on to the IdP with a state'
 		def authorizationUrl = redirectTarget('/auth/oidc' + convertMapToQueryParams([failureurl: customFailureUrl]))
-		def state = queryParameter(redirectTarget(authorizationUrl), 'state')
+		def callbackUrl = accessDeniedCallback(queryParameter(redirectTarget(authorizationUrl), 'state'))
 
 		when: 'the IdP refuses the login, as Keycloak does when the user declines consent'
-		def callbackConn = EntryStoreClient.getRequest(accessDeniedCallback(state), '')
+		def callbackConn = EntryStoreClient.getRequest(callbackUrl, '')
 
 		then: 'the rejected login is sent to the caller\'s failureurl, not to the default, and no session is issued'
 		callbackConn.getResponseCode() in [302, 303, 307]
 		callbackConn.getHeaderField('Location') == customFailureUrl
 		callbackConn.getHeaderField('Cache-Control') == CACHE_CONTROL_CREDENTIALS
 		EntryStoreClient.findSetCookie(callbackConn, 'auth_token') == null
+
+		cleanup: 'store the refused callback for the replay in the next step'
+		this.accessDeniedCallbackSaved = callbackUrl
 	}
 
-	def '8. An IdP access_denied on a login with a non-whitelisted failureurl redirects to the default failure URL'() {
+	def '8. Replaying the refused callback still redirects to the failureurl given at login start'() {
+		given:
+		assert this.accessDeniedCallbackSaved: 'Refused callback not available, did step 7 execute correctly?'
+
+		when: 'the identical callback is requested again, as a browser refresh does'
+		def replayConn = EntryStoreClient.getRequest(this.accessDeniedCallbackSaved, '')
+
+		then: 'step 7 consumed the authorization request, but the failureurl stored under the state still applies'
+		replayConn.getResponseCode() in [302, 303, 307]
+		replayConn.getHeaderField('Location') == customFailureUrl
+		replayConn.getHeaderField('Cache-Control') == CACHE_CONTROL_CREDENTIALS
+		EntryStoreClient.findSetCookie(replayConn, 'auth_token') == null
+	}
+
+	def '9. An IdP access_denied on a login with a non-whitelisted failureurl redirects to the default failure URL'() {
 		given: 'a login started at the authorization endpoint itself, so only the resolver can drop the failureurl'
 		def state = queryParameter(redirectTarget('/oauth2/authorization/keycloak'
 			+ convertMapToQueryParams([failureurl: 'https://evil.example.com/phishing'])), 'state')
@@ -290,7 +309,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		callbackConn.getHeaderField('Location') == failureLoginUrl
 	}
 
-	def '9. An IdP error callback with a state no login started redirects to the default failure URL'() {
+	def '10. An IdP error callback with a state no login started redirects to the default failure URL'() {
 		when: 'the forged callback carries its own whitelisted failureurl, which must not be followed'
 		def callbackConn = EntryStoreClient.getRequest(accessDeniedCallback('never-issued') + '&' +
 			createFormBody([failureurl: customFailureUrl]), '')

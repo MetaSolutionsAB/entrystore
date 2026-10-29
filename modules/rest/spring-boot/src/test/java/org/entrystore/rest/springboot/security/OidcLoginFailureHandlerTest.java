@@ -67,6 +67,20 @@ class OidcLoginFailureHandlerTest {
 		assertEquals(CacheControlFilter.CACHE_CONTROL_CREDENTIALS, response.getHeader(HttpHeaders.CACHE_CONTROL));
 	}
 
+	// A refreshed callback finds the authorization request consumed, but the caller's failure URL must still apply.
+	@Test
+	void replayedCallback_redirectsToTheCallersFailureUrlAgain() throws Exception {
+		authStateCache.storeAuthState(STATE, new AuthState(null, WHITELISTED_FAILURE_URL));
+		var first = new MockHttpServletResponse();
+		var replay = new MockHttpServletResponse();
+
+		handler.onAuthenticationFailure(callback(STATE), first, accessDenied());
+		handler.onAuthenticationFailure(callback(STATE), replay, authorizationRequestNotFound());
+
+		assertEquals(WHITELISTED_FAILURE_URL, first.getRedirectedUrl());
+		assertEquals(WHITELISTED_FAILURE_URL, replay.getRedirectedUrl());
+	}
+
 	// The resolver drops non-whitelisted URLs before storing, so this guards a whitelist change after the store.
 	@Test
 	void cachedFailureUrlNoLongerWhitelisted_fallsBackToTheDefault() throws Exception {
@@ -137,6 +151,12 @@ class OidcLoginFailureHandlerTest {
 	// As Spring's OIDC provider throws it for an error response from the IdP.
 	private static OAuth2AuthenticationException accessDenied() {
 		var error = new OAuth2Error("access_denied", "User denied", null);
+		return new OAuth2AuthenticationException(error, error.toString());
+	}
+
+	// As OAuth2LoginAuthenticationFilter throws it when the state's authorization request is gone.
+	private static OAuth2AuthenticationException authorizationRequestNotFound() {
+		var error = new OAuth2Error("authorization_request_not_found");
 		return new OAuth2AuthenticationException(error, error.toString());
 	}
 }
