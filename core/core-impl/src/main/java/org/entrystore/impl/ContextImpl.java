@@ -1051,7 +1051,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	/**
 	 * Refuses a create in a removed context, so no graph lands under it once its removal job may have passed
-	 * over it. Called holding the repository monitor, which the removal holds while it marks the context.
+	 * over it. Called before the repository monitor is taken and again holding it; only the second call is
+	 * authoritative, since the removal marks the context under that monitor.
 	 *
 	 * @param entryId the requested id, or null for a generated one
 	 * @throws ContextRemovalPendingException if the create is refused
