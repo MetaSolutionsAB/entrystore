@@ -38,6 +38,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 
 import java.net.URI;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
 
@@ -56,6 +57,9 @@ public abstract class AbstractCoreTest {
 	public RepositoryManagerImpl rm;
 	public ContextManager cm;
 	public PrincipalManager pm;
+
+	/** The mover a test may replace to simulate a failing data write; restored after each test. */
+	protected final DataImpl.FileMover originalFileMover = DataImpl.fileMover;
 
 	private void setUpEnvironment() {
 		setUpEnvironment(Map.of());
@@ -86,10 +90,22 @@ public abstract class AbstractCoreTest {
 		setUpEnvironment();
 	}
 
+	/** Replaces the repository manager with one that keeps data in {@code dataDir} and enforces quotas. */
+	protected void restartWithQuotas(Path dataDir) {
+		rm.shutdown();
+		setUpEnvironment(Map.of(Settings.DATA_QUOTA, "on", Settings.DATA_FOLDER, dataDir.toString()));
+		TestSuite.initDisneySuite(rm);
+	}
+
 	@AfterEach
 	public void tearDown() {
 		rm.shutdown();
 		rm = null;
+	}
+
+	@AfterEach
+	public void restoreFileMover() {
+		DataImpl.fileMover = originalFileMover;
 	}
 
 	/**

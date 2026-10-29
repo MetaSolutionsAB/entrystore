@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,8 +63,10 @@ public interface List extends Resource {
 	 * @param fromList a list where from the entry will be removed.
 	 * @param removeAll if true the entry(or entries in case of a folder tree)
 	 * will be removed from all lists in the originating context, not only fromList.
-	 * @throws IOException 
-	 * @throws QuotaException 
+	 * @throws QuotaException if a copy into another context exceeds its quota; the entry is then not moved and
+	 *                        the partial copy is removed (a failed removal is logged).
+	 * @throws IOException if the data of a copy into another context cannot be copied; the entry is then not
+	 *                     moved and the partial copy is removed (a failed removal is logged).
 	 */
 	Entry moveEntryHere(URI entry, URI fromList, boolean removeAll) throws QuotaException, IOException;
 	

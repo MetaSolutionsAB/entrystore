@@ -16,6 +16,7 @@
 
 package org.entrystore.impl;
 
+import org.apache.commons.codec.digest.DigestUtils;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -23,6 +24,7 @@ import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -49,6 +51,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -62,6 +65,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -259,7 +263,8 @@ public class ListImplTest extends AbstractCoreTest {
 
 	@ParameterizedTest(name = "{0}")
 	@EnumSource(value = EntryType.class, names = {"Local", "Link", "LinkReference"})
-	public void copyEntryBetweenContexts_preservesEntryTypeAndLeavesTheOriginal(EntryType entryType) {
+	public void copyEntryBetweenContexts_preservesEntryTypeAndLeavesTheOriginal(EntryType entryType)
+		throws IOException, QuotaException {
 		CrossContextLists lists = listsInTwoContexts();
 		Entry original = createOfType(lists.source(), entryType, lists.sourceList().getResourceURI());
 
@@ -274,6 +279,7 @@ public class ListImplTest extends AbstractCoreTest {
 	public void copyReferenceBetweenContexts_failsBecauseAReferenceHasNoLocalMetadata() {
 		CrossContextLists lists = listsInTwoContexts();
 		Entry original = createOfType(lists.source(), EntryType.Reference, lists.sourceList().getResourceURI());
+		Set<URI> targetEntries = lists.target().getEntries();
 
 		// pins today's behaviour, not the intended one: copyGraphs dereferences getLocalMetadata(),
 		// which initMetadataObjects never creates for a Reference, and _copyEntryHere wraps the
@@ -281,6 +287,10 @@ public class ListImplTest extends AbstractCoreTest {
 		// createCopyHere is exercised at all.
 		assertThrows(RepositoryException.class,
 			() -> ((ListImpl) lists.targetList().getResource()).copyEntryHere((EntryImpl) original));
+
+		// the partial copy is removed again
+		assertEquals(java.util.List.of(), reload(lists.target(), lists.targetList()).getChildren());
+		assertEquals(targetEntries, lists.target().getEntries());
 	}
 
 	@Test
@@ -314,16 +324,307 @@ public class ListImplTest extends AbstractCoreTest {
 	public void moveFileEntryBetweenContexts_carriesTheDataFileOver(@TempDir Path tempDataDir) throws IOException, QuotaException {
 		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
 		CrossContextLists lists = listsInTwoContexts();
-		Entry original = lists.source().createResource(null, GraphType.None,
-			ResourceType.InformationResource, lists.sourceList().getResourceURI());
+		Entry original = fileIn(lists.source(), lists.sourceList(), "payload");
+
+		Entry moved = ((List) lists.targetList().getResource())
+			.moveEntryHere(original.getEntryURI(), lists.sourceList().getEntryURI(), true);
+
+		assertDataReads("payload", lists.target(), moved);
+		assertEquals(DigestUtils.sha256Hex("payload"), ((DataImpl) moved.getResource()).readDigest());
+	}
+
+	@Test
+	public void moveNamedResourceWithDataBetweenContexts_carriesTheDataFileOver(@TempDir Path tempDataDir)
+		throws IOException, QuotaException {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		CrossContextLists lists = listsInTwoContexts();
+		// any local entry of graph type None can hold data, whatever its resource type
+		Entry original = lists.source().createResource(null, GraphType.None, ResourceType.NamedResource,
+			lists.sourceList().getResourceURI());
 		((Data) original.getResource()).setData(new ByteArrayInputStream("payload".getBytes(StandardCharsets.UTF_8)));
 
 		Entry moved = ((List) lists.targetList().getResource())
 			.moveEntryHere(original.getEntryURI(), lists.sourceList().getEntryURI(), true);
 
-		// the only test that reaches createCopyHere's useData branch, which needs InformationResource
-		try (InputStream movedData = ((Data) moved.getResource()).getData()) {
-			assertEquals("payload", new String(movedData.readAllBytes(), StandardCharsets.UTF_8));
+		assertDataReads("payload", lists.target(), moved);
+	}
+
+	@Test
+	public void moveFileEntryWithoutDataBetweenContexts_movesTheEntry(@TempDir Path tempDataDir)
+		throws IOException, QuotaException {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		CrossContextLists lists = listsInTwoContexts();
+		Entry original = lists.source().createResource(null, GraphType.None,
+			ResourceType.InformationResource, lists.sourceList().getResourceURI());
+
+		Entry moved = ((List) lists.targetList().getResource())
+			.moveEntryHere(original.getEntryURI(), lists.sourceList().getEntryURI(), true);
+
+		assertEquals(lists.target(), moved.getContext());
+		assertNull(lists.source().getByEntryURI(original.getEntryURI()));
+		assertNull(((Data) moved.getResource()).getDataFile());
+	}
+
+	@Test
+	public void moveFileEntryBetweenContexts_aboveTheTargetQuota_throwsAndKeepsTheSource(@TempDir Path tempDataDir)
+		throws IOException, QuotaException {
+		CrossContextLists lists = listsInTwoContextsWithTargetQuota(tempDataDir, 1);
+		Entry original = fileIn(lists.source(), lists.sourceList(), "payload");
+		Set<URI> targetEntries = lists.target().getEntries();
+
+		assertThrows(QuotaException.class, () -> ((List) lists.targetList().getResource())
+			.moveEntryHere(original.getEntryURI(), lists.sourceList().getEntryURI(), true));
+
+		assertDataReads("payload", lists.source(), original);
+		assertNoCopyLeft(lists, targetEntries, tempDataDir);
+	}
+
+	@Test
+	public void moveFileEntryBetweenContexts_failingDataCopy_throwsAndKeepsTheSource(@TempDir Path tempDataDir)
+		throws IOException, QuotaException {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		CrossContextLists lists = listsInTwoContexts();
+		Entry original = fileIn(lists.source(), lists.sourceList(), "payload");
+		Set<URI> targetEntries = lists.target().getEntries();
+		failDataMoveInto(lists.target(), 1);
+
+		assertThrows(IOException.class, () -> ((List) lists.targetList().getResource())
+			.moveEntryHere(original.getEntryURI(), lists.sourceList().getEntryURI(), true));
+
+		assertEquals(pm.getPrincipalEntry("Donald").getResourceURI(), pm.getAuthenticatedUserURI(),
+			"the rollback must restore the caller");
+		assertDataReads("payload", lists.source(), original);
+		assertNoCopyLeft(lists, targetEntries, tempDataDir);
+	}
+
+	@Test
+	public void moveFileEntryBetweenContexts_copiesTheDataBeforeTheAclThatWouldDenyIt(@TempDir Path tempDataDir)
+		throws IOException, QuotaException {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		CrossContextLists lists = listsInTwoContexts();
+		Entry original = fileIn(lists.source(), lists.sourceList(), "payload");
+		// the copy takes over this ACL with its graphs, after which Donald may no longer write its data
+		original.addAllowedPrincipalsFor(AccessProperty.WriteResource, pm.getPrincipalEntry("Mickey").getResourceURI());
+		original.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, pm.getPrincipalEntry("Donald").getResourceURI());
+
+		Entry moved = ((List) lists.targetList().getResource())
+			.moveEntryHere(original.getEntryURI(), lists.sourceList().getEntryURI(), true);
+
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		assertDataReads("payload", lists.target(), moved);
+	}
+
+	@Test
+	public void moveEntryBetweenContexts_withoutReadOnTheSourceData_isRefusedAsUnauthorized(@TempDir Path tempDataDir)
+		throws IOException, QuotaException {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		URI mickey = pm.getPrincipalEntry("Mickey").getResourceURI();
+		pm.setAuthenticatedUserURI(mickey);
+		Context mouse = cm.getContext("mouse");
+		Entry sourceList = mouse.createResource(null, GraphType.List, null, null);
+		Entry original = fileIn(mouse, sourceList, "payload");
+		original.addAllowedPrincipalsFor(AccessProperty.ReadResource, mickey);
+		// Donald may write the source list, through friendsOfMickey, but not read the file
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry targetList = duck.createResource(null, GraphType.List, null, null);
+
+		assertThrows(AuthorizationException.class, () -> ((List) targetList.getResource())
+			.moveEntryHere(original.getEntryURI(), sourceList.getEntryURI(), false));
+
+		assertEquals(java.util.List.of(), reload(duck, targetList).getChildren());
+		assertEquals(java.util.List.of(original.getEntryURI()), reload(mouse, sourceList).getChildren());
+	}
+
+	@Test
+	public void moveEntryWithoutDataBetweenContexts_needsNoReadAccessToItsData(@TempDir Path tempDataDir)
+		throws IOException, QuotaException {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
+		Context mouse = cm.getContext("mouse");
+		Entry sourceList = mouse.createResource(null, GraphType.List, null, null);
+		Entry original = mouse.createResource(null, GraphType.None, ResourceType.NamedResource,
+			sourceList.getResourceURI());
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		// Donald may read the metadata, which the copy needs, but not the resource
+		original.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, donald);
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry targetList = duck.createResource(null, GraphType.List, null, null);
+
+		Entry moved = ((List) targetList.getResource())
+			.moveEntryHere(original.getEntryURI(), sourceList.getEntryURI(), false);
+
+		assertEquals(java.util.List.of(moved.getEntryURI()), reload(duck, targetList).getChildren());
+		assertEquals(java.util.List.of(), reload(mouse, sourceList).getChildren());
+	}
+
+	@Test
+	public void moveFolderBetweenContexts_aboveTheTargetQuota_removesThePartialCopyAndKeepsTheSource(
+		@TempDir Path tempDataDir) throws IOException, QuotaException {
+		// the first file fits and is copied; the nested one exceeds the quota on its own and is refused
+		CrossContextLists lists = listsInTwoContextsWithTargetQuota(tempDataDir, 10);
+		Folder folder = folderIn(lists.source(), lists.sourceList(), "small", "too large for the quota");
+		Set<URI> targetEntries = lists.target().getEntries();
+
+		assertThrows(QuotaException.class, () -> ((List) lists.targetList().getResource())
+			.moveEntryHere(folder.folder().getEntryURI(), lists.sourceList().getEntryURI(), true));
+
+		assertEquals(java.util.List.of(folder.firstFile().getEntryURI(), folder.sublist().getEntryURI()),
+			reload(lists.source(), folder.folder()).getChildren());
+		assertDataReads("small", lists.source(), folder.firstFile());
+		assertDataReads("too large for the quota", lists.source(), folder.nestedFile());
+		assertNoCopyLeft(lists, targetEntries, tempDataDir);
+	}
+
+	@Test
+	public void moveFolderBetweenContexts_failingDataCopy_removesThePartialCopyAndKeepsTheSource(
+		@TempDir Path tempDataDir) throws IOException, QuotaException {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		CrossContextLists lists = listsInTwoContexts();
+		Folder folder = folderIn(lists.source(), lists.sourceList(), "first", "nested");
+		Set<URI> targetEntries = lists.target().getEntries();
+		failDataMoveInto(lists.target(), 2);
+
+		assertThrows(IOException.class, () -> ((List) lists.targetList().getResource())
+			.moveEntryHere(folder.folder().getEntryURI(), lists.sourceList().getEntryURI(), true));
+
+		assertEquals(pm.getPrincipalEntry("Donald").getResourceURI(), pm.getAuthenticatedUserURI(),
+			"the rollback must restore the caller");
+		assertEquals(java.util.List.of(folder.firstFile().getEntryURI(), folder.sublist().getEntryURI()),
+			reload(lists.source(), folder.folder()).getChildren());
+		assertDataReads("first", lists.source(), folder.firstFile());
+		assertDataReads("nested", lists.source(), folder.nestedFile());
+		assertNoCopyLeft(lists, targetEntries, tempDataDir);
+	}
+
+	@Test
+	public void moveFolderBetweenContexts_failingDataCopy_keepsWhatOthersAddedToThePartialCopy(
+		@TempDir Path tempDataDir) throws IOException, QuotaException {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
+		Entry unlisted = cm.getContext("mouse").createLink(null, URI.create("https://slashdot.org/"), null);
+		CrossContextLists lists = listsInTwoContexts();
+		Folder folder = folderIn(lists.source(), lists.sourceList(), "first", "nested");
+		Set<URI> targetEntries = lists.target().getEntries();
+		// while the folder is copied, an entry the copy did not create is added to the copied folder
+		failDataMoveInto(lists.target(), 2, () -> {
+			URI folderCopy = reload(lists.target(), lists.targetList()).getChildren().getFirst();
+			((List) lists.target().getByEntryURI(folderCopy).getResource()).addChild(unlisted.getEntryURI());
+		});
+
+		assertThrows(IOException.class, () -> ((List) lists.targetList().getResource())
+			.moveEntryHere(folder.folder().getEntryURI(), lists.sourceList().getEntryURI(), true));
+
+		assertNotNull(lists.target().getByEntryURI(unlisted.getEntryURI()), "the rollback must not remove it");
+		assertNoCopyLeft(lists, targetEntries, tempDataDir);
+	}
+
+	@Test
+	public void moveFolderBetweenContexts_withoutAdministerOnTheSourceContext_failsBeforeCopying() {
+		// Donald may write to mouse, through friendsOfMickey, but only Mickey administers it
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context mouse = cm.getContext("mouse");
+		Context duck = cm.getContext("duck");
+		Entry sourceList = mouse.createResource(null, GraphType.List, null, null);
+		Entry folder = mouse.createResource(null, GraphType.List, null, sourceList.getResourceURI());
+		Entry child = mouse.createLink(null, URI.create("https://slashdot.org/"), folder.getResourceURI());
+		Entry targetList = duck.createResource(null, GraphType.List, null, null);
+
+		assertThrows(AuthorizationException.class, () -> ((List) targetList.getResource())
+			.moveEntryHere(folder.getEntryURI(), sourceList.getEntryURI(), true));
+
+		assertEquals(java.util.List.of(), reload(duck, targetList).getChildren());
+		assertEquals(java.util.List.of(child.getEntryURI()), reload(mouse, folder).getChildren());
+	}
+
+	@Test
+	public void moveEntryBetweenContexts_withoutRightToRemoveTheSource_failsBeforeCopying() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
+		Context mouse = cm.getContext("mouse");
+		Entry sourceList = mouse.createResource(null, GraphType.List, null, null);
+		Entry original = mouse.createLink(null, URI.create("https://slashdot.org/"), sourceList.getResourceURI());
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		// without an ACL of its own, the entry grants Administer to anyone who may write to mouse, as Donald may
+		original.addAllowedPrincipalsFor(AccessProperty.WriteResource, donald);
+		pm.setAuthenticatedUserURI(donald);
+		Context duck = cm.getContext("duck");
+		Entry targetList = duck.createResource(null, GraphType.List, null, null);
+
+		assertThrows(AuthorizationException.class, () -> ((List) targetList.getResource())
+			.moveEntryHere(original.getEntryURI(), sourceList.getEntryURI(), true));
+
+		assertEquals(java.util.List.of(), reload(duck, targetList).getChildren());
+		assertNotNull(mouse.getByEntryURI(original.getEntryURI()));
+	}
+
+	/**
+	 * The lists of {@link #listsInTwoContexts()} in a repository that keeps data in {@code dataDir} and enforces
+	 * quotas, with the target context limited to {@code targetQuota} bytes.
+	 */
+	private CrossContextLists listsInTwoContextsWithTargetQuota(Path dataDir, long targetQuota) {
+		restartWithQuotas(dataDir);
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		cm.getContext("mouse").setQuota(targetQuota);
+		return listsInTwoContexts();
+	}
+
+	private static Entry fileIn(Context context, Entry list, String content) throws IOException, QuotaException {
+		Entry file = context.createResource(null, GraphType.None, ResourceType.InformationResource,
+			list.getResourceURI());
+		((Data) file.getResource()).setData(new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
+		return file;
+	}
+
+	/** A folder holding a file and then a list with a second file, so that a copy can fail part-way. */
+	private record Folder(Entry folder, Entry firstFile, Entry sublist, Entry nestedFile) {}
+
+	private static Folder folderIn(Context context, Entry list, String firstContent, String nestedContent)
+		throws IOException, QuotaException {
+		Entry folder = context.createResource(null, GraphType.List, null, list.getResourceURI());
+		Entry firstFile = fileIn(context, folder, firstContent);
+		Entry sublist = context.createResource(null, GraphType.List, null, folder.getResourceURI());
+		return new Folder(folder, firstFile, sublist, fileIn(context, sublist, nestedContent));
+	}
+
+	/** Makes the {@code n}th move of a data file into the data folder of {@code context} fail, as a full disk does. */
+	private void failDataMoveInto(Context context, int n) {
+		failDataMoveInto(context, n, () -> {});
+	}
+
+	/** As {@link #failDataMoveInto(Context, int)}, running {@code beforeFailing} first. */
+	private void failDataMoveInto(Context context, int n, Runnable beforeFailing) {
+		String contextFolder = context.getEntry().getId();
+		AtomicInteger dataMoves = new AtomicInteger();
+		DataImpl.fileMover = (source, target) -> {
+			if (target.getParent().getFileName().toString().equals(contextFolder)
+				&& !target.getFileName().toString().endsWith(DataImpl.SHA_256_POSTFIX)
+				&& dataMoves.incrementAndGet() == n) {
+				beforeFailing.run();
+				throw new IOException("No space left on device");
+			}
+			originalFileMover.move(source, target);
+		};
+	}
+
+	private static void assertDataReads(String expected, Context context, Entry entry) throws IOException {
+		Entry current = context.getByEntryURI(entry.getEntryURI());
+		assertNotNull(current, "the entry must still resolve");
+		try (InputStream data = ((Data) current.getResource()).getData()) {
+			assertEquals(expected, new String(data.readAllBytes(), StandardCharsets.UTF_8));
+		}
+	}
+
+	/**
+	 * Asserts that a failed move left nothing behind in the target: no member of the target list, no entry the
+	 * target context did not hold before, and no file in its data folder.
+	 */
+	private static void assertNoCopyLeft(CrossContextLists lists, Set<URI> targetEntriesBefore, Path dataDir)
+		throws IOException {
+		assertEquals(java.util.List.of(), reload(lists.target(), lists.targetList()).getChildren());
+		assertEquals(targetEntriesBefore, lists.target().getEntries());
+		try (Stream<Path> files = Files.list(dataDir.resolve(lists.target().getEntry().getId()))) {
+			assertEquals(java.util.List.of(), files.toList());
 		}
 	}
 
@@ -348,7 +649,7 @@ public class ListImplTest extends AbstractCoreTest {
 
 
 	@Test
-	public void copyStringEntryBetweenContexts_rekeysTheMetadataAndCarriesTheString() {
+	public void copyStringEntryBetweenContexts_rekeysTheMetadataAndCarriesTheString() throws IOException, QuotaException {
 		CrossContextLists lists = listsInTwoContexts();
 		Entry original = lists.source().createResource(null, GraphType.String, null, lists.sourceList().getResourceURI());
 		((StringResource) original.getResource()).setString("carried over");
