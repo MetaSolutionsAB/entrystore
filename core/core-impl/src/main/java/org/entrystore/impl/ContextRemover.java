@@ -21,6 +21,10 @@ import org.eclipse.rdf4j.model.BNode;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.query.BindingSet;
+import org.eclipse.rdf4j.query.TupleQuery;
+import org.eclipse.rdf4j.query.TupleQueryResult;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryResult;
@@ -34,11 +38,15 @@ import org.entrystore.repository.util.URIType;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.DirectoryNotEmptyException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -50,8 +58,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 import static org.eclipse.rdf4j.model.util.Values.iri;
 
@@ -62,9 +70,9 @@ import static org.eclipse.rdf4j.model.util.Values.iri;
  * {@link RepositoryProperties#removalPending} marker, in one short transaction. This job then deletes every graph
  * named {@code {base}{contextId}} or starting with {@code {base}{contextId}/}, in chunks of {@link #chunkSize}
  * statements. A chunk is read without a transaction or the repository monitor and removed in a transaction of
- * its own under the monitor, so other writers wait for one chunk at most. Each removal is a fully bound
- * statement, which any triple index finds without a scan; reading a graph scans the store unless the store has
- * an index starting with the context.
+ * its own under the monitor, so other writers wait for one chunk at most. Each statement is removed by its whole
+ * triple within its graph, which any triple index finds without a scan (on a SPARQL store, with wildcards for its
+ * blank nodes); reading a graph scans the store unless the store has an index starting with the context.
  *
  * <p>Statements of the context whose object is an entry of another context may have a copy in that entry's
  * relations graph. The copy is removed with them, unless a graph outside the context, other than a relations
@@ -80,12 +88,15 @@ import static org.eclipse.rdf4j.model.util.Values.iri;
 @Slf4j
 final class ContextRemover {
 
-	/** Passes over the context's graphs before giving up on graphs that keep appearing. */
+	/** Passes over the context's graphs, or its data folder, before giving up on what keeps appearing in them. */
 	private static final int MAX_PASSES = 3;
 
 	/** A live reindex skips a removed context; only the full wipe of a startup reindex reaches its documents. */
 	private static final String SEARCH_PURGE_HINT =
 			"only a reindex at startup (entrystore.solr.reindex-on-startup with .wait) removes any left";
+
+	/** The named graphs that state the triple bound to {@code ?s ?p ?o}. */
+	private static final String GRAPHS_STATING = "SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }";
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final Repository repository;
@@ -119,9 +130,17 @@ final class ContextRemover {
 	/** Run on the job thread after each chunk has been committed and the monitor released; for tests. */
 	volatile Runnable afterChunk = () -> {};
 
+	/** Run on the job thread before each file or folder of a data folder is deleted; for tests. */
+	volatile Consumer<Path> beforeDelete = path -> {};
+
 	ContextRemover(RepositoryManagerImpl repositoryManager, IRI contextsIndexGraph) {
+		this(repositoryManager, repositoryManager.getRepository(), contextsIndexGraph);
+	}
+
+	/** Works on {@code repository} in place of the repository manager's; for tests. */
+	ContextRemover(RepositoryManagerImpl repositoryManager, Repository repository, IRI contextsIndexGraph) {
 		this.repositoryManager = repositoryManager;
-		this.repository = repositoryManager.getRepository();
+		this.repository = repository;
 		this.contextsIndexGraph = contextsIndexGraph;
 		this.searchIndex = repositoryManager::getIndex;
 		this.blankNodesByPattern = repository instanceof SPARQLRepository;
@@ -259,7 +278,9 @@ final class ContextRemover {
 
 	/**
 	 * Deletes the context's folder in the data folder. Refuses anything but a direct child of the data folder,
-	 * such as a symbolic link or a folder an odd id resolves to, and does not follow links inside it.
+	 * such as a symbolic link or a folder an odd id resolves to, and does not follow links inside it. An upload in
+	 * flight when the context was removed may still add or delete its staging files, so a file that vanishes is
+	 * skipped and a folder that gained one is deleted again.
 	 */
 	private void deleteDataFolder(String contextId) throws IOException {
 		String configured = repositoryManager.getConfiguration().getString(Settings.DATA_FOLDER);
@@ -275,11 +296,45 @@ final class ContextRemover {
 			throw new IOException("Refusing to delete " + folder + ", which is not a folder in the data folder "
 					+ root);
 		}
-		try (Stream<Path> paths = Files.walk(folder.toPath())) {
-			for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
-				Files.delete(path);
+		for (int pass = 1; pass < MAX_PASSES; pass++) {
+			try {
+				deleteTree(folder.toPath());
+				return;
+			} catch (DirectoryNotEmptyException e) {
+				log.info("A file appeared in {} while it was being deleted, deleting it again", e.getFile());
 			}
 		}
+		deleteTree(folder.toPath());
+	}
+
+	/** Deletes a folder and what it holds without following links, skipping a file that vanishes meanwhile. */
+	private void deleteTree(Path folder) throws IOException {
+		Files.walkFileTree(folder, new SimpleFileVisitor<>() {
+			@Override
+			public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+				beforeDelete.accept(file);
+				Files.deleteIfExists(file);
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult visitFileFailed(Path file, IOException e) throws IOException {
+				if (e instanceof NoSuchFileException) {
+					return FileVisitResult.CONTINUE;
+				}
+				throw e;
+			}
+
+			@Override
+			public FileVisitResult postVisitDirectory(Path dir, IOException e) throws IOException {
+				if (e != null && !(e instanceof NoSuchFileException)) {
+					throw e;
+				}
+				beforeDelete.accept(dir);
+				Files.deleteIfExists(dir);
+				return FileVisitResult.CONTINUE;
+			}
+		});
 	}
 
 	/**
@@ -360,14 +415,18 @@ final class ContextRemover {
 
 		/**
 		 * Removes the context's graphs pass by pass, until a listing finds none. A listing cut off at
-		 * {@link #graphsPerListing} continues the pass rather than starting a new one.
+		 * {@link #graphsPerListing} continues the pass rather than starting a new one, unless it lists a graph the
+		 * previous listing removed: graphs that survive their removal would otherwise fill every listing forever.
 		 */
 		private void removeGraphs() throws StoppedException {
+			Set<IRI> previous = Set.of();
 			for (List<IRI> graphs = listGraphs(contextURI); !graphs.isEmpty(); graphs = listGraphs(contextURI)) {
-				if (graphs.size() < graphsPerListing && ++pass > MAX_PASSES) {
+				boolean newPass = graphs.size() < graphsPerListing || graphs.stream().anyMatch(previous::contains);
+				if (newPass && ++pass > MAX_PASSES) {
 					throw new IllegalStateException(graphs.size() + " graphs remain after " + MAX_PASSES + " passes");
 				}
 				removeGraphs(graphs);
+				previous = Set.copyOf(graphs);
 			}
 		}
 
@@ -426,11 +485,18 @@ final class ContextRemover {
 			return rest.isEmpty() ? "" : rest.substring(1, end < 0 ? rest.length() : end);
 		}
 
+		/**
+		 * Statements of the graph, each given that graph: a SPARQL store outside quad mode returns them without it,
+		 * and a removal without a graph reaches every graph.
+		 */
 		private static List<Statement> read(RepositoryConnection reader, IRI graph, int limit) {
+			ValueFactory vf = reader.getValueFactory();
 			List<Statement> statements = new ArrayList<>();
 			try (RepositoryResult<Statement> result = reader.getStatements(null, null, null, false, graph)) {
 				while (statements.size() < limit && result.hasNext()) {
-					statements.add(result.next());
+					Statement statement = result.next();
+					statements.add(vf.createStatement(statement.getSubject(), statement.getPredicate(),
+							statement.getObject(), graph));
 				}
 			}
 			return statements;
@@ -465,8 +531,9 @@ final class ContextRemover {
 					rc.begin();
 					try {
 						removeOwnStatements(rc, statements);
+						TupleQuery graphsStating = rc.prepareTupleQuery(GRAPHS_STATING);
 						for (Statement copy : copies) {
-							if (!isStatedOutside(rc, copy)) {
+							if (!isStatedOutside(graphsStating, copy)) {
 								rc.remove(copy);
 							}
 						}
@@ -488,9 +555,13 @@ final class ContextRemover {
 
 		/**
 		 * Removes statements of the context's own graphs. With {@link #blankNodesByPattern}, a blank node is matched
-		 * by a wildcard, which can only widen the removal within the graph, and that graph is deleted anyway.
+		 * by a wildcard, which can only widen the removal within the graph, and that graph is deleted anyway. Refuses
+		 * a statement without a graph, whose removal would reach every graph.
 		 */
 		private void removeOwnStatements(RepositoryConnection rc, List<Statement> statements) {
+			if (statements.stream().anyMatch(statement -> statement.getContext() == null)) {
+				throw new IllegalStateException("Statements of context " + contextId + " lack their graph");
+			}
 			if (!blankNodesByPattern) {
 				rc.remove(statements);
 				return;
@@ -503,17 +574,17 @@ final class ContextRemover {
 		}
 
 		/**
-		 * Whether a graph outside the context other than a relations graph, or the default graph, states the triple
-		 * of a copy.
+		 * Whether a graph outside the context, other than a relations graph, states the triple of a copy. Asked by
+		 * graph, since a SPARQL store outside quad mode returns statements without theirs.
 		 */
-		private boolean isStatedOutside(RepositoryConnection rc, Statement copy) {
-			try (RepositoryResult<Statement> holders = rc.getStatements(
-					copy.getSubject(), copy.getPredicate(), copy.getObject(), false)) {
-				for (Statement holder : holders) {
-					if (!(holder.getContext() instanceof IRI graph)) {
-						return true;
-					}
-					if (!isOfContext(graph, contextURI) && !isRelationsGraph(graph)) {
+		private boolean isStatedOutside(TupleQuery graphsStating, Statement copy) {
+			graphsStating.setBinding("s", copy.getSubject());
+			graphsStating.setBinding("p", copy.getPredicate());
+			graphsStating.setBinding("o", copy.getObject());
+			try (TupleQueryResult holders = graphsStating.evaluate()) {
+				for (BindingSet holder : holders) {
+					if (holder.getValue("g") instanceof IRI graph && !isOfContext(graph, contextURI)
+							&& !isRelationsGraph(graph)) {
 						return true;
 					}
 				}

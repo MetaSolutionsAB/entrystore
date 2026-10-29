@@ -1411,6 +1411,16 @@ public class SolrSearchIndexTest {
 	}
 
 	@Test
+	public void removeContextPropagatesASolrRejection() throws Exception {
+		RemoteSolrException rejection = new RemoteSolrException("localhost", 403, "Forbidden", null);
+		when(solrServer.request(any(), any())).thenThrow(rejection);
+
+		SolrException thrown = assertThrows(SolrException.class,
+				() -> index.removeContext(URI.create("http://localhost:8181/1")));
+		assertSame(rejection, thrown);
+	}
+
+	@Test
 	public void clearSolrIndexCombinesDateAndContextClausesWithAnd() throws Exception {
 		SolrClient client = mock(SolrClient.class);
 		Date expiration = Date.from(Instant.parse("2024-01-15T10:30:00.123Z"));

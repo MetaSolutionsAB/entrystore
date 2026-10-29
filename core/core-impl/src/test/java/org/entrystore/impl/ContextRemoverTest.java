@@ -16,16 +16,23 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.common.iteration.CloseableIteratorIteration;
 import org.eclipse.rdf4j.model.BNode;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.vocabulary.DCAT;
 import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
 import org.eclipse.rdf4j.model.vocabulary.VCARD4;
+import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryResult;
+import org.eclipse.rdf4j.repository.base.RepositoryConnectionWrapper;
+import org.eclipse.rdf4j.repository.base.RepositoryWrapper;
+import org.eclipse.rdf4j.repository.sparql.SPARQLRepository;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -41,13 +48,22 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -56,6 +72,7 @@ import static org.eclipse.rdf4j.model.util.Values.iri;
 import static org.eclipse.rdf4j.model.util.Values.literal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -245,6 +262,92 @@ public class ContextRemoverTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void aStoreReturningStatementsWithoutTheirGraphHasBlankNodesRemovedWithinTheContextOnly() throws Exception {
+		ContextImpl doomed = newContext();
+		Entry contact = doomed.createResource(null, GraphType.None, null, null);
+		contact.getLocalMetadata().setGraph(contactPoint(contact));
+		Entry neighbour = newContext().createResource(null, GraphType.None, null, null);
+		neighbour.getLocalMetadata().setGraph(contactPoint(neighbour));
+		holdJobBeforeFirstChunk();
+		cm.remove(doomed.getEntry().getEntryURI());
+		ContextRemover sparqlLike = removerOver(new SparqlLikeRepository(rm.getRepository()));
+		sparqlLike.blankNodesByPattern = true;
+
+		sparqlLike.schedule(doomed.id);
+		sparqlLike.awaitIdle();
+		sparqlLike.shutdown();
+
+		assertFalse(hasGraphsOf(doomed));
+		assertEquals(2, neighbour.getLocalMetadata().getGraph().size(),
+			"the wildcards stay within the removed context's graphs");
+	}
+
+	@Test
+	public void aStoreReturningStatementsWithoutTheirGraphKeepsATripleAnotherContextStates() throws Exception {
+		ContextImpl doomed = newContext();
+		Entry described = doomed.createResource(null, GraphType.None, null, null);
+		Entry link = newContext().createLink(null, described.getResourceURI(), null);
+		Model title = new LinkedHashModel();
+		title.add(iri(described.getResourceURI().toString()), DCTERMS.TITLE, literal("shared"));
+		described.getLocalMetadata().setGraph(title);
+		link.getLocalMetadata().setGraph(title);
+		holdJobBeforeFirstChunk();
+		cm.remove(doomed.getEntry().getEntryURI());
+		ContextRemover sparqlLike = removerOver(new SparqlLikeRepository(rm.getRepository()));
+
+		sparqlLike.schedule(doomed.id);
+		sparqlLike.awaitIdle();
+		sparqlLike.shutdown();
+
+		assertFalse(hasGraphsOf(doomed));
+		assertTrue(link.getLocalMetadata().getGraph().contains(iri(described.getResourceURI().toString()),
+			DCTERMS.TITLE, literal("shared")), "the removal stays within the removed context's graphs");
+	}
+
+	@Test
+	public void aStoreReturningStatementsWithoutTheirGraphHasTheRelationCopiesRemoved() throws Exception {
+		ContextImpl doomed = newContext();
+		Entry target = newContext().createResource(null, GraphType.None, null, null);
+		Entry source = doomed.createResource(null, GraphType.None, null, null);
+		source.getLocalMetadata().setGraph(relation(source.getResourceURI(), target));
+		assertFalse(target.getRelations().isEmpty(), "the relation must have a copy for this test to mean anything");
+		holdJobBeforeFirstChunk();
+		cm.remove(doomed.getEntry().getEntryURI());
+		ContextRemover sparqlLike = removerOver(new SparqlLikeRepository(rm.getRepository()));
+
+		sparqlLike.schedule(doomed.id);
+		sparqlLike.awaitIdle();
+		sparqlLike.shutdown();
+
+		assertTrue(target.getRelations().isEmpty(), "the copy is found by the graphs holding it, not by its own graph");
+	}
+
+	@Test
+	public void aSparqlStoreHasBlankNodesRemovedByPattern() {
+		ContextRemover sparql = removerOver(new SPARQLRepository("http://localhost:8181/sparql"));
+		sparql.shutdown();
+
+		assertTrue(sparql.blankNodesByPattern, "a SPARQL store returns its blank nodes anew on every read");
+	}
+
+	@Test
+	public void aGraphThatCannotBeEmptiedStopsTheRemoval() throws Exception {
+		ContextImpl doomed = newContext();
+		doomed.createLink(null, URI.create("http://example.com/child"), null);
+		holdJobBeforeFirstChunk();
+		cm.remove(doomed.getEntry().getEntryURI());
+		ContextRemover stuck = removerOver(new RemovalIgnoringRepository(rm.getRepository()));
+		stuck.chunkSize = 1; // so that a graph is read again after its first chunk
+
+		stuck.schedule(doomed.id);
+		stuck.awaitIdle();
+		stuck.shutdown();
+
+		assertTrue(stuck.isPending(doomed.id), "the job gives up on the graph instead of rereading it forever");
+		assertTrue(hasMarker(doomed));
+	}
+
+	@Test
 	public void removeContext_listsTheGraphsOfALargeContextInPortions() throws Exception {
 		ContextImpl doomed = newContext();
 		for (int i = 0; i < 5; i++) {
@@ -324,6 +427,90 @@ public class ContextRemoverTest extends AbstractCoreTest {
 
 		assertTrue(Files.exists(kept), "a folder outside the data folder must not be deleted");
 		assertTrue(hasMarker(doomed), "the failed deletion keeps the removal pending, as any file failure does");
+		assertTrue(cm.isRemovalPending(doomed.id));
+	}
+
+	@Test
+	public void removeContext_deletesALinkInItsDataFolderButNotWhatItPointsTo(@TempDir Path dataFolder,
+			@TempDir Path elsewhere) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, dataFolder.toString());
+		ContextImpl doomed = newContext();
+		Path folder = Files.createDirectories(dataFolder.resolve(doomed.id));
+		Path kept = Files.writeString(elsewhere.resolve("kept"), "not the context's");
+		try {
+			Files.createSymbolicLink(folder.resolve("link"), elsewhere);
+		} catch (UnsupportedOperationException | IOException e) {
+			assumeTrue(false, "symbolic links cannot be created here");
+		}
+
+		cm.remove(doomed.getEntry().getEntryURI());
+		awaitContextRemovals();
+
+		assertTrue(Files.exists(kept), "the folder a link points to must not be emptied");
+		assertFalse(Files.exists(folder));
+		assertFalse(hasMarker(doomed));
+	}
+
+	@Test
+	public void removeContext_finishesWhenAFileVanishesFromTheDataFolderMeanwhile(@TempDir Path dataFolder)
+			throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, dataFolder.toString());
+		ContextImpl doomed = newContext();
+		Path folder = Files.createDirectories(dataFolder.resolve(doomed.id));
+		Files.writeString(folder.resolve(".upload.part"), "in flight");
+		// as an upload in flight deletes its staging files once it finds its entry removed
+		remover().beforeDelete = path -> {
+			if (Files.isRegularFile(path)) {
+				path.toFile().delete();
+			}
+		};
+
+		cm.remove(doomed.getEntry().getEntryURI());
+		awaitContextRemovals();
+
+		assertFalse(Files.exists(folder));
+		assertFalse(hasMarker(doomed));
+		assertFalse(cm.isRemovalPending(doomed.id));
+	}
+
+	@Test
+	public void removeContext_deletesAFileAddedToTheDataFolderMeanwhile(@TempDir Path dataFolder) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, dataFolder.toString());
+		ContextImpl doomed = newContext();
+		Path folder = Files.createDirectories(dataFolder.resolve(doomed.id));
+		AtomicInteger added = new AtomicInteger();
+		// as an upload in flight writes the staging file of its digest after the folder was read
+		remover().beforeDelete = path -> {
+			if (Files.isDirectory(path) && added.getAndIncrement() == 0) {
+				writeStagingFile(path.resolve(".digest.part"));
+			}
+		};
+
+		cm.remove(doomed.getEntry().getEntryURI());
+		awaitContextRemovals();
+
+		assertFalse(Files.exists(folder));
+		assertFalse(hasMarker(doomed));
+		assertFalse(cm.isRemovalPending(doomed.id));
+	}
+
+	@Test
+	public void aDataFolderThatKeepsGainingFilesKeepsTheRemovalPending(@TempDir Path dataFolder) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, dataFolder.toString());
+		ContextImpl doomed = newContext();
+		Path folder = Files.createDirectories(dataFolder.resolve(doomed.id));
+		AtomicInteger added = new AtomicInteger();
+		remover().beforeDelete = path -> {
+			if (Files.isDirectory(path)) {
+				writeStagingFile(path.resolve(".late-" + added.incrementAndGet() + ".part"));
+			}
+		};
+
+		cm.remove(doomed.getEntry().getEntryURI());
+		awaitContextRemovals();
+
+		assertTrue(Files.exists(folder));
+		assertTrue(hasMarker(doomed), "the job gives up after a few passes instead of chasing new files forever");
 		assertTrue(cm.isRemovalPending(doomed.id));
 	}
 
@@ -485,6 +672,28 @@ public class ContextRemoverTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void aCreateWaitingForTheMonitorWhileItsContextIsRemovedIsRefused() throws Exception {
+		ContextImpl doomed = newContext();
+		doomed.createLink(null, URI.create("http://example.com/child"), null); // a chunk, so the job is held
+		holdJobBeforeFirstChunk();
+		FutureTask<Entry> lateCreate = new FutureTask<>(
+			() -> doomed.createLink("late", URI.create("http://example.com/late"), null));
+
+		synchronized (rm.getRepository()) {
+			Thread creator = Thread.ofPlatform().name("late-create").start(lateCreate);
+			awaitBlockedOn(creator, rm.getRepository());
+			// the removal enters the monitor again, so it commits while the create waits for it
+			cm.remove(doomed.getEntry().getEntryURI());
+		}
+
+		ExecutionException refused = assertThrows(ExecutionException.class,
+			() -> lateCreate.get(10, TimeUnit.SECONDS));
+		assertInstanceOf(ContextRemovalPendingException.class, refused.getCause(),
+			"the check before the monitor passed, so the one under it refuses");
+		assertFalse(hasGraph(URI.create(doomed.getURI() + "/entry/late")), "no graph lands in the removed context");
+	}
+
+	@Test
 	public void aFailedRemovalKeepsTheContextHiddenAndItsIdTaken() throws Exception {
 		ContextImpl doomed = newContext();
 		doomed.createLink(null, URI.create("http://example.com/child"), null);
@@ -516,6 +725,30 @@ public class ContextRemoverTest extends AbstractCoreTest {
 		awaitContextRemovals();
 
 		assertTrue(hasMarker(doomed), "the job gives up after a few passes instead of chasing new graphs forever");
+		assertTrue(cm.isRemovalPending(doomed.id));
+	}
+
+	@Test
+	public void aContextWhoseGraphsSurviveEveryFullListingStaysPending() throws Exception {
+		ContextImpl doomed = newContext();
+		doomed.createLink(null, URI.create("http://example.com/child-1"), null);
+		doomed.createLink(null, URI.create("http://example.com/child-2"), null);
+		List<Resource> graphs = graphsOf(doomed);
+		assertTrue(graphs.size() >= 3, "the context must have three graphs for this test to mean anything");
+		// one short of all, so that every listing is full and any two listings share a graph
+		remover().graphsPerListing = graphs.size() - 1;
+		remover().afterChunk = () -> {
+			try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+				for (Resource graph : graphs) {
+					rc.add(iri("http://example.com/survivor"), DCTERMS.TITLE, literal("survivor"), graph);
+				}
+			}
+		};
+
+		cm.remove(doomed.getEntry().getEntryURI());
+		awaitContextRemovals();
+
+		assertTrue(hasMarker(doomed), "the job gives up instead of listing the same graphs forever");
 		assertTrue(cm.isRemovalPending(doomed.id));
 	}
 
@@ -587,6 +820,14 @@ public class ContextRemoverTest extends AbstractCoreTest {
 	}
 
 	/**
+	 * A second remover, over a store that behaves unlike the memory store. A test that holds the job of the first
+	 * one leaves the removal to this one.
+	 */
+	private ContextRemover removerOver(Repository repository) {
+		return new ContextRemover(rm, repository, ((ContextManagerImpl) cm).getSesameURI());
+	}
+
+	/**
 	 * Holds the job before it reads anything, until {@link #release} is counted down. Only a context with an entry
 	 * has graphs of its own, so for an empty one the job finishes without reaching the hold.
 	 */
@@ -599,6 +840,31 @@ public class ContextRemoverTest extends AbstractCoreTest {
 			release.await();
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
+		}
+	}
+
+	/** Waits until the thread is blocked on entering the monitor, which this thread holds. */
+	private static void awaitBlockedOn(Thread thread, Object monitor) {
+		ThreadMXBean threads = ManagementFactory.getThreadMXBean();
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (System.nanoTime() < deadline) {
+			ThreadInfo info = threads.getThreadInfo(thread.threadId());
+			if (info != null && info.getThreadState() == Thread.State.BLOCKED
+					&& info.getLockOwnerId() == Thread.currentThread().threadId()
+					&& info.getLockInfo().getIdentityHashCode() == System.identityHashCode(monitor)) {
+				return;
+			}
+			Thread.yield();
+		}
+		throw new AssertionError(thread.getName() + " did not reach the monitor");
+	}
+
+	/** Writes a staging file from a hook, which cannot throw an IOException. */
+	private static void writeStagingFile(Path file) {
+		try {
+			Files.writeString(file, "late");
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
 		}
 	}
 
@@ -624,22 +890,81 @@ public class ContextRemoverTest extends AbstractCoreTest {
 	}
 
 	private boolean hasGraphsOf(ContextImpl context) {
+		return !graphsOf(context).isEmpty();
+	}
+
+	private List<Resource> graphsOf(ContextImpl context) {
 		String contextURI = context.getURI().toString();
+		List<Resource> graphsOfContext = new ArrayList<>();
 		try (RepositoryConnection rc = rm.getRepository().getConnection();
 			 RepositoryResult<Resource> graphs = rc.getContextIDs()) {
 			for (Resource graph : graphs) {
 				if (graph.stringValue().equals(contextURI) || graph.stringValue().startsWith(contextURI + "/")) {
-					return true;
+					graphsOfContext.add(graph);
 				}
 			}
 		}
-		return false;
+		return graphsOfContext;
 	}
 
 	private boolean hasMarker(ContextImpl context) {
 		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
 			return rc.hasStatement(context.getSesameURI(), RepositoryProperties.removalPending, null, false,
 				((ContextManagerImpl) cm).getSesameURI());
+		}
+	}
+
+	/**
+	 * Returns statements without their graph and with blank nodes that are new on every read, as a SPARQL store
+	 * outside quad mode does.
+	 */
+	private static final class SparqlLikeRepository extends RepositoryWrapper {
+
+		private SparqlLikeRepository(Repository delegate) {
+			super(delegate);
+		}
+
+		@Override
+		public RepositoryConnection getConnection() {
+			return new RepositoryConnectionWrapper(this, super.getConnection()) {
+				@Override
+				public RepositoryResult<Statement> getStatements(Resource subj, IRI pred, Value obj,
+						boolean includeInferred, Resource... contexts) {
+					// a blank node stays the same within one read, as in the result of a CONSTRUCT
+					Map<BNode, BNode> relabelled = new HashMap<>();
+					List<Statement> asReturned = new ArrayList<>();
+					try (RepositoryResult<Statement> statements =
+							super.getStatements(subj, pred, obj, includeInferred, contexts)) {
+						for (Statement statement : statements) {
+							asReturned.add(getValueFactory().createStatement(
+								(Resource) relabel(statement.getSubject(), relabelled), statement.getPredicate(),
+								relabel(statement.getObject(), relabelled)));
+						}
+					}
+					return new RepositoryResult<>(new CloseableIteratorIteration<>(asReturned.iterator()));
+				}
+			};
+		}
+
+		private static Value relabel(Value value, Map<BNode, BNode> relabelled) {
+			return value instanceof BNode blankNode ? relabelled.computeIfAbsent(blankNode, unused -> bnode()) : value;
+		}
+	}
+
+	/** Removes none of the statements it is given, as a store whose removals miss what it returned. */
+	private static final class RemovalIgnoringRepository extends RepositoryWrapper {
+
+		private RemovalIgnoringRepository(Repository delegate) {
+			super(delegate);
+		}
+
+		@Override
+		public RepositoryConnection getConnection() {
+			return new RepositoryConnectionWrapper(this, super.getConnection()) {
+				@Override
+				public void remove(Iterable<? extends Statement> statements, Resource... contexts) {
+				}
+			};
 		}
 	}
 }
