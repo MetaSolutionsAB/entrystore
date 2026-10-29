@@ -25,6 +25,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.rest.springboot.model.api.ListFilter;
@@ -165,7 +166,7 @@ public class ResourceController {
 			// Not request.getInputStream() here: Jetty answers Expect: 100-continue as soon as it is called.
 			result = resourceService.setEntryResource(entry, request::getInputStream, request.getContentLengthLong(),
 					mediaType, mimeType, filename, session.getId());
-		} catch (EntityTooLargeException e) {
+		} catch (EntityTooLargeException | AuthorizationException e) {
 			HttpUtil.discardRejectedBody(request);
 			throw e;
 		}

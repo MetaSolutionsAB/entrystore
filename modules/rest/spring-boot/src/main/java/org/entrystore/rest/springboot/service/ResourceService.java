@@ -28,6 +28,7 @@ import org.entrystore.ResourceType;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.RepositoryException;
+import org.entrystore.repository.util.StringUtils;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.api.ResourceQuery;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
@@ -35,9 +36,11 @@ import org.entrystore.rest.springboot.model.dto.RenderedFeed;
 import org.entrystore.rest.springboot.model.dto.ResourceRepresentation;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
+import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.springboot.util.GraphUtil;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -59,6 +62,11 @@ public class ResourceService {
 
 	private static final String EMPTY_REPRESENTATION = "";
 
+	private static final long DEFAULT_MAX_RESOURCE_SIZE = 10L * 1024 * 1024;
+
+	/** The longest array the JVM allocates, so the longest body that can be read into one. */
+	private static final long MAX_RESOURCE_SIZE_CEILING = Integer.MAX_VALUE - 8;
+
 	private final ResourceSerializationService resourceSerializationService;
 	private final PrincipalManager principalManager;
 	private final SyndicationService syndicationService;
@@ -67,6 +75,28 @@ public class ResourceService {
 	private final UserService userService;
 	private final ProxyService proxyService;
 	private final ContextService contextService;
+
+	private long maxResourceSize = DEFAULT_MAX_RESOURCE_SIZE;
+
+	/**
+	 * Sets the cap on non-file resource bodies, in the units of {@code entrystore.data.max-file-size}; -1 removes it.
+	 * Any other value that is not positive, or above the longest array a body can be read into, fails startup.
+	 */
+	@Value("${entrystore.data.max-resource-size:10M}")
+	void setMaxResourceSize(String value) {
+		long size;
+		try {
+			size = StringUtils.convertUnitStringToByteSize(value);
+		} catch (IllegalArgumentException e) {
+			throw new IllegalArgumentException("entrystore.data.max-resource-size must be a size such as 10M, got "
+					+ value, e);
+		}
+		if (size != -1 && (size < 1 || size > MAX_RESOURCE_SIZE_CEILING)) {
+			throw new IllegalArgumentException("entrystore.data.max-resource-size must be -1 or between 1 and "
+					+ MAX_RESOURCE_SIZE_CEILING + " bytes, got " + value);
+		}
+		maxResourceSize = size;
+	}
 
 	/**
 	 * Chooses the representation a GET on the resource URI answers with. A syndication request is served before
@@ -199,19 +229,20 @@ public class ResourceService {
 	 * Routes a PUT body to the service owning the entry's graph type and bumps the entry's modification date.
 	 * A binary upload is reported as {@link CompletionState#CREATED}, every other update as
 	 * {@link CompletionState#UPDATED}; an unsupported graph type answers {@link CompletionState#ERROR} and leaves
-	 * the entry untouched. A binary (graph type None) body is passed on unopened once the caller is found to have
-	 * write access, and is streamed to disk; every other body is small and read into memory first.
+	 * the entry untouched. The body is opened only once the caller is found to have write access. A binary (graph
+	 * type None) body is then streamed to disk; every other body is read into memory first, capped by
+	 * {@code entrystore.data.max-resource-size} from {@code contentLength} (-1 when unknown) and while reading.
 	 */
 	public CompletionState setEntryResource(Entry entry, IOSupplier<InputStream> body, long contentLength,
 											String mediaType, String mimeType, String filename,
 											String currentSessionId) {
+		principalManager.checkAuthenticatedUserAuthorized(entry, PrincipalManager.AccessProperty.WriteResource);
 		if (entry.getGraphType() == GraphType.None) {
-			principalManager.checkAuthenticatedUserAuthorized(entry, PrincipalManager.AccessProperty.WriteResource);
 			fileResourceService.setData(entry, body, contentLength, mediaType, mimeType, filename);
 			entry.updateModificationDate();
 			return CompletionState.CREATED;
 		}
-		byte[] requestBody = readBody(body);
+		byte[] requestBody = readBody(body, contentLength);
 		CompletionState state = switch (entry.getGraphType()) {
 			case List, Group -> {
 				if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType)) {
@@ -241,12 +272,28 @@ public class ResourceService {
 		return state;
 	}
 
-	private static byte[] readBody(IOSupplier<InputStream> body) {
+	/**
+	 * Reads at most one byte past {@link #maxResourceSize}, so a body without Content-Length, or with one that
+	 * understates it, is capped too. An over-long Content-Length is rejected before the body is opened, as opening
+	 * it makes Jetty answer Expect: 100-continue.
+	 */
+	private byte[] readBody(IOSupplier<InputStream> body, long contentLength) {
+		if (maxResourceSize != -1 && contentLength > maxResourceSize) {
+			throw new EntityTooLargeException("Received resource size (of " + contentLength
+					+ "b) exceeds maximum allowed size of: " + maxResourceSize + "b");
+		}
+		byte[] requestBody;
 		try {
-			return body.get().readAllBytes();
+			InputStream in = body.get();
+			requestBody = maxResourceSize == -1 ? in.readAllBytes() : in.readNBytes((int) maxResourceSize + 1);
 		} catch (IOException e) {
 			throw new BadRequestException("Failed to read the request body", e);
 		}
+		if (maxResourceSize != -1 && requestBody.length > maxResourceSize) {
+			throw new EntityTooLargeException("Received resource exceeds maximum allowed size of: " + maxResourceSize
+					+ "b");
+		}
+		return requestBody;
 	}
 
 	private static void setString(Entry entry, byte[] requestBody) {

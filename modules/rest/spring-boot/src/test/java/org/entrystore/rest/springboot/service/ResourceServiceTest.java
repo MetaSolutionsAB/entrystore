@@ -38,11 +38,14 @@ import org.entrystore.rest.springboot.model.dto.CompletionState;
 import org.entrystore.rest.springboot.model.dto.RenderedFeed;
 import org.entrystore.rest.springboot.model.dto.ResourceRepresentation;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.util.RDFJSON;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -341,16 +344,78 @@ class ResourceServiceTest {
 	}
 
 	@Test
-	void setEntryResource_binaryBodyWithoutWriteAccess_isDeniedBeforeTheBodyIsOpened() {
-		when(entry.getGraphType()).thenReturn(GraphType.None);
+	void setEntryResource_withoutWriteAccess_isDeniedBeforeTheBodyIsOpened() {
+		// Checked before the graph type is looked at, so it holds for binary and non-file bodies alike.
 		doThrow(new AuthorizationException(null, null, AccessProperty.WriteResource))
 				.when(principalManager).checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
 
 		assertThrows(AuthorizationException.class, () -> service.setEntryResource(entry, unopenableBody(), 3,
-				"image/png", null, null, "session-1"));
+				"text/plain", null, null, "session-1"));
 
-		verifyNoInteractions(fileResourceService);
+		verifyNoInteractions(fileResourceService, listResourceService, userService);
 		verify(entry, never()).updateModificationDate();
+	}
+
+	@Test
+	void setEntryResource_contentLengthAboveMaxResourceSize_isRejectedBeforeTheBodyIsOpened() {
+		service.setMaxResourceSize("1k");
+		when(entry.getGraphType()).thenReturn(GraphType.String);
+
+		EntityTooLargeException e = assertThrows(EntityTooLargeException.class, () -> service.setEntryResource(entry,
+				unopenableBody(), 1025, "text/plain", null, null, "session-1"));
+
+		assertEquals("Received resource size (of 1025b) exceeds maximum allowed size of: 1024b", e.getMessage());
+		verify(entry, never()).updateModificationDate();
+	}
+
+	@Test
+	void setEntryResource_bodyWithoutContentLengthAboveMaxResourceSize_isNotReadPastTheLimit() {
+		service.setMaxResourceSize("1k");
+		when(entry.getGraphType()).thenReturn(GraphType.String);
+		EndlessBody endlessBody = new EndlessBody();
+
+		EntityTooLargeException e = assertThrows(EntityTooLargeException.class, () -> service.setEntryResource(entry,
+				() -> endlessBody, -1, "text/plain", null, null, "session-1"));
+
+		assertEquals("Received resource exceeds maximum allowed size of: 1024b", e.getMessage());
+		// One byte past the limit is what tells a body at the limit from one above it.
+		assertEquals(1025, endlessBody.bytesRead);
+		verify(entry, never()).updateModificationDate();
+	}
+
+	@Test
+	void setEntryResource_bodyAtMaxResourceSizeWithoutContentLength_isStored() {
+		service.setMaxResourceSize("1k");
+		StringResource resource = mock(StringResource.class);
+		when(entry.getGraphType()).thenReturn(GraphType.String);
+		when(entry.getResource()).thenReturn(resource);
+		String text = "a".repeat(1024);
+
+		CompletionState state = service.setEntryResource(entry, body(text), -1, "text/plain", null, null,
+				"session-1");
+
+		assertEquals(CompletionState.UPDATED, state);
+		verify(resource).setString(text);
+	}
+
+	@Test
+	void setEntryResource_maxResourceSizeMinusOne_acceptsAContentLengthAboveTheDefault() {
+		service.setMaxResourceSize("-1");
+		StringResource resource = mock(StringResource.class);
+		when(entry.getGraphType()).thenReturn(GraphType.String);
+		when(entry.getResource()).thenReturn(resource);
+
+		CompletionState state = service.setEntryResource(entry, body("text"), 11L * 1024 * 1024, "text/plain", null,
+				null, "session-1");
+
+		assertEquals(CompletionState.UPDATED, state);
+		verify(resource).setString("text");
+	}
+
+	@ParameterizedTest(name = "\"{0}\"")
+	@ValueSource(strings = {"0", "-2", "10MB", "abc", "", "3G"})
+	void setMaxResourceSize_valueNotMinusOneOrWithinAnArray_isRejected(String value) {
+		assertThrows(IllegalArgumentException.class, () -> service.setMaxResourceSize(value));
 	}
 
 	@Test
@@ -390,6 +455,18 @@ class ResourceServiceTest {
 		return () -> {
 			throw new AssertionError("the request body was opened");
 		};
+	}
+
+	/** A request body that never ends, counting the bytes read from it. */
+	private static final class EndlessBody extends InputStream {
+
+		long bytesRead;
+
+		@Override
+		public int read() {
+			bytesRead++;
+			return 'a';
+		}
 	}
 
 	@Test

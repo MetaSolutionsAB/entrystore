@@ -37,6 +37,9 @@ class ZzzSizeLimitIT extends BaseSpec {
 	// Applies to raw PUT bodies; above the 1 KB multipart upload below, which must still succeed.
 	static final int DATA_CAP = 1536
 
+	// Applies to raw PUT bodies of non-file resources. Below DATA_CAP, so a body between the two pins the cap applied.
+	static final int RESOURCE_CAP = 1024
+
 	// Far above DATA_CAP, but within the 4 MB the server reads and discards so that a client that reads the
 	// response only after sending its whole body sees the 413 rather than a connection reset.
 	static final int OVERSIZED_BODY = 3 * 1024 * 1024
@@ -64,6 +67,8 @@ class ZzzSizeLimitIT extends BaseSpec {
 			'--spring.servlet.multipart.max-file-size=2KB',
 			'--spring.servlet.multipart.max-request-size=4KB',
 			'--entrystore.data.max-file-size=' + DATA_CAP,
+			// With a unit, as operators write it.
+			'--entrystore.data.max-resource-size=1k',
 			'--entrystore.proxy.max-response-size=' + PROXY_CAP + 'B'
 		])
 	}
@@ -300,6 +305,70 @@ class ZzzSizeLimitIT extends BaseSpec {
 		def conn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
 		assert conn.getResponseCode() == HTTP_OK
 		return conn.inputStream.bytes.length
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} String resource exactly at entrystore.data.max-resource-size is stored"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		def entryId = getOrCreateEntry(contextId, [id: 'stringAtCapId', graphtype: 'string'])
+		def text = 'a' * RESOURCE_CAP
+
+		when:
+		def conn = EntryStoreClient.putRequest('/' + contextId + '/resource/' + entryId, text, 'admin', 'text/plain')
+
+		then:
+		conn.getResponseCode() == HTTP_NO_CONTENT
+		storedText(entryId) == text
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} String resource with a Content-Length above entrystore.data.max-resource-size is answered 413 and keeps the previous value"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		def entryId = getOrCreateEntry(contextId, [id: 'stringOverCapId', graphtype: 'string'])
+		assert EntryStoreClient.putRequest('/' + contextId + '/resource/' + entryId, 'previous', 'admin', 'text/plain')
+			.getResponseCode() == HTTP_NO_CONTENT
+
+		when: 'the client sends all of a body far above the cap before it reads the response'
+		def conn = EntryStoreClient.putRequestStreamed('/' + contextId + '/resource/' + entryId, OVERSIZED_BODY)
+
+		then:
+		conn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+		JSON_PARSER.parseText(readErrorBody(conn)).error ==
+				"Received resource size (of ${OVERSIZED_BODY}b) exceeds maximum allowed size of: ${RESOURCE_CAP}b"
+		storedText(entryId) == 'previous'
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} chunked String resource above entrystore.data.max-resource-size is answered 413 and keeps the previous value"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		def entryId = getOrCreateEntry(contextId, [id: 'stringChunkedOverCapId', graphtype: 'string'])
+		assert EntryStoreClient.putRequest('/' + contextId + '/resource/' + entryId, 'previous', 'admin', 'text/plain')
+			.getResponseCode() == HTTP_NO_CONTENT
+
+		when: 'without Content-Length the limit is only found while the body is read, and the client sends on'
+		def conn = EntryStoreClient.putRequestStreamed('/' + contextId + '/resource/' + entryId, OVERSIZED_BODY, true)
+
+		then:
+		conn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+		JSON_PARSER.parseText(readErrorBody(conn)).error ==
+				"Received resource exceeds maximum allowed size of: ${RESOURCE_CAP}b"
+		storedText(entryId) == 'previous'
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} String resource with Expect: 100-continue and a Content-Length above entrystore.data.max-resource-size is answered 413 instead of 100 Continue"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		def entryId = getOrCreateEntry(contextId, [id: 'stringExpectOverCapId', graphtype: 'string'])
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/resource/' + entryId, 'admin',
+				RESOURCE_CAP + 1, 'text/plain') == HTTP_ENTITY_TOO_LARGE
+	}
+
+	private static String storedText(String entryId) {
+		def conn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+		assert conn.getResponseCode() == HTTP_OK
+		return conn.inputStream.text
 	}
 
 	def "POST /echo multipart upload above max-file-size cap answers 413 in a textarea, as 5.x did"() {
