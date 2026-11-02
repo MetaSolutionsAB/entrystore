@@ -17,9 +17,7 @@
 package org.entrystore.rest.it
 
 import com.sun.net.httpserver.HttpServer
-import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.it.util.NameSpaceConst
 
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -30,7 +28,6 @@ import static java.net.HttpURLConnection.HTTP_BAD_GATEWAY
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
-import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
@@ -436,10 +433,7 @@ class ProxyIT extends BaseSpec {
 		given:
 		getOrCreateContext([contextId: 'proxy-public'])
 		// ReadResource on a context is es:read on its resource URI, which is the context itself.
-		def contextResourceUri = EntryStoreClient.baseUrl + '/proxy-public'
-		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
-		def acl = JsonOutput.toJson([(contextResourceUri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]])
-		assert EntryStoreClient.putRequest('/_contexts/entry/proxy-public', acl).getResponseCode() == HTTP_NO_CONTENT
+		putContextInfo('proxy-public', true)
 
 		when: 'the mock upstream is not on the anonymous whitelist'
 		def conn = EntryStoreClient.getRequest('/proxy-public/proxy' + convertMapToQueryParams([url: mockOrigin + '/api/data']), '')

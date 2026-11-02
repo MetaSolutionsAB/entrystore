@@ -86,6 +86,16 @@ public class SearchController {
 					+ "carry a name and a count; facetLang narrows the buckets of a literal facet field to one "
 					+ "language.",
 			parameters = {
+					@Parameter(name = "query", description = "Solr query in the standard query syntax, passed to Solr "
+							+ "unchanged, local params included. To keep only entries in contexts of given types (the "
+							+ "rdf:type of the context entry), add filter({!join from=resource to=context score=none "
+							+ "v='graphType:Context AND rdfType:(\"<type URI>\" OR \"<type URI>\")'}), escaping ' and \\ in "
+							+ "the type URIs. The join reads context entries without an access check, so the hit count "
+							+ "can reveal a context's type; the returned entries are still access-checked."),
+					@Parameter(name = "filterQuery", description = "Comma-separated Solr filter queries. Each one is "
+							+ "URL-decoded once more after the request is decoded, so a + must be sent as %252B and a "
+							+ "comma inside a filter query as %252C; prefer AND to +. Takes the same context-type join "
+							+ "as query."),
 					@Parameter(name = "facetMinCount", description = "Minimum count of a facet bucket, default 1. 0 "
 							+ "also lists the field's terms without hits; that is honoured for admins only and counts "
 							+ "as 1 for other callers, since such terms can come from entries they may not read."),
