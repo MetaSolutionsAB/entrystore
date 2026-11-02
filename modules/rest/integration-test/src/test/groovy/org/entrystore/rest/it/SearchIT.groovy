@@ -94,6 +94,26 @@ class SearchIT extends BaseSpec {
 	static final String NGRAM_FIELD = 'metadata.predicate.literal.' + Hashing.hash(NGRAM_MARKER_IRI, HashType.MD5).substring(0, 8)
 	static final String NGRAM_VALUE = 'ngramsearchitheritage EU'
 
+	// Context-type join specs: one entry per context, each carrying a literal of CTX_TYPE_MARKER_IRI. The changing
+	// context's entry has its own value, so its type change cannot alter the entry sets of the other specs.
+	static final String ESTERMS = 'http://entryscape.com/terms/'
+	static final String CTX_TYPE_MARKER_IRI = 'http://example.org/ns/searchIT-ctx-type-marker'
+	static final String CTX_TYPE_MARKER_FIELD = 'metadata.predicate.literal_s.' + Hashing.hash(CTX_TYPE_MARKER_IRI, HashType.MD5).substring(0, 8)
+	static final String CTX_TYPE_MARKER_VALUE = 'ctxtypemarker'
+	static final String CTX_TYPE_CHANGE_MARKER_VALUE = 'ctxtypechangemarker'
+	static final String CTX_TYPE_MARKER_QUERY = CTX_TYPE_MARKER_FIELD + ':' + CTX_TYPE_MARKER_VALUE
+	static final String CTX_TYPE_CHANGE_MARKER_QUERY = CTX_TYPE_MARKER_FIELD + ':' + CTX_TYPE_CHANGE_MARKER_VALUE
+	static final String CATALOG_CTX = 'searchCtxTypeCatalog'
+	static final String CATALOG_PRIVATE_CTX = 'searchCtxTypeCatalogPrivate'
+	static final String WORKBENCH_CTX = 'searchCtxTypeWorkbench'
+	static final String UNTYPED_CTX = 'searchCtxTypeUntyped'
+	static final String CHANGING_CTX = 'searchCtxTypeChanging'
+	static final String CATALOG_ENTRY = 'searchCtxTypeCatalogEntry'
+	static final String CATALOG_PRIVATE_ENTRY = 'searchCtxTypeCatalogPrivateEntry'
+	static final String WORKBENCH_ENTRY = 'searchCtxTypeWorkbenchEntry'
+	static final String UNTYPED_ENTRY = 'searchCtxTypeUntypedEntry'
+	static final String CHANGING_ENTRY = 'searchCtxTypeChangingEntry'
+
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
@@ -246,6 +266,25 @@ class SearchIT extends BaseSpec {
 		assert getOrCreateEntry(contextId, [id: 'searchNgramEntryId', graphtype: 'string'],
 			[resource: 'Ngram text', metadata: [(newResourceIri): [
 				(NGRAM_MARKER_IRI): [[type: 'literal', value: NGRAM_VALUE], [type: 'literal', value: 'gapprobe']]]]]).length() > 0
+
+		// Context types are set as EntryScape sets them: an rdf:type on the context entry's info graph
+		getOrCreateContext([contextId: CATALOG_CTX])
+		putContextInfo(CATALOG_CTX, true, ESTERMS + 'CatalogContext')
+		getOrCreateContext([contextId: CATALOG_PRIVATE_CTX])
+		putContextInfo(CATALOG_PRIVATE_CTX, false, ESTERMS + 'CatalogContext')
+		getOrCreateContext([contextId: WORKBENCH_CTX])
+		putContextInfo(WORKBENCH_CTX, false, ESTERMS + 'WorkbenchContext')
+		getOrCreateContext([contextId: UNTYPED_CTX])
+		getOrCreateContext([contextId: CHANGING_CTX])
+		createContextTypeEntry(CATALOG_CTX, CATALOG_ENTRY, CTX_TYPE_MARKER_VALUE)
+		createContextTypeEntry(CATALOG_PRIVATE_CTX, CATALOG_PRIVATE_ENTRY, CTX_TYPE_MARKER_VALUE)
+		createContextTypeEntry(WORKBENCH_CTX, WORKBENCH_ENTRY, CTX_TYPE_MARKER_VALUE)
+		createContextTypeEntry(UNTYPED_CTX, UNTYPED_ENTRY, CTX_TYPE_MARKER_VALUE)
+		createContextTypeEntry(CHANGING_CTX, CHANGING_ENTRY, CTX_TYPE_CHANGE_MARKER_VALUE)
+		// Decoy for the graphType:Context guard: a link whose resource is the Workbench context, typed as a Catalog context
+		def workbenchUri = EntryStoreClient.baseUrl + '/' + WORKBENCH_CTX
+		assert getOrCreateEntry(UNTYPED_CTX, [id: 'searchCtxTypeDecoy', entrytype: 'link', resource: workbenchUri],
+			[metadata: [(workbenchUri): [(NameSpaceConst.RDF_TYPE): [[type: 'uri', value: ESTERMS + 'CatalogContext']]]]]).length() > 0
 
 		// Entry whose DECIMAL_PREDICATE_IRI value is typed xsd:double but has a non-numeric lexical
 		// form. The indexer's isDecimalLiteral guard matches (datatype is xsd:double), l.doubleValue()
@@ -1508,6 +1547,79 @@ class SearchIT extends BaseSpec {
 		statuses.every { it == HTTP_OK }
 	}
 
+	// ---------- ENTRYSTORE-1277: filtering by context type with a query-time join ----------
+
+	@Unroll
+	def "GET /search?type=solr with the context-type join on #types (negated: #negate) in '#parameter' should return #expected"() {
+		given:
+		def filter = (negate ? 'NOT ' : '') + contextTypeFilter(types)
+		def params = parameter == 'query'
+			? [type: 'solr', query: CTX_TYPE_MARKER_QUERY + ' AND ' + filter]
+			: [type: 'solr', query: CTX_TYPE_MARKER_QUERY, filterQuery: filter]
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(params))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		respJson['results'] == expected.size()
+		respJson['resource']['children'].collect { it['entryId'] } as Set == expected as Set
+
+		where:
+		parameter     | negate | types                                  | expected
+		'query'       | false  | ['CatalogContext']                     | [CATALOG_ENTRY, CATALOG_PRIVATE_ENTRY]
+		'query'       | false  | ['WorkbenchContext']                   | [WORKBENCH_ENTRY]
+		'query'       | false  | ['CatalogContext', 'WorkbenchContext'] | [CATALOG_ENTRY, CATALOG_PRIVATE_ENTRY, WORKBENCH_ENTRY]
+		'query'       | true   | ['CatalogContext']                     | [WORKBENCH_ENTRY, UNTYPED_ENTRY]
+		'filterQuery' | false  | ['CatalogContext']                     | [CATALOG_ENTRY, CATALOG_PRIVATE_ENTRY]
+		'filterQuery' | false  | ['CatalogContext', 'WorkbenchContext'] | [CATALOG_ENTRY, CATALOG_PRIVATE_ENTRY, WORKBENCH_ENTRY]
+	}
+
+	def "GET /search?type=solr with the context-type join should ignore a non-context entry whose resource is a context URI"() {
+		given: 'the decoy: a link in the untyped context whose resource is the Workbench context, typed as a Catalog context'
+		def unguarded = "filter({!join from=resource to=context score=none v='rdfType:\"${ESTERMS}CatalogContext\"'})"
+
+		when:
+		def unguardedConn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: CTX_TYPE_MARKER_QUERY + ' AND ' + unguarded]))
+		def guardedConn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: CTX_TYPE_MARKER_QUERY + ' AND ' + contextTypeFilter(['CatalogContext'])]))
+
+		then: 'without graphType:Context the decoy pulls in the Workbench entry'
+		entryIds(unguardedConn) == [CATALOG_ENTRY, CATALOG_PRIVATE_ENTRY, WORKBENCH_ENTRY] as Set
+		entryIds(guardedConn) == [CATALOG_ENTRY, CATALOG_PRIVATE_ENTRY] as Set
+	}
+
+	def "GET /search?type=solr with the context-type join as guest should return only the entries guest may read"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: CTX_TYPE_MARKER_QUERY + ' AND ' + contextTypeFilter(['CatalogContext'])]), '')
+
+		then: 'the private Catalog context matches the join, but the access check drops its entry'
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		respJson['results'] == 1
+		respJson['resource']['children'].collect { it['entryId'] } == [CATALOG_ENTRY]
+	}
+
+	def "GET /search?type=solr with the context-type join should follow a context's type change with the same query"() {
+		given: 'a query that names a type, not a context'
+		def path = '/search' + convertMapToQueryParams(
+			[type: 'solr', query: CTX_TYPE_CHANGE_MARKER_QUERY + ' AND ' + contextTypeFilter(['CatalogContext'])])
+		def before = EntryStoreClient.getRequest(path)
+		assert entryIds(before).isEmpty()
+
+		when: 'the context becomes a Catalog context; with no guest ACL or projectType change, its entries are not reindexed'
+		putContextInfo(CHANGING_CTX, false, ESTERMS + 'CatalogContext')
+
+		then:
+		await()
+			.pollInterval(200, TimeUnit.MILLISECONDS)
+			.atMost(15, TimeUnit.SECONDS)
+			.until { entryIds(EntryStoreClient.getRequest(path)) == [CHANGING_ENTRY] as Set }
+	}
+
 	/**
 	 * The shape entrystore.js builds in EntryStoreUtil.loadEntriesByResourceURIs: 20 resource URIs OR-ed into one
 	 * query, of which only the first one, searchEntryId's, exists.
@@ -1516,5 +1628,25 @@ class SearchIT extends BaseSpec {
 		def existing = EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryId
 		def missing = (1..19).collect { EntryStoreClient.baseUrl + '/' + contextId + '/resource/searchIT-missing-entry-' + it }
 		return '(' + ([existing] + missing).collect { field + ':"' + it + '"' }.join(' OR ') + ')'
+	}
+
+	/**
+	 * The filter entrystore.js adds to restrict a search to contexts of the given types, local names in the esterms
+	 * namespace. AND, not +, so that it also survives the second URL-decoding of filterQuery.
+	 */
+	private static String contextTypeFilter(List<String> types) {
+		def values = types.collect { '"' + ESTERMS + it + '"' }.join(' OR ')
+		return "filter({!join from=resource to=context score=none v='graphType:Context AND rdfType:(" + values + ")'})"
+	}
+
+	private void createContextTypeEntry(String contextId, String entryId, String markerValue) {
+		def resourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		assert getOrCreateEntry(contextId, [id: entryId, graphtype: 'string'], [resource: 'Context type text',
+			metadata: [(resourceIri): [(CTX_TYPE_MARKER_IRI): [[type: 'literal', value: markerValue]]]]]).length() > 0
+	}
+
+	private static Set<String> entryIds(HttpURLConnection conn) {
+		assert conn.getResponseCode() == HTTP_OK
+		return JSON_PARSER.parseText(conn.inputStream.text)['resource']['children'].collect { it['entryId'] } as Set
 	}
 }

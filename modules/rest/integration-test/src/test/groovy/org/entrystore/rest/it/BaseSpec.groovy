@@ -47,6 +47,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.nio.charset.StandardCharsets.UTF_8
 import static org.awaitility.Awaitility.await
@@ -318,6 +319,25 @@ abstract class BaseSpec extends Specification {
 		def connection = EntryStoreClient.postRequest('/_principals/groups' + convertMapToQueryParams(data))
 		assert connection.getResponseCode() == HTTP_CREATED
 		return connection.getHeaderField('Location').find(/\/_principals\/entry\/([0-9A-Za-z]+)$/) { match, id -> id }
+	}
+
+	/**
+	 * Replaces the context entry's info graph, so every triple that must stay goes in this one call. Its subject is
+	 * the context's resource URI, {base}/{contextId}.
+	 *
+	 * @param guestReadable whether guest gets es:read, which makes the context's entries without an ACL guest-readable
+	 * @param typeUri the context's rdf:type, e.g. http://entryscape.com/terms/CatalogContext; none if null
+	 */
+	static void putContextInfo(String contextId, boolean guestReadable, String typeUri = null) {
+		def triples = [:]
+		if (typeUri != null) {
+			triples[NameSpaceConst.RDF_TYPE] = [[type: 'uri', value: typeUri]]
+		}
+		if (guestReadable) {
+			triples[NameSpaceConst.TERM_READ] = [[type: 'uri', value: EntryStoreClient.baseUrl + '/_principals/resource/_guest']]
+		}
+		def body = JsonOutput.toJson([(EntryStoreClient.baseUrl + '/' + contextId): triples])
+		assert EntryStoreClient.putRequest('/_contexts/entry/' + contextId, body).getResponseCode() == HTTP_NO_CONTENT
 	}
 
 	/**

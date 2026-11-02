@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.it
 
-import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
@@ -434,7 +433,7 @@ class ContextIT extends BaseSpec {
 		given:
 		def contextId = 'ctx-public-resource-test'
 		getOrCreateContext([contextId: contextId])
-		makeContextReadableByGuest(contextId)
+		putContextInfo(contextId, true)
 		createEntry(contextId, [entrytype: 'link', resource: 'https://example.com'])
 
 		when:
@@ -451,7 +450,7 @@ class ContextIT extends BaseSpec {
 		given:
 		def contextId = 'ctx-public-resource-test'
 		getOrCreateContext([contextId: contextId])
-		makeContextReadableByGuest(contextId)
+		putContextInfo(contextId, true)
 
 		when:
 		def conn = EntryStoreClient.getRequest('/' + contextId, '')
@@ -473,13 +472,5 @@ class ContextIT extends BaseSpec {
 		respJson['info'] != null
 		respJson['rights'] != null
 		respJson['resource'] == [:]
-	}
-
-	private static void makeContextReadableByGuest(String contextId) {
-		def contextUri = EntryStoreClient.baseUrl + '/' + contextId
-		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
-		def acl = [(contextUri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]]
-		def conn = EntryStoreClient.putRequest('/_contexts/entry/' + contextId, JsonOutput.toJson(acl))
-		assert conn.getResponseCode() == HTTP_NO_CONTENT
 	}
 }
