@@ -286,6 +286,113 @@ class SolrSearchInputValidatorTest {
 		assertThrows(BadRequestException.class, () -> validator.parseFilterQueries(raw));
 	}
 
+	@ParameterizedTest(name = "{0}")
+	@ValueSource(strings = {
+			"{!join fromIndex=other from=resource to=context}*:*",
+			// Solr unescapes a nested query before reading its local params
+			"_query_:\"{!join from\\u0049ndex=other from=resource to=context}*:*\"",
+			"{!query v='{!join fromInd\\ex=other from=resource to=context}*:*'}",
+			"_query_:\"_query_:\\\"{!join from\\\\u0049ndex=other from=resource to=context}*:*\\\"\"",
+			// Solr reads a unicode escape with Integer.parseInt, which also takes a sign and non-ASCII digits
+			"{!query v='{!join fromI\\u+06edex=other from=resource to=context}*:*'}",
+			"{!query v='{!join fromI\\u\uFF10\uFF10\uFF16\uFF45dex=other from=resource to=context}*:*'}",
+			"{!query v='{!join fromI\\u\u0660\u0660\u0666edex=other from=resource to=context}*:*'}"
+	})
+	void validateQueryRejectsFromIndexHoweverItIsEscaped(String query) {
+		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.validateQuery(query));
+		assertEquals("Local parameter 'fromIndex' is not permitted in 'query'", ex.getMessage());
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@ValueSource(strings = {
+			"resource:http\\://example.org/data/fromindex.html",
+			"title:FromIndex*",
+			"fulltext:FROMINDEX",
+			// Solr reads local-param keys case-sensitively, so this is no cross-core join
+			"{!join FROMINDEX=other from=resource to=context}*:*"
+	})
+	void validateQueryAcceptsOtherCasingsOfFromIndex(String query) {
+		assertDoesNotThrow(() -> validator.validateQuery(query));
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@ValueSource(strings = {
+			"{!query v=$facet.matches}",
+			"{!query v=$ facet.matches}",
+			"{!query v=$'facet.matches'}",
+			"{!func}query($qq)",
+			"_query_:\"{!query v=\\$facet.matches}\""
+	})
+	void validateQueryRejectsParameterDereferencing(String query) {
+		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.validateQuery(query));
+		assertEquals("Parameter dereferencing ($name) is not permitted in 'query'", ex.getMessage());
+	}
+
+	@Test
+	void validateQueryAcceptsADollarSignThatNamesNoParameter() {
+		assertDoesNotThrow(() -> validator.validateQuery("price:$100 OR title:US$"));
+	}
+
+	@Test
+	void validateQueryRejectsEscapesNestedDeeperThanSolrNeeds() {
+		// each pass turns the leading unicode-escaped backslash into a new escape, shedding one level only
+		String query = "\\u005c" + "u005c".repeat(20);
+
+		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.validateQuery(query));
+		assertEquals("Query parameter 'query' nests escapes more than 16 levels deep", ex.getMessage());
+	}
+
+	@Test
+	void validateQueryAcceptsASameCoreJoin() {
+		// the shape entrystore.js sends to filter by context type (ENTRYSTORE-1277)
+		assertDoesNotThrow(() -> validator.validateQuery(
+				"{!join from=resource to=context}rdfType:\"http://www.w3.org/ns/dcat#Catalog\""));
+	}
+
+	@Test
+	void validateQueryAcceptsEscapedCharacters() {
+		assertDoesNotThrow(() -> validator.validateQuery("resource:http\\://example.com/a\\ b"));
+	}
+
+	@Test
+	void parseFilterQueriesRejectsFromIndexInAnyEntry() {
+		BadRequestException ex = assertThrows(BadRequestException.class,
+				() -> validator.parseFilterQueries("public:true,{!join fromIndex=other from=resource to=context}*:*"));
+		assertEquals("Local parameter 'fromIndex' is not permitted in 'filterQuery'", ex.getMessage());
+	}
+
+	@Test
+	void parseFilterQueriesRejectsAPercentEncodedFromIndex() {
+		String encoded = "%7B!join%20from%49ndex%3Dother%20from%3Dresource%20to%3Dcontext%7D*:*";
+
+		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.parseFilterQueries(encoded));
+		assertEquals("Local parameter 'fromIndex' is not permitted in 'filterQuery'", ex.getMessage());
+	}
+
+	@Test
+	void parseFilterQueriesRejectsParameterDereferencing() {
+		BadRequestException ex = assertThrows(BadRequestException.class,
+				() -> validator.parseFilterQueries("{!query v=$facet.matches}"));
+		assertEquals("Parameter dereferencing ($name) is not permitted in 'filterQuery'", ex.getMessage());
+	}
+
+	@Test
+	void validateFacetSettingsRejectsFromIndexInFacetMatches() {
+		// literal text for the regex, yet query text once a query dereferences it with {!query v=$facet.matches}
+		FacetSettingsRequestParams req = new FacetSettingsRequestParams();
+		req.setFacetFields("tag.literal");
+		req.setFacetMatches("_query_:\"\\{!join fromIndex=other from=resource to=context\\}title:a\\*\"");
+
+		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.validateFacetSettings(req));
+		assertEquals("Local parameter 'fromIndex' is not permitted in 'facetMatches'", ex.getMessage());
+	}
+
+	@Test
+	void parseFilterQueriesAcceptsASameCoreJoin() {
+		String fq = "{!join from=resource to=context}public:true";
+		assertEquals(List.of(fq), validator.parseFilterQueries(fq));
+	}
+
 	@Test
 	void validateFacetSettingsAcceptsNullParams() {
 		FacetSettingsRequestParams empty = new FacetSettingsRequestParams();

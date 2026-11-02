@@ -31,6 +31,9 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
 import org.entrystore.config.Config;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
+import org.entrystore.repository.RepositoryListener;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
@@ -39,6 +42,8 @@ import org.junit.jupiter.api.BeforeEach;
 
 import java.net.URI;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -222,6 +227,36 @@ public abstract class AbstractCoreTest {
 		} finally {
 			pm.setAuthenticatedUserURI(previous);
 		}
+	}
+
+	/** An event on an entry, with the entry's principals for one access property as the listener saw them. */
+	protected record AclEvent(URI entry, RepositoryEvent event, Set<URI> principals) {
+	}
+
+	/**
+	 * Runs {@code action} and returns each {@link RepositoryEvent#EntryUpdated} and
+	 * {@link RepositoryEvent#EntryAclGuestUpdated} it fired, in order, with the source entry's principals for
+	 * {@code prop} at dispatch time, which is when the Solr listener reads them.
+	 */
+	protected List<AclEvent> recordAclEvents(AccessProperty prop, Runnable action) {
+		List<AclEvent> events = new ArrayList<>();
+		RepositoryListener recorder = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				Entry source = (Entry) eventObject.getSource();
+				events.add(new AclEvent(source.getEntryURI(), eventObject.getEvent(),
+						Set.copyOf(source.getAllowedPrincipalsFor(prop))));
+			}
+		};
+		rm.registerListener(recorder, RepositoryEvent.EntryUpdated);
+		rm.registerListener(recorder, RepositoryEvent.EntryAclGuestUpdated);
+		try {
+			action.run();
+		} finally {
+			rm.unregisterListener(recorder, RepositoryEvent.EntryUpdated);
+			rm.unregisterListener(recorder, RepositoryEvent.EntryAclGuestUpdated);
+		}
+		return events;
 	}
 
 }

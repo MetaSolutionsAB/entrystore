@@ -38,7 +38,6 @@ import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
@@ -52,7 +51,6 @@ import org.entrystore.SearchIndex;
 import org.entrystore.User;
 import org.entrystore.impl.LocalMetadataWrapper;
 import org.entrystore.impl.RegularContext;
-import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.CorruptEntryException;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
@@ -64,10 +62,8 @@ import javax.xml.datatype.XMLGregorianCalendar;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
-import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -216,7 +212,8 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private final Set<String> fieldsKnownToHaveTerms = ConcurrentHashMap.newKeySet();
 
-	private final Map<URI, DelayedContextIndexerInfo> delayedReindex = Collections.synchronizedMap(new HashMap<>());
+	/** Context entry URI to the {@link System#nanoTime()} of its latest submission, immune to wall-clock steps. */
+	private final Map<URI, Long> delayedReindex = Collections.synchronizedMap(new HashMap<>());
 
 	private final ValueFactory valueFactory;
 
@@ -494,14 +491,6 @@ public class SolrSearchIndex implements SearchIndex {
 
 	}
 
-	public static class DelayedContextIndexerInfo {
-
-		LocalDateTime submitted;
-
-		boolean guestReadable;
-
-	}
-
 	public static class FacetSettings {
 
 		public String fields;
@@ -525,13 +514,17 @@ public class SolrSearchIndex implements SearchIndex {
 		public void run() {
 			while (!interrupted()) {
 				synchronized (delayedReindex) {
-					Iterator<URI> it = delayedReindex.keySet().iterator();
+					Iterator<Map.Entry<URI, Long>> it = delayedReindex.entrySet().iterator();
 					while (it.hasNext()) {
-						URI contextURI = it.next();
-						DelayedContextIndexerInfo info = delayedReindex.get(contextURI);
-						if (info.submitted.until(LocalDateTime.now(), ChronoUnit.SECONDS) >= 10) {
-							log.info("Submitting context for reindexing after 10 seconds delay");
-							reindex(contextURI);
+						Map.Entry<URI, Long> queued = it.next();
+						if (System.nanoTime() - queued.getValue() >= TimeUnit.SECONDS.toNanos(10)) {
+							log.info("Submitting context {} for reindexing after 10 seconds delay", queued.getKey());
+							try {
+								reindex(queued.getKey());
+							} catch (RuntimeException e) {
+								log.error("Delayed reindex of context {} failed: {}", queued.getKey(), e.getMessage(),
+										e);
+							}
 							it.remove();
 						}
 					}
@@ -1130,29 +1123,13 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * This method was originally developed for ACL changes, but we also use it for project types now. If ACL changes
-	 * are reverted within a short period of time then the context is removed from the reindexing queue again. This
-	 * does not apply for other reindexing triggers such as a changed project type.
+	 * Queues the context's entries for a reindex after a changed guest ACL or project type of the context, both of
+	 * which the entries' documents depend on. Every submission restarts the 10 second wait, so a burst of changes
+	 * reindexes the context once. A change reverted within the wait still reindexes.
 	 */
-	public void submitContextForDelayedReindex(Entry contextEntry, Model entryGraph) {
-		synchronized (delayedReindex) {
-			IRI guestURI = valueFactory.createIRI(rm.getPrincipalManager().getGuestUser().getURI().toString());
-			URI contextURI = contextEntry.getEntryURI();
-			Model m = new LinkedHashModel(entryGraph);
-			boolean newGuestReadable = m.contains(valueFactory.createIRI(contextEntry.getLocalMetadataURI().toString()), RepositoryProperties.Read, guestURI) ||
-					m.contains(valueFactory.createIRI(contextEntry.getLocalMetadataURI().toString()), RepositoryProperties.Write, guestURI);
-			if (delayedReindex.containsKey(contextURI) && (delayedReindex.get(contextURI).guestReadable != newGuestReadable)) {
-				// the context has been switched back to the previous guest ACL and does not need to be reindexed anymore
-				log.info("Removing context from delayed reindexing queue due to reverted ACL change within grace period");
-				delayedReindex.remove(contextURI);
-			} else {
-				log.info("Enqueueing context for delayed reindexing due to ACL change");
-				DelayedContextIndexerInfo info = new DelayedContextIndexerInfo();
-				info.submitted = LocalDateTime.now();
-				info.guestReadable = newGuestReadable;
-				delayedReindex.put(contextURI, info);
-			}
-		}
+	public void submitContextForDelayedReindex(URI contextEntryURI) {
+		log.info("Enqueueing context {} for delayed reindexing", contextEntryURI);
+		delayedReindex.put(contextEntryURI, System.nanoTime());
 	}
 
 	/**
@@ -1920,7 +1897,6 @@ public class SolrSearchIndex implements SearchIndex {
 			return counts;
 		}
 		SolrQuery countQuery = facetOnlyQuery(baseQuery.getQuery(), baseQuery.getFilterQueries());
-		countQuery.set("expandMacros", "false");
 		fieldAndLabelByQuery.keySet().forEach(countQuery::addFacetQuery);
 		QueryResponse response;
 		try {
@@ -1973,6 +1949,7 @@ public class SolrSearchIndex implements SearchIndex {
 	/** A {@code rows=0} faceting request over the given query and filters, the shared shape of the facet side requests. */
 	private static SolrQuery facetOnlyQuery(String query, String[] filters) {
 		SolrQuery facetQuery = new SolrQuery(query);
+		facetQuery.set("expandMacros", "false");
 		if (filters != null) {
 			facetQuery.setFilterQueries(filters);
 		}
@@ -1993,6 +1970,8 @@ public class SolrSearchIndex implements SearchIndex {
 		// We only need the "uri" field in the response,
 		// so we skip the rest (default is "*")
 		query.setFields("uri");
+		// the REST layer validates client query text literally, so a ${…} macro must not rewrite it in Solr
+		query.set("expandMacros", "false");
 
 		long hits = -1;
 		QueryResponse r;

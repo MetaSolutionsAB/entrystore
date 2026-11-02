@@ -1081,14 +1081,12 @@ public class ListImpl extends RDFResource implements List {
 	public void applyACLtoChildren(boolean recursive) {
 		Context c = this.entry.getContext();
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(c.getEntry(), AccessProperty.Administer);
+		Map<AccessProperty, Set<URI>> acl = EntryImpl.aclOf(entry);
 		// snapshot: this loop writes each child's ACL and recurses, so iterating the live vector would let a
 		// concurrent member change abort it part-applied with no rollback
 		for (URI uri : new ArrayList<>(loadChildren())) {
-			Entry childEntry = entry.getContext().getByEntryURI(uri);
-			if (childEntry != null) {
-				for (AccessProperty ap : AccessProperty.values()) {
-					childEntry.setAllowedPrincipalsFor(ap, entry.getAllowedPrincipalsFor(ap));
-				}
+			if (c.getByEntryURI(uri) instanceof EntryImpl childEntry) {
+				childEntry.setAllowedPrincipalsFor(acl);
 				if (GraphType.List.equals(childEntry.getGraphType()) && EntryType.Local.equals(childEntry.getEntryType())) {
 					Resource childResource = childEntry.getResource();
 					if (childResource instanceof List) {

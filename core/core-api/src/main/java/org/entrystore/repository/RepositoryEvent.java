@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,8 +25,7 @@ public enum RepositoryEvent {
 	EntryCreated,
 	EntryUpdated, // fired after any write to an entry's own graph, its file metadata or a list's membership
 	EntryDeleted,
-	EntryAclGuestUpdated, // implemented for EntryImpl.setGraph() and changes concerning _guest,
-						  // NOT for EntryImpl.setAllowedPrincipalsFor and its siblings
+	EntryAclGuestUpdated, // fired by EntryImpl.setGraph() and the ACL setters when a context entry's _guest ACL changes
 	EntryProjectTypeUpdated,
 	MetadataUpdated,
 	ExternalMetadataUpdated,

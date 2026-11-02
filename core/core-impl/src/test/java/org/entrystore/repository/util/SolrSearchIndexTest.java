@@ -167,6 +167,17 @@ public class SolrSearchIndexTest {
 	}
 
 	@Test
+	public void submitContextForDelayedReindexKeepsTheContextQueuedWhenResubmittedWithinTheWait() throws Exception {
+		URI ctx = URI.create("http://localhost:8181/_contexts/entry/1");
+
+		// e.g. guest granted on the context's resource, then on its metadata: the second must not cancel the first
+		index.submitContextForDelayedReindex(ctx);
+		index.submitContextForDelayedReindex(ctx);
+
+		assertTrue(delayedReindex().containsKey(ctx), "a resubmission must not drop the queued reindex");
+	}
+
+	@Test
 	public void isIndexingReturnsFalseWhenNoContextIsBeingIndexed() {
 		assertFalse(index.isIndexing(), "isIndexing() must be false when reindexing map is empty");
 	}
@@ -1322,6 +1333,13 @@ public class SolrSearchIndexTest {
 		return (Set<URI>) f.get(index);
 	}
 
+	@SuppressWarnings("unchecked")
+	private Map<URI, ?> delayedReindex() throws Exception {
+		Field f = SolrSearchIndex.class.getDeclaredField("delayedReindex");
+		f.setAccessible(true);
+		return (Map<URI, ?>) f.get(index);
+	}
+
 	/**
 	 * Returns the delete query of the only request sent to Solr.
 	 */
@@ -1659,6 +1677,19 @@ public class SolrSearchIndexTest {
 
 		assertTrue(result.getEntries().isEmpty());
 		assertEquals(0, result.getHits());
+	}
+
+	@Test
+	public void sendQuerySwitchesMacroExpansionOff() throws Exception {
+		// with macros on, from${x:I}ndex in a client query would reach Solr as the fromIndex the REST layer refuses
+		contextManagerListing();
+		solrReturnsHits();
+
+		index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		ArgumentCaptor<SolrParams> sent = ArgumentCaptor.forClass(SolrParams.class);
+		verify(solrServer).query(sent.capture());
+		assertEquals("false", sent.getValue().get("expandMacros"));
 	}
 
 	@Test

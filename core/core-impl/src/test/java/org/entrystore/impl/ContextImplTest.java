@@ -47,6 +47,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -65,6 +66,7 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
 import org.entrystore.repository.CorruptEntryException;
+import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.config.Settings;
 import org.junit.jupiter.api.BeforeEach;
@@ -1571,6 +1573,39 @@ public class ContextImplTest extends AbstractCoreTest {
 
 		// a copy would have carried Daisy's grant over; a skip leaves the entry without it
 		assertFalse(entry.getAllowedPrincipalsFor(AccessProperty.ReadResource).contains(daisy));
+	}
+
+	@Test
+	public void copyACL_firesOneEntryUpdatedForAllCopiedProperties() {
+		Entry listEntry = context.createResource(null, GraphType.List, null, null);
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		listEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, daisy);
+		listEntry.addAllowedPrincipalsFor(AccessProperty.WriteResource, daisy);
+		Entry entry = context.createResource(null, GraphType.None, null, null);
+		// a warm cache, which an event fired before the cache update would show stale
+		entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata);
+
+		var events = recordAclEvents(AccessProperty.ReadMetadata,
+				() -> context.copyACL((List) listEntry.getResource(), entry));
+
+		assertEquals(java.util.List.of(
+				new AclEvent(entry.getEntryURI(), RepositoryEvent.EntryUpdated, Set.of(daisy))), events);
+		assertTrue(entry.getAllowedPrincipalsFor(AccessProperty.WriteResource).contains(daisy));
+	}
+
+	@Test
+	public void createIntoList_firesAnEntryUpdatedThatSeesTheCopiedACL() {
+		Entry listEntry = context.createResource(null, GraphType.List, null, null);
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		listEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, daisy);
+		AtomicReference<Entry> created = new AtomicReference<>();
+
+		var events = recordAclEvents(AccessProperty.ReadMetadata,
+				() -> created.set(context.createResource(null, GraphType.None, null, listEntry.getResourceURI())));
+
+		// the Solr index builds the entry's document at its last event, which must come after the ACL copy
+		assertEquals(new AclEvent(created.get().getEntryURI(), RepositoryEvent.EntryUpdated, Set.of(daisy)),
+				events.getLast());
 	}
 
 	@Test
