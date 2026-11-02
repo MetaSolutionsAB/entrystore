@@ -24,7 +24,9 @@ import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.SoftReference;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -133,6 +135,34 @@ public class SoftCache {
 		pop(entry.getRelationURI(), entryURI);
 	}
 
+	/**
+	 * Removes every cached entry whose entry URI starts with the prefix, such as all entries of one context.
+	 *
+	 * @return the removed entries the garbage collector had not cleared yet
+	 */
+	public List<Entry> removeByEntryURIPrefix(String prefix) {
+		List<Entry> removed = new ArrayList<>();
+		cache.forEach((entryURI, ref) -> {
+			if (entryURI.toString().startsWith(prefix) && ref instanceof EntrySoftReference esr
+					&& removeReference(esr) && esr.get() instanceof Entry entry) {
+				removed.add(entry);
+			}
+		});
+		return removed;
+	}
+
+	/** Removes a reference by the URIs it recorded when cached, unless it has been replaced since. */
+	private boolean removeReference(EntrySoftReference esr) {
+		if (!cache.remove(esr.entryURI, esr)) {
+			return false;
+		}
+		pop(esr.localMetadataURI, esr.entryURI);
+		pop(esr.externalMetadataURI, esr.entryURI);
+		pop(esr.resourceURI, esr.entryURI);
+		pop(esr.relationURI, esr.entryURI);
+		return true;
+	}
+
 	public Entry getByEntryURI(URI uri) {
 		if (uri == null) {
 			return null;
@@ -215,12 +245,7 @@ public class SoftCache {
 					Reference<? extends Entry> ref = refQ.remove();
 					try {
 						if (ref instanceof EntrySoftReference esr) {
-							if (softCache.cache.remove(esr.entryURI, esr)) {
-								softCache.pop(esr.localMetadataURI, esr.entryURI);
-								softCache.pop(esr.externalMetadataURI, esr.entryURI);
-								softCache.pop(esr.resourceURI, esr.entryURI);
-								softCache.pop(esr.relationURI, esr.entryURI);
-							}
+							softCache.removeReference(esr);
 						} else {
 							log.warn("Unexpected reference type dequeued from SoftCache: {}", ref.getClass().getName());
 						}

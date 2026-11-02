@@ -582,7 +582,14 @@ public class EntryService {
 		return entry;
 	}
 
-	public void deleteEntry(Entry entry, boolean recursive) {
+	/**
+	 * Deletes an entry, and with {@code recursive} the whole tree of a list.
+	 *
+	 * @return true if the deletion finishes in the background, as for a context: it is gone at once, but its
+	 * entries, files and search documents are deleted afterwards
+	 */
+	public boolean deleteEntry(Entry entry, boolean recursive) {
+		boolean deferred = entry.getResource() instanceof Context;
 		try {
 			if (GraphType.List.equals(entry.getGraphType()) && recursive) {
 				org.entrystore.List l = (org.entrystore.List) entry.getResource();
@@ -597,6 +604,7 @@ public class EntryService {
 		} catch (EntryMissingException e) {
 			throw new EntityNotFoundException("Entry requested for deletion was not found", e);
 		}
+		return deferred;
 	}
 
 	public String getEntryName(Entry entry) {

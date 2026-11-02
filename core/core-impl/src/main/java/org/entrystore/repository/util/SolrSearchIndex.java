@@ -683,8 +683,23 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	public boolean clearSolrIndex(SolrClient solrServer, Date expirationDate, Entry contextEntry) {
-		if (solrServer == null || (expirationDate == null && contextEntry == null)) {
+	/**
+	 * Also drops the queued documents of the context's entries, which the submitter would otherwise send after
+	 * the delete-by-query, and settles those being sent, so a failed batch does not queue them again; a batch
+	 * already being sent can still land after it.
+	 */
+	@Override
+	public boolean removeContext(URI contextURI) {
+		String entryURIPrefix = contextURI + "/";
+		synchronized (postQueue) {
+			postQueue.asMap().keySet().removeIf(entryURI -> entryURI.toString().startsWith(entryURIPrefix));
+			inFlightAdds.removeIf(entryURI -> entryURI.toString().startsWith(entryURIPrefix));
+		}
+		return clearSolrIndex(solrServer, null, contextURI);
+	}
+
+	public boolean clearSolrIndex(SolrClient solrServer, Date expirationDate, URI contextURI) {
+		if (solrServer == null || (expirationDate == null && contextURI == null)) {
 			throw new IllegalArgumentException("Too many parameters are null");
 		}
 		UpdateRequest req = new UpdateRequest();
@@ -693,11 +708,11 @@ public class SolrSearchIndex implements SearchIndex {
 			String solrExpirationDate = ClientUtils.escapeQueryChars(SOLR_DATE_FORMATTER.format(expirationDate.toInstant()));
 			deleteQuery += "indexedAt:[* TO " + solrExpirationDate + "}";
 		}
-		if (contextEntry != null) {
+		if (contextURI != null) {
 			if (!deleteQuery.isEmpty()) {
 				deleteQuery += " AND ";
 			}
-			deleteQuery += "context:" + ClientUtils.escapeQueryChars(contextEntry.getResourceURI().toString());
+			deleteQuery += "context:" + ClientUtils.escapeQueryChars(contextURI.toString());
 		}
 		req.deleteByQuery(deleteQuery);
 		req.setCommitWithin(SOLR_COMMIT_WITHIN);
@@ -995,7 +1010,7 @@ public class SolrSearchIndex implements SearchIndex {
 							+ " may be missing from search results until a reindex after the cause is fixed",
 							rejected, contextURI);
 				}
-				if (clearSolrIndex(solrServer, reindexStart, contextEntry)) {
+				if (clearSolrIndex(solrServer, reindexStart, contextEntry.getResourceURI())) {
 					log.info("Expired entries of context {} have been purged from the index", contextURI);
 				} else {
 					log.warn("Delayed purge of context {} did not clear expired entries; rerun the reindex if needed",
@@ -1828,7 +1843,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 		// if entry is a context, also remove all entries inside
 		if (GraphType.Context.equals(entry.getGraphType())) {
-			if (!clearSolrIndex(solrServer, null, entry)) {
+			if (!removeContext(entry.getResourceURI())) {
 				log.warn("Context-removal purge for context {} failed; expired Solr documents may remain", entry.getEntryURI());
 			}
 		}

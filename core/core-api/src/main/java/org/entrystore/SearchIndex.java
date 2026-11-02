@@ -48,6 +48,14 @@ public interface SearchIndex {
 
 	void removeEntry(Entry entry);
 
+	/**
+	 * Removes every document of the context with this resource URI.
+	 *
+	 * @return false if the index could not be reached or did not answer
+	 * @throws RuntimeException if the index answered with an error
+	 */
+	boolean removeContext(URI contextURI);
+
 	boolean isIndexing();
 
 	boolean isIndexing(URI contextURI);

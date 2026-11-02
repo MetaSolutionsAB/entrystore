@@ -215,7 +215,9 @@ public class EntryController {
 
 	@Operation(
 			summary = "Deletes the entry.",
-			description = "Deletes given entry. If parameter 'recursive' is set then also deletes all its children.")
+			description = "Deletes given entry. If parameter 'recursive' is set then also deletes all its children. "
+					+ "Deleting a context answers 202: the context is gone at once, and its entries, files and search "
+					+ "documents are deleted in the background.")
 	@DeleteMapping(path = "/{context-id}/entry/{entry-id}", produces = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<Void> deleteEntry(
 			@PathVariable("context-id") String contextId,
@@ -224,11 +226,9 @@ public class EntryController {
 	) {
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		entryService.deleteEntry(entry, recursive != null);
+		boolean deferred = entryService.deleteEntry(entry, recursive != null);
 
-		return ResponseEntity
-				.noContent()
-				.build();
+		return deferred ? ResponseEntity.accepted().build() : ResponseEntity.noContent().build();
 	}
 
 	@Operation(summary = "Returns the entry's name (alias).")

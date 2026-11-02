@@ -594,7 +594,7 @@ public class PublicRepository {
 						// context rather than the handful the listing misses, and rebuildRepository is only
 						// called at construction, so nothing brings them back before a restart. Enumerating
 						// from the store removes the trade-off rather than choosing a side of it, and is what
-						// importContext and ContextImpl.remove(RepositoryConnection) already do.
+						// importContext and context removal already do.
 						Set<URI> entries = (context instanceof ContextImpl ci)
 								? ci.getChildEntryURIsFromStore()
 								: context.getEntries();

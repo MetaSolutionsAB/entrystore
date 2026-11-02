@@ -24,6 +24,10 @@ entrystore.repository.store.type=native
 ## If store type is native these properties must be specified
 ## If store type is memory a path can be specified for persisting the repository
 entrystore.repository.store.path=file:///srv/entrystore/store/
+## Triple indexes of a native or lmdb store. Keep an index starting with c (the context): without one,
+## removing a context scans the whole store for each of its graphs, and a warning is logged at startup.
+## Unset, the store keeps the indexes it was created with (RDF4J creates spoc,posc). Changing the list
+## rebuilds the indexes on the next start, which lengthens that start.
 entrystore.repository.store.indexes=cspo,posc
 ## if type=http: entrystore.repository.store.url=URL of Sesame HTTP repository
 ## if type=sparql: entrystore.repository.store.endpoint-query=Query URL of SPARQL repository

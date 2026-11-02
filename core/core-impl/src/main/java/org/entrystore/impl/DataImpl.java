@@ -139,6 +139,10 @@ public class DataImpl extends ResourceImpl implements Data {
 		} catch (NoSuchAlgorithmException e) {
 			throw new RuntimeException(e);
 		}
+		// Checked before getFile(), which would create the context's folder again after its removal deleted it.
+		if (entry.getContext().isDeleted()) {
+			throw new EntryRemovedException(entry.getEntryURI());
+		}
 		Path dataPath = getFile().toPath();
 		Path dataPart = stagingPath(dataPath);
 		Path digestPart = stagingPath(dataPath);
@@ -231,7 +235,7 @@ public class DataImpl extends ResourceImpl implements Data {
 	}
 
 	/** The data folder of a {@link Settings#DATA_FOLDER} value, which may carry a "file:" prefix. */
-	private static File dataFolder(String configured) {
+	static File dataFolder(String configured) {
 		return new File(Strings.CS.removeStart(Strings.CS.removeStart(configured, "file://"), "file:"));
 	}
 

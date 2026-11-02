@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -64,7 +64,14 @@ public interface ContextManager extends Context {
 	Context getContext(String contextId);
 
 	Context getContext(URI contextURI);
-	
+
+	/**
+	 * Whether the context with this id has been removed but its graphs, files and search documents are still
+	 * being deleted in the background. Such a context is no longer visible, but its id stays taken until the
+	 * deletion finishes, so creating a context with it is refused.
+	 */
+	boolean isRemovalPending(String contextId);
+
 	//***********************************************************************//
 	// Retrieval of Items independent of which Contexts they appear in.      //
 	//***********************************************************************//
