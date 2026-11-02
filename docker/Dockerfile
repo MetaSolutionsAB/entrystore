@@ -5,7 +5,9 @@ WORKDIR /srv/entrystore
 LABEL org.opencontainers.image.authors="devops@metasolutions.se"
 LABEL se.metasolutions.service="entrystore"
 
-RUN apk --no-cache upgrade && apk --no-cache add wget
+COPY docker/distrust-emudhra.sh /tmp/distrust-emudhra.sh
+RUN apk --no-cache upgrade && apk --no-cache add wget &&\
+    /tmp/distrust-emudhra.sh && rm /tmp/distrust-emudhra.sh
 
 RUN addgroup -g 2000 entrystore &&\
     adduser -G entrystore -D -H -g "" -h /srv/entrystore -u 2000 entrystore
