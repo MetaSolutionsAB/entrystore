@@ -1536,6 +1536,15 @@ class SearchIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_OK
 	}
 
+	def "GET /search?type=solr with a dollar sign in ordinary search text should return search results"() {
+		when: 'outside local params and function queries Solr reads $ as part of a term'
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: 'title:US$ AND title:rates']), '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+	}
+
 	@Unroll
 	def "GET /search?type=solr with facetLang '#facetLang' and facetFields '#facetFields' should reply with Bad Request 400"() {
 		when:

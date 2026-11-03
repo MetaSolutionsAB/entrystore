@@ -321,25 +321,47 @@ class SolrSearchInputValidatorTest {
 			"{!query v=$ facet.matches}",
 			"{!query v=$'facet.matches'}",
 			"{!func}query($qq)",
-			"_query_:\"{!query v=\\$facet.matches}\""
+			// Solr skips any Character.isWhitespace after the $, not only ASCII whitespace
+			"{!lucene v=$\u2003facet.matches}",
+			"{!func}query($\u001Fqq)",
+			"_query_:\"{!query v=\\$facet.matches}\"",
+			// the lucene parser reads the field _val_ as a function query
+			"_val_:\"query($qq)\"",
+			"\\_val\\_:\"query($qq)\"",
+			// the local params only appear once Solr unescapes the nested query
+			"_query_:\"\\u007b!query v=$facet.matches}\""
 	})
 	void validateQueryRejectsParameterDereferencing(String query) {
 		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.validateQuery(query));
 		assertEquals("Parameter dereferencing ($name) is not permitted in 'query'", ex.getMessage());
 	}
 
-	@Test
-	void validateQueryAcceptsADollarSignThatNamesNoParameter() {
-		assertDoesNotThrow(() -> validator.validateQuery("price:$100 OR title:US$"));
+	@ParameterizedTest(name = "{0}")
+	@ValueSource(strings = {
+			"price:$100 OR title:US$",
+			"title:US$ AND title:rates",
+			"title:\"US$\"",
+			"title:$Money",
+			"title:\\$Money"
+	})
+	void validateQueryAcceptsADollarSignOutsideLocalParamsAndFunctionQueries(String query) {
+		assertDoesNotThrow(() -> validator.validateQuery(query));
 	}
 
 	@Test
-	void validateQueryRejectsEscapesNestedDeeperThanSolrNeeds() {
+	void validateQueryRejectsEscapesNestedSeventeenLevelsDeep() {
 		// each pass turns the leading unicode-escaped backslash into a new escape, shedding one level only
-		String query = "\\u005c" + "u005c".repeat(20);
+		String query = "\\u005c" + "u005c".repeat(16);
 
 		BadRequestException ex = assertThrows(BadRequestException.class, () -> validator.validateQuery(query));
 		assertEquals("Query parameter 'query' nests escapes more than 16 levels deep", ex.getMessage());
+	}
+
+	@Test
+	void validateQueryAcceptsEscapesNestedSixteenLevelsDeep() {
+		String query = "\\u005c" + "u005c".repeat(15);
+
+		assertDoesNotThrow(() -> validator.validateQuery(query));
 	}
 
 	@Test

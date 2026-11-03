@@ -513,22 +513,7 @@ public class SolrSearchIndex implements SearchIndex {
 		@Override
 		public void run() {
 			while (!interrupted()) {
-				synchronized (delayedReindex) {
-					Iterator<Map.Entry<URI, Long>> it = delayedReindex.entrySet().iterator();
-					while (it.hasNext()) {
-						Map.Entry<URI, Long> queued = it.next();
-						if (System.nanoTime() - queued.getValue() >= TimeUnit.SECONDS.toNanos(10)) {
-							log.info("Submitting context {} for reindexing after 10 seconds delay", queued.getKey());
-							try {
-								reindex(queued.getKey());
-							} catch (RuntimeException e) {
-								log.error("Delayed reindex of context {} failed: {}", queued.getKey(), e.getMessage(),
-										e);
-							}
-							it.remove();
-						}
-					}
-				}
+				reindexDue(System.nanoTime());
 
 				try {
 					Thread.sleep(1000);
@@ -1130,6 +1115,29 @@ public class SolrSearchIndex implements SearchIndex {
 	public void submitContextForDelayedReindex(URI contextEntryURI) {
 		log.info("Enqueueing context {} for delayed reindexing", contextEntryURI);
 		delayedReindex.put(contextEntryURI, System.nanoTime());
+	}
+
+	/**
+	 * Reindexes and dequeues every context whose latest submission is at least 10 seconds older than
+	 * {@code nowNanos}, a {@link System#nanoTime()} reading; one pass of the {@link DelayedContextIndexer}. A failed
+	 * reindex is logged and its context dequeued, so that it stops neither the other contexts nor the indexer thread.
+	 */
+	void reindexDue(long nowNanos) {
+		synchronized (delayedReindex) {
+			Iterator<Map.Entry<URI, Long>> it = delayedReindex.entrySet().iterator();
+			while (it.hasNext()) {
+				Map.Entry<URI, Long> queued = it.next();
+				if (nowNanos - queued.getValue() >= TimeUnit.SECONDS.toNanos(10)) {
+					log.info("Submitting context {} for reindexing after 10 seconds delay", queued.getKey());
+					try {
+						reindex(queued.getKey());
+					} catch (RuntimeException e) {
+						log.error("Delayed reindex of context {} failed: {}", queued.getKey(), e.getMessage(), e);
+					}
+					it.remove();
+				}
+			}
+		}
 	}
 
 	/**

@@ -78,6 +78,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -85,6 +86,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -98,6 +100,7 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.eq;
@@ -167,14 +170,71 @@ public class SolrSearchIndexTest {
 	}
 
 	@Test
-	public void submitContextForDelayedReindexKeepsTheContextQueuedWhenResubmittedWithinTheWait() throws Exception {
-		URI ctx = URI.create("http://localhost:8181/_contexts/entry/1");
+	public void reindexDueKeepsAContextQueuedLessThanTenSecondsAfterItsSubmission() throws Exception {
+		SolrSearchIndex recording = indexRecordingDelayedReindexes();
+		recording.submitContextForDelayedReindex(CONTEXT_1);
+		long submitted = delayedReindex().get(CONTEXT_1);
+
+		recording.reindexDue(submitted + TimeUnit.SECONDS.toNanos(10) - 1);
+
+		verify(recording, never()).reindex(any(URI.class));
+		assertTrue(delayedReindex().containsKey(CONTEXT_1));
+	}
+
+	@Test
+	public void reindexDueReindexesAndDequeuesAContextTenSecondsAfterItsSubmission() throws Exception {
+		SolrSearchIndex recording = indexRecordingDelayedReindexes();
+		recording.submitContextForDelayedReindex(CONTEXT_1);
+		long submitted = delayedReindex().get(CONTEXT_1);
+
+		recording.reindexDue(submitted + TimeUnit.SECONDS.toNanos(10));
+
+		verify(recording).reindex(CONTEXT_1);
+		assertFalse(delayedReindex().containsKey(CONTEXT_1));
+	}
+
+	@Test
+	public void reindexDueRestartsTheWaitOfAResubmittedContext() throws Exception {
+		SolrSearchIndex recording = indexRecordingDelayedReindexes();
+		long firstSubmission = System.nanoTime() - TimeUnit.SECONDS.toNanos(10);
+		delayedReindex().put(CONTEXT_1, firstSubmission);
 
 		// e.g. guest granted on the context's resource, then on its metadata: the second must not cancel the first
-		index.submitContextForDelayedReindex(ctx);
-		index.submitContextForDelayedReindex(ctx);
+		recording.submitContextForDelayedReindex(CONTEXT_1);
+		recording.reindexDue(firstSubmission + TimeUnit.SECONDS.toNanos(10));
 
-		assertTrue(delayedReindex().containsKey(ctx), "a resubmission must not drop the queued reindex");
+		verify(recording, never()).reindex(any(URI.class));
+		assertTrue(delayedReindex().containsKey(CONTEXT_1), "a resubmission must not drop the queued reindex");
+	}
+
+	@Test
+	public void reindexDueReindexesTheOtherDueContextsWhenOneReindexFails() throws Exception {
+		SolrSearchIndex recording = indexRecordingDelayedReindexes();
+		// what reindex throws once shutdown() has shut the reindex executor down during a pass
+		doThrow(new RejectedExecutionException("simulated")).when(recording).reindex(CONTEXT_1);
+		recording.submitContextForDelayedReindex(CONTEXT_1);
+		recording.submitContextForDelayedReindex(CONTEXT_2);
+
+		recording.reindexDue(System.nanoTime() + TimeUnit.SECONDS.toNanos(10));
+
+		verify(recording).reindex(CONTEXT_1);
+		verify(recording).reindex(CONTEXT_2);
+		assertTrue(delayedReindex().isEmpty(), "a failed context is dropped, not retried every second");
+	}
+
+	@Test
+	public void delayedContextIndexerKeepsRunningAfterAFailedReindex() throws Exception {
+		Field executorField = SolrSearchIndex.class.getDeclaredField("reindexExecutor");
+		executorField.setAccessible(true);
+		// makes every reindex fail with RejectedExecutionException, as during shutdown()
+		((ExecutorService) executorField.get(index)).shutdown();
+
+		delayedReindex().put(CONTEXT_1, System.nanoTime() - TimeUnit.SECONDS.toNanos(10));
+		await().atMost(10, TimeUnit.SECONDS).until(() -> delayedReindex().isEmpty());
+		delayedReindex().put(CONTEXT_2, System.nanoTime() - TimeUnit.SECONDS.toNanos(10));
+
+		await().atMost(10, TimeUnit.SECONDS).until(() -> delayedReindex().isEmpty());
+		assertTrue(delayedContextIndexer().isAlive(), "a failed reindex must not end the indexer thread");
 	}
 
 	@Test
@@ -1312,6 +1372,26 @@ public class SolrSearchIndexTest {
 		assertFalse(documentSubmitter.isAlive());
 	}
 
+	private Thread delayedContextIndexer() throws Exception {
+		Field f = SolrSearchIndex.class.getDeclaredField("delayedContextIndexer");
+		f.setAccessible(true);
+		return (Thread) f.get(index);
+	}
+
+	/**
+	 * Stops the delayed context indexer, so that only the test runs {@link SolrSearchIndex#reindexDue}, and returns a
+	 * spy of the index that records the contexts it would reindex. The spy shares the queue of the index.
+	 */
+	private SolrSearchIndex indexRecordingDelayedReindexes() throws Exception {
+		Thread delayedContextIndexer = delayedContextIndexer();
+		delayedContextIndexer.interrupt();
+		delayedContextIndexer.join(TimeUnit.SECONDS.toMillis(10));
+		assertFalse(delayedContextIndexer.isAlive());
+		SolrSearchIndex recording = spy(index);
+		doNothing().when(recording).reindex(any(URI.class));
+		return recording;
+	}
+
 	@SuppressWarnings("unchecked")
 	private Cache<URI, SolrInputDocument> postQueue() throws Exception {
 		Field f = SolrSearchIndex.class.getDeclaredField("postQueue");
@@ -1334,10 +1414,10 @@ public class SolrSearchIndexTest {
 	}
 
 	@SuppressWarnings("unchecked")
-	private Map<URI, ?> delayedReindex() throws Exception {
+	private Map<URI, Long> delayedReindex() throws Exception {
 		Field f = SolrSearchIndex.class.getDeclaredField("delayedReindex");
 		f.setAccessible(true);
-		return (Map<URI, ?>) f.get(index);
+		return (Map<URI, Long>) f.get(index);
 	}
 
 	/**

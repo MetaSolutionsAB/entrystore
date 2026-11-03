@@ -46,9 +46,11 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  *
  * <p>{@code query} and {@code filterQuery} may carry local params, since entrystore.js sends same-core joins, but
  * neither {@code fromIndex}, which joins against another core on the same Solr node that may hold another
- * instance's index, nor parameter dereferencing ({@code $name}), which makes Solr parse another parameter's text.
- * {@code facetMatches}, the only other free-text parameter, is checked for {@code fromIndex} too, and
- * {@code SolrSearchIndex} switches macro expansion off, so no {@code ${…}} macro can assemble the key in Solr.
+ * instance's index, nor, in a value that carries local params or a function query, parameter dereferencing
+ * ({@code $name}), which makes Solr parse another parameter's text. Elsewhere Solr reads {@code $} as part of a
+ * term, so a search such as {@code title:US$ AND title:rates} stays allowed. {@code facetMatches}, the only other
+ * free-text parameter, is checked for {@code fromIndex} too, and {@code SolrSearchIndex} switches macro expansion
+ * off, so no {@code ${…}} macro can assemble the key in Solr.
  *
  * <p>{@code facetMatches} and {@code facetLang} are restricted to literal-only patterns because Solr evaluates
  * them as regular expressions, so a crafted pattern could tie up Solr (ReDoS). The length and count caps are
@@ -99,8 +101,20 @@ public class SolrSearchInputValidator {
 	 */
 	private static final Pattern ESCAPE = Pattern.compile("(?s)\\\\(?:u(.{4})|(.))");
 
-	/** Parameter dereferencing ({@code v=$name}, {@code query($name)}, {@code $'name'}) in Solr query text. */
-	private static final Pattern DEREFERENCE = Pattern.compile("\\$\\s*[\\p{javaJavaIdentifierStart}'\"]");
+	/**
+	 * Parameter dereferencing ({@code v=$name}, {@code query($name)}, {@code $'name'}) in Solr query text. Solr skips
+	 * any {@link Character#isWhitespace} character after the {@code $}, which {@code \p{javaWhitespace}} matches and
+	 * {@code \s} does not.
+	 */
+	private static final Pattern DEREFERENCE =
+			Pattern.compile("\\$\\p{javaWhitespace}*[\\p{javaJavaIdentifierStart}'\"]");
+
+	/**
+	 * Syntax through which Solr reads {@code $name} as a parameter: local params ({@code {!query v=$name}},
+	 * {@code {!func}query($name)}) and the function-query field {@code _val_}. Outside them the lucene parser, which
+	 * reads {@code q} and {@code fq} as no {@code defType} is set, takes {@code $} as part of a term.
+	 */
+	private static final Pattern DEREFERENCING_SYNTAX = Pattern.compile("\\{!|_val_");
 
 	/**
 	 * Escape levels {@link #escapeLevels} decodes. Solr decodes one level per nested query, and no client nests that
@@ -216,13 +230,16 @@ public class SolrSearchInputValidator {
 	}
 
 	/**
-	 * Refuses {@code fromIndex} and parameter dereferencing however they are escaped: Solr unescapes a nested query
-	 * ({@code _query_:"…"}, {@code {!query v='…'}}) once per level before reading its local params.
+	 * Refuses {@code fromIndex} anywhere, and parameter dereferencing in a value with {@link #DEREFERENCING_SYNTAX} at
+	 * any escape level, however either is escaped: Solr unescapes a nested query ({@code _query_:"…"},
+	 * {@code {!query v='…'}}) once per level before reading its local params.
 	 */
 	private static void requireSafeQueryText(String value, String parameterName) {
-		for (String level : escapeLevels(value, parameterName)) {
+		List<String> levels = escapeLevels(value, parameterName);
+		boolean canDereference = levels.stream().anyMatch(level -> DEREFERENCING_SYNTAX.matcher(level).find());
+		for (String level : levels) {
 			requireNoFromIndex(level, parameterName);
-			if (DEREFERENCE.matcher(level).find()) {
+			if (canDereference && DEREFERENCE.matcher(level).find()) {
 				throw new BadRequestException(
 						"Parameter dereferencing ($name) is not permitted in '" + parameterName + "'");
 			}
@@ -246,7 +263,7 @@ public class SolrSearchInputValidator {
 			return List.of();
 		}
 		List<String> levels = new ArrayList<>(List.of(value));
-		for (int level = 0; level < MAX_ESCAPE_LEVELS; level++) {
+		for (int level = 0; level <= MAX_ESCAPE_LEVELS; level++) {
 			String next = unescapeOnce(levels.getLast());
 			if (next.equals(levels.getLast())) {
 				return levels;

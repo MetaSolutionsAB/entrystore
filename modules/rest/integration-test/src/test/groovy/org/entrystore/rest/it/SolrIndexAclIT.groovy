@@ -55,6 +55,24 @@ class SolrIndexAclIT extends BaseSpec {
 		awaitIndexed('uri:"' + entryUri(childId) + '" AND public:true')
 	}
 
+	def "PUT /{context-id}/entry/{list-id}?applyACLtoChildren revoking guest read should index the list's child as not public"() {
+		given: 'a child indexed as public through the ACL copied from its guest-readable list'
+		def listId = createGuestReadableList()
+		def childId = createEntry(contextId,
+			[entrytype: 'link', resource: 'https://example.org/revoke-acl-child', list: resourceUri(listId)])
+		awaitIndexed('uri:"' + entryUri(childId) + '" AND public:true')
+		def userUri = EntryStoreClient.createdEsUsers['user']['resourceUri']
+		def userReadAcl = [(metadataUri(listId)): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: userUri]]]]
+
+		when: 'the list grants read to a user instead of guest, so the child keeps an ACL of its own'
+		def conn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + listId + '?applyACLtoChildren=true',
+			JsonOutput.toJson(userReadAcl))
+
+		then:
+		conn.getResponseCode() == HTTP_NO_CONTENT
+		awaitIndexed('uri:"' + entryUri(childId) + '" AND public:false')
+	}
+
 	def "POST /{context-id}?list= with an entry information body should index the ACL copied from a guest-readable list"() {
 		given: 'a guest-readable list, and an entry information body whose own ACL replaces the copied one'
 		def listId = createGuestReadableList()
