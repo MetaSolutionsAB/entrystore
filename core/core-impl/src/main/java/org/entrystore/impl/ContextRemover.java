@@ -17,14 +17,9 @@
 package org.entrystore.impl;
 
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.rdf4j.model.BNode;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
-import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.query.BindingSet;
-import org.eclipse.rdf4j.query.TupleQuery;
-import org.eclipse.rdf4j.query.TupleQueryResult;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryResult;
@@ -33,7 +28,6 @@ import org.entrystore.Entry;
 import org.entrystore.SearchIndex;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.URISplit;
-import org.entrystore.repository.util.URIType;
 
 import java.io.File;
 import java.io.IOException;
@@ -49,7 +43,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -76,7 +69,7 @@ import static org.eclipse.rdf4j.model.util.Values.iri;
  *
  * <p>Statements of the context whose object is an entry of another context may have a copy in that entry's
  * relations graph. The copy is removed with them, unless a graph outside the context, other than a relations
- * graph, still states the triple.
+ * graph, still states the triple; see {@link ExactRemoval}.
  *
  * <p>The marker survives a restart, after which {@link #resumePending()} continues the job. A job that fails
  * stops and keeps the marker, so the context stays hidden and its id taken until a later start completes it. The
@@ -95,12 +88,10 @@ final class ContextRemover {
 	private static final String SEARCH_PURGE_HINT =
 			"only a reindex at startup (entrystore.solr.reindex-on-startup with .wait) removes any left";
 
-	/** The named graphs that state the triple bound to {@code ?s ?p ?o}. */
-	private static final String GRAPHS_STATING = "SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }";
-
 	private final RepositoryManagerImpl repositoryManager;
 	private final Repository repository;
 	private final IRI contextsIndexGraph;
+	private final ExactRemoval exactRemoval;
 	private final Set<String> pending = ConcurrentHashMap.newKeySet();
 	private final ExecutorService executor =
 			Executors.newSingleThreadExecutor(Thread.ofPlatform().name("context-removal").daemon().factory());
@@ -142,6 +133,7 @@ final class ContextRemover {
 		this.repositoryManager = repositoryManager;
 		this.repository = repository;
 		this.contextsIndexGraph = contextsIndexGraph;
+		this.exactRemoval = new ExactRemoval(repositoryManager);
 		this.searchIndex = repositoryManager::getIndex;
 		this.blankNodesByPattern = repository instanceof SPARQLRepository;
 	}
@@ -359,40 +351,6 @@ final class ContextRemover {
 		}
 	}
 
-	/**
-	 * Whether {@code EntryImpl} or {@code MetadataImpl} copies a statement of an entry or metadata graph into the
-	 * relations graph of the entry its object belongs to.
-	 */
-	private static boolean isCopiedToRelations(Statement statement, boolean fromEntryGraph, String base) {
-		if (fromEntryGraph) {
-			return EntryImpl.isStatementInvRelationCandidate(statement, base);
-		}
-		return statement.getObject() instanceof IRI object && object.stringValue().startsWith(base)
-				&& statement.getSubject().stringValue().startsWith(base);
-	}
-
-	/** The relations graph of the entry an IRI belongs to, if it belongs to an entry of this repository. */
-	private Optional<IRI> relationsGraphOf(IRI iri) {
-		try {
-			return split(iri).filter(uriSplit -> uriSplit.getUriType() != URIType.Unknown)
-					.map(uriSplit -> iri(uriSplit.getRelationURI().toString()));
-		} catch (IllegalArgumentException e) {
-			return Optional.empty();
-		}
-	}
-
-	private boolean isRelationsGraph(IRI graph) {
-		return split(graph).filter(uriSplit -> RepositoryProperties.RELATION.equals(uriSplit.getPath())).isPresent();
-	}
-
-	private Optional<URISplit> split(IRI iri) {
-		try {
-			return URISplit.of(URI.create(iri.stringValue()), repositoryManager.getRepositoryURL());
-		} catch (IllegalArgumentException e) {
-			return Optional.empty();
-		}
-	}
-
 	/** Thrown between two chunks once {@link #shutdown()} has been called. */
 	private static final class StoppedException extends Exception {
 	}
@@ -402,15 +360,13 @@ final class ContextRemover {
 
 		private final String contextId;
 		private final String contextURI;
-		private final String base;
 		private int pass;
 		private long removed;
 
 		private Removal(String contextId) {
 			this.contextId = contextId;
-			this.base = repositoryManager.getRepositoryURL().toString();
 			// concatenated as URISplit.createURI does, but without its parsing, which could throw outside the try
-			this.contextURI = base + contextId;
+			this.contextURI = repositoryManager.getRepositoryURL().toString() + contextId;
 		}
 
 		/**
@@ -447,13 +403,14 @@ final class ContextRemover {
 							|| path.equals(RepositoryProperties.EXTERNAL_MD_PATH);
 					List<Statement> removedOfGraph = List.of();
 					while (true) {
-						List<Statement> read = read(reader, graph, chunkSize - chunk.size());
+						List<Statement> read = ExactRemoval.read(reader, graph, chunkSize - chunk.size());
 						if (!read.isEmpty() && removedOfGraph.contains(read.getFirst())) {
 							throw new IllegalStateException("Statements of graph " + graph + " were not removed");
 						}
 						chunk.addAll(read);
 						if (relationSource) {
-							copies.addAll(relationCopies(reader, read, fromEntryGraph));
+							copies.addAll(exactRemoval.relationCopies(reader, read, fromEntryGraph,
+									object -> isOfContext(object, contextURI)));
 						}
 						if (chunk.size() < chunkSize) {
 							break;
@@ -486,42 +443,6 @@ final class ContextRemover {
 		}
 
 		/**
-		 * Statements of the graph, each given that graph: a SPARQL store outside quad mode returns them without it,
-		 * and a removal without a graph reaches every graph.
-		 */
-		private static List<Statement> read(RepositoryConnection reader, IRI graph, int limit) {
-			ValueFactory vf = reader.getValueFactory();
-			List<Statement> statements = new ArrayList<>();
-			try (RepositoryResult<Statement> result = reader.getStatements(null, null, null, false, graph)) {
-				while (statements.size() < limit && result.hasNext()) {
-					Statement statement = result.next();
-					statements.add(vf.createStatement(statement.getSubject(), statement.getPredicate(),
-							statement.getObject(), graph));
-				}
-			}
-			return statements;
-		}
-
-		/** The copies other entries' relations graphs hold of these statements, as found when reading them. */
-		private List<Statement> relationCopies(RepositoryConnection reader, List<Statement> sources,
-				boolean fromEntryGraph) {
-			List<Statement> copies = new ArrayList<>();
-			for (Statement source : sources) {
-				if (!isCopiedToRelations(source, fromEntryGraph, base)
-						|| !(source.getObject() instanceof IRI object) || isOfContext(object, contextURI)) {
-					continue;
-				}
-				Optional<IRI> relationsGraph = relationsGraphOf(object);
-				if (relationsGraph.isPresent() && reader.hasStatement(source.getSubject(), source.getPredicate(),
-						object, false, relationsGraph.get())) {
-					copies.add(reader.getValueFactory().createStatement(source.getSubject(), source.getPredicate(),
-							object, relationsGraph.get()));
-				}
-			}
-			return copies;
-		}
-
-		/**
 		 * Removes the chunk in one transaction under the monitor. Whether a copy is still stated outside the context
 		 * is checked there, since a surviving entry may have stated the same triple after the chunk was read.
 		 */
@@ -530,13 +451,8 @@ final class ContextRemover {
 				try (RepositoryConnection rc = repository.getConnection()) {
 					rc.begin();
 					try {
-						removeOwnStatements(rc, statements);
-						TupleQuery graphsStating = rc.prepareTupleQuery(GRAPHS_STATING);
-						for (Statement copy : copies) {
-							if (!isStatedOutside(graphsStating, copy)) {
-								rc.remove(copy);
-							}
-						}
+						ExactRemoval.removeOwn(rc, statements, blankNodesByPattern, "context " + contextId);
+						exactRemoval.removeCopies(rc, copies, graph -> isOfContext(graph, contextURI));
 						rc.commit();
 					} catch (RuntimeException e) {
 						try {
@@ -551,45 +467,6 @@ final class ContextRemover {
 			removed += statements.size();
 			log.info("Removing context {}: {} statements removed (pass {})", contextId, removed, pass);
 			afterChunk.run();
-		}
-
-		/**
-		 * Removes statements of the context's own graphs. With {@link #blankNodesByPattern}, a blank node is matched
-		 * by a wildcard, which can only widen the removal within the graph, and that graph is deleted anyway. Refuses
-		 * a statement without a graph, whose removal would reach every graph.
-		 */
-		private void removeOwnStatements(RepositoryConnection rc, List<Statement> statements) {
-			if (statements.stream().anyMatch(statement -> statement.getContext() == null)) {
-				throw new IllegalStateException("Statements of context " + contextId + " lack their graph");
-			}
-			if (!blankNodesByPattern) {
-				rc.remove(statements);
-				return;
-			}
-			for (Statement statement : statements) {
-				rc.remove(statement.getSubject() instanceof BNode ? null : statement.getSubject(),
-						statement.getPredicate(), statement.getObject() instanceof BNode ? null : statement.getObject(),
-						statement.getContext());
-			}
-		}
-
-		/**
-		 * Whether a graph outside the context, other than a relations graph, states the triple of a copy. Asked by
-		 * graph, since a SPARQL store outside quad mode returns statements without theirs.
-		 */
-		private boolean isStatedOutside(TupleQuery graphsStating, Statement copy) {
-			graphsStating.setBinding("s", copy.getSubject());
-			graphsStating.setBinding("p", copy.getPredicate());
-			graphsStating.setBinding("o", copy.getObject());
-			try (TupleQueryResult holders = graphsStating.evaluate()) {
-				for (BindingSet holder : holders) {
-					if (holder.getValue("g") instanceof IRI graph && !isOfContext(graph, contextURI)
-							&& !isRelationsGraph(graph)) {
-						return true;
-					}
-				}
-			}
-			return false;
 		}
 	}
 }

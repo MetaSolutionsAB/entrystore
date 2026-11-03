@@ -656,7 +656,8 @@ public class EntryImplTest extends AbstractCoreTest {
 		URI newResourceURI = URI.create("http://example.com/concepts/reloaded");
 		named.setResourceURI(newResourceURI);
 
-		((ContextImpl) context).evictFromCaches(java.util.List.of(named));
+		evictFromSoftCache(named);
+		((ContextImpl) context).unpublishIndexes();
 		Entry reloaded = context.get(named.getId());
 
 		assertNotSame(named, reloaded);
@@ -967,7 +968,8 @@ public class EntryImplTest extends AbstractCoreTest {
 		assertEquals(URI.create(newResourceIRI.stringValue()), linkRef.getResourceURI());
 		assertEquals(conceptURI, linkRef.getExternalMetadataURI());
 		// reloaded from the store, so the es:mdHasEntry index triple is checked too
-		((ContextImpl) context).evictFromCaches(java.util.List.of(linkRef));
+		evictFromSoftCache(linkRef);
+		((ContextImpl) context).unpublishIndexes();
 		Entry reloaded = context.get(linkRef.getId());
 		assertEquals(conceptURI, reloaded.getExternalMetadataURI());
 		assertTrue(context.getByExternalMdURI(conceptURI).contains(reloaded));

@@ -115,6 +115,10 @@ public class Benchmark {
 					readAllFromDatabase(context, arguments.getSizeToGenerate());
 				}
 
+				// before the context removal, which removes the context the import replaces
+				if (arguments.isWithContextImport()) {
+					ContextImportBenchmark.runBenchmark(repositoryManager);
+				}
 				if (arguments.isWithContextRemoval()) {
 					ContextRemovalBenchmark.runBenchmark(repositoryManager);
 				}

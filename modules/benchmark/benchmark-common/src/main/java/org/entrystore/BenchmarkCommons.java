@@ -84,6 +84,11 @@ public class BenchmarkCommons {
 				.longOpt("remove-context")
 				.desc("Afterwards, time removing the benchmark context while another context is written to.")
 				.build();
+		Option contextImportOption = Option.builder("I")
+				.longOpt("import-context")
+				.desc("Afterwards, time replacing the benchmark context by an import of its own export while another "
+						+ "context is written to.")
+				.build();
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -97,6 +102,7 @@ public class BenchmarkCommons {
 		options.addOption(baseUrlOption);
 		options.addOption(indexesOption);
 		options.addOption(contextRemovalOption);
+		options.addOption(contextImportOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -196,6 +202,7 @@ public class BenchmarkCommons {
 				}
 				arguments.setWithContextRemoval(true);
 			}
+			arguments.setWithContextImport(commandLine.hasOption("I"));
 
 			// welcome message
 			LogUtils.logWelcome(storeType, arguments.isWithTransactions(), arguments.getSizeToGenerate());

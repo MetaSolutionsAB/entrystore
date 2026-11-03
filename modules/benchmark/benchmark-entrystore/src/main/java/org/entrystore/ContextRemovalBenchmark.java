@@ -26,11 +26,6 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import java.net.URI;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.eclipse.rdf4j.model.util.Values.iri;
 
@@ -47,8 +42,6 @@ public class ContextRemovalBenchmark {
 	/** Entries of the removed context whose metadata relates them to the other context, giving it relation copies. */
 	private static final int RELATED_ENTRIES = 100;
 
-	private static final long WRITE_PAUSE_MILLIS = 10;
-
 	/** A failed removal keeps its marker, so the wait gives up after this long. */
 	private static final Duration REMOVAL_DEADLINE = Duration.ofHours(1);
 
@@ -64,27 +57,7 @@ public class ContextRemovalBenchmark {
 		Context written = (Context) contextManager.createResource(null, GraphType.Context, null, null).getResource();
 		relateEntries(removed, written.createResource(null, GraphType.None, null, null));
 
-		List<Long> writeNanos = Collections.synchronizedList(new ArrayList<>());
-		AtomicInteger failedWrites = new AtomicInteger();
-		AtomicBoolean removing = new AtomicBoolean(true);
-		Thread writer = Thread.ofPlatform().name("benchmark-writer").start(() -> {
-			principalManager.setAuthenticatedUserURI(admin);
-			while (removing.get()) {
-				long start = System.nanoTime();
-				try {
-					written.createResource(null, GraphType.None, null, null);
-					writeNanos.add(System.nanoTime() - start);
-				} catch (RuntimeException e) {
-					failedWrites.incrementAndGet();
-				}
-				try {
-					Thread.sleep(WRITE_PAUSE_MILLIS);
-				} catch (InterruptedException e) {
-					return;
-				}
-			}
-		});
-
+		WriteLatencyProbe probe = new WriteLatencyProbe(written, principalManager, admin);
 		LocalDateTime start = LocalDateTime.now();
 		LocalDateTime returned;
 		LocalDateTime end;
@@ -92,25 +65,21 @@ public class ContextRemovalBenchmark {
 		try {
 			contextManager.remove(removed.getEntry().getEntryURI());
 			returned = LocalDateTime.now();
-			if (!awaitRemoval(repositoryManager.getRepository(), iri(removed.getURI().toString()))) {
+			Repository repository = repositoryManager.getRepository();
+			IRI contextIRI = iri(removed.getURI().toString());
+			if (!WriteLatencyProbe.await(() -> isRemovalPending(repository, contextIRI), REMOVAL_DEADLINE)) {
 				LogUtils.log.warn("The removal did not finish within {}; the timings below are incomplete",
 						REMOVAL_DEADLINE);
 			}
 			end = LocalDateTime.now();
 		} finally {
-			// the writer is no daemon, so a failed removal must stop it too or the benchmark never exits
-			removing.set(false);
-			try {
-				writer.join();
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-			}
+			probe.stop();
 		}
 
 		LogUtils.logDate("Ended removing the context at", end);
 		LogUtils.logTimeDifference("Removing the context returned after", start, returned);
 		LogUtils.logTimeDifference("Removing the context took", start, end);
-		logWriteLatency(writeNanos, failedWrites.get());
+		probe.log("the removal");
 	}
 
 	private static void relateEntries(Context context, Entry target) {
@@ -127,37 +96,9 @@ public class ContextRemovalBenchmark {
 		}
 	}
 
-	/** @return false if the removal did not finish within {@link #REMOVAL_DEADLINE} */
-	private static boolean awaitRemoval(Repository repository, IRI context) {
-		long deadline = System.nanoTime() + REMOVAL_DEADLINE.toNanos();
-		while (isRemovalPending(repository, context)) {
-			if (System.nanoTime() - deadline > 0) {
-				return false;
-			}
-			try {
-				Thread.sleep(100);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				return false;
-			}
-		}
-		return true;
-	}
-
 	private static boolean isRemovalPending(Repository repository, IRI context) {
 		try (RepositoryConnection rc = repository.getConnection()) {
 			return rc.hasStatement(context, REMOVAL_PENDING, null, false);
 		}
-	}
-
-	private static void logWriteLatency(List<Long> writeNanos, int failedWrites) {
-		List<Long> sorted = new ArrayList<>(writeNanos);
-		if (sorted.isEmpty()) {
-			LogUtils.log.info("No write to the other context completed during the removal ({} failed)", failedWrites);
-			return;
-		}
-		Collections.sort(sorted);
-		LogUtils.log.info("Writes to the other context during the removal: {}, p50 {} ms, max {} ms, {} failed",
-				sorted.size(), sorted.get(sorted.size() / 2) / 1_000_000, sorted.getLast() / 1_000_000, failedWrites);
 	}
 }

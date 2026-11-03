@@ -177,7 +177,14 @@ public class ContextService {
 		return getExport(context, metadataOnly, writer);
 	}
 
+	/**
+	 * Replaces the context's entries by the export in {@code input}. Refuses, before reading the upload, a context
+	 * that keeps entry names, such as {@code _principals}, whose entries an import does not replace.
+	 */
 	public void importContextDataFromFile(Context context, InputStream input) {
+		if (context instanceof EntryNamesContext) {
+			throw new BadRequestException("Context " + context.getEntry().getId() + " cannot be replaced by an import");
+		}
 		File tmpFile = null;
 		try {
 			tmpFile = File.createTempFile("entrystore_context_import", ".zip");
