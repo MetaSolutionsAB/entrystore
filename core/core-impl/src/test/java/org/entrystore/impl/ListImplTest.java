@@ -1501,4 +1501,47 @@ public class ListImplTest extends AbstractCoreTest {
 		assertEquals(Set.of(), reloaded.getAllowedPrincipalsFor(AccessProperty.WriteMetadata));
 		assertEquals(Set.of(), reloaded.getAllowedPrincipalsFor(AccessProperty.WriteResource));
 	}
+
+	@Test
+	public void applyACLtoChildren_firesOneEntryUpdatedPerChildThatSeesTheListAcl() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null);
+		listEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, daisy);
+		Entry child = duck.createLink(null, URI.create("http://example.com/child"), null);
+		Entry subList = duck.createResource(null, GraphType.List, null, null);
+		Entry grandchild = duck.createLink(null, URI.create("http://example.com/grandchild"), null);
+		((List) listEntry.getResource()).addChild(child.getEntryURI());
+		((List) listEntry.getResource()).addChild(subList.getEntryURI());
+		((List) subList.getResource()).addChild(grandchild.getEntryURI());
+		// warm caches, which an event fired before the cache update would show stale
+		for (Entry entry : java.util.List.of(child, subList, grandchild)) {
+			entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata);
+		}
+
+		var events = recordAclEvents(AccessProperty.ReadMetadata,
+				() -> ((List) listEntry.getResource()).applyACLtoChildren(true));
+
+		assertEquals(java.util.List.of(
+				new AclEvent(child.getEntryURI(), RepositoryEvent.EntryUpdated, Set.of(daisy)),
+				new AclEvent(subList.getEntryURI(), RepositoryEvent.EntryUpdated, Set.of(daisy)),
+				new AclEvent(grandchild.getEntryURI(), RepositoryEvent.EntryUpdated, Set.of(daisy))), events);
+	}
+
+	@Test
+	public void applyACLtoChildren_firesNothingForAChildThatAlreadyHasTheListAcl() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		Entry listEntry = duck.createResource(null, GraphType.List, null, null);
+		listEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, daisy);
+		duck.createLink(null, URI.create("http://example.com/child"), listEntry.getResourceURI());
+
+		var events = recordAclEvents(AccessProperty.ReadMetadata,
+				() -> ((List) listEntry.getResource()).applyACLtoChildren(true));
+
+		// created in the list, the child already carries the list's ACL
+		assertEquals(java.util.List.of(), events);
+	}
 }
