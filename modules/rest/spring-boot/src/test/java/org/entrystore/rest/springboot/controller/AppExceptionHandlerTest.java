@@ -21,6 +21,7 @@ import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
+import org.entrystore.repository.security.ContextImportPendingException;
 import org.entrystore.repository.security.ContextRemovalPendingException;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
@@ -101,6 +102,18 @@ class AppExceptionHandlerTest {
 
 		ResponseEntity<?> response = (ResponseEntity<?>) mapped.invoke(handler, ex,
 				new MockHttpServletRequest("POST", "/_contexts"));
+
+		assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+	}
+
+	@Test
+	void contextImportPendingException_isAnsweredAsAConflict() throws Exception {
+		ContextImportPendingException ex = new ContextImportPendingException("Context 5 is being imported");
+		Method mapped = new ExceptionHandlerMethodResolver(AppExceptionHandler.class).resolveMethod(ex);
+		assertNotNull(mapped, "Expected a handler for ContextImportPendingException");
+
+		ResponseEntity<?> response = (ResponseEntity<?>) mapped.invoke(handler, ex,
+				new MockHttpServletRequest("POST", "/5/import"));
 
 		assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
 	}

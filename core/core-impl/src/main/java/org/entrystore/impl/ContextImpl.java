@@ -43,6 +43,7 @@ import org.entrystore.exception.EntryMissingException;
 import org.entrystore.exception.InvalidExternalMetadataURIException;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
+import org.entrystore.repository.security.ContextImportPendingException;
 import org.entrystore.repository.security.ContextRemovalPendingException;
 import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.test.TestSuite;
@@ -63,9 +64,9 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.concurrent.ConcurrentHashMap;
@@ -136,7 +137,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * dependent write atomic, so a listing can be missing an entry that a concurrent
 	 * {@code updateResource2EntryIndex} has popped but not yet pushed. Callers needing more must
 	 * coordinate. No caller decides what to delete from these indexes: context removal lists the context's
-	 * graphs, and {@code removeNonSystemEntries} its index graph, from the store.
+	 * graphs, and an import its index graph, from the store.
 	 */
 	private volatile ConcurrentMap<URI, Object> extMdUri2entry;
 	private volatile ConcurrentMap<URI, Object> res2entry;
@@ -166,9 +167,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * and a replayed op whose store change was undone is durable index divergence — the mirror of the
 	 * problem this buffer exists to solve.
 	 *
-	 * <p>Only populated between construction (or a {@link #reIndex()}) and the first read, so it is
-	 * empty in steady state. {@link #indexOpBufferLimit} bounds a pathological case — a bulk import into
-	 * a context nobody reads — after which the buffer is discarded rather than grown; see
+	 * <p>Only populated between construction (or a {@link #reIndex()} or {@link #unpublishIndexes()}) and the
+	 * first read, so it is empty in steady state. {@link #indexOpBufferLimit} bounds a pathological case — a bulk
+	 * import into a context nobody reads — after which the buffer is discarded rather than grown; see
 	 * {@link #scanAndPublish()} for how a scan that raced such a discard is detected and retried.
 	 *
 	 * <p>Package-private so {@code ContextImplTest} can assert that a test named for the unpublished
@@ -177,8 +178,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	final List<IndexOp> pendingIndexOps = new ArrayList<>();
 
 	/**
-	 * How many times {@link #pendingIndexOps} has been discarded for exceeding
-	 * {@link #indexOpBufferLimit}. Guarded by {@link #indexLock}.
+	 * How many times {@link #pendingIndexOps} has been discarded, for exceeding
+	 * {@link #indexOpBufferLimit} or by {@link #unpublishIndexes()}. Guarded by {@link #indexLock}.
 	 *
 	 * <p>A count rather than a flag because the question a scan has to answer is "was anything dropped
 	 * <em>while I was scanning</em>", not "has anything ever been dropped": an overflow that happened
@@ -622,6 +623,24 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
+	/**
+	 * Drops both indexes and the id counter held in memory, so the next read scans the index graph again and the next
+	 * create reads the stored counter: for a change to the index graph that no op describes, as an import makes. The
+	 * caller holds the repository monitor.
+	 *
+	 * <p>Also drops the buffered ops, whose changes the store already holds, and counts that as an overflow, so a
+	 * scan that started before the change is discarded and retried rather than published.
+	 */
+	void unpublishIndexes() {
+		synchronized (indexLock) {
+			res2entry = null;
+			extMdUri2entry = null;
+			counter = -1;
+			pendingIndexOps.clear();
+			pendingIndexOpsOverflows++;
+		}
+	}
+
 	/** The published pair, or null while either field is unpublished. */
 	private Indexes publishedIndexes() {
 		ConcurrentMap<URI, Object> resIndex = res2entry;
@@ -718,24 +737,29 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 		txOps.add(new IndexOp(IndexKind.RESOURCE, false, entry.getResourceURI(), entry.getEntryURI()));
 
-		if (RepositoryManagerImpl.trackDeletedEntries) {
-			// add deletion information to index
-			ValueFactory vf = rc.getValueFactory();
-			XMLGregorianCalendar deletedDate = null;
-			try {
-				deletedDate = DatatypeFactory.newInstance().newXMLGregorianCalendar(new GregorianCalendar());
-			} catch (DatatypeConfigurationException e) {
-				log.error(e.getMessage());
-			}
-			if (deletedDate != null) {
-				Statement delDateStatement = vf.createStatement(entryURI, RepositoryProperties.Deleted, vf.createLiteral(deletedDate), this.resourceURI);
-				rc.add(delDateStatement, this.resourceURI);
-			}
-			URI deletedBy = entry.getRepositoryManager().getPrincipalManager().getAuthenticatedUserURI();
-			if (deletedBy != null) {
-				Statement delByStatement = vf.createStatement(entryURI, RepositoryProperties.DeletedBy, vf.createIRI(deletedBy.toString()), this.resourceURI);
-				rc.add(delByStatement, this.resourceURI);
-			}
+		addTombstone(entryURI, rc);
+	}
+
+	/**
+	 * Records in the index graph when, and by the current user, the entry was removed, if deleted entries are tracked.
+	 */
+	void addTombstone(IRI entryURI, RepositoryConnection rc) throws RepositoryException {
+		if (!RepositoryManagerImpl.trackDeletedEntries) {
+			return;
+		}
+		ValueFactory vf = rc.getValueFactory();
+		XMLGregorianCalendar deletedDate = null;
+		try {
+			deletedDate = DatatypeFactory.newInstance().newXMLGregorianCalendar(new GregorianCalendar());
+		} catch (DatatypeConfigurationException e) {
+			log.error(e.getMessage());
+		}
+		if (deletedDate != null) {
+			rc.add(entryURI, RepositoryProperties.Deleted, vf.createLiteral(deletedDate), this.resourceURI);
+		}
+		URI deletedBy = entry.getRepositoryManager().getPrincipalManager().getAuthenticatedUserURI();
+		if (deletedBy != null) {
+			rc.add(entryURI, RepositoryProperties.DeletedBy, vf.createIRI(deletedBy.toString()), this.resourceURI);
 		}
 	}
 
@@ -1036,6 +1060,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 		synchronized (this.entry.repository) {
 			checkCreateAllowed(entryId);
+			checkNotBeingImported();
 			EntryImpl newEntry = createNewMinimalItem(resourceURI, metadataURI, entryType, graphType, resourceType, entryId);
 			if (list != null) {
 				list.addChild(newEntry.getEntryURI());
@@ -1055,11 +1080,25 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * authoritative, since the removal marks the context under that monitor.
 	 *
 	 * @param entryId the requested id, or null for a generated one
-	 * @throws ContextRemovalPendingException if the create is refused
+	 * @throws ContextRemovalPendingException if the context has been removed
 	 */
 	protected void checkCreateAllowed(String entryId) {
 		if (isDeleted()) {
 			throw new ContextRemovalPendingException("Context " + id + " has been removed");
+		}
+	}
+
+	/**
+	 * Refuses a create in a context being imported, whose import plans its removals from the entries it read.
+	 * Called holding the repository monitor, under which the import marks the context, and after the access check,
+	 * so that a caller who may not write is refused as such and learns nothing of the import.
+	 *
+	 * @throws ContextImportPendingException if the context is being imported
+	 */
+	private void checkNotBeingImported() {
+		if (entry.getRepositoryManager().getContextManager() instanceof ContextManagerImpl contextManager
+				&& contextManager.isImportPending(id)) {
+			throw new ContextImportPendingException("Context " + id + " is being imported");
 		}
 	}
 
@@ -1207,6 +1246,37 @@ public class ContextImpl extends ResourceImpl implements Context {
 		return newEntry;
 	}
 
+	/**
+	 * The entry whose entry graph holds {@code statements}, which the caller read in one pass with many others: the
+	 * instance the cache holds, which other threads may hold too, or else one loaded from the statements and not
+	 * cached.
+	 *
+	 * @return null if the statements are empty or the URI names no entry of this context
+	 * @throws org.entrystore.repository.CorruptEntryException if the statements are no valid entry graph
+	 */
+	EntryImpl entryFromGraph(IRI entryURI, List<Statement> statements) {
+		if (statements.isEmpty()) {
+			return null;
+		}
+		URI uri = URI.create(entryURI.stringValue());
+		if (softCache.getByEntryURI(uri) instanceof EntryImpl cached && isOwnEntry(cached)) {
+			return cached;
+		}
+		Optional<URISplit> split = URISplit.of(uri, this.entry.getRepositoryManager().getRepositoryURL());
+		if (split.isEmpty() || !this.id.equals(split.get().getContextId()) || split.get().getId() == null) {
+			return null;
+		}
+		EntryImpl loaded = new EntryImpl(split.get().getId(), this, this.entry.repositoryManager,
+				this.entry.getRepository());
+		if (!loaded.load(statements)) {
+			return null;
+		}
+		if (loaded.getEntryType() == EntryType.Local) {
+			initResource(loaded);
+		}
+		return loaded;
+	}
+
 	public Set<Entry> getByExternalMdURI(URI metadataURI) {
 		if (metadataURI == null) {
 			// ConcurrentHashMap.get(null) throws NullPointerException where the HashMap this replaced
@@ -1296,9 +1366,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * The resource-URI index, loading it first if needed.
 	 *
 	 * <p>Reads the volatile field once, and otherwise takes what {@link #loadIndexes()} published rather
-	 * than re-reading the field: a concurrent {@link #reIndex()} nulling it between a successful load and
-	 * a re-read would otherwise turn a perfectly healthy read into a failure, and {@code reIndex()} runs
-	 * on every context import. There is no null case left to guard, which is why this no longer throws.
+	 * than re-reading the field: a concurrent {@link #reIndex()} or {@link #unpublishIndexes()} nulling it
+	 * between a successful load and a re-read would otherwise turn a perfectly healthy read into a failure,
+	 * and every context import unpublishes the indexes. There is no null case left to guard, so this does
+	 * not throw.
 	 */
 	private ConcurrentMap<URI, Object> resourceIndex() {
 		ConcurrentMap<URI, Object> index = res2entry;
@@ -1393,134 +1464,11 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	/**
-	 * Removes all non-system entries as part of the supplied transaction, so that a caller performing a
-	 * larger operation (e.g. context import) can roll back the removals together with the rest of the
-	 * transaction. Entries that are named in the index graph but cannot be loaded are skipped, not removed.
-	 *
-	 * <p>The children come from the store through the supplied connection, not from {@link #getEntries()}:
-	 * a statement the in-memory index could not parse makes that listing short, and an entry missing from it
-	 * would survive a replace-import and coexist with the imported data (ENTRYSTORE-1095).
-	 *
-	 * <p>The three accumulators are filled as the removal runs, so they reflect the progress made even if
-	 * this method throws: {@code removedEntries} every entry whose removal has started,
-	 * {@code deferredFileDeletions} the file resources whose disk files must be deleted after a successful
-	 * commit, and {@code survivingLists} the entries of all lists the removal keeps, whether pruned or not.
-	 * After a commit the caller must, still holding the repository monitor, invoke
-	 * {@link ListImpl#invalidateChildren()} on the surviving lists, since a reader that takes no monitor may
-	 * have cached their pre-commit members meanwhile; it must then invoke {@link #evictFromCaches(List)} with
-	 * the removed entries, fire {@link RepositoryEvent#EntryDeleted} for each of them and delete the deferred
-	 * files. After a rollback it must invoke {@link #recoverFromFailedRemoval(List)} instead and refresh this
-	 * context's entry and the surviving list entries from the repository, since the modification dates (and
-	 * the pruned lists' contributors) are updated in memory as part of the removal.
+	 * Whether a context-replacing import keeps the entry: a system entry or one whose id starts with {@code _}, such
+	 * as {@code _top}.
 	 */
-	protected void removeNonSystemEntries(RepositoryConnection rc, List<EntryImpl> removedEntries,
-			List<DataImpl> deferredFileDeletions, List<EntryImpl> survivingLists) throws Exception {
-		synchronized (this.entry.repository) {
-			Map<URI, SurvivingListPrune> survivingListPrunes = new LinkedHashMap<>();
-			// Collected and then discarded: both required follow-ups unpublish the two indexes, so the
-			// next read rebuilds them from the store. Applying an op instead would buffer a pop into
-			// pendingIndexOps while they are unpublished, and a rolled-back removal would have that pop
-			// replayed onto the freshly loaded index, hiding a live entry from every listing.
-			List<IndexOp> discardedOps = new ArrayList<>();
-			for (URI entryURI : childEntryURIsFromStore(rc)) {
-				EntryImpl removeEntry = (EntryImpl) getByEntryURI(entryURI);
-				if (removeEntry == null) {
-					log.warn("Entry {} is named by the context index graph but could not be loaded, "
-							+ "skipping removal and removing the stale index reference", entryURI);
-					removeStaleIndexReference(entryURI, rc);
-					continue;
-				}
-				if (removeEntry.getId().startsWith("_") || systemEntries.contains(entryURI)) {
-					if (removeEntry.getGraphType() == GraphType.List && !survivingLists.contains(removeEntry)) {
-						survivingLists.add(removeEntry);
-					}
-					continue;
-				}
-				checkAccess(removeEntry, AccessProperty.Administer);
-				log.info("Removing {}", entryURI);
-				collectSurvivingListPrunes(removeEntry, survivingListPrunes);
-				removedEntries.add(removeEntry);
-				removeFromIndex(removeEntry, rc, discardedOps);
-				removeEntry.remove(rc, deferredFileDeletions);
-			}
-			// prune each surviving list once for all of its removed members: one graph read and rewrite
-			// per list instead of one per member
-			for (SurvivingListPrune prune : survivingListPrunes.values()) {
-				EntryImpl listEntry = (EntryImpl) prune.list().getEntry();
-				if (!survivingLists.contains(listEntry)) {
-					survivingLists.add(listEntry);
-				}
-				prune.list().removeChildrenInTransaction(prune.memberURIsToRemove(), rc);
-			}
-			this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
-		}
-	}
-
-	private void removeStaleIndexReference(URI entryURI, RepositoryConnection rc) throws RepositoryException {
-		IRI entryIRI = rc.getValueFactory().createIRI(entryURI.toString());
-		rc.remove((Resource) null, RepositoryProperties.resHasEntry, entryIRI, this.resourceURI);
-		rc.remove((Resource) null, RepositoryProperties.mdHasEntry, entryIRI, this.resourceURI);
-	}
-
-	/** The members to prune from one surviving list after the bulk-removal loop has finished. */
-	private record SurvivingListPrune(ListImpl list, List<URI> memberURIsToRemove) {}
-
-	/**
-	 * Collects the prunes needed for referring lists that survive the bulk removal (system entries and
-	 * entries with an id starting with "_"), so no dangling member references remain after the transaction
-	 * commits. Keyed by list entry URI, so each surviving list is pruned exactly once. Lists that are
-	 * themselves being removed are left alone — their graphs are cleared by their own removal.
-	 */
-	private void collectSurvivingListPrunes(EntryImpl removeEntry, Map<URI, SurvivingListPrune> survivingListPrunes) {
-		for (URI listURI : removeEntry.getReferringListsInSameContext()) {
-			boolean handled = false;
-			for (Entry referringEntry : getByResourceURI(listURI)) {
-				EntryImpl listEntry = (EntryImpl) referringEntry;
-				boolean listSurvives = listEntry.getId().startsWith("_") || systemEntries.contains(listEntry.getEntryURI());
-				if (!listSurvives) {
-					// the list is removed itself, its graph is cleared by its own removal
-					handled = true;
-					continue;
-				}
-				if (listEntry.getResource() instanceof ListImpl list) {
-					survivingListPrunes
-							.computeIfAbsent(listEntry.getEntryURI(), uri -> new SurvivingListPrune(list, new ArrayList<>()))
-							.memberURIsToRemove().add(removeEntry.getEntryURI());
-					handled = true;
-				}
-			}
-			if (!handled) {
-				log.warn("Referring list {} of removed entry {} could not be resolved to a list, "
-						+ "a dangling member reference may remain", listURI, removeEntry.getEntryURI());
-			}
-		}
-	}
-
-	/**
-	 * Restores in-memory state after a rolled-back removal: clears the entries' deleted flag (the repository
-	 * still contains them) and evicts them from the caches.
-	 */
-	protected void recoverFromFailedRemoval(List<EntryImpl> entries) {
-		for (EntryImpl entryToRecover : entries) {
-			entryToRecover.resetDeleted();
-		}
-		evictFromCaches(entries);
-	}
-
-	/**
-	 * Evicts the given entries from the soft cache and resets the in-memory URI index, so both are reloaded
-	 * from the repository on next access. Must be called once a transaction that removed entries has
-	 * finished: after a commit the cached objects are stale, after a rollback the index and the entry objects
-	 * have already been mutated.
-	 */
-	protected void evictFromCaches(List<EntryImpl> entries) {
-		synchronized (this.entry.repository) {
-			for (EntryImpl entryToEvict : entries) {
-				softCache.remove(entryToEvict);
-			}
-			res2entry = null;
-			extMdUri2entry = null;
-		}
+	boolean isKeptByImport(URI entryURI) {
+		return URISplit.getLastSegment(entryURI.toString()).startsWith("_") || systemEntries.contains(entryURI);
 	}
 
 	/**
@@ -1580,23 +1528,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * the caller.
 	 */
 	public Set<URI> getChildEntryURIsFromStore() {
-		try (RepositoryConnection rc = entry.repository.getConnection()) {
-			return childEntryURIsFromStore(rc);
-		} catch (RepositoryException e) {
-			log.error(e.getMessage(), e);
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
-		}
-	}
-
-	/**
-	 * {@link #getChildEntryURIsFromStore()} on a caller-supplied connection, for
-	 * {@link #removeNonSystemEntries} which must see its own transaction's view of the index graph.
-	 * Materialised rather than iterated lazily, since that caller mutates the graph this walks.
-	 */
-	private Set<URI> childEntryURIsFromStore(RepositoryConnection rc) {
 		Set<URI> children = new HashSet<>();
-		try (RepositoryResult<Statement> statements = rc
-				.getStatements(null, RepositoryProperties.resHasEntry, null, false, this.resourceURI)) {
+		try (RepositoryConnection rc = entry.repository.getConnection();
+			 RepositoryResult<Statement> statements = rc
+					 .getStatements(null, RepositoryProperties.resHasEntry, null, false, this.resourceURI)) {
 			for (Statement statement : statements) {
 				if (!(statement.getObject() instanceof IRI childEntryIRI)) {
 					log.error("Index statement {} in context {} names a child that is not an IRI; it cannot "
@@ -1608,6 +1543,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 				}
 				children.add(URI.create(childEntryIRI.toString()));
 			}
+		} catch (RepositoryException e) {
+			log.error(e.getMessage(), e);
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
 		}
 		return children;
 	}

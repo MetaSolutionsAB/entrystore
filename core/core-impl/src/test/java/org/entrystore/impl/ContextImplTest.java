@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -29,13 +28,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -1059,6 +1056,44 @@ public class ContextImplTest extends AbstractCoreTest {
 	}
 
 	/**
+	 * An import changes the index graph without index ops and then unpublishes the indexes. A scan that ran across
+	 * that change read the old index graph, so it must be discarded and repeated rather than published.
+	 */
+	@Test
+	public void unpublishIndexes_discardsAScanThatRanAcrossIt() {
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		Entry replaced = context.createLink(null, URI.create("http://example.com/replaced"), null);
+		synchronized (rm.getRepository()) {
+			context.unpublishIndexes();
+		}
+		AtomicInteger scans = new AtomicInteger();
+		context.indexScanHookForTests = () -> {
+			if (scans.incrementAndGet() == 1) {
+				// what an import commits while the first scan has read the index graph but not yet published it
+				synchronized (rm.getRepository()) {
+					try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+						rc.remove((org.eclipse.rdf4j.model.Resource) null, RepositoryProperties.resHasEntry,
+								SimpleValueFactory.getInstance().createIRI(replaced.getEntryURI().toString()),
+								context.resourceURI);
+					}
+					context.unpublishIndexes();
+				}
+			}
+		};
+
+		Set<URI> listed;
+		try {
+			listed = context.getEntries();
+		} finally {
+			context.indexScanHookForTests = null;
+		}
+
+		assertFalse(listed.contains(replaced.getEntryURI()), "the listing must not show what the import removed");
+		assertEquals(2, scans.get(), "the scan that ran across the import is discarded and repeated");
+	}
+
+	/**
 	 * ENTRYSTORE-1095. Deleting a context must not clear a graph belonging to a different context, even one
 	 * its index graph names: a {@code resHasEntry} object pointing into a neighbouring context once destroyed
 	 * that entry's graph. {@code importContext} copies index-graph objects verbatim, so restoring an export
@@ -1307,89 +1342,6 @@ public class ContextImplTest extends AbstractCoreTest {
 			rc.add(vf.createIRI(UNPARSEABLE_IRI), RepositoryProperties.resHasEntry,
 				child.getSesameEntryURI(), owner.resourceURI);
 		}
-	}
-
-	@Test
-	public void removeNonSystemEntries_rollback_restoresContextAndKeepsDataFiles(@TempDir Path tempDataDir) throws Exception {
-		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
-		Entry linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
-		Entry dataEntry = context.createResource(null, GraphType.None, ResourceType.InformationResource, null);
-		((Data) dataEntry.getResource()).setData(new ByteArrayInputStream("file content".getBytes(StandardCharsets.UTF_8)));
-		Entry survivorListEntry = context.createResource("_survivor", GraphType.List, null, null);
-		((List) survivorListEntry.getResource()).addChild(linkEntry.getEntryURI());
-		File dataFile = new File(new File(tempDataDir.toFile(), context.getEntry().getId()), dataEntry.getId());
-		assertTrue(dataFile.exists());
-		Date modifiedBefore = context.getEntry().getModifiedDate();
-
-		ArrayList<EntryImpl> removedEntries = new ArrayList<>();
-		ArrayList<DataImpl> deferredFileDeletions = new ArrayList<>();
-		ArrayList<EntryImpl> survivingLists = new ArrayList<>();
-		try (RepositoryConnection rc = context.entry.repository.getConnection()) {
-			rc.begin();
-			context.removeNonSystemEntries(rc, removedEntries, deferredFileDeletions, survivingLists);
-			rc.rollback();
-			// mirrors the production rollback path in ContextManagerImpl.importContextFromUnzippedDir
-			((EntryImpl) context.getEntry()).refreshFromRepository(rc);
-			for (EntryImpl survivingList : survivingLists) {
-				survivingList.refreshFromRepository(rc);
-			}
-		}
-		context.recoverFromFailedRemoval(removedEntries);
-
-		Set<URI> entries = context.getEntries();
-		assertTrue(entries.contains(linkEntry.getEntryURI()));
-		assertTrue(entries.contains(dataEntry.getEntryURI()));
-		assertFalse(removedEntries.isEmpty());
-		for (EntryImpl removedEntry : removedEntries) {
-			assertFalse(removedEntry.isDeleted(), "recoverFromFailedRemoval must reset the deleted flag on held references");
-			// the caches must serve a freshly loaded, non-deleted entry, not the mutated instance
-			EntryImpl reloadedEntry = (EntryImpl) context.getByEntryURI(removedEntry.getEntryURI());
-			assertNotNull(reloadedEntry);
-			assertNotSame(removedEntry, reloadedEntry);
-			assertFalse(reloadedEntry.isDeleted());
-		}
-		assertTrue(((List) survivorListEntry.getResource()).getChildren().contains(linkEntry.getEntryURI()),
-				"a rolled-back removal must not prune surviving lists");
-		assertEquals(modifiedBefore, context.getEntry().getModifiedDate());
-		assertTrue(dataFile.exists(), "A rolled-back removal must not delete data files from disk");
-	}
-
-	@Test
-	public void removeNonSystemEntries_commit_removesEntriesAndDefersFileDeletion(@TempDir Path tempDataDir) throws Exception {
-		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
-		Entry linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
-		Entry dataEntry = context.createResource(null, GraphType.None, ResourceType.InformationResource, null);
-		((Data) dataEntry.getResource()).setData(new ByteArrayInputStream("file content".getBytes(StandardCharsets.UTF_8)));
-		Entry survivorListEntry = context.createResource("_survivor", GraphType.List, null, null);
-		((List) survivorListEntry.getResource()).addChild(linkEntry.getEntryURI());
-		File dataFile = new File(new File(tempDataDir.toFile(), context.getEntry().getId()), dataEntry.getId());
-		assertTrue(dataFile.exists());
-		Date modifiedBefore = context.getEntry().getModifiedDate();
-		Thread.sleep(10); // let the clock advance past millisecond resolution before the removal bumps the date
-
-		ArrayList<EntryImpl> removedEntries = new ArrayList<>();
-		ArrayList<DataImpl> deferredFileDeletions = new ArrayList<>();
-		ArrayList<EntryImpl> survivingLists = new ArrayList<>();
-		try (RepositoryConnection rc = context.entry.repository.getConnection()) {
-			rc.begin();
-			context.removeNonSystemEntries(rc, removedEntries, deferredFileDeletions, survivingLists);
-			rc.commit();
-		}
-		context.evictFromCaches(removedEntries);
-
-		assertNull(context.getByEntryURI(linkEntry.getEntryURI()));
-		assertNull(context.getByEntryURI(dataEntry.getEntryURI()));
-		assertFalse(context.getEntries().contains(linkEntry.getEntryURI()));
-		assertNotNull(context.getByEntryURI(survivorListEntry.getEntryURI()), "surviving list must not be removed");
-		assertFalse(((List) survivorListEntry.getResource()).getChildren().contains(linkEntry.getEntryURI()),
-				"a committed removal must prune the removed entry from surviving lists");
-		assertTrue(context.getEntry().getModifiedDate().after(modifiedBefore),
-				"the removal must bump the context's modification date");
-		assertTrue(dataFile.exists(), "File deletion is deferred until after a successful commit");
-		for (DataImpl removedData : deferredFileDeletions) {
-			removedData.deleteFile();
-		}
-		assertFalse(dataFile.exists());
 	}
 
 	@Test

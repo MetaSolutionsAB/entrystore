@@ -41,6 +41,7 @@ public class Arguments {
 	/** Triple indexes given on the command line, or null for the store type's default. */
 	String indexes;
 	boolean withContextRemoval = false;
+	boolean withContextImport = false;
 	File storePath;
 	File solrPath;
 

@@ -17,12 +17,16 @@
 package org.entrystore.impl;
 
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.query.MalformedQueryException;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -30,11 +34,14 @@ import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
+import org.entrystore.User;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryListener;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.ContextImportPendingException;
 import org.entrystore.repository.security.ContextRemovalPendingException;
+import org.entrystore.repository.test.TestSuite;
 import org.entrystore.repository.util.CommonQueries;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -54,10 +61,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -207,7 +216,8 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 
 
 	@Test
-	public void importContext_failureDuringRemoval_restoresPreviousContext(@TempDir Path tempDataDir) throws Exception {
+	public void importContext_byAUserWhoMayNotAdministerTheContext_isRefusedAndChangesNothing(@TempDir Path tempDataDir)
+			throws Exception {
 		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
 		rm.setCheckForAuthorization(true);
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
@@ -224,9 +234,8 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		assertTrue(dataFile.exists());
 		Date modifiedBefore = contextEntry.getModifiedDate();
 
-		// Mickey may administer the granted entries but not the file entry (and not the context), so the
-		// removal inside the import transaction fails partway; iteration order of getEntries() is hash-based,
-		// so several granted entries make it very likely that at least one removal starts before the denial
+		// Mickey may administer the granted entries but not the context, so the import is refused before the upload
+		// is read
 		Entry mickey = pm.getPrincipalEntry("Mickey");
 		for (Entry grantedEntry : grantedEntries) {
 			grantedEntry.addAllowedPrincipalsFor(AccessProperty.Administer, mickey.getResourceURI());
@@ -234,9 +243,7 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		File importZip = createMinimalImportZip(tempDataDir);
 
 		pm.setAuthenticatedUserURI(mickey.getResourceURI());
-		var thrown = assertThrows(org.entrystore.repository.RepositoryException.class,
-				() -> cm.importContext(contextEntry, importZip));
-		assertEquals("Failed to import context data", thrown.getMessage());
+		assertThrows(AuthorizationException.class, () -> cm.importContext(contextEntry, importZip));
 
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		List<URI> allEntryURIs = new ArrayList<>(grantedEntries.stream().map(Entry::getEntryURI).toList());
@@ -249,6 +256,8 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		}
 		assertTrue(dataFile.exists(), "A failed import must not delete data files from disk");
 		assertEquals(modifiedBefore, contextEntry.getModifiedDate());
+		assertNotNull(context.createLink(null, URI.create("https://digg.com/"), null),
+				"a refused import must not keep refusing creates in the context");
 	}
 
 	@Test
@@ -301,10 +310,10 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 			// a reader takes no repository monitor, so while the import transaction is open it caches the
 			// members the store still holds
 			doAnswer(invocation -> {
-				invocation.callRealMethod();
+				Object pruned = invocation.callRealMethod();
 				readDuringImport.set(reader.submit(list::getChildren).get(10, TimeUnit.SECONDS));
-				return null;
-			}).when(list).removeChildrenInTransaction(any(), any(RepositoryConnection.class));
+				return pruned;
+			}).when(list).pruneExactly(any(RepositoryConnection.class), any());
 
 			cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
 		} finally {
@@ -330,15 +339,44 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		ListImpl list = (ListImpl) listEntry.getResource();
 		assertEquals(List.of(), list.getChildren(), "precondition: the empty member list is cached");
 
-		String importedMember = """
-				<http://localhost:8181/99/resource/_list> {
-					<http://localhost:8181/99/resource/_list> <%s_1> <http://localhost:8181/99/entry/_kept> .
-				}
-				""".formatted(RDF.NAMESPACE);
-		cm.importContext(contextEntry, createImportZip(tempDataDir, importedMember));
+		cm.importContext(contextEntry, createImportZip(tempDataDir, KEPT_LIST_MEMBER));
 
 		assertEquals(List.of(kept.getEntryURI()), list.getChildren());
 	}
+
+	@Test
+	public void importContext_publishesAKeptListWhoseMembersItChanged(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		Entry listEntry = context.createResource("_list", GraphType.List, null, null);
+		context.createLink("_kept", URI.create("http://digg.com/"), null);
+		List<URI> updated = new ArrayList<>();
+		RepositoryListener recorder = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				updated.add(((Entry) eventObject.getSource()).getEntryURI());
+			}
+		};
+		rm.registerListener(recorder, RepositoryEvent.ResourceUpdated);
+		try {
+			cm.importContext(contextEntry, createImportZip(tempDataDir, KEPT_LIST_MEMBER));
+		} finally {
+			rm.unregisterListener(recorder, RepositoryEvent.ResourceUpdated);
+		}
+
+		// the import removed no member of the list, so only the import itself can publish the one it added
+		assertTrue(updated.contains(listEntry.getEntryURI()),
+				"listeners such as the search index must learn of the members the import gave a kept list");
+	}
+
+	/** Puts the entry _kept into the list _list, both of which an import keeps. */
+	private static final String KEPT_LIST_MEMBER = """
+			<http://localhost:8181/99/resource/_list> {
+				<http://localhost:8181/99/resource/_list> <%s_1> <http://localhost:8181/99/entry/_kept> .
+			}
+			""".formatted(RDF.NAMESPACE);
 
 	/** The members of a list as the store holds them, bypassing every in-memory copy. */
 	private List<URI> storedMembers(Entry listEntry) {
@@ -644,5 +682,426 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		assertEquals(List.of(false), removedMemberVisibleAtDispatch,
 				"the members must be dropped before the event is fired, or a listener that re-scans on it "
 						+ "reads the stale ones");
+	}
+
+	@Test
+	public void importContext_letsAWriteToAnotherContextCompleteWhileItPrepares(@TempDir Path tempDataDir)
+			throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		((Context) contextEntry.getResource()).createLink(null, URI.create("https://slashdot.org/"), null);
+		Context other = (Context) cm.createResource(null, GraphType.Context, null, null).getResource();
+		AtomicReference<Boolean> monitorHeld = new AtomicReference<>();
+		AtomicReference<Entry> written = new AtomicReference<>();
+		((ContextManagerImpl) cm).whileImportPrepares = () -> {
+			monitorHeld.set(Thread.holdsLock(rm.getRepository()));
+			written.set(onAnotherThread(() -> other.createLink(null, URI.create("https://digg.com/"), null)));
+		};
+
+		cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+
+		assertFalse(monitorHeld.get(), "the import must not hold the repository monitor while it prepares");
+		assertNotNull(written.get(), "a write to another context must complete while the import prepares");
+	}
+
+	@Test
+	public void importContext_refusesACreateInTheContextWhileItPrepares(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		AtomicReference<Throwable> refused = new AtomicReference<>();
+		((ContextManagerImpl) cm).whileImportPrepares = () -> refused.set(assertThrows(
+				ContextImportPendingException.class,
+				() -> context.createLink(null, URI.create("https://digg.com/"), null)));
+
+		cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+
+		assertNotNull(refused.get());
+		assertNotNull(context.createLink(null, URI.create("https://digg.com/"), null),
+				"creates must be accepted again once the import has ended");
+	}
+
+	@Test
+	public void importContext_refusesASecondImportOfTheContextWhileItPrepares(@TempDir Path tempDataDir)
+			throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		File secondImport = createMinimalImportZip(Files.createDirectory(tempDataDir.resolve("second")));
+		AtomicReference<Throwable> refused = new AtomicReference<>();
+		((ContextManagerImpl) cm).whileImportPrepares = () -> {
+			refused.set(assertThrows(ContextImportPendingException.class,
+					() -> cm.importContext(contextEntry, secondImport)));
+			assertThrows(ContextImportPendingException.class,
+					() -> context.createLink(null, URI.create("https://digg.com/"), null),
+					"the refused import must leave the fence of the first one in place");
+		};
+
+		cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+
+		assertNotNull(refused.get());
+	}
+
+	@Test
+	public void importContext_answersACreateByAUserWhoMayNotWriteAsUnauthorizedWhileItPrepares(
+			@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		rm.setCheckForAuthorization(true);
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		User mickey = (User) pm.getPrincipalEntry("Mickey").getResource();
+		AtomicReference<Throwable> refused = new AtomicReference<>();
+		// refused for lack of rights before the import is checked, so the caller learns nothing of the import
+		((ContextManagerImpl) cm).whileImportPrepares = () -> refused.set(asUser(mickey, () -> assertThrows(
+				AuthorizationException.class, () -> context.createLink(null, URI.create("https://digg.com/"), null))));
+
+		cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+
+		assertNotNull(refused.get());
+	}
+
+	@Test
+	public void importContext_withAKeptEntryThatCannotBeLoaded_failsAsAServerError(@TempDir Path tempDataDir)
+			throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Entry kept = ((Context) contextEntry.getResource())
+				.createLink("_kept", URI.create("https://slashdot.org/"), null);
+		removeFromEntryGraph(kept.getEntryURI(), RepositoryProperties.resource);
+		evictFromSoftCache(kept);
+		File importZip = createMinimalImportZip(tempDataDir);
+
+		// the store's data failed, not the upload, which a RepositoryException would be answered as
+		assertThrows(IllegalStateException.class, () -> cm.importContext(contextEntry, importZip));
+	}
+
+	@Test
+	public void importContext_refusesAMoveIntoAListOfTheContextWhileItPrepares(@TempDir Path tempDataDir)
+			throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ListImpl keptList = (ListImpl) ((Context) contextEntry.getResource())
+				.createResource("_list", GraphType.List, null, null).getResource();
+		Context other = (Context) cm.createResource(null, GraphType.Context, null, null).getResource();
+		Entry sourceList = other.createResource(null, GraphType.List, null, null);
+		Entry moved = other.createLink(null, URI.create("https://slashdot.org/"), sourceList.getResourceURI());
+		AtomicReference<Throwable> refused = new AtomicReference<>();
+		// a move from another context creates a copy in this one, which the import refuses like any create
+		((ContextManagerImpl) cm).whileImportPrepares = () -> refused.set(assertThrows(
+				ContextImportPendingException.class,
+				() -> keptList.moveEntryHere(moved.getEntryURI(), sourceList.getEntryURI(), true)));
+
+		cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+
+		assertNotNull(refused.get());
+		assertNotNull(other.getByEntryURI(moved.getEntryURI()), "the refused move leaves the entry where it was");
+	}
+
+	@Test
+	public void importContext_removesAnEntryEditedWhileItPrepares(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		Entry edited = context.createLink(null, URI.create("https://slashdot.org/"), null);
+		((ContextManagerImpl) cm).whileImportPrepares = () -> {
+			// past the millisecond of the modified date the plan read, which the edit must change
+			sleep(10);
+			Model metadata = edited.getLocalMetadata().getGraph();
+			metadata.add(rm.getValueFactory().createIRI(edited.getResourceURI().toString()), DCTERMS.TITLE,
+					rm.getValueFactory().createLiteral("Edited during the import"));
+			edited.getLocalMetadata().setGraph(metadata);
+		};
+
+		cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+
+		assertNull(context.getByEntryURI(edited.getEntryURI()));
+		assertFalse(hasGraph(edited.getLocalMetadataURI()),
+				"the import must read again an entry edited after its plan, or the edit is left behind");
+		assertFalse(hasGraph(edited.getEntryURI()));
+	}
+
+	@Test
+	public void importContext_writesTheIndexReIndexWouldBuild(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		// replaced by the import, whose index triples by resource and by external metadata reIndex() does not write
+		context.createLink(null, URI.create("https://slashdot.org/"), null);
+		context.createReference(null, URI.create("https://example.com/referenced"),
+				URI.create("https://example.com/referenced/metadata"), null);
+
+		cm.importContext(contextEntry, createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES));
+		Set<Statement> imported = indexOf(context);
+		long importedCounter = counterOf(context);
+		context.reIndex();
+
+		assertEquals(indexOf(context), imported);
+		assertEquals(counterOf(context), importedCounter);
+	}
+
+	@Test
+	public void importContext_letsACreateTakeAnIdAboveTheImportedOnes(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		context.createLink(null, URI.create("https://slashdot.org/"), null);
+
+		cm.importContext(contextEntry, createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES));
+
+		assertEquals("13", context.createLink(null, URI.create("https://digg.com/"), null).getId());
+	}
+
+	@Test
+	public void importContext_leavesAnIdBeyondTheCounterRangeOutOfTheCounter(@TempDir Path tempDataDir)
+			throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		String beyondTheIntRange = """
+				<http://localhost:8181/99/entry/5000000000> {
+					<http://localhost:8181/99/entry/5000000000> <%s> <http://localhost:8181/99/resource/5000000000> .
+				}
+				""".formatted(RepositoryProperties.resource);
+
+		cm.importContext(contextEntry, createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES + beyondTheIntRange));
+
+		// the counter is read back as an int, so a larger one would fail every create that takes a generated id
+		assertEquals("13", context.createLink(null, URI.create("https://digg.com/"), null).getId());
+	}
+
+	@Test
+	public void importContext_replacesALinkWhoseGraphTypeIsUser(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		Entry link = context.createLink(null, URI.create("https://example.com/someone"), null);
+		link.setGraphType(GraphType.User);
+
+		cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+
+		assertNull(context.getByEntryURI(link.getEntryURI()));
+		assertFalse(hasGraph(link.getEntryURI()));
+	}
+
+	@Test
+	public void importContext_ofAContextRemovedWhileItPrepares_isRefused(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		File importZip = createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES);
+		((ContextManagerImpl) cm).whileImportPrepares = () -> cm.remove(contextEntry.getEntryURI());
+
+		assertThrows(ContextRemovalPendingException.class, () -> cm.importContext(contextEntry, importZip));
+		awaitContextRemovals();
+	}
+
+	@Test
+	public void importContext_completesWhenAnEntryIsRemovedWhileItPrepares(@TempDir Path tempDataDir)
+			throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		Entry removedMeanwhile = context.createLink(null, URI.create("https://slashdot.org/"), null);
+		((ContextManagerImpl) cm).whileImportPrepares = () -> context.remove(removedMeanwhile.getEntryURI());
+
+		cm.importContext(contextEntry, createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES));
+
+		assertNull(context.getByEntryURI(removedMeanwhile.getEntryURI()));
+		assertTrue(hasGraph(URI.create(contextEntry.getResourceURI() + "/entry/7")), "the import committed");
+	}
+
+	@Test
+	public void importContext_removesTheGraphsOfAnEntryItCannotLoad(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Entry corrupt = corruptLink((Context) contextEntry.getResource());
+
+		cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+
+		// found through the graph URIs an entry of its id has, since its entry graph cannot say which it has
+		assertFalse(hasGraph(corrupt.getEntryURI()));
+		assertFalse(hasGraph(corrupt.getLocalMetadataURI()));
+	}
+
+	@Test
+	public void importContext_recordsTheEntriesItRemovesWhenDeletedEntriesAreTracked(@TempDir Path tempDataDir)
+			throws Exception {
+		rm.shutdown();
+		setUpEnvironment(Map.of(Settings.REPOSITORY_TRACK_DELETED, "on", Settings.DATA_FOLDER, tempDataDir.toString()));
+		TestSuite.initDisneySuite(rm);
+		rm.setCheckForAuthorization(false);
+		URI admin = pm.getAdminUser().getURI();
+		pm.setAuthenticatedUserURI(admin);
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		Entry removed = context.createLink(null, URI.create("https://slashdot.org/"), null);
+
+		cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+
+		ValueFactory vf = rm.getValueFactory();
+		IRI removedIRI = vf.createIRI(removed.getEntryURI().toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			assertTrue(rc.hasStatement(removedIRI, RepositoryProperties.Deleted, null, false, context.resourceURI));
+			assertTrue(rc.hasStatement(removedIRI, RepositoryProperties.DeletedBy, vf.createIRI(admin.toString()),
+					false, context.resourceURI));
+		}
+	}
+
+	@Test
+	public void importContext_replacesALinkWhoseResourceIsNoJavaURI(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		Entry link = context.createLink(null, URI.create("https://slashdot.org/"), null);
+		ValueFactory vf = rm.getValueFactory();
+		IRI linkIRI = vf.createIRI(link.getEntryURI().toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.remove(linkIRI, RepositoryProperties.resource, null, linkIRI);
+			// a valid IRI, which java.net.URI rejects for the brackets in its path
+			rc.add(linkIRI, RepositoryProperties.resource, vf.createIRI("https://example.com/x[1]"), linkIRI);
+		}
+		evictFromSoftCache(link);
+
+		cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+
+		assertFalse(hasGraph(link.getEntryURI()));
+		assertFalse(context.getEntries().contains(link.getEntryURI()));
+	}
+
+	@Test
+	public void importContext_failingInItsTransaction_leavesTheContextAsItWas(@TempDir Path tempDataDir)
+			throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		Entry listEntry = context.createResource("_list", GraphType.List, null, null);
+		Entry removed = context.createLink(null, URI.create("https://slashdot.org/"), listEntry.getResourceURI());
+		Entry kept = context.createLink("_kept", URI.create("https://digg.com/"), listEntry.getResourceURI());
+		ListImpl list = spy((ListImpl) listEntry.getResource());
+		((EntryImpl) listEntry).setResource(list);
+		// fails once the list is pruned and stamped modified in memory, which the rollback must undo
+		doAnswer(invocation -> {
+			invocation.callRealMethod();
+			throw new IllegalStateException("simulated failure");
+		}).when(list).pruneExactly(any(RepositoryConnection.class), any());
+		Date listModifiedBefore = listEntry.getModifiedDate();
+		long counterBefore = counterOf(context);
+		File importZip = createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES);
+		// past the millisecond of the list's modified date, which the prune stamps
+		sleep(10);
+
+		IllegalStateException thrown = assertThrows(IllegalStateException.class,
+				() -> cm.importContext(contextEntry, importZip));
+
+		assertTrue(thrown.getMessage().contains("commit"), "the import failed in its transaction, not while planning");
+		assertNotNull(context.getByEntryURI(removed.getEntryURI()));
+		assertFalse(removed.isDeleted());
+		assertEquals(List.of(removed.getEntryURI(), kept.getEntryURI()), storedMembers(listEntry));
+		assertEquals(listModifiedBefore, listEntry.getModifiedDate());
+		assertFalse(hasGraph(URI.create(contextEntry.getResourceURI() + "/entry/7")), "nothing was imported");
+		assertEquals(counterBefore, counterOf(context));
+		assertNotNull(context.createLink(null, URI.create("https://example.com/"), null),
+				"a failed import must not keep refusing creates in the context");
+	}
+
+	@Test
+	public void importContext_skipsAStatementInAGraphOfAnotherContext(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Entry other = newContext().createLink(null, URI.create("https://digg.com/"), null);
+		String plantedInOther = """
+				<%1$s> {
+					<%2$s> <%3$s> "planted" .
+				}
+				""".formatted(other.getEntryURI(), other.getResourceURI(), DCTERMS.TITLE);
+
+		cm.importContext(contextEntry, createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES + plantedInOther));
+
+		IRI otherEntryGraph = rm.getValueFactory().createIRI(other.getEntryURI().toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			assertFalse(rc.hasStatement(null, DCTERMS.TITLE, null, false, otherEntryGraph));
+		}
+		assertTrue(hasGraph(URI.create(contextEntry.getResourceURI() + "/entry/7")), "the rest is imported");
+	}
+
+	/** A link with a title whose entry graph has lost its resource statement, evicted so it is loaded again. */
+	private Entry corruptLink(Context context) {
+		Entry link = context.createLink(null, URI.create("https://slashdot.org/"), null);
+		Model metadata = link.getLocalMetadata().getGraph();
+		metadata.add(rm.getValueFactory().createIRI(link.getResourceURI().toString()), DCTERMS.TITLE,
+				rm.getValueFactory().createLiteral("a link"));
+		link.getLocalMetadata().setGraph(metadata);
+		removeFromEntryGraph(link.getEntryURI(), RepositoryProperties.resource);
+		evictFromSoftCache(link);
+		assertTrue(hasGraph(link.getLocalMetadataURI()), "precondition: the metadata graph holds the title");
+		return link;
+	}
+
+	/** Entries 7 and 12 of the exported context 99; 12 is a reference, which the index also lists by metadata. */
+	private static final String TWO_IMPORTED_ENTRIES = """
+			<http://localhost:8181/99/entry/7> {
+				<http://localhost:8181/99/entry/7> <%1$s> <http://localhost:8181/99/resource/7> .
+			}
+			<http://localhost:8181/99/entry/12> {
+				<http://localhost:8181/99/entry/12> <%1$s> <http://example.com/resource> .
+				<http://localhost:8181/99/entry/12> <%2$s> <http://example.com/metadata> .
+			}
+			""".formatted(RepositoryProperties.resource, RepositoryProperties.externalMetadata);
+
+	/** The index triples of the context, without the counter, which {@link #counterOf} compares by value. */
+	private Set<Statement> indexOf(ContextImpl context) {
+		ValueFactory vf = rm.getValueFactory();
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			return rc.getStatements(null, null, null, false, context.resourceURI).stream()
+					.filter(s -> s.getPredicate().equals(RepositoryProperties.resHasEntry)
+							|| s.getPredicate().equals(RepositoryProperties.mdHasEntry))
+					.map(s -> vf.createStatement(s.getSubject(), s.getPredicate(), s.getObject()))
+					.collect(Collectors.toSet());
+		}
+	}
+
+	private long counterOf(ContextImpl context) {
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			return rc.getStatements(context.resourceURI, RepositoryProperties.counter, null, false,
+					context.resourceURI).stream().mapToLong(s -> ((Literal) s.getObject()).longValue()).max()
+					.orElse(-1);
+		}
+	}
+
+	/** Runs {@code work} on a thread of its own and waits for it, so the caller's monitors do not carry over. */
+	private static <T> T onAnotherThread(Callable<T> work) {
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+		try {
+			return executor.submit(work).get(10, TimeUnit.SECONDS);
+		} catch (Exception e) {
+			throw new AssertionError("the work on another thread did not complete", e);
+		} finally {
+			executor.shutdownNow();
+		}
+	}
+
+	private static void sleep(long millis) {
+		try {
+			Thread.sleep(millis);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new AssertionError(e);
+		}
 	}
 }

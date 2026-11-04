@@ -811,10 +811,6 @@ public class ContextRemoverTest extends AbstractCoreTest {
 		assertFalse(cm.isRemovalPending(doomed.id));
 	}
 
-	private ContextImpl newContext() {
-		return (ContextImpl) cm.createResource(null, GraphType.Context, null, null).getResource();
-	}
-
 	private ContextRemover remover() {
 		return ((ContextManagerImpl) cm).contextRemover;
 	}
@@ -881,12 +877,6 @@ public class ContextRemoverTest extends AbstractCoreTest {
 		model.add(iri(entry.getResourceURI().toString()), DCAT.CONTACT_POINT, contact);
 		model.add(contact, VCARD4.FN, literal("Contact"));
 		return model;
-	}
-
-	private boolean hasGraph(URI graph) {
-		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
-			return rc.hasStatement(null, null, null, false, iri(graph.toString()));
-		}
 	}
 
 	private boolean hasGraphsOf(ContextImpl context) {

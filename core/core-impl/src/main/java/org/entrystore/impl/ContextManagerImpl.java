@@ -56,6 +56,7 @@ import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.ContextImportPendingException;
 import org.entrystore.repository.security.ContextRemovalPendingException;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.NS;
@@ -78,6 +79,7 @@ import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
@@ -85,6 +87,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -93,6 +96,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
@@ -113,6 +117,15 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 	/** Deletes the graphs of removed contexts. Package-private for RepositoryManagerImpl and tests. */
 	final ContextRemover contextRemover;
+
+	/** The ids of the contexts being imported; added and checked under the repository monitor. */
+	private final Set<String> importsPending = ConcurrentHashMap.newKeySet();
+
+	/**
+	 * Run on the importing thread while an import prepares, once its plan is read, checked and read again without the
+	 * monitor, so that a change made here is found only by the read under it; for tests.
+	 */
+	volatile Runnable whileImportPrepares = () -> {};
 
 	public ContextManagerImpl(RepositoryManagerImpl rman, Repository repo) {
 		super(new EntryImpl(rman,repo), URISplit.createURI(rman.getRepositoryURL().toString(),
@@ -138,6 +151,11 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	@Override
 	public boolean isRemovalPending(String contextId) {
 		return contextRemover.isPending(contextId);
+	}
+
+	/** Whether the context is being imported, which refuses creates in it and a second import of it. */
+	boolean isImportPending(String contextId) {
+		return contextId != null && importsPending.contains(contextId);
 	}
 
 	/**
@@ -272,8 +290,25 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		}
 	}
 
+	/**
+	 * Replaces the entries of the context, except those an import keeps (see {@link ContextImpl#isKeptByImport}), by
+	 * the export in {@code unzippedDir}, atomically: a failure leaves the old content (ENTRYSTORE-1064). Requires
+	 * Administer on the context, checked before the upload is read.
+	 *
+	 * <p>Parses the export and moves it to the context's URIs first. Then, while creates in the context and a second
+	 * import of it are refused, reads what to remove without the repository monitor, which scans the store without an
+	 * index starting with the context. The monitor is held for one transaction that reads again the entries edited
+	 * meanwhile (see {@link EntryPurge}), removes what was read and adds the imported statements, with the index
+	 * triples and the counter of the imported entry graphs in place of those of the replaced entries.
+	 */
 	private void importContextFromUnzippedDir(Entry contextEntry, File srcFile, File unzippedDir) throws RepositoryException, IOException {
 		Date before = new Date();
+		String contextId = contextEntry.getId();
+		ContextImpl cont = (ContextImpl) getContext(contextId);
+		if (cont == null) {
+			throw new ContextRemovalPendingException("Context " + contextId + " has been removed");
+		}
+		cont.checkAccess(null, AccessProperty.Administer);
 		FileOperations.unzipFile(srcFile, unzippedDir);
 
 		File propFile = new File(unzippedDir, "export.properties");
@@ -326,240 +361,308 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			throw new org.entrystore.repository.RepositoryException("Failed to parse RDF data from the import file", e);
 		}
 
-		// remove the old entries and add the parsed statements in one transaction, so a failure restores
-		// the previous content of the context (ENTRYSTORE-1064); disk side effects cannot be rolled back
-		// and therefore happen only after a successful commit
-
-		long amountTriples = 0;
-		long importedTriples = 0;
-		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
-
-		ContextImpl cont = (ContextImpl) getContext(contextEntry.getId());
-		List<EntryImpl> removedEntries = new ArrayList<>();
-		List<DataImpl> deferredFileDeletions = new ArrayList<>();
-		List<EntryImpl> survivingLists = new ArrayList<>();
+		ImportedStatements imported;
+		try {
+			imported = moveToContext(collector.getStatements(), cont, props, id2name);
+		} catch (IllegalArgumentException e) {
+			// an IRI of the upload that java.net.URI rejects
+			throw new org.entrystore.repository.RepositoryException("Failed to import context data", e);
+		} catch (AuthorizationException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			// e.g. a principal lookup in the store failed, which must not read as a bad upload
+			throw new IllegalStateException("Failed to move the export to context " + contextId, e);
+		}
+		collector.clear();
+		int importedCount = imported.statements().size();
 
 		synchronized (this.entry.repository) {
 			// checked under the monitor: a removal that committed while the import was being read must win
-			if (cont == null || cont.isDeleted()) {
-				throw new ContextRemovalPendingException("Context " + contextEntry.getId() + " has been removed");
+			if (cont.isDeleted()) {
+				throw new ContextRemovalPendingException("Context " + contextId + " has been removed");
 			}
-			log.info("Importing context from stream");
+			if (!importsPending.add(contextId)) {
+				throw new ContextImportPendingException("Context " + contextId + " is being imported");
+			}
+		}
+		try {
+			ImportPlan plan;
+			try {
+				plan = planImport(cont);
+			} catch (AuthorizationException e) {
+				throw e;
+			} catch (RuntimeException e) {
+				// the store or its data failed, not the upload, which a RepositoryException would be answered as
+				throw new IllegalStateException("Failed to plan the import of context " + contextId, e);
+			}
+			long held = commitImport(cont, plan, imported);
+
+			// committed, so each step below only logs a failure; the removed entries' files go before the
+			// imported ones, which may have the same names, are copied
+			plan.purge().afterPublish();
+			// the import changed their members and fired nothing; invalidated under the monitor, so listeners read
+			// the committed ones
+			List<EntryImpl> pruned = plan.purge().prunedLists();
+			for (EntryImpl keptList : plan.keptLists()) {
+				if (!pruned.contains(keptList)) {
+					entry.getRepositoryManager().fireRepositoryEvent(
+							new RepositoryEventObject(keptList, RepositoryEvent.ResourceUpdated));
+				}
+			}
+			copyImportedFiles(contextId, unzippedDir);
+
+			log.info("Import finished in {} ms, holding the repository monitor for {} ms",
+					new Date().getTime() - before.getTime(), held);
+			log.info("Imported {} triples", importedCount);
+			log.info("Skipped {} triples", imported.skipped());
+		} finally {
+			importsPending.remove(contextId);
+		}
+	}
+
+	/**
+	 * The statements an import adds, moved to the context, with the index triples and the id counter of the imported
+	 * entry graphs, and how many exported statements were skipped.
+	 */
+	private record ImportedStatements(Set<Statement> statements, List<Statement> index, int counter, long skipped) {
+	}
+
+	/** The removal of the entries an import replaces, and the lists it keeps, whose members it may change. */
+	private record ImportPlan(EntryPurge purge, List<EntryImpl> keptLists) {
+	}
+
+	/**
+	 * Moves the exported statements to the context: graphs, subjects and objects in the exported context's namespace,
+	 * or naming its entry, resource, metadata or relations, are renamed, and the principals that creator, contributor,
+	 * ACL and deleted-by statements name are found by their id or name. A statement is skipped if it has no graph, if
+	 * its graph is not one an export of the context holds (see {@link #isExportedGraph}), if its principal is unknown,
+	 * or if it repeats one moved before. Derives the index triples and the counter from the imported entry graphs as
+	 * {@link ContextImpl#reIndex()} does.
+	 */
+	private ImportedStatements moveToContext(Collection<Statement> exported, ContextImpl cont, Properties props,
+			Map<String, String> id2name) {
+		Entry contextEntry = cont.getEntry();
+		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
+		ValueFactory vf = entry.repository.getValueFactory();
+
+		String oldContextNS = withTrailingSlash(props.getProperty("contextResourceURI"));
+		String newContextNS = withTrailingSlash(contextEntry.getResourceURI().toString());
+		Map<String, String> renamed = new HashMap<>();
+		renameIfExported(renamed, props.getProperty("contextEntryURI"), contextEntry.getEntryURI());
+		renameIfExported(renamed, props.getProperty("contextResourceURI"), contextEntry.getResourceURI());
+		renameIfExported(renamed, props.getProperty("contextMetadataURI"), contextEntry.getLocalMetadataURI());
+		renameIfExported(renamed, props.getProperty("contextRelationURI"), contextEntry.getRelationURI());
+		Set<String> contextEntryGraphs = Set.of(contextEntry.getEntryURI().toString(),
+				contextEntry.getLocalMetadataURI().toString(), contextEntry.getRelationURI().toString());
+		log.info("Moving the export from {} to {}", oldContextNS, newContextNS);
+
+		Set<Statement> moved = new LinkedHashSet<>();
+		List<Statement> index = new ArrayList<>();
+		int counter = 0;
+		long skipped = 0;
+		long outsideContext = 0;
+		for (Statement s : exported) {
+			org.eclipse.rdf4j.model.Resource context = s.getContext();
+			if (context == null) {
+				log.warn("No named graph information provided, ignoring triple");
+				skipped++;
+				continue;
+			}
+			if (context instanceof IRI contextIRI) {
+				context = moveIRI(contextIRI, oldContextNS, newContextNS, renamed, vf);
+			}
+			if (!isExportedGraph(context, newContextNS, contextEntryGraphs)) {
+				outsideContext++;
+				skipped++;
+				continue;
+			}
+
+			org.eclipse.rdf4j.model.Resource subject = s.getSubject();
+			IRI predicate = s.getPredicate();
+			Value object = s.getObject();
+
+			if (predicate.equals(RepositoryProperties.Creator) ||
+					predicate.equals(RepositoryProperties.Contributor) ||
+					predicate.equals(RepositoryProperties.Read) ||
+					predicate.equals(RepositoryProperties.Write) ||
+					predicate.equals(RepositoryProperties.DeletedBy)) {
+				String oldUserID = URISplit.getLastSegment(object.stringValue());
+				String oldUserName = id2name.get(oldUserID);
+				Entry pE = oldUserName == null ? pm.get(oldUserID) : pm.getPrincipalEntry(oldUserName);
+				if (pE == null || pE.getResourceURI() == null) {
+					log.info("Unable to detect principal for ID {}, skipping", oldUserID);
+					skipped++;
+					continue;
+				}
+				object = vf.createIRI(pE.getResourceURI().toString());
+			}
+
+			if (subject instanceof IRI subjectIRI) {
+				subject = moveIRI(subjectIRI, oldContextNS, newContextNS, renamed, vf);
+			}
+			if (object instanceof IRI objectIRI) {
+				object = moveIRI(objectIRI, oldContextNS, newContextNS, renamed, vf);
+			}
+
+			if (!moved.add(vf.createStatement(subject, predicate, object, context))) {
+				skipped++;
+				continue;
+			}
+			boolean resource = predicate.equals(RepositoryProperties.resource);
+			if (!resource && !predicate.equals(RepositoryProperties.externalMetadata)
+					|| !(object instanceof org.eclipse.rdf4j.model.Resource indexed)) {
+				continue;
+			}
+			Optional<String> entryId = entryIdOf(context, cont.id);
+			if (entryId.isEmpty()) {
+				continue;
+			}
+			index.add(vf.createStatement(indexed,
+					resource ? RepositoryProperties.resHasEntry : RepositoryProperties.mdHasEntry, context,
+					cont.resourceURI));
+			if (resource) {
+				try {
+					counter = Math.max(counter, Integer.parseInt(entryId.get()));
+				} catch (NumberFormatException ignored) {
+					// an id such as _top, or one beyond the int range the counter is read back in, takes no number
+				}
+			}
+		}
+		if (outsideContext > 0) {
+			log.warn("Skipped {} statements of the import in graphs outside context {}", outsideContext, cont.id);
+		}
+		return new ImportedStatements(moved, index, counter, skipped);
+	}
+
+	/**
+	 * Whether a graph, moved to the context, is one an export of the context holds: one in its namespace, or the
+	 * context entry's own entry, metadata or relations graph. The context's index graph is none of them.
+	 */
+	private static boolean isExportedGraph(org.eclipse.rdf4j.model.Resource graph, String contextNS,
+			Set<String> contextEntryGraphs) {
+		return graph instanceof IRI iri
+				&& (iri.stringValue().startsWith(contextNS) || contextEntryGraphs.contains(iri.stringValue()));
+	}
+
+	private static String withTrailingSlash(String uri) {
+		return uri.endsWith("/") ? uri : uri + "/";
+	}
+
+	private static void renameIfExported(Map<String, String> renamed, String exported, URI imported) {
+		if (exported != null) {
+			renamed.put(exported, imported.toString());
+		}
+	}
+
+	/** The IRI moved to the context, or the same instance where it names nothing of the exported context. */
+	private static IRI moveIRI(IRI iri, String oldContextNS, String newContextNS, Map<String, String> renamed,
+			ValueFactory vf) {
+		String uri = iri.stringValue();
+		if (uri.startsWith(oldContextNS)) {
+			return vf.createIRI(uri.replace(oldContextNS, newContextNS));
+		}
+		String moved = renamed.get(uri);
+		return moved != null ? vf.createIRI(moved) : iri;
+	}
+
+	/** The id of the entry whose entry graph {@code graph} is, if it is one of the context's. */
+	private Optional<String> entryIdOf(org.eclipse.rdf4j.model.Resource graph, String contextId) {
+		if (!(graph instanceof IRI)) {
+			return Optional.empty();
+		}
+		return URISplit.of(URI.create(graph.stringValue()), entry.getRepositoryManager().getRepositoryURL())
+				.filter(split -> split.getUriType() == URIType.MetaMetadata && contextId.equals(split.getContextId()))
+				.map(URISplit::getId);
+	}
+
+	/**
+	 * Plans removing the entries the import replaces, as the store's index graph names them, since the in-memory index
+	 * skips a statement it cannot parse (ENTRYSTORE-1095). Reads again, still without the monitor, the entries edited
+	 * while the plan was read.
+	 */
+	private ImportPlan planImport(ContextImpl cont) {
+		ValueFactory vf = entry.repository.getValueFactory();
+		Set<IRI> replaced = new LinkedHashSet<>();
+		List<EntryImpl> keptLists = new ArrayList<>();
+		for (URI child : cont.getChildEntryURIsFromStore()) {
+			if (!cont.isKeptByImport(child)) {
+				replaced.add(vf.createIRI(child.toString()));
+			} else if (cont.getByEntryURI(child) instanceof EntryImpl kept && kept.getGraphType() == GraphType.List) {
+				keptLists.add(kept);
+			}
+		}
+		EntryPurge purge = EntryPurge.plan(cont, replaced);
+		try (RepositoryConnection reader = entry.getRepository().getConnection()) {
+			purge.refresh(reader);
+		}
+		whileImportPrepares.run();
+		log.info("Removing {} entries ({} statements) of context {}", replaced.size(), purge.statementCount(),
+				cont.id);
+		return new ImportPlan(purge, keptLists);
+	}
+
+	/**
+	 * Removes the planned entries and adds the imported statements in one transaction under the monitor, and rewrites
+	 * the context's index triples and counter. Then, still under the monitor, publishes the removal and drops what
+	 * memory holds of the context's indexes and of the lists kept, whose members the import may have changed.
+	 *
+	 * @return how long the monitor was held, in milliseconds
+	 */
+	private long commitImport(ContextImpl cont, ImportPlan plan, ImportedStatements imported) {
+		synchronized (this.entry.repository) {
+			long start = System.currentTimeMillis();
+			if (cont.isDeleted()) {
+				throw new ContextRemovalPendingException("Context " + cont.id + " has been removed");
+			}
 			RepositoryConnection rc = null;
 			try {
 				rc = entry.getRepository().getConnection();
 				rc.begin();
-
-				log.info("Removing old entries from context...");
-				cont.removeNonSystemEntries(rc, removedEntries, deferredFileDeletions, survivingLists);
-
-				String oldBaseURI = srcBaseURI;
-				if (!oldBaseURI.endsWith("/")) {
-					oldBaseURI += "/";
+				int changed = plan.purge().refresh(rc);
+				if (changed > 0) {
+					log.info("{} entries of context {} changed during the import and were read again", changed,
+							cont.id);
 				}
-				String newBaseURI = entry.getRepositoryManager().getRepositoryURL().toString();
-				if (!newBaseURI.endsWith("/")) {
-					newBaseURI += "/";
-				}
-				String oldContextID = URISplit.getLastSegment(srcContextResourceURI);
-				String newContextID = contextEntry.getId();
-
-				String oldContextResourceURI = srcContextResourceURI;
-				String oldContextEntryURI = srcContextEntryURI;
-				String oldContextMetadataURI = srcContextMetadataURI;
-				String oldContextRelationURI = srcContextRelationURI;
-				String oldContextNS = oldContextResourceURI;
-				if (!oldContextNS.endsWith("/")) {
-					oldContextNS += "/";
-				}
-				String newContextNS = contextEntry.getResourceURI().toString();
-				if (!newContextNS.endsWith("/")) {
-					newContextNS += "/";
-				}
-
-				log.info("Old context ID: {}", oldContextID);
-				log.info("New context ID: {}", newContextID);
-				log.info("Old context resource URI: {}", oldContextResourceURI);
-				log.info("New context resource URI: {}", contextEntry.getResourceURI().toString());
-				log.info("Old context entry URI: {}", oldContextEntryURI);
-				log.info("New context entry URI: {}", contextEntry.getEntryURI().toString());
-				log.info("Old context metadata URI: {}", oldContextMetadataURI);
-				log.info("New context metadata URI: {}", contextEntry.getLocalMetadataURI().toString());
-				log.info("Old context relation URI: {}", oldContextRelationURI);
-				log.info("New context relation URI: {}", contextEntry.getRelationURI().toString());
-
-				// iterate over all statements and add them to the repository
-
-				ValueFactory vf = rc.getValueFactory();
-				for (Statement s : collector.getStatements()) {
-					amountTriples++;
-					org.eclipse.rdf4j.model.Resource context = s.getContext();
-					if (context == null) {
-						log.warn("No named graph information provided, ignoring triple");
-						continue;
-					}
-
-					org.eclipse.rdf4j.model.Resource subject = s.getSubject();
-					IRI predicate = s.getPredicate();
-					Value object = s.getObject();
-
-					if (predicate.equals(RepositoryProperties.Creator) ||
-							predicate.equals(RepositoryProperties.Contributor) ||
-							predicate.equals(RepositoryProperties.Read) ||
-							predicate.equals(RepositoryProperties.Write) ||
-							predicate.equals(RepositoryProperties.DeletedBy)) {
-						String oldUserID = URISplit.getLastSegment(object.stringValue());
-						log.info("Old user URI: {}", object);
-						log.info("Old user ID: {}", oldUserID);
-						String oldUserName = id2name.get(oldUserID);
-						URI newUserURI = null;
-						Entry pE = null;
-						if (oldUserName == null) {
-							pE = pm.get(oldUserID);
-						} else {
-							pE = pm.getPrincipalEntry(oldUserName);
-						}
-						if (pE != null) {
-							newUserURI = pE.getResourceURI();
-						}
-						if (newUserURI == null) {
-							log.info("Unable to detect principal for ID {}, skipping", oldUserID);
-							continue;
-						}
-						object = vf.createIRI(newUserURI.toString());
-						log.info("Created principal URI for user {}:{}: {}", oldUserID, oldUserName, object.stringValue());
-					}
-
-					if (subject instanceof IRI) {
-						String sS = subject.stringValue();
-						if (sS.startsWith(oldContextNS)) {
-							subject = vf.createIRI(sS.replace(oldContextNS, newContextNS));
-						} else if (sS.equals(oldContextEntryURI)) {
-							subject = vf.createIRI(contextEntry.getEntryURI().toString());
-						} else if (sS.equals(oldContextResourceURI)) {
-							subject = vf.createIRI(contextEntry.getResourceURI().toString());
-						} else if (sS.equals(oldContextMetadataURI)) {
-							subject = vf.createIRI(contextEntry.getLocalMetadataURI().toString());
-						} else if (sS.equals(oldContextRelationURI)) {
-							subject = vf.createIRI(contextEntry.getRelationURI().toString());
-						}
-					}
-
-					if (object instanceof IRI) {
-						String oS = object.stringValue();
-						if (oS.startsWith(oldContextNS)) {
-							object = vf.createIRI(oS.replace(oldContextNS, newContextNS));
-						} else if (oS.equals(oldContextEntryURI)) {
-							object = vf.createIRI(contextEntry.getEntryURI().toString());
-						} else if (oS.equals(oldContextResourceURI)) {
-							object = vf.createIRI(contextEntry.getResourceURI().toString());
-						} else if (oS.equals(oldContextMetadataURI)) {
-							object = vf.createIRI(contextEntry.getLocalMetadataURI().toString());
-						} else if (oS.equals(oldContextRelationURI)) {
-							object = vf.createIRI(contextEntry.getRelationURI().toString());
-						}
-					}
-
-					if (context instanceof IRI) {
-						String cS = context.stringValue();
-
-//						// dirty hack to skip metadata on portfolio
-//						if (cS.contains("/_contexts/metadata/")) {
-//							log.info("Skipping metadata triple for portfolio: " + s.toString());
-//							continue;
-//						}
-
-						if (cS.startsWith(oldContextNS)) {
-							context = vf.createIRI(cS.replace(oldContextNS, newContextNS));
-						} else if (cS.equals(oldContextEntryURI)) {
-							context = vf.createIRI(contextEntry.getEntryURI().toString());
-						} else if (cS.equals(oldContextResourceURI)) {
-							context = vf.createIRI(contextEntry.getResourceURI().toString());
-						} else if (cS.equals(oldContextMetadataURI)) {
-							context = vf.createIRI(contextEntry.getLocalMetadataURI().toString());
-						} else if (cS.equals(oldContextRelationURI)) {
-							context = vf.createIRI(contextEntry.getRelationURI().toString());
-						}
-					}
-
-					// we check first whether such a stmnt already exists
-					Statement newStmnt = vf.createStatement(subject, predicate, object, context);
-					if (!rc.hasStatement(newStmnt, false, context)) {
-						importedTriples++;
-						log.info("Adding statement to repository: {}", newStmnt.toString());
-						rc.add(newStmnt, context);
-					} else {
-						log.warn("Statement already exists, skipping: {}", newStmnt.toString());
-					}
-				}
-
+				plan.purge().apply(rc);
+				rc.remove(cont.resourceURI, RepositoryProperties.counter, null, cont.resourceURI);
+				rc.add(cont.resourceURI, RepositoryProperties.counter,
+						rc.getValueFactory().createLiteral(imported.counter()), cont.resourceURI);
+				rc.add(imported.index());
+				rc.add(imported.statements());
 				rc.commit();
-				// under the monitor, so no list write computes from members a reader cached during the import;
-				// the field, not getResource(), so nothing here can throw and send a committed import to the rollback
-				for (EntryImpl survivingList : survivingLists) {
-					if (survivingList.resource instanceof ListImpl list) {
-						list.invalidateChildren();
-					}
-				}
 			} catch (Exception e) {
 				if (rc != null) {
-					try {
-						rc.rollback();
-					} catch (Exception rollbackEx) {
-						log.error("Failed to roll back import transaction", rollbackEx);
-					}
-					try {
-						((EntryImpl) cont.getEntry()).refreshFromRepository(rc);
-					} catch (Exception refreshEx) {
-						log.error("Failed to refresh context entry after rollback, in-memory modification date may be stale", refreshEx);
-					}
-					for (EntryImpl survivingList : survivingLists) {
-						try {
-							survivingList.refreshFromRepository(rc);
-						} catch (Exception refreshEx) {
-							log.error("Failed to refresh surviving list entry {} after rollback, in-memory state may be stale",
-									survivingList.getEntryURI(), refreshEx);
-						}
-					}
+					plan.purge().rollBack(rc);
 				}
-				cont.recoverFromFailedRemoval(removedEntries);
-				throw new org.entrystore.repository.RepositoryException("Failed to import context data", e);
+				throw new IllegalStateException("Failed to commit the import of context " + cont.id, e);
 			} finally {
 				if (rc != null) {
 					rc.close();
 				}
 			}
-		}
-
-		// committed, so the import can no longer be reported as failed: evict stale objects, update Solr
-		// and delete the removed entries' files before new ones with the same names are copied; each of
-		// the steps below is failure-isolated and only logged
-
-		cont.evictFromCaches(removedEntries);
-		for (EntryImpl removedEntry : removedEntries) {
-			entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(removedEntry, RepositoryEvent.EntryDeleted));
-		}
-		// the import changed their members and fired nothing; invalidated above, so listeners read the committed ones
-		for (EntryImpl survivingList : survivingLists) {
-			entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(survivingList, RepositoryEvent.ResourceUpdated));
-		}
-		for (DataImpl removedData : deferredFileDeletions) {
+			// committed, so a failure is only logged; under the monitor, so no list write computes from members a
+			// reader cached during the import
 			try {
-				if (!removedData.deleteFile()) {
-					log.warn("Failed to delete data file of removed entry {}, truncating it instead",
-							removedData.getEntry().getEntryURI());
-					removedData.truncateFile();
-				}
-			} catch (Exception e) {
-				log.error("Failed to delete data file of removed entry {}", removedData.getEntry().getEntryURI(), e);
+				plan.purge().publish();
+			} catch (RuntimeException e) {
+				log.error("Context {} was imported, but releasing what memory holds of the replaced entries failed: {}",
+						cont.id, e.getMessage(), e);
 			}
+			for (EntryImpl keptList : plan.keptLists()) {
+				// the field, not getResource(), which may load the resource and fail
+				if (keptList.resource instanceof ListImpl list) {
+					list.invalidateChildren();
+				}
+			}
+			return System.currentTimeMillis() - start;
 		}
+	}
 
-		// copy resources/files to data dir of context
-
+	/** Copies the imported resource files to the context's data folder; a failure is only logged. */
+	private void copyImportedFiles(String contextId, File unzippedDir) {
 		List<String> failedResourceCopies = new ArrayList<>();
 		try {
-			File dstDir = new File(entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER), contextEntry.getId());
+			File dstDir = new File(entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER), contextId);
 			if (!dstDir.exists() && !dstDir.mkdirs()) {
 				log.error("Could not create data directory {}, skipping copying of imported resource files", dstDir);
 			} else {
@@ -588,21 +691,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		if (!failedResourceCopies.isEmpty()) {
 			log.error("Import of context {} committed, but {} resource file(s) could not be copied "
 							+ "and the entries with the following ids have no data: {}",
-					contextEntry.getId(), failedResourceCopies.size(), failedResourceCopies);
+					contextId, failedResourceCopies.size(), failedResourceCopies);
 		}
-
-		// reindex the context to get everything reloaded
-
-		try {
-			log.info("Reindexing {}", cont.getEntry().getEntryURI());
-			cont.reIndex();
-		} catch (Exception e) {
-			log.error("Failed to reindex context {} after import", cont.getEntry().getEntryURI(), e);
-		}
-
-		log.info("Import finished in {} ms", new Date().getTime() - before.getTime());
-		log.info("Imported {} triples", importedTriples);
-		log.info("Skipped {} triples", amountTriples - importedTriples);
 	}
 
 	/** FIXME: rewrite

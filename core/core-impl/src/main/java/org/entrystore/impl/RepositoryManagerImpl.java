@@ -165,6 +165,14 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	static boolean trackDeletedEntries;
 
+	/**
+	 * Whether reading one named graph of the main store scans the whole store: a native or LMDB store without a
+	 * configured index starting with the context. Unset indexes count, since the indexes an existing store was created
+	 * with are unknown here, and RDF4J creates spoc,posc.
+	 * Package-private and non-final so tests can make a memory store read as one that scans.
+	 */
+	volatile boolean readingGraphsByScan;
+
 	private static String VERSION = null;
 
 	public RepositoryManagerImpl(String baseURL, Config configuration) {
@@ -193,6 +201,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				String indexes = configuration.getString(Settings.STORE_INDEXES);
 				checkAndUpgradeNativeStore(path, indexes);
 				log.info("Main repository: using Native Store at {} with indexes {}", path, indexes);
+				readingGraphsByScan = !hasContextFirstIndex(indexes);
 				warnIfNoContextFirstIndex(indexes);
 				NativeStore store;
 				if (indexes != null) {
@@ -240,6 +249,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				File path = new File(configuration.getURI(Settings.STORE_PATH));
 				String indexes = configuration.getString(Settings.STORE_INDEXES);
 				log.info("Main repository: using LMDB Store at {} with indexes {}", path, indexes);
+				readingGraphsByScan = !hasContextFirstIndex(indexes);
 				warnIfNoContextFirstIndex(indexes);
 				LmdbStore store;
 				if (indexes != null) {
@@ -858,18 +868,19 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	/**
-	 * Warns when the main store may lack a triple index starting with the context: removing a context then reads
-	 * each of its graphs with a scan of the whole store.
+	 * Warns when the main store may lack a triple index starting with the context: removing or importing a context
+	 * then reads graphs with a scan of the whole store.
 	 */
 	private static void warnIfNoContextFirstIndex(String indexes) {
 		if (indexes == null) {
 			log.warn("{} is not set, so the main store keeps the triple indexes it was created with; RDF4J creates "
-					+ "spoc,posc, which has no index starting with the context (c) and makes removing a context "
-					+ "scan the whole store for each of its graphs. Set it to cspo,posc", Settings.STORE_INDEXES);
+					+ "spoc,posc, which has no index starting with the context (c) and makes removing or importing "
+					+ "a context scan the whole store for the graphs it reads. Set it to cspo,posc",
+					Settings.STORE_INDEXES);
 		} else if (!hasContextFirstIndex(indexes)) {
 			log.warn("The main store has no triple index starting with the context (c) in {}={}, which makes "
-					+ "removing a context scan the whole store for each of its graphs. Add cspo, e.g. cspo,posc",
-					Settings.STORE_INDEXES, indexes);
+					+ "removing or importing a context scan the whole store for the graphs it reads. Add cspo, e.g. "
+					+ "cspo,posc", Settings.STORE_INDEXES, indexes);
 		}
 	}
 

@@ -169,13 +169,14 @@ public class EntryImpl implements Entry {
 		}
 	}
 
-	/**
-	 * Loads entry information from an existing list of statements.
-	 *
-	 * @throws RepositoryException
-	 */
+	/** Loads the entry from its entry graph, read through {@code rc}. */
 	protected boolean load(RepositoryConnection rc) throws RepositoryException {
-		if (loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, this.entryURI)))) {
+		return load(Iterations.asList(rc.getStatements(null, null, null, false, this.entryURI)));
+	}
+
+	/** Loads the entry from the statements of its entry graph, which the caller has read. */
+	boolean load(List<Statement> entryGraph) {
+		if (loadFromStatements(entryGraph)) {
 			initMetadataObjects();
 			return true;
 		}
@@ -1789,30 +1790,16 @@ public class EntryImpl implements Entry {
 		return new LinkedHashModel();
 	}
 
-	public void remove(RepositoryConnection rc) throws Exception {
-		remove(rc, null);
-	}
-
-	/**
-	 * Clears the deleted flag set by {@link #remove(RepositoryConnection)} after the surrounding transaction
-	 * was rolled back, so references held across the failed removal stop reporting the entry as deleted while
-	 * the repository still contains it.
-	 */
-	protected void resetDeleted() {
-		deleted = false;
-	}
-
-	/** Flags an entry removed together with its context, whose graphs are deleted without loading it. */
+	/** Flags an entry removed without {@link #remove(RepositoryConnection)}: with its context, or by a purge. */
 	void markDeleted() {
 		deleted = true;
 	}
 
 	/**
-	 * Removes the entry as part of the supplied transaction. If {@code deferredFileDeletions} is non-null,
-	 * file resources are collected there instead of being deleted from disk here, so the caller can delete
-	 * them after a successful commit — a disk deletion cannot be rolled back with the transaction.
+	 * Removes the entry within the supplied transaction, except a data file, which is deleted at once and not restored
+	 * by a rollback; see {@link EntryPurge} for removing many at once.
 	 */
-	protected void remove(RepositoryConnection rc, List<DataImpl> deferredFileDeletions) throws Exception {
+	public void remove(RepositoryConnection rc) throws Exception {
 		// TODO the handling of removal is non-atomic and should be rewritten to take
 		//  failures (i.e. rollbacks of the ongoing transaction) into consideration
 		deleted = true;
@@ -1840,13 +1827,7 @@ public class EntryImpl implements Entry {
 		cachedExternalMetadata = null;
 
 		if (resource != null && resource.isRemovable()) {
-			if (deferredFileDeletions != null && resource instanceof DataImpl data) {
-				if (data.hasFile()) {
-					deferredFileDeletions.add(data);
-				}
-			} else {
-				resource.remove(rc);
-			}
+			resource.remove(rc);
 			resource = null;
 		}
 	}

@@ -50,6 +50,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -129,7 +130,8 @@ public class ListImpl extends RDFResource implements List {
 		setChildren(loadChildren(graph));
 	}
 
-	private Vector<URI> loadChildren(Model graph) {
+	/** The members a list graph holds by position; a position without a statement holds null. */
+	static Vector<URI> loadChildren(Iterable<Statement> graph) {
 		if (graph == null) {
 			throw new IllegalArgumentException("Graph must not be null");
 		}
@@ -230,9 +232,8 @@ public class ListImpl extends RDFResource implements List {
 	/**
 	 * Persists exactly the members the caller holds. It must never re-derive them from the field or the store,
 	 * because neither carries the caller's uncommitted change: the field still holds the pre-change membership
-	 * whenever the caller built its vector without assigning it, as {@link #removeChildrenInTransaction} does
-	 * from its own {@code rc.getStatements}, and when the field is null {@link #loadChildren()} reaches
-	 * {@link #getGraph()}, which opens a connection that cannot see the caller's transaction either.
+	 * whenever the caller built its vector without assigning it, and when the field is null {@link #loadChildren()}
+	 * reaches {@link #getGraph()}, which opens a connection that cannot see the caller's transaction either.
 	 * Package-private so a same-package test can hold or fail a writer inside the member-list write.
 	 */
 	void saveChildren(Vector<URI> childrenToSave, RepositoryConnection rc) throws RepositoryException {
@@ -454,8 +455,9 @@ public class ListImpl extends RDFResource implements List {
 	/**
 	 * Copies the given entry into this list with its data and graphs, and the members of a list recursively, adding
 	 * every entry it creates to {@code copies}; users, groups and contexts are not copied, returning null. An
-	 * authorization failure keeps its type, so that it is answered as such; any other runtime failure is rethrown as
-	 * a RepositoryException, while QuotaException and IOException propagate unchanged.
+	 * authorization failure or a refusal, such as a create in a context being imported, keeps its type, so that it is
+	 * answered as such; any other runtime failure is rethrown as a RepositoryException, while QuotaException and
+	 * IOException propagate unchanged.
 	 */
 	private EntryImpl _copyEntryHere(EntryImpl entryToCopy, java.util.List<EntryImpl> copies) throws QuotaException, IOException {
 		GraphType bt = entryToCopy.getGraphType();
@@ -478,7 +480,7 @@ public class ListImpl extends RDFResource implements List {
 				}
 			}
 			return newEntry;
-		} catch (AuthorizationException e) {
+		} catch (AuthorizationException | DisallowedException e) {
 			throw e;
 		} catch (RuntimeException e) {
 			throw new org.entrystore.repository.RepositoryException("Failed to copy entry (" + entryToCopy.getEntryURI() + "):" + e.getMessage(), e);
@@ -983,25 +985,58 @@ public class ListImpl extends RDFResource implements List {
 	}
 
 	/**
-	 * Removes several children from this list as part of the supplied transaction — one graph read and one
-	 * rewrite for the whole batch — without firing repository events or checking for orphans. Reads and
-	 * writes go through the supplied connection only, so earlier uncommitted removals in the same transaction
-	 * are seen and nothing uncommitted is published to concurrent readers; the in-memory members are cleared so
-	 * they are reloaded on next access whatever the transaction outcome. The list entry's modification date
-	 * and contributors are updated in memory, so after a rollback the caller must refresh it.
-	 * <p>
-	 * Clearing them here is not on its own enough: a reader that does not hold the transaction can reload the
-	 * members from the pre-commit store while it is open, so a caller that needs them current must call
-	 * {@link #invalidateChildren()} again after the commit.
+	 * Removes {@code members} from this list within the caller's transaction, without events or the orphan check. It
+	 * reads the list by its subject and removes and adds only the positions that change, where
+	 * {@link #saveChildren(Vector, RepositoryConnection)} clears the graph, which scans the store without an index
+	 * starting with the context. Leaves the member positions as that method writes them, and like it stamps the
+	 * list modified while members remain. The caller holds the repository monitor, calls {@link #invalidateChildren()}
+	 * after the commit and refreshes the list entry after a rollback.
+	 *
+	 * @return whether a member was removed
 	 */
-	protected void removeChildrenInTransaction(Collection<URI> childrenToRemove, RepositoryConnection rc) throws RepositoryException {
+	boolean pruneExactly(RepositoryConnection rc, Collection<URI> members) {
 		synchronized (this.entry.repository) {
-			Model graph = new LinkedHashModel(Iterations.asList(rc.getStatements(this.resourceURI, null, null, false, this.resourceURI)));
-			Vector<URI> inTransactionChildren = loadChildren(graph);
-			if (inTransactionChildren.removeAll(childrenToRemove)) {
-				saveChildren(inTransactionChildren, rc);
+			java.util.List<Statement> positions = new ArrayList<>();
+			try (RepositoryResult<Statement> statements = rc.getStatements(this.resourceURI, null, null, false,
+					this.resourceURI)) {
+				for (Statement statement : statements) {
+					if (statement.getPredicate().stringValue().startsWith(RDF.NAMESPACE + "_")) {
+						positions.add(statement);
+					}
+				}
 			}
-			invalidateChildren();
+			Vector<URI> current = loadChildren(positions);
+			if (current.stream().noneMatch(members::contains)) {
+				return false;
+			}
+			ValueFactory vf = rc.getValueFactory();
+			Set<Statement> kept = new LinkedHashSet<>();
+			for (URI member : current) {
+				if (member != null && !members.contains(member)) {
+					kept.add(vf.createStatement(this.resourceURI, vf.createIRI(RDF.NAMESPACE + "_" + (kept.size() + 1)),
+							vf.createIRI(member.toString())));
+				}
+			}
+			Set<Statement> existing = new HashSet<>();
+			for (Statement statement : positions) {
+				Statement triple = vf.createStatement(statement.getSubject(), statement.getPredicate(),
+						statement.getObject());
+				existing.add(triple);
+				if (!kept.contains(triple)) {
+					rc.remove(triple, this.resourceURI);
+				}
+			}
+			for (Statement triple : kept) {
+				if (!existing.contains(triple)) {
+					rc.add(triple, this.resourceURI);
+				}
+			}
+			if (kept.isEmpty()) {
+				rc.remove(this.resourceURI, RDF.TYPE, RDF.SEQ, this.resourceURI);
+			} else {
+				entry.registerEntryModified(rc, vf);
+			}
+			return true;
 		}
 	}
 

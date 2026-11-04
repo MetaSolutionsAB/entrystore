@@ -16,6 +16,11 @@
 
 package org.entrystore.rest.springboot.service;
 
+import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
+import org.entrystore.impl.EntryNamesContext;
+import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -23,6 +28,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,6 +39,10 @@ import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 class ContextServiceTest {
 
@@ -94,5 +104,21 @@ class ContextServiceTest {
 			assertEquals("data", new String(zis.readAllBytes(), StandardCharsets.UTF_8));
 			assertNull(zis.getNextEntry(), "no further entries expected");
 		}
+	}
+
+	@Test
+	void importContextDataFromFile_refusesAContextThatKeepsEntryNamesBeforeReadingTheUpload() {
+		RepositoryManagerImpl repositoryManager = mock(RepositoryManagerImpl.class);
+		ContextService service = new ContextService(repositoryManager, mock(ReservedNamesService.class),
+				mock(PrincipalManager.class));
+		EntryNamesContext principals = mock(EntryNamesContext.class);
+		Entry principalsEntry = mock(Entry.class);
+		when(principals.getEntry()).thenReturn(principalsEntry);
+		when(principalsEntry.getId()).thenReturn("_principals");
+		InputStream upload = mock(InputStream.class);
+
+		assertThrows(BadRequestException.class, () -> service.importContextDataFromFile(principals, upload));
+
+		verifyNoInteractions(repositoryManager, upload);
 	}
 }

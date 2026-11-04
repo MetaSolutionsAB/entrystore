@@ -27,6 +27,7 @@ import org.eclipse.rdf4j.rio.RDFHandlerException;
 import org.entrystore.AuthorizationException;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
@@ -179,6 +180,18 @@ public abstract class AbstractCoreTest {
 	/** Waits until the removed contexts' graphs, search documents and files have been deleted in the background. */
 	protected void awaitContextRemovals() throws Exception {
 		((ContextManagerImpl) cm).contextRemover.awaitIdle();
+	}
+
+	protected ContextImpl newContext() {
+		return (ContextImpl) cm.createResource(null, GraphType.Context, null, null).getResource();
+	}
+
+	/** Whether the store holds a statement in the named graph. */
+	protected boolean hasGraph(URI graph) {
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			return rc.hasStatement(null, null, null, false,
+					SimpleValueFactory.getInstance().createIRI(graph.toString()));
+		}
 	}
 
 	/**
