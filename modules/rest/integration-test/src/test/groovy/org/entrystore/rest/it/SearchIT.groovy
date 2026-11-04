@@ -92,8 +92,8 @@ class SearchIT extends BaseSpec {
 	static final String NGRAM_FIELD = 'metadata.predicate.literal.' + Hashing.hash(NGRAM_MARKER_IRI, HashType.MD5).substring(0, 8)
 	static final String NGRAM_VALUE = 'ngramsearchitheritage EU'
 
-	// Context-type join specs: one entry per context, each carrying a literal of CTX_TYPE_MARKER_IRI. The changing
-	// context's entry has its own value, so its type change cannot alter the entry sets of the other specs.
+	// Context-type join specs: one entry per context, each carrying a literal of CTX_TYPE_MARKER_IRI. The entries of
+	// the changing and the quote-typed context have their own values, so they cannot alter the other specs' entry sets.
 	static final String ESTERMS = 'http://entryscape.com/terms/'
 	static final String CTX_TYPE_MARKER_IRI = 'http://example.org/ns/searchIT-ctx-type-marker'
 	static final String CTX_TYPE_MARKER_FIELD = 'metadata.predicate.literal_s.' + Hashing.hash(CTX_TYPE_MARKER_IRI, HashType.MD5).substring(0, 8)
@@ -101,16 +101,21 @@ class SearchIT extends BaseSpec {
 	static final String CTX_TYPE_CHANGE_MARKER_VALUE = 'ctxtypechangemarker'
 	static final String CTX_TYPE_MARKER_QUERY = CTX_TYPE_MARKER_FIELD + ':' + CTX_TYPE_MARKER_VALUE
 	static final String CTX_TYPE_CHANGE_MARKER_QUERY = CTX_TYPE_MARKER_FIELD + ':' + CTX_TYPE_CHANGE_MARKER_VALUE
+	static final String CTX_TYPE_QUOTE_MARKER_VALUE = 'ctxtypequotemarker'
+	static final String CTX_TYPE_QUOTE_MARKER_QUERY = CTX_TYPE_MARKER_FIELD + ':' + CTX_TYPE_QUOTE_MARKER_VALUE
+	static final String QUOTE_TYPE = 'http://example.org/ns/searchIT\'quote-context'
 	static final String CATALOG_CTX = 'searchCtxTypeCatalog'
 	static final String CATALOG_PRIVATE_CTX = 'searchCtxTypeCatalogPrivate'
 	static final String WORKBENCH_CTX = 'searchCtxTypeWorkbench'
 	static final String UNTYPED_CTX = 'searchCtxTypeUntyped'
 	static final String CHANGING_CTX = 'searchCtxTypeChanging'
+	static final String QUOTE_CTX = 'searchCtxTypeQuote'
 	static final String CATALOG_ENTRY = 'searchCtxTypeCatalogEntry'
 	static final String CATALOG_PRIVATE_ENTRY = 'searchCtxTypeCatalogPrivateEntry'
 	static final String WORKBENCH_ENTRY = 'searchCtxTypeWorkbenchEntry'
 	static final String UNTYPED_ENTRY = 'searchCtxTypeUntypedEntry'
 	static final String CHANGING_ENTRY = 'searchCtxTypeChangingEntry'
+	static final String QUOTE_ENTRY = 'searchCtxTypeQuoteEntry'
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
@@ -274,11 +279,14 @@ class SearchIT extends BaseSpec {
 		putContextInfo(WORKBENCH_CTX, false, ESTERMS + 'WorkbenchContext')
 		getOrCreateContext([contextId: UNTYPED_CTX])
 		getOrCreateContext([contextId: CHANGING_CTX])
+		getOrCreateContext([contextId: QUOTE_CTX])
+		putContextInfo(QUOTE_CTX, false, QUOTE_TYPE)
 		createContextTypeEntry(CATALOG_CTX, CATALOG_ENTRY, CTX_TYPE_MARKER_VALUE)
 		createContextTypeEntry(CATALOG_PRIVATE_CTX, CATALOG_PRIVATE_ENTRY, CTX_TYPE_MARKER_VALUE)
 		createContextTypeEntry(WORKBENCH_CTX, WORKBENCH_ENTRY, CTX_TYPE_MARKER_VALUE)
 		createContextTypeEntry(UNTYPED_CTX, UNTYPED_ENTRY, CTX_TYPE_MARKER_VALUE)
 		createContextTypeEntry(CHANGING_CTX, CHANGING_ENTRY, CTX_TYPE_CHANGE_MARKER_VALUE)
+		createContextTypeEntry(QUOTE_CTX, QUOTE_ENTRY, CTX_TYPE_QUOTE_MARKER_VALUE)
 		// Decoy for the graphType:Context guard: a link whose resource is the Workbench context, typed as a Catalog context
 		def workbenchUri = EntryStoreClient.baseUrl + '/' + WORKBENCH_CTX
 		assert getOrCreateEntry(UNTYPED_CTX, [id: 'searchCtxTypeDecoy', entrytype: 'link', resource: workbenchUri],
@@ -1645,6 +1653,7 @@ class SearchIT extends BaseSpec {
 		'query'       | true   | ['CatalogContext']                     | [WORKBENCH_ENTRY, UNTYPED_ENTRY]
 		'filterQuery' | false  | ['CatalogContext']                     | [CATALOG_ENTRY, CATALOG_PRIVATE_ENTRY]
 		'filterQuery' | false  | ['CatalogContext', 'WorkbenchContext'] | [CATALOG_ENTRY, CATALOG_PRIVATE_ENTRY, WORKBENCH_ENTRY]
+		'filterQuery' | true   | ['CatalogContext']                     | [WORKBENCH_ENTRY, UNTYPED_ENTRY]
 	}
 
 	def "GET /search?type=solr with the context-type join should ignore a non-context entry whose resource is a context URI"() {
@@ -1691,6 +1700,34 @@ class SearchIT extends BaseSpec {
 			.until { entryIds(EntryStoreClient.getRequest(path)) == [CHANGING_ENTRY] as Set }
 	}
 
+	def "GET /search?type=solr with the context-type join should match a type URI containing an escaped '"() {
+		given:
+		def markedEntries = '(' + CTX_TYPE_MARKER_QUERY + ' OR ' + CTX_TYPE_QUOTE_MARKER_QUERY + ')'
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: markedEntries + ' AND ' + contextTypeFilterForUris([QUOTE_TYPE])]))
+
+		then: 'of the contexts with marked entries, only the quote-typed one matches'
+		entryIds(conn) == [QUOTE_ENTRY] as Set
+	}
+
+	def "GET /search?type=solr with the context-type join's + form in 'filterQuery' should need + sent as %252B"() {
+		given:
+		def plusFilter = "filter({!join from=resource to=context score=none " +
+			"v='+graphType:Context +rdfType:(\"${ESTERMS}CatalogContext\")'})"
+
+		when:
+		def onceEncoded = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: CTX_TYPE_MARKER_QUERY, filterQuery: plusFilter]))
+		def twiceEncoded = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: CTX_TYPE_MARKER_QUERY, filterQuery: plusFilter.replace('+', '%2B')]))
+
+		then: 'decoded a second time, a + sent as %2B becomes a space, and with q.op=OR the join takes every context'
+		entryIds(onceEncoded) == [CATALOG_ENTRY, CATALOG_PRIVATE_ENTRY, WORKBENCH_ENTRY, UNTYPED_ENTRY] as Set
+		entryIds(twiceEncoded) == [CATALOG_ENTRY, CATALOG_PRIVATE_ENTRY] as Set
+	}
+
 	/**
 	 * The shape entrystore.js builds in EntryStoreUtil.loadEntriesByResourceURIs: 20 resource URIs OR-ed into one
 	 * query, of which only the first one, searchEntryId's, exists.
@@ -1706,7 +1743,12 @@ class SearchIT extends BaseSpec {
 	 * namespace. AND, not +, so that it also survives the second URL-decoding of filterQuery.
 	 */
 	private static String contextTypeFilter(List<String> types) {
-		def values = types.collect { '"' + ESTERMS + it + '"' }.join(' OR ')
+		return contextTypeFilterForUris(types.collect { ESTERMS + it })
+	}
+
+	/** {@link #contextTypeFilter} for full type URIs, each ' escaped as \', since v='…' is quoted with '. */
+	private static String contextTypeFilterForUris(List<String> typeUris) {
+		def values = typeUris.collect { '"' + it.replace("'", "\\'") + '"' }.join(' OR ')
 		return "filter({!join from=resource to=context score=none v='graphType:Context AND rdfType:(" + values + ")'})"
 	}
 
