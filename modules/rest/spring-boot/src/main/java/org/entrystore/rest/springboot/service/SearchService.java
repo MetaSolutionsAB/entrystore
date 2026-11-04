@@ -132,7 +132,8 @@ public class SearchService {
 	/**
 	 * Runs a Solr query. The row count is clamped with {@link #clampLimit(int)} here as well, so the
 	 * {@code entrystore.solr.max-limit} cap holds for every caller. The query and each filter query reach Solr
-	 * unchanged, local params included: clients filter by context type with a join, which {@code SearchIT} pins.
+	 * unchanged, local params included, so callers check them with {@link SolrSearchInputValidator} first; clients
+	 * filter by context type with a join, which {@code SearchIT} pins.
 	 */
 	public QueryResultsDto findEntriesSolr(
 			String queryValue,

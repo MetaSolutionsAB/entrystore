@@ -365,10 +365,11 @@ class SolrSearchInputValidatorTest {
 	}
 
 	@Test
-	void validateQueryAcceptsASameCoreJoin() {
-		// the shape entrystore.js sends to filter by context type (ENTRYSTORE-1277)
-		assertDoesNotThrow(() -> validator.validateQuery(
-				"{!join from=resource to=context}rdfType:\"http://www.w3.org/ns/dcat#Catalog\""));
+	void validateQueryAcceptsTheContextTypeJoin() {
+		// the shape entrystore.js sends to filter by context type (ENTRYSTORE-1277), with a ' escaped in a type URI
+		assertDoesNotThrow(() -> validator.validateQuery("filter({!join from=resource to=context score=none "
+				+ "v='graphType:Context AND rdfType:(\"http://example.org/ns/o\\'type\" OR "
+				+ "\"http://entryscape.com/terms/CatalogContext\")'})"));
 	}
 
 	@Test
@@ -410,9 +411,20 @@ class SolrSearchInputValidatorTest {
 	}
 
 	@Test
-	void parseFilterQueriesAcceptsASameCoreJoin() {
-		String fq = "{!join from=resource to=context}public:true";
+	void parseFilterQueriesAcceptsTheContextTypeJoin() {
+		String fq = "filter({!join from=resource to=context score=none "
+				+ "v='graphType:Context AND rdfType:(\"http://entryscape.com/terms/CatalogContext\")'})";
+
 		assertEquals(List.of(fq), validator.parseFilterQueries(fq));
+	}
+
+	@Test
+	void parseFilterQueriesAcceptsTheContextTypeJoinWithEncodedPlus() {
+		String fq = "filter({!join from=resource to=context score=none "
+				+ "v='+graphType:Context +rdfType:(\"http://entryscape.com/terms/CatalogContext\")'})";
+
+		// the request decoding has turned a + the client sent as %252B into %2B
+		assertEquals(List.of(fq), validator.parseFilterQueries(fq.replace("+", "%2B")));
 	}
 
 	@Test
