@@ -1082,6 +1082,121 @@ public class EntryImplTest extends AbstractCoreTest {
 		}
 	}
 
+	@Test
+	public void setAllowedPrincipalsFor_firesOneEntryUpdatedThatSeesTheNewAcl() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		// a warm cache, which an event fired before the cache update would show stale
+		linkEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource);
+
+		var events = recordAclEvents(AccessProperty.ReadResource,
+				() -> linkEntry.setAllowedPrincipalsFor(AccessProperty.ReadResource, Set.of(daisy)));
+
+		assertEquals(java.util.List.of(
+				new AclEvent(linkEntry.getEntryURI(), RepositoryEvent.EntryUpdated, Set.of(daisy))), events);
+	}
+
+	@Test
+	public void setAllowedPrincipalsFor_narrowingRevokesTheDroppedPrincipalAndFiresEntryUpdated() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, donald);
+
+		var events = recordAclEvents(AccessProperty.ReadResource,
+				() -> linkEntry.setAllowedPrincipalsFor(AccessProperty.ReadResource, Set.of(donald)));
+
+		assertEquals(java.util.List.of(
+				new AclEvent(linkEntry.getEntryURI(), RepositoryEvent.EntryUpdated, Set.of(donald))), events);
+		assertEquals(Set.of(donald), reload(linkEntry).getAllowedPrincipalsFor(AccessProperty.ReadResource));
+	}
+
+	@Test
+	public void setAllowedPrincipalsFor_withTheCurrentAclFiresNothing() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+
+		var events = recordAclEvents(AccessProperty.ReadResource,
+				() -> linkEntry.setAllowedPrincipalsFor(AccessProperty.ReadResource, Set.of(daisy)));
+
+		assertEquals(java.util.List.of(), events);
+	}
+
+	@Test
+	public void addAllowedPrincipalsFor_firesOneEntryUpdatedThatSeesTheAddedPrincipal() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		// a warm cache, which an event fired before the cache update would show stale
+		linkEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource);
+
+		var events = recordAclEvents(AccessProperty.ReadResource,
+				() -> linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy));
+
+		assertEquals(java.util.List.of(
+				new AclEvent(linkEntry.getEntryURI(), RepositoryEvent.EntryUpdated, Set.of(daisy))), events);
+	}
+
+	@Test
+	public void removeAllowedPrincipalsFor_firesOneEntryUpdatedThatNoLongerSeesThePrincipal() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+		linkEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy);
+		// a warm cache, which an event fired before the cache update would show stale
+		linkEntry.getAllowedPrincipalsFor(AccessProperty.ReadResource);
+
+		var events = recordAclEvents(AccessProperty.ReadResource,
+				() -> linkEntry.removeAllowedPrincipalsFor(AccessProperty.ReadResource, daisy));
+
+		assertEquals(java.util.List.of(
+				new AclEvent(linkEntry.getEntryURI(), RepositoryEvent.EntryUpdated, Set.of())), events);
+	}
+
+	@Test
+	public void removeAllowedPrincipalsFor_ofAnUnlistedPrincipalFiresNothing() {
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+
+		var events = recordAclEvents(AccessProperty.ReadResource,
+				() -> linkEntry.removeAllowedPrincipalsFor(AccessProperty.ReadResource, daisy));
+
+		assertEquals(java.util.List.of(), events);
+	}
+
+	@Test
+	public void addAllowedPrincipalsFor_guestOnAContextEntryAlsoFiresEntryAclGuestUpdated() {
+		Entry contextEntry = context.getEntry();
+		URI guest = pm.getGuestUser().getURI();
+
+		var events = recordAclEvents(AccessProperty.ReadResource,
+				() -> contextEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, guest));
+
+		assertEquals(java.util.List.of(
+				new AclEvent(contextEntry.getEntryURI(), RepositoryEvent.EntryUpdated, Set.of(guest)),
+				new AclEvent(contextEntry.getEntryURI(), RepositoryEvent.EntryAclGuestUpdated, Set.of(guest))), events);
+	}
+
+	@Test
+	public void removeAllowedPrincipalsFor_guestOnAContextEntryAlsoFiresEntryAclGuestUpdated() {
+		Entry contextEntry = context.getEntry();
+		URI guest = pm.getGuestUser().getURI();
+		contextEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, guest);
+
+		var events = recordAclEvents(AccessProperty.ReadResource,
+				() -> contextEntry.removeAllowedPrincipalsFor(AccessProperty.ReadResource, guest));
+
+		assertEquals(java.util.List.of(
+				new AclEvent(contextEntry.getEntryURI(), RepositoryEvent.EntryUpdated, Set.of()),
+				new AclEvent(contextEntry.getEntryURI(), RepositoryEvent.EntryAclGuestUpdated, Set.of())), events);
+	}
+
+	@Test
+	public void addAllowedPrincipalsFor_userOnAContextEntryFiresOnlyEntryUpdated() {
+		Entry contextEntry = context.getEntry();
+		URI daisy = pm.getPrincipalEntry("Daisy").getResourceURI();
+
+		var events = recordAclEvents(AccessProperty.ReadResource,
+				() -> contextEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, daisy));
+
+		assertEquals(java.util.List.of(
+				new AclEvent(contextEntry.getEntryURI(), RepositoryEvent.EntryUpdated, Set.of(daisy))), events);
+	}
+
 	@ParameterizedTest(name = "{0}")
 	@EnumSource(EntryType.class)
 	public void addAllowedPrincipalsFor_storesTheMetadataAclOnTheMetadataUriOfEveryEntryType(EntryType type) {

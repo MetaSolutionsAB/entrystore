@@ -63,10 +63,12 @@ import java.net.URI;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.EnumMap;
 import java.util.GregorianCalendar;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -965,45 +967,51 @@ public class EntryImpl implements Entry {
 	}
 
 	public void setAllowedPrincipalsFor(AccessProperty prop, Set<URI> principals) {
+		setAllowedPrincipalsFor(Map.of(prop, principals));
+	}
+
+	/**
+	 * Replaces the ACL of each given property in one write, so {@link ListImpl#applyACLtoChildren} reposts each
+	 * child once rather than once per property.
+	 */
+	void setAllowedPrincipalsFor(Map<AccessProperty, Set<URI>> acl) {
 		checkAdministerRights();
-		Set<IRI> principalIRIs = toIRIs(principals);
-		updateAcl(prop, principals, (rc, subject, predicate) -> {
-			rc.remove(subject, predicate, null, entryURI);
-			addPrincipals(rc, subject, predicate, principalIRIs);
-			return null;
-		});
+		Map<AccessProperty, AclUpdate> updates = new EnumMap<>(AccessProperty.class);
+		acl.forEach((prop, principals) -> updates.put(prop, replacing(toIRIs(principals))));
+		updateAcl(updates, acl);
 	}
 
 	public void addAllowedPrincipalsFor(AccessProperty prop, URI principal) {
 		checkAdministerRights();
-		appendAllowedPrincipals(prop, Set.of(principal));
+		appendAllowedPrincipals(Map.of(prop, Set.of(principal)));
 	}
 
 	/**
-	 * Adds principals without an Administer check of its own. {@link #addAllowedPrincipalsFor} checks
-	 * before delegating here; {@link ContextImpl#copyACL} cannot, since during creation the entry has
-	 * no ACL yet and the check would fall back to the context ACL, denying the list-only writer that
+	 * Adds principals to the ACL of each given property in one write, so {@link ContextImpl#copyACL} reposts the
+	 * entry once, and not at all if every principal was already allowed. Has no Administer check of its own:
+	 * {@link #addAllowedPrincipalsFor} checks before delegating here; copyACL cannot, since during creation the
+	 * entry has no ACL yet and the check would fall back to the context ACL, denying the list-only writer that
 	 * copyACL exists to admit.
 	 */
-	void appendAllowedPrincipals(AccessProperty prop, Set<URI> principals) {
-		if (principals.isEmpty()) {
-			return;
-		}
-		Set<IRI> principalIRIs = toIRIs(principals);
-		updateAcl(prop, null, (rc, subject, predicate) -> {
-			addPrincipals(rc, subject, predicate, principalIRIs);
-			return null;
+	void appendAllowedPrincipals(Map<AccessProperty, Set<URI>> acl) {
+		Map<AccessProperty, AclUpdate> updates = new EnumMap<>(AccessProperty.class);
+		acl.forEach((prop, principals) -> {
+			if (!principals.isEmpty()) {
+				updates.put(prop, adding(toIRIs(principals)));
+			}
 		});
+		updateAcl(updates, Map.of());
 	}
 
 	public boolean removeAllowedPrincipalsFor(AccessProperty prop, URI principal) {
 		checkAdministerRights();
 		IRI principalIRI = this.repository.getValueFactory().createIRI(principal.toString());
-		return updateAcl(prop, null, (rc, subject, predicate) -> {
+		AclUpdate removing = (rc, subject, predicate) -> {
 			boolean listed = rc.hasStatement(subject, predicate, principalIRI, false, entryURI);
 			rc.remove(subject, predicate, principalIRI, entryURI);
 			return listed;
-		});
+		};
+		return updateAcl(Map.of(prop, removing), Map.of());
 	}
 
 	/** Converted before the transaction, so a malformed principal fails as bad input rather than as a store error. */
@@ -1012,33 +1020,80 @@ public class EntryImpl implements Entry {
 		return principals.stream().map(principal -> vf.createIRI(principal.toString())).collect(Collectors.toSet());
 	}
 
-	private void addPrincipals(RepositoryConnection rc, IRI subject, IRI predicate, Set<IRI> principals) throws RepositoryException {
-		for (IRI principal : principals) {
-			rc.add(subject, predicate, principal, entryURI);
-		}
+	/** Makes the property's ACL exactly the given principals. */
+	private AclUpdate replacing(Set<IRI> principals) {
+		return (rc, subject, predicate) -> {
+			Set<Value> current = Iterations.asList(rc.getStatements(subject, predicate, null, false, entryURI))
+					.stream().map(Statement::getObject).collect(Collectors.toSet());
+			if (current.equals(principals)) {
+				return false;
+			}
+			rc.remove(subject, predicate, null, entryURI);
+			for (IRI principal : principals) {
+				rc.add(subject, predicate, principal, entryURI);
+			}
+			return true;
+		};
 	}
 
-	/** One ACL change against a connection already in a transaction that {@link #updateAcl} commits or rolls back. */
-	@FunctionalInterface
-	private interface AclUpdate<T> {
-		T apply(RepositoryConnection rc, IRI subject, IRI predicate) throws RepositoryException;
+	/** Adds the given principals that the property's ACL lacks. */
+	private AclUpdate adding(Set<IRI> principals) {
+		return (rc, subject, predicate) -> {
+			boolean added = false;
+			for (IRI principal : principals) {
+				if (!rc.hasStatement(subject, predicate, principal, false, entryURI)) {
+					rc.add(subject, predicate, principal, entryURI);
+					added = true;
+				}
+			}
+			return added;
+		};
 	}
 
 	/**
-	 * Runs one ACL change in a transaction under the repository monitor.
-	 *
-	 * @param cacheAfter what {@link #getAllowedPrincipalsFor} may answer once the change is committed,
-	 * or null to make it reload from the store.
+	 * One property's ACL change against a connection already in a transaction that {@link #updateAcl} commits or
+	 * rolls back; answers whether it changed the store.
 	 */
-	private <T> T updateAcl(AccessProperty prop, Set<URI> cacheAfter, AclUpdate<T> update) {
-		Set<URI> cached = cacheAfter == null ? null : Set.copyOf(cacheAfter);
+	@FunctionalInterface
+	private interface AclUpdate {
+		boolean apply(RepositoryConnection rc, IRI subject, IRI predicate) throws RepositoryException;
+	}
+
+	/**
+	 * Runs the ACL changes in one transaction under the repository monitor. If they changed the store, publishes
+	 * them as {@link #setGraph} does: {@link RepositoryEvent#EntryUpdated}, plus
+	 * {@link RepositoryEvent#EntryAclGuestUpdated} when a guest grant of a context entry changed. The events fire
+	 * after the ACL cache is updated, since the Solr listener builds the document from it synchronously.
+	 *
+	 * @param cacheAfter what {@link #getAllowedPrincipalsFor} may answer per property once the changes are
+	 * committed; a property it lacks reloads from the store.
+	 * @return whether the changes altered the store
+	 */
+	private boolean updateAcl(Map<AccessProperty, AclUpdate> updates, Map<AccessProperty, Set<URI>> cacheAfter) {
+		if (updates.isEmpty()) {
+			return false;
+		}
+		Map<AccessProperty, Set<URI>> cached = new EnumMap<>(AccessProperty.class);
+		cacheAfter.forEach((prop, principals) -> cached.put(prop, Set.copyOf(principals)));
+		IRI guest = GraphType.Context.equals(getGraphType())
+				? iri(getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString())
+				: null;
+		boolean changed = false;
+		boolean guestChanged = false;
 		try {
 			synchronized (this.repository) {
 				try (RepositoryConnection rc = this.repository.getConnection()) {
 					rc.begin();
-					T result;
 					try {
-						result = update.apply(rc, getAccessSubject(prop), getAccessPredicate(prop));
+						for (Map.Entry<AccessProperty, AclUpdate> update : updates.entrySet()) {
+							IRI subject = getAccessSubject(update.getKey());
+							IRI predicate = getAccessPredicate(update.getKey());
+							boolean guestBefore = guest != null
+									&& rc.hasStatement(subject, predicate, guest, false, entryURI);
+							changed |= update.getValue().apply(rc, subject, predicate);
+							guestChanged |= guest != null
+									&& guestBefore != rc.hasStatement(subject, predicate, guest, false, entryURI);
+						}
 						rc.commit();
 					} catch (Exception e) {
 						rollbackQuietly(rc, e);
@@ -1048,14 +1103,30 @@ public class EntryImpl implements Entry {
 					// answer; one that loaded before the commit and stores after this line still can, and the
 					// stale answer then survives until the next ACL write on this entry
 					this.hasExplicitAcl = null;
-					setCachedAllowedPrincipalsFor(prop, cached);
-					return result;
+					updates.keySet().forEach(prop -> setCachedAllowedPrincipalsFor(prop, cached.get(prop)));
 				}
 			}
 		} catch (RepositoryException e) {
 			log.error(e.getMessage(), e);
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
+		if (changed) {
+			RepositoryManager rm = getRepositoryManager();
+			rm.fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
+			if (guestChanged) {
+				rm.fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryAclGuestUpdated));
+			}
+		}
+		return changed;
+	}
+
+	/** A copy of the entry's whole ACL, one principal set per property. */
+	static Map<AccessProperty, Set<URI>> aclOf(Entry entry) {
+		Map<AccessProperty, Set<URI>> acl = new EnumMap<>(AccessProperty.class);
+		for (AccessProperty prop : AccessProperty.values()) {
+			acl.put(prop, Set.copyOf(entry.getAllowedPrincipalsFor(prop)));
+		}
+		return acl;
 	}
 
 	public boolean hasAllowedPrincipals() {

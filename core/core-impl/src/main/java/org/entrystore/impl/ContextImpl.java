@@ -1107,21 +1107,18 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	public void copyACL(org.entrystore.List fromList, Entry toEntry) {
 		if (toEntry instanceof EntryImpl entryImpl) {
-			// a copy: the set returned is the source list's live ACL cache
-			Set<URI> adminPrincipals = new HashSet<>(fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.Administer));
+			Map<AccessProperty, Set<URI>> acl = EntryImpl.aclOf(fromList.getEntry());
 			if (toEntry.getGraphType() != GraphType.List || toEntry.getEntryType() != EntryType.Local) {
 				PrincipalManager pm = toEntry.getRepositoryManager().getPrincipalManager();
 				try {
 					pm.checkAuthenticatedUserAuthorized(fromList.getEntry(), AccessProperty.Administer);
 				} catch (AuthorizationException ae) {
+					Set<URI> adminPrincipals = new HashSet<>(acl.get(AccessProperty.Administer));
 					adminPrincipals.add(pm.getAuthenticatedUserURI());
+					acl.put(AccessProperty.Administer, adminPrincipals);
 				}
 			}
-			entryImpl.appendAllowedPrincipals(AccessProperty.Administer, adminPrincipals);
-			entryImpl.appendAllowedPrincipals(AccessProperty.ReadMetadata, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
-			entryImpl.appendAllowedPrincipals(AccessProperty.ReadResource, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.ReadResource));
-			entryImpl.appendAllowedPrincipals(AccessProperty.WriteMetadata, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.WriteMetadata));
-			entryImpl.appendAllowedPrincipals(AccessProperty.WriteResource, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.WriteResource));
+			entryImpl.appendAllowedPrincipals(acl);
 		} else {
 			log.warn("copyACL(fromList, toEntry): Not setting an ACL: toEntry is not an instance of EntryImpl");
 		}

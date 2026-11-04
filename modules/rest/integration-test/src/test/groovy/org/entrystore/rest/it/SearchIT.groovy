@@ -1472,6 +1472,79 @@ class SearchIT extends BaseSpec {
 		'sort'        | '{!func}modified desc'
 	}
 
+	def "GET /search?type=solr with a fromIndex join in 'query' should reply with Bad Request 400"() {
+		when: 'a join against a core on the same Solr node, here the instance\'s own'
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: '{!join fromIndex=entrystore-core from=resource to=context}*:*']), '')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(conn.errorStream.text)['error'] ==
+			"Local parameter 'fromIndex' is not permitted in 'query'"
+	}
+
+	def "GET /search?type=solr with a fromIndex join in 'filterQuery' should reply with Bad Request 400"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams([type: 'solr', query: '*:*',
+			filterQuery: '{!join fromIndex=entrystore-core from=resource to=context}*:*']), '')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(conn.errorStream.text)['error'] ==
+			"Local parameter 'fromIndex' is not permitted in 'filterQuery'"
+	}
+
+	def "GET /search?type=solr with fromIndex assembled by a Solr macro should reply with Bad Request 400"() {
+		when: 'with macro expansion on, Solr would run this as a join against its own core and answer 200'
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: '{!join from${x:I}ndex=entrystore-core from=resource to=context}*:*']), '')
+
+		then: 'read literally, the local params are malformed'
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
+	def "GET /search?type=solr with fromIndex hidden in a unicode escape Solr reads leniently should reply with Bad Request 400"() {
+		when: 'Solr decodes \\u+06e in a quoted local-param value to n, a join against its own core that answered 200'
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams([type: 'solr',
+			query: '{!query v=\'{!join from=resource to=context fromI\\u+06edex=entrystore-core}*:*\'}']), '')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(conn.errorStream.text)['error'] ==
+			"Local parameter 'fromIndex' is not permitted in 'query'"
+	}
+
+	def "GET /search?type=solr dereferencing facetMatches that carries a fromIndex join should reply with Bad Request 400"() {
+		when: 'Solr would parse facet.matches as the query text and join against its own core'
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams([type: 'solr',
+			query       : '{!query v=$facet.matches}',
+			facetFields : 'tag.literal',
+			facetMatches: '_query_:"\\{!join from=resource to=context fromIndex=entrystore-core\\}\\*:\\*"']), '')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(conn.errorStream.text)['error'] ==
+			"Parameter dereferencing (\$name) is not permitted in 'query'"
+	}
+
+	def "GET /search?type=solr with a join within the own core should return search results"() {
+		when: 'the shape entrystore.js sends to filter by context type (ENTRYSTORE-1277)'
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: '{!join from=resource to=context}*:*']), '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+	}
+
+	def "GET /search?type=solr with a dollar sign in ordinary search text should return search results"() {
+		when: 'outside local params and function queries Solr reads $ as part of a term'
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: 'title:US$ AND title:rates']), '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+	}
+
 	@Unroll
 	def "GET /search?type=solr with facetLang '#facetLang' and facetFields '#facetFields' should reply with Bad Request 400"() {
 		when:
