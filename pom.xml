@@ -108,8 +108,8 @@
 	</distributionManagement>
 
 	<scm>
-		<connection>scm:git:ssh://git@bitbucket.org/metasolutions/entrystore.git</connection>
-		<developerConnection>scm:git:ssh://git@bitbucket.org/metasolutions/entrystore.git</developerConnection>
+		<connection>scm:git:ssh://git@ssh.bitbucket.org/metasolutions/entrystore.git</connection>
+		<developerConnection>scm:git:ssh://git@ssh.bitbucket.org/metasolutions/entrystore.git</developerConnection>
 		<url>https://bitbucket.org/metasolutions/entrystore.git</url>
 	</scm>
 
