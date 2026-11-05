@@ -446,6 +446,19 @@ abstract class BaseSpec extends Specification {
 			.until({ getSolrStatus() }, SOLR_IDLE)
 	}
 
+	/** Polls an admin search until the query matches exactly one document; commitWithin lets the searcher lag. */
+	protected void awaitIndexed(String query) {
+		waitForSolrProcessing()
+		await()
+			.pollInterval(200, TimeUnit.MILLISECONDS)
+			.atMost(15, TimeUnit.SECONDS)
+			.until {
+				def conn = EntryStoreClient.getRequest(
+					'/search' + convertMapToQueryParams([type: 'solr', query: query]))
+				conn.getResponseCode() == HTTP_OK && JSON_PARSER.parseText(conn.inputStream.text)['results'] == 1
+			}
+	}
+
 	/**
 	 * Starts a lifecycle-owned EntryStore app for specs that need non-default args, prepending the
 	 * shared Solr URL and upholding invariant #2 (sets appStarted=true, see the comment on it).
