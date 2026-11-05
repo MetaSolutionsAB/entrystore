@@ -70,6 +70,11 @@ public class RepositoryProperties {
 	public static final IRI resHasEntry;
 	/** Marks, in the _contexts index graph, a removed context whose graphs are still being deleted. */
 	public static final IRI removalPending;
+	/**
+	 * Marks, in a context's index graph, the root list of a tree being removed; the object is the user who asked for
+	 * it.
+	 */
+	public static final IRI treeRemovalPending;
 
 	public static final IRI resource;
 	public static final IRI metadata;
@@ -154,6 +159,7 @@ public class RepositoryProperties {
 		mdHasEntry = vf.createIRI(NSbase + "mdHasMMd");
 		resHasEntry = vf.createIRI(NSbase + "resHasMMd");
 		removalPending = vf.createIRI(NSbase + "removalPending");
+		treeRemovalPending = vf.createIRI(NSbase + "treeRemovalPending");
 		alias = vf.createIRI(NSbase + "alias");
 		
 		metadata = vf.createIRI(NSbase + "metadata");

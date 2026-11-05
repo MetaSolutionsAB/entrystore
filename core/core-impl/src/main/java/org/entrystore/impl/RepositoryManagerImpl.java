@@ -360,6 +360,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 		// after initSolr: a removal resumed without the index would skip purging the context's documents
 		contextManager.contextRemover.resumePending();
+		// after the context removals, which a tree removal in a removed context is left to
+		contextManager.listTreeRemover.resumePending();
 
 		log.info("Adding shutdown hook");
 		Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
@@ -492,6 +494,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				// before Solr and the store, which a context removal still uses until it stops
 				if (contextManager != null) {
 					shutdownQuietly("context removal", contextManager.contextRemover::shutdown);
+					shutdownQuietly("list tree removal", contextManager.listTreeRemover::shutdown);
 				}
 				log.info("Shutting down repository listeners and executor");
 				//listenerExecutor.shutdown();
@@ -868,19 +871,19 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	/**
-	 * Warns when the main store may lack a triple index starting with the context: removing or importing a context
-	 * then reads graphs with a scan of the whole store.
+	 * Warns when the main store may lack a triple index starting with the context: removing a context, importing one
+	 * or deleting a list recursively then reads graphs with a scan of the whole store.
 	 */
 	private static void warnIfNoContextFirstIndex(String indexes) {
 		if (indexes == null) {
 			log.warn("{} is not set, so the main store keeps the triple indexes it was created with; RDF4J creates "
-					+ "spoc,posc, which has no index starting with the context (c) and makes removing or importing "
-					+ "a context scan the whole store for the graphs it reads. Set it to cspo,posc",
-					Settings.STORE_INDEXES);
+					+ "spoc,posc, which has no index starting with the context (c) and makes removing a context, "
+					+ "importing one or deleting a list recursively scan the whole store for the graphs they read. "
+					+ "Set it to cspo,posc", Settings.STORE_INDEXES);
 		} else if (!hasContextFirstIndex(indexes)) {
 			log.warn("The main store has no triple index starting with the context (c) in {}={}, which makes "
-					+ "removing or importing a context scan the whole store for the graphs it reads. Add cspo, e.g. "
-					+ "cspo,posc", Settings.STORE_INDEXES, indexes);
+					+ "removing a context, importing one or deleting a list recursively scan the whole store for "
+					+ "the graphs they read. Add cspo, e.g. cspo,posc", Settings.STORE_INDEXES, indexes);
 		}
 	}
 

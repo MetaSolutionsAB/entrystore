@@ -23,6 +23,7 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
 import org.entrystore.repository.security.ContextImportPendingException;
 import org.entrystore.repository.security.ContextRemovalPendingException;
+import org.entrystore.repository.security.TreeRemovalPendingException;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
@@ -114,6 +115,18 @@ class AppExceptionHandlerTest {
 
 		ResponseEntity<?> response = (ResponseEntity<?>) mapped.invoke(handler, ex,
 				new MockHttpServletRequest("POST", "/5/import"));
+
+		assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+	}
+
+	@Test
+	void treeRemovalPendingException_isAnsweredAsAConflict() throws Exception {
+		TreeRemovalPendingException ex = new TreeRemovalPendingException("The tree of list 5 is being removed");
+		Method mapped = new ExceptionHandlerMethodResolver(AppExceptionHandler.class).resolveMethod(ex);
+		assertNotNull(mapped, "Expected a handler for TreeRemovalPendingException");
+
+		ResponseEntity<?> response = (ResponseEntity<?>) mapped.invoke(handler, ex,
+				new MockHttpServletRequest("POST", "/6/resource/1"));
 
 		assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
 	}

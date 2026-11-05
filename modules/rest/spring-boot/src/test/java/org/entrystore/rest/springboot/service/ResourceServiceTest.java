@@ -553,6 +553,15 @@ class ResourceServiceTest {
 	}
 
 	@Test
+	void deleteResource_localList_reportsATreeRemovedInTheBackground() {
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.List);
+		when(listResourceService.deleteChildren(entry, true)).thenReturn(true);
+
+		assertTrue(service.deleteResource(entry, null, true));
+	}
+
+	@Test
 	void deleteResource_localBinary_delegatesToFileResourceService() {
 		when(entry.getEntryType()).thenReturn(EntryType.Local);
 		when(entry.getGraphType()).thenReturn(GraphType.None);

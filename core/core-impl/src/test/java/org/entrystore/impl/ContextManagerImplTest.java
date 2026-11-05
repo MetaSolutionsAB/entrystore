@@ -55,6 +55,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -66,6 +67,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -1064,6 +1066,89 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 				<http://localhost:8181/99/entry/12> <%2$s> <http://example.com/metadata> .
 			}
 			""".formatted(RepositoryProperties.resource, RepositoryProperties.externalMetadata);
+
+	@Test
+	public void importContext_cancelsATreeRemovalPendingInTheContext(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		Entry list = context.createResource(null, GraphType.List, null, null);
+		IRI listEntry = rm.getValueFactory().createIRI(list.getEntryURI().toString());
+		ContextImpl other = (ContextImpl) cm.createResource(null, GraphType.Context, null, null).getResource();
+		Entry otherList = other.createResource(null, GraphType.List, null, null);
+		IRI otherListEntry = rm.getValueFactory().createIRI(otherList.getEntryURI().toString());
+		IRI admin = rm.getValueFactory().createIRI(pm.getAdminUser().getURI().toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.add(listEntry, RepositoryProperties.treeRemovalPending, admin, context.resourceURI);
+			rc.add(otherListEntry, RepositoryProperties.treeRemovalPending, admin, other.resourceURI);
+		}
+
+		cm.importContext(contextEntry, createMinimalImportZip(tempDataDir));
+
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			assertFalse(rc.hasStatement(listEntry, RepositoryProperties.treeRemovalPending, null, false,
+					context.resourceURI), "an import must cancel a tree removal whose list it may replace");
+			assertTrue(rc.hasStatement(otherListEntry, RepositoryProperties.treeRemovalPending, null, false,
+					other.resourceURI), "an import leaves the tree removals of other contexts alone");
+		}
+	}
+
+	@Test
+	public void importContext_endsATreeRemovalWaitingForARetry(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		Entry list = context.createResource(null, GraphType.List, null, null);
+		IRI listEntry = rm.getValueFactory().createIRI(list.getEntryURI().toString());
+		ListTreeRemover remover = ((ContextManagerImpl) cm).listTreeRemover;
+		remover.retryDelays = List.of(Duration.ofMinutes(10));
+		AtomicBoolean failed = new AtomicBoolean();
+		remover.beforeChunk = () -> {
+			if (failed.compareAndSet(false, true)) {
+				throw new IllegalStateException("the store failed");
+			}
+		};
+		((org.entrystore.List) list.getResource()).removeTree();
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+		while (!remover.isWaitingForRetry(listEntry)) {
+			assertTrue(System.nanoTime() < deadline, "the run did not fail");
+			Thread.sleep(10);
+		}
+
+		cm.importContext(contextEntry, createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES));
+
+		// a delete or a move of the list would otherwise be refused until the retry, minutes later
+		assertFalse(remover.isPending(listEntry));
+		assertFalse(remover.isBeingRemoved(listEntry));
+	}
+
+	@Test
+	public void importContext_leavesTheRetriesOfOtherContexts(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl other = (ContextImpl) cm.createResource(null, GraphType.Context, null, null).getResource();
+		Entry otherList = other.createResource(null, GraphType.List, null, null);
+		IRI otherListEntry = rm.getValueFactory().createIRI(otherList.getEntryURI().toString());
+		ListTreeRemover remover = ((ContextManagerImpl) cm).listTreeRemover;
+		remover.retryDelays = List.of(Duration.ofMinutes(10));
+		remover.beforeChunk = () -> {
+			throw new IllegalStateException("the store failed");
+		};
+		((org.entrystore.List) otherList.getResource()).removeTree();
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+		while (!remover.isWaitingForRetry(otherListEntry)) {
+			assertTrue(System.nanoTime() < deadline, "the run did not fail");
+			Thread.sleep(10);
+		}
+
+		cm.importContext(contextEntry, createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES));
+
+		assertTrue(remover.isWaitingForRetry(otherListEntry), "an import ends only the removals in its own context");
+		assertTrue(remover.isPending(otherListEntry));
+	}
 
 	@Test
 	public void importContext_takesTheImportedEntriesIntoIndexesLoadedBefore(@TempDir Path tempDataDir)

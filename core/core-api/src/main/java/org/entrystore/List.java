@@ -107,12 +107,19 @@ public interface List extends Resource {
 	 * by this list it's sublists, it's subsublists etc.
 	 * Entrys that only appear in the tree will be removed completely, that is,
 	 * they will not be orphaned. Hence, entries that also occurs in a list that
-	 * is not part of the tree is only removed from the tree, not removed completely.
+	 * is not part of the tree is only removed from the tree, not removed completely;
+	 * lists of the tree are removed even then. A list of the tree whose own removal,
+	 * or move to another context, is pending is left to that.
 	 * 
 	 * For simplicity of implementation this method requires that the caller is an
 	 * owner of the current context.
+	 *
+	 * The removal may finish in the background: this method can return once it is
+	 * scheduled, and the tree then shrinks from its leaves, its root going last.
+	 *
+	 * @return true if the removal finishes in the background, after this returns
 	 */
-	void removeTree();
+	boolean removeTree();
 
 	/**
 	 * Applies the ACL of the current list to its children.

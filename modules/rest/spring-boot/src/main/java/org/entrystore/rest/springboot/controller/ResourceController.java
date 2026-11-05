@@ -248,7 +248,12 @@ public class ResourceController {
 	}
 
 	@Operation(
-			summary = "Deletes a resource.")
+			summary = "Deletes a resource.",
+			description = "Deletes the uploaded file of an entry of graph type None, with parameter 'proxy' the remote "
+					+ "document of a link, or empties a list, whose members stay; with parameter 'recursive', "
+					+ "removes a list and the tree below it. A recursive delete of a list answers 202: the tree is "
+					+ "removed in the background, from its leaves to the list, except in _principals and _contexts, "
+					+ "where it is removed before the response (204).")
 	@DeleteMapping("/{context-id}/resource/{entry-id}")
 	public ResponseEntity<Void> deleteResource(
 			@PathVariable("context-id") String contextId,
@@ -257,9 +262,9 @@ public class ResourceController {
 			@RequestParam(required = false) String recursive) {
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		resourceService.deleteResource(entry, proxy, recursive != null);
+		boolean deferred = resourceService.deleteResource(entry, proxy, recursive != null);
 
-		return ResponseEntity.noContent().build();
+		return deferred ? ResponseEntity.accepted().build() : ResponseEntity.noContent().build();
 	}
 
 	private HttpHeaders buildFileDownloadResponseHeaders(ResourceRepresentation.FileDownload file, boolean isDownload) {

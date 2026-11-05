@@ -344,8 +344,10 @@ public class ResourceService {
 	/**
 	 * Checks write access, then deletes the remote document of a link-type entry when {@code proxy} is
 	 * {@code "true"} and otherwise routes to the service owning the entry's graph type.
+	 *
+	 * @return true if the deletion finishes in the background, as the recursive delete of a list can
 	 */
-	public void deleteResource(Entry entry, String proxy, boolean isRecursive) {
+	public boolean deleteResource(Entry entry, String proxy, boolean isRecursive) {
 		principalManager.checkAuthenticatedUserAuthorized(entry, PrincipalManager.AccessProperty.WriteResource);
 
 		EntryType entryType = entry.getEntryType();
@@ -353,14 +355,16 @@ public class ResourceService {
 		if ((entryType == EntryType.Link || entryType == EntryType.Reference || entryType == EntryType.LinkReference)
 				&& "true".equalsIgnoreCase(proxy)) {
 			proxyService.deleteUrl(entry.getResourceURI().toString());
-			return;
+			return false;
 		}
-		switch (entry.getGraphType()) {
+		return switch (entry.getGraphType()) {
 			case List -> listResourceService.deleteChildren(entry, isRecursive);
-			case None -> fileResourceService.deleteData(entry);
-			case null, default -> {
-				// Nothing to delete for the remaining graph types.
+			case None -> {
+				fileResourceService.deleteData(entry);
+				yield false;
 			}
-		}
+			// nothing to delete for the remaining graph types
+			case null, default -> false;
+		};
 	}
 }

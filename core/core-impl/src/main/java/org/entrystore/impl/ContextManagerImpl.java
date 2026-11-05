@@ -118,6 +118,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	/** Deletes the graphs of removed contexts. Package-private for RepositoryManagerImpl and tests. */
 	final ContextRemover contextRemover;
 
+	/** Removes the trees of lists. Package-private for ContextImpl, ListImpl, RepositoryManagerImpl and tests. */
+	final ListTreeRemover listTreeRemover;
+
 	/** The ids of the contexts being imported; added and checked under the repository monitor. */
 	private final Set<String> importsPending = ConcurrentHashMap.newKeySet();
 
@@ -134,6 +137,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				RepositoryProperties.SYSTEM_CONTEXTS_ID).toString(),
 				rman.getSoftCache());
 		contextRemover = new ContextRemover(rman, this.resourceURI);
+		listTreeRemover = new ListTreeRemover(rman);
 		//First try to load the ContextManager.
 		EntryImpl e = (EntryImpl) getByEntryURI(URISplit.createURI(rman.getRepositoryURL().toString(),
 				RepositoryProperties.SYSTEM_CONTEXTS_ID,
@@ -602,9 +606,11 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	}
 
 	/**
-	 * Removes the planned entries and adds the imported statements in one transaction under the monitor, and rewrites
-	 * the context's index triples and counter. Then, still under the monitor, publishes the removal and drops what
-	 * memory holds of the context's indexes and of the lists kept, whose members the import may have changed.
+	 * Removes the planned entries and adds the imported statements in one transaction under the monitor, rewrites the
+	 * context's index triples and counter, and drops every tree removal marker in the context, which ends those
+	 * removals, as a marker may name a list the import replaces. Then, still under the monitor, ends at once those
+	 * waiting for a retry, publishes the removal and drops what memory holds of the context's indexes and of the lists
+	 * kept, whose members the import may have changed.
 	 *
 	 * @return how long the monitor was held, in milliseconds
 	 */
@@ -624,6 +630,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 							cont.id);
 				}
 				plan.purge().apply(rc);
+				rc.remove((org.eclipse.rdf4j.model.Resource) null, RepositoryProperties.treeRemovalPending, null,
+						cont.resourceURI);
 				rc.remove(cont.resourceURI, RepositoryProperties.counter, null, cont.resourceURI);
 				rc.add(cont.resourceURI, RepositoryProperties.counter,
 						rc.getValueFactory().createLiteral(imported.counter()), cont.resourceURI);
@@ -640,6 +648,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					rc.close();
 				}
 			}
+			listTreeRemover.cancelRetries(cont.id);
 			// committed, so a failure is only logged; under the monitor, so no list write computes from members a
 			// reader cached during the import
 			try {

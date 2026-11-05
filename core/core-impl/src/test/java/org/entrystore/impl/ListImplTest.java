@@ -539,6 +539,24 @@ public class ListImplTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void removeTree_withoutAdministerOnTheContext_isRefusedAndSchedulesNothing() throws Exception {
+		// Donald may write to mouse, through friendsOfMickey, but only Mickey administers it; the removal in the
+		// background checks no access of its own
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context mouse = cm.getContext("mouse");
+		Entry root = mouse.createResource(null, GraphType.List, null, null);
+		Entry member = mouse.createLink(null, URI.create("https://slashdot.org/"), root.getResourceURI());
+
+		assertThrows(AuthorizationException.class, () -> ((List) root.getResource()).removeTree());
+		awaitTreeRemovals();
+
+		ListTreeRemover remover = ((ContextManagerImpl) cm).listTreeRemover;
+		assertFalse(remover.isBeingRemoved(rm.getValueFactory().createIRI(root.getEntryURI().toString())),
+				"nothing is scheduled or marked");
+		assertNotNull(mouse.getByEntryURI(member.getEntryURI()));
+	}
+
+	@Test
 	public void moveEntryBetweenContexts_withoutRightToRemoveTheSource_failsBeforeCopying() {
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
 		Context mouse = cm.getContext("mouse");
@@ -629,7 +647,7 @@ public class ListImplTest extends AbstractCoreTest {
 	}
 
 	@Test
-	public void ownerRemoveTree() {
+	public void ownerRemoveTree() throws Exception {
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
 		Entry listE1 = duck.createResource(null, GraphType.List, null, null); // since owner
@@ -639,6 +657,7 @@ public class ListImplTest extends AbstractCoreTest {
 		Entry linkEntry2 = duck.createLink(null, URI.create("https://digg.com/"), listE2.getResourceURI());
 		Entry linkEntry3 = duck.createLink(null, URI.create("https://reddit.com/"), listE3.getResourceURI());
 		((List) listE1.getResource()).removeTree();
+		awaitTreeRemovals();
 		assertNull(duck.getByEntryURI(listE1.getEntryURI()));
 		assertNull(duck.getByEntryURI(listE2.getEntryURI()));
 		assertNull(duck.getByEntryURI(linkEntry.getEntryURI()));
@@ -1225,8 +1244,8 @@ public class ListImplTest extends AbstractCoreTest {
 	}
 
 	/**
-	 * A listener that throws after the commit must not turn a committed write into a reported failure: removeTree
-	 * would otherwise abandon the children of a list the store already holds empty.
+	 * A listener that throws after the commit must not turn a committed write into a reported failure: a caller
+	 * that empties a list and then removes its children would otherwise abandon them.
 	 */
 	@Test
 	public void setChildrenReturnsWhenAListenerFailsAfterTheCommit() {
@@ -1354,7 +1373,7 @@ public class ListImplTest extends AbstractCoreTest {
 	 * recursively without removing the mouse entry: Administer on duck says nothing about mouse.
 	 */
 	@Test
-	public void removeTreeLeavesAChildOfAnotherContextAlone() {
+	public void removeTreeLeavesAChildOfAnotherContextAlone() throws Exception {
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
 		Context mouse = cm.getContext("mouse"); // Donald writes it as one of friendsOfMickey
@@ -1363,6 +1382,7 @@ public class ListImplTest extends AbstractCoreTest {
 		ListImpl list = withPlantedMember(listEntry, foreign.getEntryURI());
 
 		list.removeTree();
+		awaitTreeRemovals();
 
 		assertNull(duck.getByEntryURI(listEntry.getEntryURI()));
 		assertNotNull(mouse.getByEntryURI(foreign.getEntryURI()));

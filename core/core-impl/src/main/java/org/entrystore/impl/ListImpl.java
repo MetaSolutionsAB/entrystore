@@ -40,6 +40,7 @@ import org.entrystore.Resource;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.security.DisallowedException;
+import org.entrystore.repository.security.TreeRemovalPendingException;
 import org.entrystore.repository.util.ModelUtil;
 
 import java.io.File;
@@ -348,6 +349,12 @@ public class ListImpl extends RDFResource implements List {
 		} else {
 			pm.checkAuthenticatedUserAuthorized(e.getContext().getEntry(), AccessProperty.WriteResource);
 		}
+		// before anything is unlinked or copied: the removal of a tree holding this list would delete what it moved
+		if (listTreeRemover().isBeingRemoved(this.entry.getSesameEntryURI())
+				|| listTreeRemover().isHeldByAPendingTree(this.entry)) {
+			throw new TreeRemovalPendingException("List " + this.entry.getEntryURI() + ", or a list holding it, is "
+					+ "being removed or moved");
+		}
 
 		if (e.getContext() == this.getEntry().getContext()) {
 			if (fromListEntry != null) {
@@ -375,18 +382,34 @@ public class ListImpl extends RDFResource implements List {
 				throw new org.entrystore.repository.RepositoryException("Cannot move SystemContexts, Contexts, Users or Groups.");
 			}
 			if (bt == GraphType.List) {
-				// removeTree's check, made before anything is copied
+				// the check removeTreeNow leaves to its caller, made before anything is copied
 				pm.checkAuthenticatedUserAuthorized(e.getContext().getEntry(), AccessProperty.Administer);
+				if (listTreeRemover().isHeldByAPendingTree(e)) {
+					throw new TreeRemovalPendingException("A list holding list " + e.getEntryURI()
+							+ " is being removed or moved");
+				}
+				ListImpl source = (ListImpl) e.getResource();
+				// claimed before the copy, so that no removal of the source runs while it is copied
+				IRI root = listTreeRemover().claim(source);
 				EntryImpl newEntry;
+				boolean copied = false;
 				try {
 					newEntry = this.copyEntryHere(e);
+					copied = true;
 				} catch (org.entrystore.repository.RepositoryException re) {
 					throw new org.entrystore.repository.RepositoryException("Failed copying the folder structure: " + re.getMessage(), re);
+				} finally {
+					if (!copied) {
+						listTreeRemover().release(root);
+					}
 				}
 				try {
-					((List) e.getResource()).removeTree();
+					// on this thread, so the source is gone when the move returns
+					source.removeTreeNow();
 				} catch (org.entrystore.repository.RepositoryException re) {
-					throw new org.entrystore.repository.RepositoryException("Succeeded in copying folder structure (leaving it there), but failed to remove the old structure (remove manually): " + re.getMessage(), re);
+					throw new org.entrystore.repository.RepositoryException("Succeeded in copying folder structure "
+							+ "(leaving it there), but removing the old structure failed (remove manually): "
+							+ re.getMessage(), re);
 				}
 				return newEntry;
 			}
@@ -454,10 +477,10 @@ public class ListImpl extends RDFResource implements List {
 
 	/**
 	 * Copies the given entry into this list with its data and graphs, and the members of a list recursively, adding
-	 * every entry it creates to {@code copies}; users, groups and contexts are not copied, returning null. An
-	 * authorization failure or a refusal, such as a create in a context being imported, keeps its type, so that it is
-	 * answered as such; any other runtime failure is rethrown as a RepositoryException, while QuotaException and
-	 * IOException propagate unchanged.
+	 * every entry it creates to {@code copies}; users, groups and contexts are not copied, returning null. A member
+	 * list whose tree is being removed or moved is refused. An authorization failure or a refusal, such as a create in
+	 * a context being imported, keeps its type, so that it is answered as such; any other runtime failure is rethrown
+	 * as a RepositoryException, while QuotaException and IOException propagate unchanged.
 	 */
 	private EntryImpl _copyEntryHere(EntryImpl entryToCopy, java.util.List<EntryImpl> copies) throws QuotaException, IOException {
 		GraphType bt = entryToCopy.getGraphType();
@@ -476,6 +499,11 @@ public class ListImpl extends RDFResource implements List {
 				List oldList = (List) entryToCopy.getResource();
 				for (URI uri : oldList.getChildren()) {
 					EntryImpl childEntryToCopy = ((EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(uri));
+					if (childEntryToCopy != null && childEntryToCopy.getGraphType() == GraphType.List
+							&& listTreeRemover().isBeingRemoved(childEntryToCopy.getSesameEntryURI())) {
+						throw new TreeRemovalPendingException("List " + uri + " in the copied tree is being removed "
+								+ "or moved");
+					}
 					newList._copyEntryHere(childEntryToCopy, copies);
 				}
 			}
@@ -1092,9 +1120,48 @@ public class ListImpl extends RDFResource implements List {
 		}
 	}
 
-	public void removeTree() {
+	/**
+	 * Removes the tree in the background, see {@link ListTreeRemover}, except in a context keeping entry names, where
+	 * it is removed before this returns.
+	 */
+	public boolean removeTree() {
 		Context c = this.entry.getContext();
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(c.getEntry(), AccessProperty.Administer);
+		if (c instanceof EntryNamesContext) {
+			removeTreeOneByOne();
+			return false;
+		}
+		listTreeRemover().schedule(this);
+		return true;
+	}
+
+	/**
+	 * Removes the tree, which the caller claimed with {@link ListTreeRemover#claim}, on the calling thread: through
+	 * {@link ListTreeRemover#removeNow}, or one entry per transaction in a context keeping entry names. The caller has
+	 * checked that the user may administer the context.
+	 */
+	void removeTreeNow() {
+		if (this.entry.getContext() instanceof EntryNamesContext) {
+			try {
+				removeTreeOneByOne();
+			} finally {
+				listTreeRemover().release(this.entry.getSesameEntryURI());
+			}
+		} else {
+			listTreeRemover().removeNow(this);
+		}
+	}
+
+	private ListTreeRemover listTreeRemover() {
+		return ((ContextManagerImpl) this.entry.getRepositoryManager().getContextManager()).listTreeRemover;
+	}
+
+	/**
+	 * Removes the tree one entry per transaction, as a context keeping entry names needs, whose entries a purge does
+	 * not remove.
+	 */
+	private void removeTreeOneByOne() {
+		Context c = this.entry.getContext();
 		java.util.List<URI> tchildren = new ArrayList<>(loadChildren());
 		setChildren(new ArrayList<>(), false, false);
 		for (URI uri : tchildren) {

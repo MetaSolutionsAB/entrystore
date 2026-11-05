@@ -46,6 +46,7 @@ import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.security.ContextImportPendingException;
 import org.entrystore.repository.security.ContextRemovalPendingException;
 import org.entrystore.repository.security.DisallowedException;
+import org.entrystore.repository.security.TreeRemovalPendingException;
 import org.entrystore.repository.test.TestSuite;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.URISplit;
@@ -1398,6 +1399,18 @@ public class ContextImpl extends ResourceImpl implements Context {
 				throw new EntryMissingException(entryURI);
 			}
 			checkAccess(removeEntry, AccessProperty.Administer);
+			if (removeEntry.getGraphType() == GraphType.List && removeEntry.getEntryType() == EntryType.Local
+					&& !(this instanceof EntryNamesContext)) {
+				// the tree removal would leave out the members it has not reached yet; a context keeping entry names
+				// removes its trees through this method
+				ListTreeRemover remover = ((ContextManagerImpl) entry.getRepositoryManager().getContextManager())
+						.listTreeRemover;
+				if (remover.isBeingRemoved(removeEntry.getSesameEntryURI())
+						|| remover.isHeldByAPendingTree(removeEntry)) {
+					throw new TreeRemovalPendingException("List " + entryURI + ", or a list holding it, is being "
+							+ "removed or moved");
+				}
+			}
 
 			try {
 				for (URI uri : removeEntry.getReferringListsInSameContext()) {

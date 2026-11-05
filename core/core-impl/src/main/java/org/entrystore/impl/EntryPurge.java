@@ -137,6 +137,17 @@ final class EntryPurge {
 		return List.copyOf(prunedLists);
 	}
 
+	/** The members of the removed lists that are not removed themselves, as last read. */
+	Set<IRI> unlinkedMembers() {
+		return Set.copyOf(unlinkedMembers);
+	}
+
+	/** The resources of the lists holding a planned entry, as last read; none for an entry not planned. */
+	Set<IRI> holdingLists(IRI entry) {
+		Planned p = planned.get(entry);
+		return p != null ? Set.copyOf(p.lists()) : Set.of();
+	}
+
 	/**
 	 * Reads again the entries changed since they were read: those whose modified date or list memberships differ.
 	 * Both are looked up through an index; the graphs of a changed entry are read again, in one store pass when many

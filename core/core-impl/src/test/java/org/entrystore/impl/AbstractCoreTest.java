@@ -182,6 +182,11 @@ public abstract class AbstractCoreTest {
 		((ContextManagerImpl) cm).contextRemover.awaitIdle();
 	}
 
+	/** Waits until the trees of lists asked to be removed recursively have been removed in the background. */
+	protected void awaitTreeRemovals() throws Exception {
+		((ContextManagerImpl) cm).listTreeRemover.awaitIdle();
+	}
+
 	protected ContextImpl newContext() {
 		return (ContextImpl) cm.createResource(null, GraphType.Context, null, null).getResource();
 	}
