@@ -44,7 +44,7 @@
 		<!-- bcprov/bcpkix/bcutil must all resolve to the same version; bcprov sometimes gets patch
 		     releases the other two do not, so only move to a version published for all three. -->
 		<bouncycastle.version>1.86</bouncycastle.version>
-		<owasp-html-sanitizer.version>20260924.2</owasp-html-sanitizer.version>
+		<owasp-html-sanitizer.version>20261103.2</owasp-html-sanitizer.version>
 
 		<!-- Override Spring-boot versions -->
 		<!-- cas-client-core 4.1.1 needs commons-codec 1.22.0 or later, above the Boot 4.1 BOM's 1.21.0 -->
@@ -481,7 +481,7 @@
 				     so it has to be pinned here rather than via a property override. -->
 				<groupId>com.nimbusds</groupId>
 				<artifactId>nimbus-jose-jwt</artifactId>
-				<version>10.9.1</version>
+				<version>10.10</version>
 			</dependency>
 			<dependency>
 				<!-- RDF4J's MapDB collection factory pins 1.11.1; 1.11.4 extracts the native library
