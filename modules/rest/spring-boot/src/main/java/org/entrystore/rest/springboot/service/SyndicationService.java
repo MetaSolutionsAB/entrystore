@@ -21,10 +21,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.solr.client.solrj.request.SolrQuery;
 import org.apache.solr.client.solrj.util.ClientUtils;
+import org.entrystore.AuthorizationException;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.SolrSearchIndex;
@@ -33,6 +35,7 @@ import org.entrystore.rest.springboot.model.dto.RenderedFeed;
 import org.entrystore.rest.springboot.model.exception.MethodNotAllowedException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.util.Syndication;
+import org.jetbrains.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -63,7 +66,8 @@ public class SyndicationService {
 	 * answer {@link NotImplementedException}, and {@code feedSize} is clamped to {@code entrystore.solr.max-limit}.
 	 * Item links follow the URL template configured under {@code urlTemplate} (the {@code default} one when null),
 	 * else the resource URI; {@code feedTitle} replaces the default title "Feed of &lt;alias&gt;" and is sanitized
-	 * like a /search feed title.
+	 * like a /search feed title. Entries the caller may not read, and the children of lists whose resource it may
+	 * not read, are left out.
 	 */
 	public RenderedFeed renderFeed(Entry entry, String feedType, String language, int feedSize, String urlTemplate,
 								   String feedTitle) {
@@ -128,33 +132,52 @@ public class SyndicationService {
 		Set<Entry> searchEntries = ((SolrSearchIndex) repositoryManager.getIndex()).sendQuery(solrQuery).getEntries();
 		List<Entry> recursiveEntries = new LinkedList<>();
 		for (Entry e : searchEntries) {
-			recursiveEntries.addAll(getListChildrenRecursively(e));
+			recursiveEntries.addAll(feedEntries(e));
 		}
 		EntryUtil.sortAfterModificationDate(recursiveEntries, false, null);
 
 		return recursiveEntries;
 	}
 
-	private Set<Entry> getListChildrenRecursively(Entry listEntry) {
+	/** The hit itself, or for a local list the entries reachable through its children that the caller may read. */
+	Set<Entry> feedEntries(Entry hit) {
+		return feedEntries(hit, new HashSet<>());
+	}
+
+	private Set<Entry> feedEntries(Entry entry, Set<URI> visitedLists) {
+		if (entry.getGraphType() != GraphType.List || entry.getEntryType() != EntryType.Local) {
+			return Set.of(entry);
+		}
+		if (!visitedLists.add(entry.getEntryURI())) {
+			return Set.of();
+		}
+		List<URI> children;
+		try {
+			children = ((org.entrystore.List) entry.getResource()).getChildren();
+		} catch (AuthorizationException e) {
+			return Set.of();
+		}
 		Set<Entry> result = new HashSet<>();
-		if (GraphType.List.equals(listEntry.getGraphType()) && EntryType.Local.equals(listEntry.getEntryType())) {
-			org.entrystore.List l = (org.entrystore.List) listEntry.getResource();
-			List<URI> c = l.getChildren();
-			for (URI uri : c) {
-				Entry e = repositoryManager.getContextManager().getEntry(uri);
-				if (e != null) {
-					if (GraphType.List.equals(e.getGraphType())) {
-						result.addAll(getListChildrenRecursively(e));
-					} else {
-						result.add(e);
-					}
-				}
+		for (URI uri : children) {
+			Entry child = readableEntry(uri);
+			if (child != null) {
+				result.addAll(feedEntries(child, visitedLists));
 			}
-		} else {
-			result.add(listEntry);
 		}
 		return result;
 	}
 
-
+	/** Checks ReadMetadata itself, since {@code getEntry} checks it only for an entry that was already cached. */
+	private @Nullable Entry readableEntry(URI uri) {
+		try {
+			Entry entry = repositoryManager.getContextManager().getEntry(uri);
+			if (entry != null) {
+				repositoryManager.getPrincipalManager()
+						.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
+			}
+			return entry;
+		} catch (AuthorizationException e) {
+			return null;
+		}
+	}
 }
