@@ -28,12 +28,11 @@ import java.util.regex.Pattern;
 
 /**
  * A rate limiter keyed by client address, {@code request.getRemoteAddr()}. Behind
- * {@code server.forward-headers-strategy: framework} that is the unvalidated {@code Forwarded: for=} or
- * leftmost {@code X-Forwarded-For} value. An IP address counts against the budget of its canonical text, so
- * every spelling of one address shares a budget, and a port sent with it is ignored. Any other value, such as
- * RFC 7239 {@code unknown}, an obfuscated identifier like {@code _hidden}, an IPv6 address with a zone or a
- * malformed header, counts against {@link #UNKNOWN_KEY}. A key is therefore an IP address or
- * {@link #UNKNOWN_KEY}, never the text a client sent.
+ * {@code server.forward-headers-strategy: framework} that is the unvalidated leftmost {@code X-Forwarded-For}
+ * value (see {@code ForwardedHeaderConfiguration}). An IP address counts against the budget of its canonical text,
+ * so every spelling of one address shares a budget, and a port sent with it is ignored. Any other value, such as
+ * {@code unknown}, an IPv6 address with a zone or a malformed header, counts against {@link #UNKNOWN_KEY}. A key
+ * is therefore an IP address or {@link #UNKNOWN_KEY}, never the text a client sent.
  */
 public abstract class ClientAddressRateLimiter extends FixedWindowRateLimiter {
 

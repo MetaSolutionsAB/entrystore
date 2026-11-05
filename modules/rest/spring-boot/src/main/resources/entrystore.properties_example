@@ -12,7 +12,8 @@
 ## When running behind a reverse proxy, configure the proxy to send
 ## X-Forwarded-Proto, X-Forwarded-Host, X-Forwarded-Port, and X-Forwarded-Prefix headers.
 ## Spring Boot's ForwardedHeaderFilter (server.forward-headers-strategy=framework
-## in application.yaml) processes these headers for request URL resolution.
+## in application.yaml) processes these headers for request URL resolution. The RFC 7239
+## Forwarded header is ignored.
 ## SECURITY: Spring does NOT validate which client sent the X-Forwarded-* headers,
 ## so the reverse proxy MUST strip them from untrusted (client-originating) requests
 ## before forwarding. Otherwise a client can spoof X-Forwarded-Proto/Host/Port/Prefix
@@ -168,14 +169,13 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.message.rate.limit.window=1h
 
 ## Rate limiting for POST /auth/signup by client IP
-## SECURITY: the client IP comes from the Forwarded (for=) header, else the leftmost
-## X-Forwarded-For entry (server.forward-headers-strategy in application.yaml), for every request
-## that carries them. The reverse proxy must drop client-supplied Forwarded and X-Forwarded-*
-## headers and set X-Forwarded-For to the connecting client's address, not append to it (nginx:
-## proxy_set_header Forwarded ""; proxy_set_header X-Forwarded-For $remote_addr;). Otherwise this
-## and the other per-IP limits are bypassable by spoofing either header. Without a reverse proxy,
-## set server.forward-headers-strategy=none. A client address that is not an IP address (e.g.
-## for=unknown or for=_hidden) shares one budget with all such clients.
+## SECURITY: the client IP comes from the leftmost X-Forwarded-For entry
+## (server.forward-headers-strategy in application.yaml) of every request that carries one; the
+## Forwarded header is ignored. The reverse proxy must drop client-supplied X-Forwarded-* headers and
+## set X-Forwarded-For to the connecting client's address, not append to it (nginx:
+## proxy_set_header X-Forwarded-For $remote_addr;). Otherwise this and the other per-IP limits are
+## bypassable by spoofing the header. Without a reverse proxy, set server.forward-headers-strategy=none.
+## A client address that is not an IP address (e.g. unknown) shares one budget with all such clients.
 # entrystore.auth.signup.rate.limit.max=10
 # entrystore.auth.signup.rate.limit.window=1h
 
@@ -185,8 +185,8 @@ entrystore.data.folder=/srv/entrystore/files/
 
 ## Search input constraints and per-IP rate limiting for /search.
 ## The endpoint is guest-accessible; these caps protect Solr from expensive or abusive input.
-## The rate limit is disabled by default (max=0). It is keyed by client IP only (Forwarded for=, else
-## the leftmost X-Forwarded-For entry; see signup rate limiting) and applies to authenticated users too,
+## The rate limit is disabled by default (max=0). It is keyed by client IP only (the leftmost
+## X-Forwarded-For entry; see signup rate limiting) and applies to authenticated users too,
 ## so clients sharing an IP (pipelines, EntryScape API, users behind NAT) share one budget.
 # entrystore.solr.search.rate.limit.max=0
 # entrystore.solr.search.rate.limit.window=1m

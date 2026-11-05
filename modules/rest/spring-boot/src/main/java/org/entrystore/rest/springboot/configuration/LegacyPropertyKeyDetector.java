@@ -38,11 +38,10 @@ public final class LegacyPropertyKeyDetector implements EnvironmentPostProcessor
 	// Removed key -> what applies instead.
 	private static final Map<String, String> REMOVED_KEYS = Map.of(
 			"entrystore.trust.x-forwarded-for",
-			"The client IP used for rate limiting and logging is always resolved from the Forwarded "
-					+ "(for=) header, else the leftmost X-Forwarded-For entry "
-					+ "(server.forward-headers-strategy=framework). The reverse proxy must drop "
-					+ "client-supplied Forwarded and X-Forwarded-* headers and set X-Forwarded-For to the "
-					+ "connecting client's address; without a reverse proxy, set "
+			"The client IP used for rate limiting and logging is always resolved from the leftmost "
+					+ "X-Forwarded-For entry (server.forward-headers-strategy=framework); the Forwarded header "
+					+ "is ignored. The reverse proxy must drop client-supplied X-Forwarded-* headers and set "
+					+ "X-Forwarded-For to the connecting client's address; without a reverse proxy, set "
 					+ "server.forward-headers-strategy=none.");
 
 	private final Log log;

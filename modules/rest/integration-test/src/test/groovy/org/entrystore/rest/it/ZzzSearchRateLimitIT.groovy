@@ -78,6 +78,14 @@ class ZzzSearchRateLimitIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_TOO_MANY_REQUESTS
 	}
 
+	def "GET /search — a spoofed Forwarded for= is counted against the connecting address"() {
+		when:
+		def conn = EntryStoreClient.getRequest(QUERY, '', 'application/json', ['Forwarded': 'for=198.51.100.7'])
+
+		then:
+		conn.getResponseCode() == HTTP_TOO_MANY_REQUESTS
+	}
+
 	def "GET /search — request from a different X-Forwarded-For IP gets its own budget"() {
 		when:
 		def conn = EntryStoreClient.getRequest(QUERY, '', 'application/json',
@@ -101,21 +109,21 @@ class ZzzSearchRateLimitIT extends BaseSpec {
 	def "GET /search — client addresses that are not IP addresses share one budget"() {
 		when:
 		def codes = searchCodes([
-			['Forwarded': 'for=unknown'],
-			['Forwarded': 'for=unknown'],
+			['X-Forwarded-For': 'unknown'],
+			['X-Forwarded-For': 'unknown'],
 			['X-Forwarded-For': 'not-an-ip'],
-			['Forwarded': 'for=_hidden']
+			['X-Forwarded-For': '_hidden']
 		])
 
 		then:
 		codes == [HTTP_OK, HTTP_OK, HTTP_OK, HTTP_TOO_MANY_REQUESTS]
 	}
 
-	def "GET /search — an IPv6 client has its own budget, shared across Forwarded and X-Forwarded-For"() {
+	def "GET /search — an IPv6 client has one budget across its X-Forwarded-For spellings"() {
 		when:
 		def codes = searchCodes([
-			['Forwarded': 'for="[2001:db8::1]:4711"'],
-			['Forwarded': 'for="[2001:db8::1]:4711"'],
+			['X-Forwarded-For': '[2001:db8::1]:4711'],
+			['X-Forwarded-For': '2001:db8::1'],
 			['X-Forwarded-For': '2001:DB8:0:0:0:0:0:1'],
 			['X-Forwarded-For': '2001:DB8:0:0:0:0:0:1']
 		])
