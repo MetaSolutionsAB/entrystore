@@ -34,6 +34,8 @@ public class Benchmark {
 		Config config = new PropertiesConfiguration("EntryStore Configuration");
 		config.setProperty(Settings.STORE_TYPE, arguments.getStoreType());
 		config.addProperty(Settings.STORE_PATH, "file:///" + arguments.getStorePath().getAbsolutePath().replace('\\', '/'));
+		// DATA_FOLDER is needed when benchmarking entries with files, without it removing an entry logs that its file cannot be found
+		config.addProperty(Settings.DATA_FOLDER, arguments.getDataPath().getAbsolutePath());
 
 		if (arguments.getIndexes() != null && !arguments.getStoreType().equalsIgnoreCase(BenchmarkCommons.MEMORY)) {
 			config.addProperty(Settings.STORE_INDEXES, arguments.getIndexes());
@@ -118,6 +120,9 @@ public class Benchmark {
 				// before the context removal, which removes the context the import replaces
 				if (arguments.isWithContextImport()) {
 					ContextImportBenchmark.runBenchmark(repositoryManager);
+				}
+				if (arguments.isWithTreeRemoval()) {
+					TreeRemovalBenchmark.runBenchmark(repositoryManager, arguments.getSizeToGenerate());
 				}
 				if (arguments.isWithContextRemoval()) {
 					ContextRemovalBenchmark.runBenchmark(repositoryManager);

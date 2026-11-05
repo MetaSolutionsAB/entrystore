@@ -89,6 +89,11 @@ public class BenchmarkCommons {
 				.desc("Afterwards, time replacing the benchmark context by an import of its own export while another "
 						+ "context is written to.")
 				.build();
+		Option treeRemovalOption = Option.builder("T")
+				.longOpt("remove-tree")
+				.desc("Afterwards, time a recursive delete of a folder tree holding as many entries as the universe "
+						+ "while another context is written to.")
+				.build();
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -103,6 +108,7 @@ public class BenchmarkCommons {
 		options.addOption(indexesOption);
 		options.addOption(contextRemovalOption);
 		options.addOption(contextImportOption);
+		options.addOption(treeRemovalOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -117,6 +123,7 @@ public class BenchmarkCommons {
 
 				arguments.setStoreType(storeType);
 				arguments.setSolrPath();
+				arguments.setDataPath();
 				System.setProperty("log.storeType", storeType);
 			} else {
 				System.err.println("Benchmark store type not supported.");
@@ -203,6 +210,7 @@ public class BenchmarkCommons {
 				arguments.setWithContextRemoval(true);
 			}
 			arguments.setWithContextImport(commandLine.hasOption("I"));
+			arguments.setWithTreeRemoval(commandLine.hasOption("T"));
 
 			// welcome message
 			LogUtils.logWelcome(storeType, arguments.isWithTransactions(), arguments.getSizeToGenerate());
