@@ -643,7 +643,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			// committed, so a failure is only logged; under the monitor, so no list write computes from members a
 			// reader cached during the import
 			try {
-				plan.purge().publish();
+				plan.purge().publish(true);
 			} catch (RuntimeException e) {
 				log.error("Context {} was imported, but releasing what memory holds of the replaced entries failed: {}",
 						cont.id, e.getMessage(), e);

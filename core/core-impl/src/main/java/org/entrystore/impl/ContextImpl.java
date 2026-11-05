@@ -641,6 +641,11 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
+	/** Whether both indexes are held in memory, so that an op applies to them instead of being buffered. */
+	boolean indexesPublished() {
+		return publishedIndexes() != null;
+	}
+
 	/** The published pair, or null while either field is unpublished. */
 	private Indexes publishedIndexes() {
 		ConcurrentMap<URI, Object> resIndex = res2entry;
@@ -659,7 +664,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * change is committed, so an op either finds the indexes published and applies directly, or is
 	 * buffered under {@code indexLock} before any scan can replay-and-clear.
 	 */
-	private void applyIndexOps(List<IndexOp> txOps) {
+	void applyIndexOps(List<IndexOp> txOps) {
 		for (IndexOp op : txOps) {
 			applyIndexOp(op.kind(), op.push(), op.from(), op.to());
 		}

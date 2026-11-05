@@ -56,6 +56,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -1063,6 +1064,24 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 				<http://localhost:8181/99/entry/12> <%2$s> <http://example.com/metadata> .
 			}
 			""".formatted(RepositoryProperties.resource, RepositoryProperties.externalMetadata);
+
+	@Test
+	public void importContext_takesTheImportedEntriesIntoIndexesLoadedBefore(@TempDir Path tempDataDir)
+			throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		Set<URI> imported = Set.of(URI.create(contextEntry.getResourceURI() + "/entry/7"),
+				URI.create(contextEntry.getResourceURI() + "/entry/12"));
+		// loads the indexes, which a purge only takes removed entries out of; read as entry URIs, since the imported
+		// entry graphs are too thin to load
+		assertTrue(Collections.disjoint(imported, context.getEntries()));
+
+		cm.importContext(contextEntry, createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES));
+
+		assertTrue(context.getEntries().containsAll(imported));
+	}
 
 	/** The index triples of the context, without the counter, which {@link #counterOf} compares by value. */
 	private Set<Statement> indexOf(ContextImpl context) {

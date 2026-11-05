@@ -193,13 +193,18 @@ final class EntryPurge {
 	}
 
 	/**
-	 * After the commit, still under the monitor: drops the context's indexes, so that the next read builds them from
-	 * the store, flags the removed entries deleted, also the instance the soft cache holds, evicts it, and drops the
-	 * members the pruned lists hold in memory. Converts no IRI of an entry to a {@link URI} but the entry URIs, which
-	 * the plan has parsed, so that an IRI {@code java.net.URI} rejects cannot fail it.
+	 * After the commit, still under the monitor: updates the context's indexes, flags the removed entries deleted, also
+	 * the instance the soft cache holds, evicts it, and drops the members the pruned lists hold in memory. Cannot fail
+	 * on an IRI {@code java.net.URI} rejects.
+	 *
+	 * @param dropIndexes whether to drop the context's indexes, so that the next read builds them from the store, as a
+	 *                    caller that changed the index graph further needs; otherwise the removed entries are taken out
+	 *                    of them, unless one could not be loaded or has such an IRI, which drops them too
 	 */
-	void publish() {
-		context.unpublishIndexes();
+	void publish(boolean dropIndexes) {
+		if (dropIndexes || !unindexRemoved()) {
+			context.unpublishIndexes();
+		}
 		SoftCache softCache = context.getSoftCache();
 		for (Planned p : planned.values()) {
 			Entry cached = softCache.getByEntryURI(URI.create(p.entryURI().stringValue()));
@@ -216,6 +221,40 @@ final class EntryPurge {
 				listResource.invalidateChildren();
 			}
 		}
+	}
+
+	/**
+	 * Takes the removed entries out of the context's in-memory indexes, with the ops
+	 * {@code ContextImpl.removeFromIndex} collects for one; {@link #apply} has removed their index triples.
+	 *
+	 * @return false, having changed nothing, if the indexes are not held in memory, where each op would only be
+	 * buffered for a load, or if an entry could not be loaded or has an IRI {@code java.net.URI} rejects
+	 */
+	private boolean unindexRemoved() {
+		if (!context.indexesPublished()) {
+			return false;
+		}
+		List<ContextImpl.IndexOp> ops = new ArrayList<>();
+		try {
+			for (Planned p : planned.values()) {
+				EntryImpl entry = p.entry();
+				if (entry == null) {
+					return false;
+				}
+				if (entry.getSesameExternalMetadataURI() != null) {
+					ops.add(new ContextImpl.IndexOp(ContextImpl.IndexKind.EXTERNAL_METADATA, false,
+							entry.getExternalMetadataURI(), entry.getEntryURI()));
+				}
+				if (entry.getSesameResourceURI() != null) {
+					ops.add(new ContextImpl.IndexOp(ContextImpl.IndexKind.RESOURCE, false, entry.getResourceURI(),
+							entry.getEntryURI()));
+				}
+			}
+		} catch (IllegalArgumentException e) {
+			return false;
+		}
+		context.applyIndexOps(ops);
+		return true;
 	}
 
 	/**
