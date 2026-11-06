@@ -33,6 +33,7 @@ import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
@@ -85,6 +86,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -98,6 +100,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyBoolean;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
@@ -1768,7 +1771,7 @@ public class SolrSearchIndexTest {
 		index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
 
 		ArgumentCaptor<SolrParams> sent = ArgumentCaptor.forClass(SolrParams.class);
-		verify(solrServer).query(sent.capture());
+		verify(solrServer).query(sent.capture(), eq(SolrRequest.METHOD.POST));
 		assertEquals("false", sent.getValue().get("expandMacros"));
 	}
 
@@ -1894,7 +1897,147 @@ public class SolrSearchIndexTest {
 		docs.setNumFound(entryURIs.length);
 		QueryResponse response = mock(QueryResponse.class);
 		when(response.getResults()).thenReturn(docs);
-		when(solrServer.query(any(SolrParams.class))).thenReturn(response);
+		when(solrServer.query(any(SolrParams.class), eq(SolrRequest.METHOD.POST))).thenReturn(response);
+	}
+
+	private static final URI SEARCHING_USER = URI.create("http://localhost:8181/_principals/resource/7");
+	private static final URI GUEST = URI.create("http://localhost:8181/_principals/resource/_guest");
+	private static final String READ_FILTER = "{!bool should=$esacl.direct should=$esacl.viaReference}";
+
+	/**
+	 * Makes the thread's caller a user with authorization checks on, whose searches the read-access filter restricts
+	 * unless it is the admin or an admin-group member.
+	 */
+	private ContextManager callerSearching(boolean adminOrAdminGroup) {
+		ContextManager cm = contextManagerListing();
+		PrincipalManager pm = rm.getPrincipalManager();
+		when(rm.isCheckForAuthorization()).thenReturn(true);
+		when(pm.getAuthenticatedUserURI()).thenReturn(SEARCHING_USER);
+		when(pm.isUserAdminOrAdminGroup(SEARCHING_USER)).thenReturn(adminOrAdminGroup);
+		when(pm.getAclPrincipalsOfAuthenticatedUser()).thenReturn(Set.of(SEARCHING_USER, GUEST));
+		Entry contextsEntry = mock(Entry.class);
+		when(contextsEntry.getResourceURI()).thenReturn(URI.create("http://localhost:8181/_contexts"));
+		when(cm.getEntry()).thenReturn(contextsEntry);
+		return cm;
+	}
+
+	/** Stubs a local entry that the given hit loads as and whose metadata the access check denies. */
+	private void deniedLocalHit(ContextManager cm, URI hitURI) {
+		Entry entry = mock(Entry.class);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getRepositoryManager()).thenReturn(rm);
+		when(cm.getEntry(hitURI)).thenReturn(entry);
+		// fetched first: a call on another mock between doThrow and when leaves the stubbing unfinished
+		PrincipalManager pm = rm.getPrincipalManager();
+		doThrow(new AuthorizationException(null, entry, AccessProperty.ReadMetadata)).when(pm)
+				.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
+	}
+
+	private List<SolrParams> sentSearches() throws Exception {
+		ArgumentCaptor<SolrParams> sent = ArgumentCaptor.forClass(SolrParams.class);
+		verify(solrServer, atLeastOnce()).query(sent.capture(), eq(SolrRequest.METHOD.POST));
+		return sent.getAllValues();
+	}
+
+	private static long readFiltersIn(SolrParams params) {
+		String[] filterQueries = params.getParams("fq");
+		return filterQueries == null ? 0 : Stream.of(filterQueries).filter(READ_FILTER::equals).count();
+	}
+
+	@Test
+	public void sendQueryRestrictsTheSearchOfACallerWhoIsNotAnAdmin() throws Exception {
+		callerSearching(false);
+		solrReturnsHits();
+
+		index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		SolrParams sent = sentSearches().getFirst();
+		assertEquals(1, readFiltersIn(sent));
+		assertEquals(SEARCHING_USER + " " + GUEST, sent.get("esacl.principals"));
+		assertEquals(SEARCHING_USER.toString(), sent.get("esacl.user"));
+	}
+
+	@Test
+	public void sendQueryLeavesTheSearchOfAnAdminUnrestricted() throws Exception {
+		callerSearching(true);
+		solrReturnsHits();
+
+		index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		SolrParams sent = sentSearches().getFirst();
+		assertEquals(0, readFiltersIn(sent));
+		assertNull(sent.get("esacl.principals"));
+	}
+
+	@Test
+	public void sendQueryLeavesTheCallersQueryUnchanged() throws Exception {
+		callerSearching(false);
+		solrReturnsHits();
+		SolrQuery query = new SolrQuery("*:*").setStart(20).setRows(5);
+		query.setFacet(true);
+		query.addFacetField("rdfType");
+
+		index.sendQuery(query);
+
+		// the REST layer passes this query on to facetCountsForLabels, which adds the filter itself
+		assertNull(query.getFilterQueries());
+		assertNull(query.get("esacl.principals"));
+		assertEquals(Integer.valueOf(20), query.getStart());
+		assertEquals(Integer.valueOf(5), query.getRows());
+		assertEquals("true", query.get("facet"));
+	}
+
+	@Test
+	public void sendQueryCountsAHitTheReadFilterAdmittedButTheAccessCheckDenied() throws Exception {
+		deniedLocalHit(callerSearching(false), ENTRY_1_1);
+		solrReturnsHits(ENTRY_1_1);
+
+		QueryResult result = index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		assertTrue(result.getEntries().isEmpty());
+		assertEquals(1, index.getReadFilterMismatchCount());
+	}
+
+	@Test
+	public void sendQueryDoesNotCountADeniedHitOfAnUnrestrictedSearch() throws Exception {
+		deniedLocalHit(contextManagerListing(), ENTRY_1_1);
+		solrReturnsHits(ENTRY_1_1);
+
+		index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		// without a read filter, a denied hit is the expected post-filtering, not a disagreement with the filter
+		assertEquals(0, index.getReadFilterMismatchCount());
+	}
+
+	@Test
+	public void facetCountsForLabelsRestrictsTheCountsOnceForTheQueryTheSearchRan() throws Exception {
+		callerSearching(false);
+		solrReturnsHits();
+		SolrQuery query = new SolrQuery("*:*").setStart(0).setRows(10);
+		index.sendQuery(query);
+
+		index.facetCountsForLabels(query, Map.of("metadata.predicate.literal_s.aaaa1111", List.of("Sverige")));
+
+		SolrParams countRequest = sentSearches().getLast();
+		assertEquals(1, countRequest.getParams("facet.query").length, "the count request must be the last one");
+		assertEquals(1, readFiltersIn(countRequest));
+		assertEquals(SEARCHING_USER + " " + GUEST, countRequest.get("esacl.principals"));
+	}
+
+	@Test
+	public void hasFacetTermsStaysUnrestrictedForACallerWhoIsNotAnAdmin() throws Exception {
+		callerSearching(false);
+		String companion = "metadata.predicate.literal_l.abc12345";
+		QueryResponse response = mock(QueryResponse.class);
+		when(response.getFacetField(companion)).thenReturn(new FacetField(companion));
+		when(solrServer.query(any(SolrQuery.class))).thenReturn(response);
+
+		index.hasFacetTerms(companion);
+
+		ArgumentCaptor<SolrQuery> probe = ArgumentCaptor.forClass(SolrQuery.class);
+		verify(solrServer).query(probe.capture());
+		// the probe answers whether the index has the field at all, which holds no entry's values
+		assertNull(probe.getValue().getFilterQueries());
 	}
 
 	/**
@@ -1929,7 +2072,7 @@ public class SolrSearchIndexTest {
 			when(response.getFacetFields()).thenReturn(List.of(facetField));
 			// the same query object is re-sent, so the facet parameter is recorded at the moment of each call
 			List<String> facetParamPerCall = new ArrayList<>();
-			when(server.query(any(SolrQuery.class))).thenAnswer(invocation -> {
+			when(server.query(any(SolrQuery.class), eq(SolrRequest.METHOD.POST))).thenAnswer(invocation -> {
 				facetParamPerCall.add(invocation.<SolrQuery>getArgument(0).get("facet"));
 				return response;
 			});

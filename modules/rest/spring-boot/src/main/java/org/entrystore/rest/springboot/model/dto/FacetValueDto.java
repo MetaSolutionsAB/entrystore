@@ -17,9 +17,8 @@
 package org.entrystore.rest.springboot.model.dto;
 
 /**
- * One facet bucket. {@code name} is {@code null} for the {@code facet.missing} bucket. The count is Solr's, taken
- * before the per-entry authorization filtering in {@code SolrSearchIndex.sendQuery}, so a drill-down on the label
- * can return fewer hits than the count for a caller who may not read every matching entry.
+ * One facet bucket. {@code name} is {@code null} for the {@code facet.missing} bucket. The count is Solr's over the
+ * matching entries the caller may read.
  */
 public record FacetValueDto(String name, long count) {
 }
