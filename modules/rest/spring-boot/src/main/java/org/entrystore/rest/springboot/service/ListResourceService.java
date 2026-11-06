@@ -199,15 +199,17 @@ public class ListResourceService {
 	}
 
 	/**
-	 * Empties a List entry, or removes the whole tree below it when {@code recursive} is set.
+	 * Empties a List entry, or removes it with the whole tree below it when {@code recursive} is set.
+	 *
+	 * @return true if the deletion finishes in the background, as {@link ListImpl#removeTree} reports
 	 */
-	public void deleteChildren(Entry entry, boolean recursive) {
+	public boolean deleteChildren(Entry entry, boolean recursive) {
 		ListImpl l = (ListImpl) entry.getResource();
 		if (recursive) {
-			l.removeTree();
-		} else {
-			l.setChildren(new Vector<>());
+			return l.removeTree();
 		}
+		l.setChildren(new Vector<>());
+		return false;
 	}
 
 	/**

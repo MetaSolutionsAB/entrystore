@@ -217,7 +217,9 @@ public class EntryController {
 			summary = "Deletes the entry.",
 			description = "Deletes given entry. If parameter 'recursive' is set then also deletes all its children. "
 					+ "Deleting a context answers 202: the context is gone at once, and its entries, files and search "
-					+ "documents are deleted in the background.")
+					+ "documents are deleted in the background. A recursive delete of a list answers 202 too: the tree "
+					+ "is removed in the background, from its leaves to the list, except in _principals and _contexts, "
+					+ "where it is removed before the response (204).")
 	@DeleteMapping(path = "/{context-id}/entry/{entry-id}", produces = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<Void> deleteEntry(
 			@PathVariable("context-id") String contextId,

@@ -51,6 +51,7 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -92,6 +93,83 @@ public class EntryPurgeTest extends AbstractCoreTest {
 		assertFalse(isIndexed(context, link));
 		assertNull(context.getByEntryURI(link.getEntryURI()));
 		assertTrue(link.isDeleted(), "an instance held elsewhere reports the entry removed");
+	}
+
+	@Test
+	public void purge_takesTheRemovedEntryOutOfTheIndexesWithoutARescan() {
+		ContextImpl context = newContext();
+		URI shared = URI.create("https://slashdot.org/");
+		Entry removed = context.createLink(null, shared, null);
+		Entry kept = context.createLink(null, shared, null);
+		assertEquals(2, context.getByResourceURI(shared).size(), "precondition: the indexes are loaded");
+		AtomicInteger scans = new AtomicInteger();
+		context.indexScanHookForTests = scans::incrementAndGet;
+
+		purge(context, removed);
+
+		assertEquals(Set.of(kept.getEntryURI()), context.getByResourceURI(shared).stream().map(Entry::getEntryURI)
+				.collect(Collectors.toSet()));
+		assertEquals(0, scans.get(), "a tree removal purges once per chunk, which must not make every read rescan");
+	}
+
+	@Test
+	public void purge_takesARemovedReferenceOutOfTheExternalMetadataIndex() {
+		ContextImpl context = newContext();
+		URI metadata = URI.create("https://example.com/metadata");
+		Entry removed = context.createReference(null, URI.create("https://example.com/a"), metadata, null);
+		Entry kept = context.createReference(null, URI.create("https://example.com/b"), metadata, null);
+		assertEquals(2, context.getByExternalMdURI(metadata).size(), "precondition: the indexes are loaded");
+		AtomicInteger scans = new AtomicInteger();
+		context.indexScanHookForTests = scans::incrementAndGet;
+
+		purge(context, removed);
+
+		assertEquals(Set.of(kept.getEntryURI()), context.getByExternalMdURI(metadata).stream()
+				.map(Entry::getEntryURI).collect(Collectors.toSet()));
+		assertEquals(0, scans.get());
+	}
+
+	@Test
+	public void purge_ofAnEntryThatCannotBeLoaded_dropsTheIndexes() {
+		ContextImpl context = newContext();
+		URI resource = URI.create("https://slashdot.org/");
+		Entry link = context.createLink(null, resource, null);
+		assertEquals(1, context.getByResourceURI(resource).size(), "precondition: the indexes are loaded");
+		removeFromEntryGraph(link.getEntryURI(), RepositoryProperties.resource);
+		evictFromSoftCache(link);
+		AtomicInteger scans = new AtomicInteger();
+		context.indexScanHookForTests = scans::incrementAndGet;
+
+		purge(context, link);
+
+		assertEquals(Set.of(), context.getByResourceURI(resource));
+		assertEquals(1, scans.get(), "without the entry there is no resource URI to take out, so the indexes are "
+				+ "rebuilt");
+	}
+
+	@Test
+	public void purge_ofAnEntryWithAResourceIRIJavaNetURIRejects_dropsTheIndexes() {
+		ContextImpl context = newContext();
+		URI resource = URI.create("https://slashdot.org/");
+		Entry link = context.createLink(null, resource, null);
+		assertEquals(1, context.getByResourceURI(resource).size(), "precondition: the indexes are loaded");
+		// the entry still loads, as its resource IRI is only parsed when asked for
+		removeFromEntryGraph(link.getEntryURI(), RepositoryProperties.resource);
+		IRI entryGraph = iri(link.getEntryURI().toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			// Values.iri validates the IRI; the store, as SimpleValueFactory, does not
+			rc.add(entryGraph, RepositoryProperties.resource,
+					SimpleValueFactory.getInstance().createIRI("https://example.com/a b"), entryGraph);
+		}
+		evictFromSoftCache(link);
+		AtomicInteger scans = new AtomicInteger();
+		context.indexScanHookForTests = scans::incrementAndGet;
+
+		purge(context, link);
+
+		assertNull(context.getByEntryURI(link.getEntryURI()));
+		assertEquals(Set.of(), context.getByResourceURI(resource));
+		assertEquals(1, scans.get(), "the resource URI cannot be taken out, so the indexes are rebuilt");
 	}
 
 	@Test
@@ -406,7 +484,7 @@ public class EntryPurgeTest extends AbstractCoreTest {
 		return statements;
 	}
 
-	/** Runs a purge as an import does. */
+	/** Runs a purge as a tree removal does. */
 	private void purge(ContextImpl context, Entry... entries) {
 		commit(EntryPurge.plan(context, iris(entries)));
 	}
@@ -425,7 +503,7 @@ public class EntryPurgeTest extends AbstractCoreTest {
 				purge.apply(rc);
 				rc.commit();
 			}
-			purge.publish();
+			purge.publish(false);
 		}
 		purge.afterPublish();
 		return refreshed;

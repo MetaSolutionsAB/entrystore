@@ -49,8 +49,10 @@ import java.util.zip.ZipException;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -80,6 +82,35 @@ class ListResourceServiceTest {
 		// temp-file cleanup assertions are scoped to this test and cannot be
 		// polluted by other processes or orphan files in the shared system temp.
 		service.setImportTmpDir(isolatedTmpDir.toFile());
+	}
+
+	@Test
+	void deleteChildren_recursive_removesTheTreeInTheBackground() {
+		ListImpl list = mock(ListImpl.class);
+		when(entry.getResource()).thenReturn(list);
+		when(list.removeTree()).thenReturn(true);
+
+		assertTrue(service.deleteChildren(entry, true), "the tree is removed after the response (202)");
+	}
+
+	@Test
+	void deleteChildren_recursiveOfATreeRemovedBeforeItReturns_finishesAtOnce() {
+		ListImpl list = mock(ListImpl.class);
+		when(entry.getResource()).thenReturn(list);
+		when(list.removeTree()).thenReturn(false);
+
+		assertFalse(service.deleteChildren(entry, true),
+				"a context keeping entry names removes the tree at once (204)");
+	}
+
+	@Test
+	void deleteChildren_notRecursive_emptiesTheListAtOnce() {
+		ListImpl list = mock(ListImpl.class);
+		when(entry.getResource()).thenReturn(list);
+
+		assertFalse(service.deleteChildren(entry, false), "the list is empty when the response is sent (204)");
+		verify(list).setChildren(new java.util.Vector<>());
+		verify(list, never()).removeTree();
 	}
 
 	@Test

@@ -26,6 +26,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.entrystore.AuthorizationException;
 import org.entrystore.repository.security.ContextImportPendingException;
 import org.entrystore.repository.security.ContextRemovalPendingException;
+import org.entrystore.repository.security.TreeRemovalPendingException;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
@@ -184,10 +185,10 @@ public class AppExceptionHandler {
 		return jsonResponse(responseBody);
 	}
 
-	// The pending exceptions come from core: a create in a removed context, or of a context with the id of one still
-	// being removed; a create in a context being imported, or a second import of it.
+	// Pending exceptions from core: a create in a removed or importing context or with the id of a context being
+	// removed, a second import, and a move or delete of a list in a tree being removed or moved.
 	@ExceptionHandler({DataConflictException.class, ContextRemovalPendingException.class,
-			ContextImportPendingException.class})
+			ContextImportPendingException.class, TreeRemovalPendingException.class})
 	public ResponseEntity<ErrorResponse> handleDataConflictException(RuntimeException ex,
 																	 HttpServletRequest request) {
 		log.warn("{} at endpoint '{}': {}", ex.getClass().getSimpleName(), request.getRequestURI(), ex.getMessage(),

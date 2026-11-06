@@ -42,8 +42,10 @@ public class Arguments {
 	String indexes;
 	boolean withContextRemoval = false;
 	boolean withContextImport = false;
+	boolean withTreeRemoval = false;
 	File storePath;
 	File solrPath;
+	File dataPath;
 
 	public void setStorePath() throws IOException {
 		Path path = Path.of(FileUtils.getTempDirectory().getAbsolutePath(), "benchmark-store-" + UUID.randomUUID());
@@ -57,5 +59,10 @@ public class Arguments {
 	public void setSolrPath() throws IOException {
 		Path path = Path.of(FileUtils.getTempDirectory().getAbsolutePath(), "benchmark-solr-" + UUID.randomUUID());
 		this.solrPath = Files.createDirectories(path).toFile();
+	}
+
+	public void setDataPath() throws IOException {
+		Path path = Path.of(FileUtils.getTempDirectory().getAbsolutePath(), "benchmark-files-" + UUID.randomUUID());
+		this.dataPath = Files.createDirectories(path).toFile();
 	}
 }

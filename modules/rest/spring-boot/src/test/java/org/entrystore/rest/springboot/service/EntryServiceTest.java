@@ -108,6 +108,26 @@ class EntryServiceTest {
 	}
 
 	@Test
+	void deleteEntry_recursiveOfAList_finishesInTheBackground() {
+		org.entrystore.List list = mock(org.entrystore.List.class);
+		when(entry.getGraphType()).thenReturn(GraphType.List);
+		when(entry.getResource()).thenReturn(list);
+		when(list.removeTree()).thenReturn(true);
+
+		assertTrue(service.deleteEntry(entry, true), "the tree is removed after the response (202)");
+	}
+
+	@Test
+	void deleteEntry_recursiveOfAListRemovedBeforeItReturns_finishesAtOnce() {
+		org.entrystore.List list = mock(org.entrystore.List.class);
+		when(entry.getGraphType()).thenReturn(GraphType.List);
+		when(entry.getResource()).thenReturn(list);
+		when(list.removeTree()).thenReturn(false);
+
+		assertFalse(service.deleteEntry(entry, true), "a context keeping entry names removes the tree at once (204)");
+	}
+
+	@Test
 	void deleteEntry_ofAnEntryThatIsNoContext_finishesAtOnce() {
 		URI entryURI = URI.create("http://localhost:8181/1/entry/5");
 		when(entry.getGraphType()).thenReturn(GraphType.None);

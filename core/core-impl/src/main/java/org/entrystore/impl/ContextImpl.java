@@ -46,6 +46,7 @@ import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.security.ContextImportPendingException;
 import org.entrystore.repository.security.ContextRemovalPendingException;
 import org.entrystore.repository.security.DisallowedException;
+import org.entrystore.repository.security.TreeRemovalPendingException;
 import org.entrystore.repository.test.TestSuite;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.URISplit;
@@ -641,6 +642,11 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
+	/** Whether both indexes are held in memory, so that an op applies to them instead of being buffered. */
+	boolean indexesPublished() {
+		return publishedIndexes() != null;
+	}
+
 	/** The published pair, or null while either field is unpublished. */
 	private Indexes publishedIndexes() {
 		ConcurrentMap<URI, Object> resIndex = res2entry;
@@ -659,7 +665,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * change is committed, so an op either finds the indexes published and applies directly, or is
 	 * buffered under {@code indexLock} before any scan can replay-and-clear.
 	 */
-	private void applyIndexOps(List<IndexOp> txOps) {
+	void applyIndexOps(List<IndexOp> txOps) {
 		for (IndexOp op : txOps) {
 			applyIndexOp(op.kind(), op.push(), op.from(), op.to());
 		}
@@ -1393,6 +1399,18 @@ public class ContextImpl extends ResourceImpl implements Context {
 				throw new EntryMissingException(entryURI);
 			}
 			checkAccess(removeEntry, AccessProperty.Administer);
+			if (removeEntry.getGraphType() == GraphType.List && removeEntry.getEntryType() == EntryType.Local
+					&& !(this instanceof EntryNamesContext)) {
+				// the tree removal would leave out the members it has not reached yet; a context keeping entry names
+				// removes its trees through this method
+				ListTreeRemover remover = ((ContextManagerImpl) entry.getRepositoryManager().getContextManager())
+						.listTreeRemover;
+				if (remover.isBeingRemoved(removeEntry.getSesameEntryURI())
+						|| remover.isHeldByAPendingTree(removeEntry)) {
+					throw new TreeRemovalPendingException("List " + entryURI + ", or a list holding it, is being "
+							+ "removed or moved");
+				}
+			}
 
 			try {
 				for (URI uri : removeEntry.getReferringListsInSameContext()) {
