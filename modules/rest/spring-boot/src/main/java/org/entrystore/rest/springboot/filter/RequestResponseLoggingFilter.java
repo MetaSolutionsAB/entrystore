@@ -16,11 +16,15 @@
 
 package org.entrystore.rest.springboot.filter;
 
+import jakarta.servlet.AsyncEvent;
+import jakarta.servlet.AsyncListener;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.UnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.jetty.http.HttpException;
 import org.entrystore.rest.springboot.configuration.ConditionalOnBooleanConfig;
 import org.entrystore.rest.springboot.util.HttpQueryRedactor;
 import org.jetbrains.annotations.NotNull;
@@ -32,9 +36,14 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * OncePerRequest Filter that logs the incoming HTTP requests and outgoing HTTP responses.
+ * Logs each HTTP request in one INFO line once its response is complete, as the 5.x access log did:
+ * {@code GET /store/1/entry/2?includeAll 200 16ms client=192.0.2.1}. The query is redacted by
+ * {@link HttpQueryRedactor}.
  * <p>
- * It captures the request/response bodies, truncates them based on configuration, and logs the execution time.
+ * An asynchronous response, such as a streamed SPARQL result, is logged when it completes, with its final
+ * status and duration. A request whose handler throws is logged with the status Jetty answers it with: the
+ * code of an {@link HttpException} or {@link UnavailableException} in its cause chain, else 500, or the
+ * status already sent if the response was committed. The start of each request is logged at DEBUG, to trace requests that never complete.
  */
 @Slf4j
 @Component
@@ -47,21 +56,22 @@ public class RequestResponseLoggingFilter extends OncePerRequestFilter {
 									@NotNull HttpServletResponse response,
 									@NotNull FilterChain filterChain)
 			throws ServletException, IOException {
+		String target = target(request);
+		String client = request.getRemoteAddr();
+		log.debug("{} started client={}", target, client);
+		long start = System.nanoTime();
 
-		log.info("REQUEST  {} {} | query={} | client={}",
-				request.getMethod(), request.getRequestURI(),
-				HttpQueryRedactor.redact(request.getQueryString()), request.getRemoteAddr());
-
-		long start = System.currentTimeMillis();
-
-		// Below line executes the rest of the flow here - so don't touch!
-		filterChain.doFilter(request, response);
-
-		long duration = System.currentTimeMillis() - start;
-
-		log.info("RESPONSE {} {} | status={} | duration={}ms",
-				request.getMethod(), request.getRequestURI(),
-				response.getStatus(), duration);
+		try {
+			filterChain.doFilter(request, response);
+		} catch (Throwable e) {
+			logCompleted(target, response.isCommitted() ? response.getStatus() : statusFor(e), start, client);
+			throw e;
+		}
+		if (request.isAsyncStarted()) {
+			request.getAsyncContext().addListener(new CompletionLogger(response, target, client, start));
+		} else {
+			logCompleted(target, response.getStatus(), start, client);
+		}
 	}
 
 	// Skip logging for favicon requests.
@@ -69,5 +79,52 @@ public class RequestResponseLoggingFilter extends OncePerRequestFilter {
 	protected boolean shouldNotFilter(HttpServletRequest request) {
 		String path = request.getServletPath();
 		return path.equals("/favicon.ico");
+	}
+
+	private static String target(HttpServletRequest request) {
+		String query = request.getQueryString();
+		String target = request.getMethod() + " " + request.getRequestURI();
+		return query == null || query.isEmpty() ? target : target + "?" + HttpQueryRedactor.redact(query);
+	}
+
+	/** The status Jetty sends for an exception that leaves the filter chain. */
+	static int statusFor(Throwable e) {
+		for (Throwable cause = e; cause != null; cause = cause.getCause()) {
+			if (cause instanceof HttpException http) {
+				return http.getCode();
+			}
+			if (cause instanceof UnavailableException unavailable) {
+				return unavailable.isPermanent() ? 404 : 503;
+			}
+		}
+		return 500;
+	}
+
+	private static void logCompleted(String target, int status, long startNanos, String client) {
+		log.info("{} {} {}ms client={}", target, status, (System.nanoTime() - startNanos) / 1_000_000, client);
+	}
+
+	/** Logs an asynchronous request when it completes; onComplete also follows a timeout or an error. */
+	private record CompletionLogger(HttpServletResponse response, String target, String client, long startNanos)
+			implements AsyncListener {
+
+		@Override
+		public void onComplete(AsyncEvent event) {
+			logCompleted(target, response.getStatus(), startNanos, client);
+		}
+
+		@Override
+		public void onStartAsync(AsyncEvent event) {
+			// A new async cycle drops the registered listeners, so stay registered for its completion.
+			event.getAsyncContext().addListener(this);
+		}
+
+		@Override
+		public void onTimeout(AsyncEvent event) {
+		}
+
+		@Override
+		public void onError(AsyncEvent event) {
+		}
 	}
 }
