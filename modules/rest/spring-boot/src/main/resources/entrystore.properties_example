@@ -205,7 +205,8 @@ entrystore.data.folder=/srv/entrystore/files/
 ## entrystore.smtp.email.* equivalent is unset, with a deprecation warning logged at startup.
 # entrystore.auth.email.from=signup@yourdomain.tld
 # entrystore.auth.email.bcc=info+signup@yourdomain.tld
-## With reCAPTCHA on, both keys are required; startup fails if either is missing.
+## With reCAPTCHA on, startup fails without the private key. Without the public key (site key), EntryStore's own
+## sign-up and password-reset forms render no widget; clients such as EntryScape render it with their own site key.
 # entrystore.auth.recaptcha=on (default: off)
 # entrystore.auth.recaptcha.public-key=your-public-recaptcha-key
 # entrystore.auth.recaptcha.private-key=your-private-recaptcha-key
