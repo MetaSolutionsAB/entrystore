@@ -16,6 +16,9 @@
 
 package org.entrystore.rest.springboot.filter;
 
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletResponse;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LogEvent;
@@ -23,20 +26,24 @@ import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.config.Configuration;
 import org.apache.logging.log4j.core.config.LoggerConfig;
+import org.eclipse.jetty.http.BadMessageException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.mock.web.MockAsyncContext;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RequestResponseLoggingFilterTest {
@@ -94,53 +101,123 @@ class RequestResponseLoggingFilterTest {
 	}
 
 	@Test
-	void requestLog_redactsSensitiveQueryParameters() throws Exception {
-		// Verifies the call-site wiring: the filter's REQUEST log line goes through
-		// HttpQueryRedactor so a 'confirm' token in the query string is replaced with
-		// '***' in the emitted LogEvent, while non-sensitive parameters survive verbatim.
-		var request = new MockHttpServletRequest("GET", "/auth/pwreset");
-		request.setQueryString("confirm=secret-token-abc&q=foo");
-		var response = new MockHttpServletResponse();
-		var chain = new MockFilterChain();
+	void completedRequest_isLoggedInOneInfoLine() throws Exception {
+		var request = new MockHttpServletRequest("GET", "/store/1/entry/2");
+		request.setQueryString("includeAll&limit=50");
+		request.setRemoteAddr("192.0.2.1");
+		FilterChain chain = (req, res) -> ((HttpServletResponse) res).setStatus(404);
 
-		filter.doFilter(request, response, chain);
+		filter.doFilter(request, new MockHttpServletResponse(), chain);
 
-		String requestLine = capturingAppender.events.stream()
-				.map(LogEvent::getMessage)
-				.map(m -> m.getFormattedMessage())
-				.filter(m -> m.startsWith("REQUEST "))
-				.findFirst()
-				.orElseThrow(() -> new AssertionError("Filter did not emit a REQUEST log line"));
-
-		assertFalse(requestLine.contains("secret-token-abc"),
-				"sensitive token must not appear verbatim in the log line: " + requestLine);
-		assertTrue(requestLine.contains("confirm=***"),
-				"redacted form of confirm must be present in the log line: " + requestLine);
-		assertTrue(requestLine.contains("q=foo"),
-				"non-sensitive query parameter must survive redaction: " + requestLine);
+		List<String> lines = loggedLines(Level.INFO);
+		assertEquals(1, lines.size(), lines.toString());
+		assertTrue(lines.getFirst().matches("GET /store/1/entry/2\\?includeAll&limit=50 404 \\d+ms client=192\\.0\\.2\\.1"),
+				lines.getFirst());
 	}
 
 	@Test
-	void requestLog_withNoQueryString_rendersCleanlyWithoutException() throws Exception {
-		// Defensive: a request with no query string (the common case for GET requests
-		// without parameters) must traverse the filter without throwing and the
-		// captured log line must reflect the absence as `query=null`.
-		var request = new MockHttpServletRequest("GET", "/auth/user");
-		// Intentionally no setQueryString — request.getQueryString() returns null.
+	void completedRequest_withoutQueryString_logsThePathOnly() throws Exception {
+		var request = new MockHttpServletRequest("POST", "/store/auth/cookie");
+		request.setRemoteAddr("192.0.2.1");
+
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+		assertTrue(loggedLines(Level.INFO).getFirst().matches("POST /store/auth/cookie 200 \\d+ms client=192\\.0\\.2\\.1"),
+				loggedLines(Level.INFO).toString());
+	}
+
+	@Test
+	void completedRequest_redactsSensitiveQueryParameters() throws Exception {
+		var request = new MockHttpServletRequest("GET", "/auth/pwreset");
+		request.setQueryString("confirm=secret-token-abc&q=foo");
+
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+		String line = loggedLines(Level.INFO).getFirst();
+		assertFalse(line.contains("secret-token-abc"), line);
+		assertTrue(line.contains("?confirm=***&q=foo "), line);
+	}
+
+	@Test
+	void handlerThatThrows_isLoggedWithStatus500AndTheExceptionPropagates() {
+		var request = new MockHttpServletRequest("GET", "/store/1/entry/2");
+		FilterChain chain = (req, res) -> {
+			throw new ServletException("handler failed");
+		};
+
+		assertThrows(ServletException.class, () -> filter.doFilter(request, new MockHttpServletResponse(), chain));
+
+		List<String> lines = loggedLines(Level.INFO);
+		assertEquals(1, lines.size(), lines.toString());
+		assertTrue(lines.getFirst().startsWith("GET /store/1/entry/2 500 "), lines.getFirst());
+	}
+
+	@Test
+	void filterThrowingABadMessage_isLoggedWithTheStatusJettySends() {
+		var request = new MockHttpServletRequest("POST", "/store/auth/cookie");
+		FilterChain chain = (req, res) -> {
+			throw new ServletException(new BadMessageException("Unable to parse form content"));
+		};
+
+		assertThrows(ServletException.class, () -> filter.doFilter(request, new MockHttpServletResponse(), chain));
+
+		assertTrue(loggedLines(Level.INFO).getFirst().startsWith("POST /store/auth/cookie 400 "),
+				loggedLines(Level.INFO).toString());
+	}
+
+	@Test
+	void exceptionAfterTheResponseIsCommitted_isLoggedWithTheStatusAlreadySent() {
+		var request = new MockHttpServletRequest("GET", "/store/1/resource/2");
 		var response = new MockHttpServletResponse();
-		var chain = new MockFilterChain();
+		FilterChain chain = (req, res) -> {
+			response.setStatus(206);
+			response.setCommitted(true);
+			throw new IOException("client went away");
+		};
+
+		assertThrows(IOException.class, () -> filter.doFilter(request, response, chain));
+
+		assertTrue(loggedLines(Level.INFO).getFirst().startsWith("GET /store/1/resource/2 206 "),
+				loggedLines(Level.INFO).toString());
+	}
+
+	@Test
+	void asyncRequest_isLoggedWhenItCompletesWithItsFinalStatus() throws Exception {
+		var request = new MockHttpServletRequest("GET", "/store/sparql");
+		request.setAsyncSupported(true);
+		var response = new MockHttpServletResponse();
+		FilterChain chain = (req, res) -> req.startAsync();
 
 		filter.doFilter(request, response, chain);
+		assertTrue(loggedLines(Level.INFO).isEmpty(), "logged before the async response completed");
 
-		String requestLine = capturingAppender.events.stream()
-				.map(LogEvent::getMessage)
-				.map(m -> m.getFormattedMessage())
-				.filter(m -> m.startsWith("REQUEST "))
-				.findFirst()
-				.orElseThrow(() -> new AssertionError("Filter did not emit a REQUEST log line"));
+		response.setStatus(503);
+		((MockAsyncContext) request.getAsyncContext()).complete();
 
-		assertTrue(requestLine.contains("query=null"),
-				"absent query string must render as `query=null`: " + requestLine);
+		List<String> lines = loggedLines(Level.INFO);
+		assertEquals(1, lines.size(), lines.toString());
+		assertTrue(lines.getFirst().startsWith("GET /store/sparql 503 "), lines.getFirst());
+	}
+
+	@Test
+	void requestStart_isLoggedAtDebugOnlyAndRedacted() throws Exception {
+		dedicatedLoggerConfig.setLevel(Level.DEBUG);
+		loggerContext.updateLoggers();
+		var request = new MockHttpServletRequest("GET", "/auth/pwreset");
+		request.setQueryString("confirm=secret-token-abc");
+		request.setRemoteAddr("192.0.2.1");
+
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+		assertEquals(List.of("GET /auth/pwreset?confirm=*** started client=192.0.2.1"), loggedLines(Level.DEBUG));
+		assertEquals(1, loggedLines(Level.INFO).size());
+	}
+
+	private List<String> loggedLines(Level level) {
+		return capturingAppender.events.stream()
+				.filter(e -> e.getLevel() == level)
+				.map(e -> e.getMessage().getFormattedMessage())
+				.toList();
 	}
 
 	/**
