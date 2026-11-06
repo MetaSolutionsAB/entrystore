@@ -17,8 +17,6 @@
 package org.entrystore.rest.springboot.service.auth;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -27,6 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RecaptchaSettingsTest {
+
+	private static final String MISSING_PRIVATE_KEY = "missing: [entrystore.auth.recaptcha.private-key]";
 
 	@Test
 	void enabled_withBothKeys_isEnabledAndExposesTheSiteKey() {
@@ -49,16 +49,41 @@ class RecaptchaSettingsTest {
 		assertNull(settings.getSiteKey());
 	}
 
-	@ParameterizedTest(name = "public-key={0}, private-key={1} -> missing {2}")
-	@CsvSource(nullValues = "null", delimiter = '|', value = {
-			"null  | secret | [entrystore.auth.recaptcha.public-key]",
-			"'  '  | secret | [entrystore.auth.recaptcha.public-key]",
-			"site  | null   | [entrystore.auth.recaptcha.private-key]",
-			"null  | ''     | [entrystore.auth.recaptcha.public-key, entrystore.auth.recaptcha.private-key]"
-	})
-	void enabled_withAMissingKey_failsStartupNamingOnlyTheMissingKeys(String siteKey, String secret, String missing) {
-		var e = assertThrows(IllegalStateException.class, () -> new RecaptchaSettings(true, siteKey, secret));
+	@Test
+	void enabled_withoutPublicKey_staysEnabledAndVerifiesWithThePrivateKey() {
+		RecaptchaSettings settings = new RecaptchaSettings(true, null, "secret");
 
-		assertTrue(e.getMessage().endsWith("missing: " + missing), e.getMessage());
+		assertTrue(settings.isEnabled());
+		assertNull(settings.getSiteKey());
+		assertEquals("secret", settings.getSecret());
+	}
+
+	@Test
+	void enabled_withBlankPublicKey_exposesNoSiteKeySoNoBrokenWidgetRenders() {
+		RecaptchaSettings settings = new RecaptchaSettings(true, "  ", "secret");
+
+		assertTrue(settings.isEnabled());
+		assertNull(settings.getSiteKey());
+	}
+
+	@Test
+	void enabled_withoutPrivateKey_failsStartup() {
+		var e = assertThrows(IllegalStateException.class, () -> new RecaptchaSettings(true, "site", null));
+
+		assertTrue(e.getMessage().endsWith(MISSING_PRIVATE_KEY), e.getMessage());
+	}
+
+	@Test
+	void enabled_withBlankPrivateKey_failsStartup() {
+		var e = assertThrows(IllegalStateException.class, () -> new RecaptchaSettings(true, "site", "  "));
+
+		assertTrue(e.getMessage().endsWith(MISSING_PRIVATE_KEY), e.getMessage());
+	}
+
+	@Test
+	void enabled_withoutAnyKey_failsStartupNamingOnlyThePrivateKey() {
+		var e = assertThrows(IllegalStateException.class, () -> new RecaptchaSettings(true, null, null));
+
+		assertTrue(e.getMessage().endsWith(MISSING_PRIVATE_KEY), e.getMessage());
 	}
 }
