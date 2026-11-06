@@ -81,15 +81,20 @@ public class SearchController {
 
 	@Operation(
 			summary = "Searches the repository and returns entries",
-			description = "Solr search. Facet buckets carry a name and a count; facetLang narrows the buckets of a "
-					+ "literal facet field to one language.",
+			description = "Solr search. Rows, the results count and facets cover only entries whose metadata the "
+					+ "caller may read; values in related.* fields come from entries related to them. Facet buckets "
+					+ "carry a name and a count; facetLang narrows the buckets of a literal facet field to one "
+					+ "language.",
 			parameters = {
+					@Parameter(name = "facetMinCount", description = "Minimum count of a facet bucket, default 1. 0 "
+							+ "also lists the field's terms without hits; that is honoured for admins only and counts "
+							+ "as 1 for other callers, since such terms can come from entries they may not read."),
 					@Parameter(name = "facetLang", description = "BCP 47 language tag, e.g. sv or en-GB. Keeps only the "
 							+ "buckets of literal facet fields (metadata.predicate.literal_s.<hash> or the "
 							+ "metadata.predicate.literal.<hash> shorthand) whose label occurs in that language (prefix "
 							+ "match, so en also matches en-GB) or untagged. The selection happens in Solr before "
-							+ "facetLimit is applied. A bucket's count is the label's count in all languages, taken "
-							+ "before access filtering; it is not the number of entries in the requested language. "
+							+ "facetLimit is applied. A bucket's count is the label's count in all languages; it is "
+							+ "not the number of entries in the requested language. "
 							+ "Candidates are gathered with a bounded overrequest ranked by their count in the "
 							+ "requested language, while the final order uses the total count, so a label that is rare "
 							+ "in that language but frequent overall can be missing from the top N entirely. Labels "

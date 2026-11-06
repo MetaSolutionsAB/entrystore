@@ -75,6 +75,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.concurrent.ConcurrentHashMap;
@@ -206,6 +207,21 @@ public class SolrSearchIndex implements SearchIndex {
 
 	// Documents Solr has accepted or rejected; growing while a purge waits means the submitter is not stalled.
 	private final AtomicLong settledDocuments = new AtomicLong();
+
+	private final AtomicLong readFilterMismatches = new AtomicLong();
+
+	/** Whether the entry has an ACL of its own ({@link Entry#hasAllowedPrincipals()}), which replaces its context's. */
+	public static final String FIELD_ACL_EXPLICIT = "acl.explicit";
+
+	/** Entry URI of a reference's local target, whose ACL governs the reference's indexed metadata. */
+	public static final String FIELD_REFERENCED_ENTRY = "referencedEntry";
+
+	/**
+	 * Fields and dynamic field patterns this version writes that an older {@code schema.xml} lacks; the startup
+	 * schema check refuses a schema without them, since Solr would reject every document.
+	 */
+	public static final List<String> REQUIRED_SCHEMA_FIELDS = List.of(FIELD_ACL_EXPLICIT, FIELD_REFERENCED_ENTRY,
+			LangFacetValue.FIELD_PREFIX + "*", "related." + LangFacetValue.FIELD_PREFIX + "*");
 
 	/** Total {@code facet.query} clauses one {@link #facetCountsForLabels} request may carry, across all fields. */
 	public static final int MAX_COUNT_CLAUSES = 1600;
@@ -1064,6 +1080,15 @@ public class SolrSearchIndex implements SearchIndex {
 		return rejectedDocuments.get();
 	}
 
+	/**
+	 * Search hits since startup that the read-access filter admitted but the per-hit access check denied. A short lag
+	 * after an ACL change explains a few; a steadily growing value means the filter and the access check disagree, so
+	 * counts and facets include entries their callers cannot read.
+	 */
+	public long getReadFilterMismatchCount() {
+		return readFilterMismatches.get();
+	}
+
 	public long getDeleteQueueSize() {
 		return deleteQueue.size();
 	}
@@ -1534,6 +1559,12 @@ public class SolrSearchIndex implements SearchIndex {
 		} catch (IllegalArgumentException iae) {
 			log.warn("Unable to index ACL for entry {}: {}", entry.getEntryURI().toString(), iae.getMessage());
 		}
+		doc.setField(FIELD_ACL_EXPLICIT, entry.hasAllowedPrincipals());
+		if ((entry.getEntryType() == EntryType.Reference || entry.getEntryType() == EntryType.LinkReference)
+				&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper wrapper
+				&& wrapper.getReferencedEntryURI() instanceof URI referencedEntryURI) {
+			doc.setField(FIELD_REFERENCED_ENTRY, referencedEntryURI.toString());
+		}
 
 		// status
 		URI status = entry.getStatus();
@@ -1864,15 +1895,16 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Exact counts for candidate labels of several facet fields, in one bounded {@code rows=0} request without ACL
-	 * filtering: one {@code facet.query} per (field, label), at most {@link #MAX_COUNT_CLAUSES} in total, shared
+	 * Exact counts for candidate labels of several facet fields, in one bounded {@code rows=0} request restricted by
+	 * the caller's {@link SolrReadAccessFilter}, as {@link #sendQuery} restricts the search the candidates come from:
+	 * one {@code facet.query} per (field, label), at most {@link #MAX_COUNT_CLAUSES} in total, shared
 	 * round-robin across the fields so each keeps the head of its ranked candidate list. The field query parser takes
 	 * the label literally, {@code cache=false} keeps the clauses out of the filterCache that every other search
 	 * depends on, and macro expansion is switched off because labels are user-written text in which {@code ${…}}
 	 * would otherwise be expanded. The request goes out as POST because labels can be long. Labels the field does not
 	 * hold are absent from the result rather than present with zero.
 	 *
-	 * @param baseQuery the query whose result set the counts apply to; only its query and filters are reused
+	 * @param baseQuery the query whose result set the counts apply to; only its query and client filters are reused
 	 * @param candidatesByField per client-facing facet field, its candidate labels in ranked order
 	 * @return per field, the counted labels; a field whose candidates were all cut by the budget maps to an empty map
 	 * @throws SolrException when Solr rejects the request, or with {@code SERVICE_UNAVAILABLE} when it cannot be
@@ -1906,6 +1938,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 		SolrQuery countQuery = facetOnlyQuery(baseQuery.getQuery(), baseQuery.getFilterQueries());
 		fieldAndLabelByQuery.keySet().forEach(countQuery::addFacetQuery);
+		SolrReadAccessFilter.forAuthenticatedUser(rm).ifPresent(filter -> filter.applyTo(countQuery));
 		QueryResponse response;
 		try {
 			response = solrServer.query(countQuery, SolrRequest.METHOD.POST);
@@ -1927,7 +1960,8 @@ public class SolrSearchIndex implements SearchIndex {
 	/**
 	 * Whether {@code field} holds at least one term anywhere in the index, as a bounded {@code rows=0} facet with
 	 * {@code facet.limit=1} over {@code *:*}. Callers read a negative answer as an index built before the field
-	 * existed; a positive answer cannot become false again, so it is cached and the probe runs once per field.
+	 * existed; a positive answer cannot become false again, so it is cached and the probe runs once per field. Not
+	 * restricted by read access: the answer says whether the index has the field, not what any entry holds.
 	 *
 	 * @throws SolrException when Solr rejects the request, or with {@code SERVICE_UNAVAILABLE} when it cannot be
 	 * reached; a failed probe is not reported as either answer
@@ -1984,7 +2018,8 @@ public class SolrSearchIndex implements SearchIndex {
 		long hits = -1;
 		QueryResponse r;
 		try {
-			r = solrServer.query(query);
+			// POST: the read-access filter carries the caller's principals, which can exceed a URL's length limit
+			r = solrServer.query(query, SolrRequest.METHOD.POST);
 			r.getElapsedTime();
 			// Facets are identical on every result-fill pass of sendQuery; taking them once keeps each field single.
 			if (r.getFacetFields() != null && facetFields.isEmpty()) {
@@ -2012,7 +2047,15 @@ public class SolrSearchIndex implements SearchIndex {
 		return hits;
 	}
 
-	public QueryResult sendQuery(SolrQuery query) throws SolrException {
+	/**
+	 * Runs {@code clientQuery} restricted by the caller's {@link SolrReadAccessFilter}, so that rows, the hit count
+	 * and facets cover only entries the caller may read. Every returned hit is still checked against the repository,
+	 * which drops a hit an index lagging behind an ACL change admitted. {@code clientQuery} itself is left unchanged.
+	 */
+	public QueryResult sendQuery(SolrQuery clientQuery) throws SolrException {
+		Optional<SolrReadAccessFilter> readFilter = SolrReadAccessFilter.forAuthenticatedUser(rm);
+		SolrQuery query = clientQuery.getCopy();
+		readFilter.ifPresent(filter -> filter.applyTo(query));
 		Set<Entry> result = new LinkedHashSet<>();
 		long hits = -1;
 		long inaccessibleHits = 0;
@@ -2079,6 +2122,10 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 				} catch (AuthorizationException | IllegalStateException e) {
 					inaccessibleHits++;
+					if (e instanceof AuthorizationException && readFilter.isPresent()) {
+						readFilterMismatches.incrementAndGet();
+						log.debug("Search hit {} passed the read-access filter but the access check denied it", uri);
+					}
 				} catch (RuntimeException | StackOverflowError e) {
 					// Only corrupt data of the hit, its referenced entry or their context entries skips the hit; other
 					// failures, e.g. of the store or a corrupt principal in an access check, must fail the search

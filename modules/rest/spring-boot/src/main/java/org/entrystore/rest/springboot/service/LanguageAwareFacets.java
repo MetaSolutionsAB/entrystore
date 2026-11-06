@@ -49,8 +49,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * frequent overall can be missing from the top N entirely. A label longer than {@link LangFacetValue#MAX_LABEL_LENGTH}
  * has no companion term, so it cannot be selected while {@code facetLang} is set.
  *
- * <p>Counts are Solr's, taken before the per-entry authorization filtering in {@code SolrSearchIndex.sendQuery}, so
- * a caller who may not read every matching entry can see a count higher than the hits a drill-down returns.
+ * <p>Counts are Solr's and cover only the entries the caller may read: {@code SolrSearchIndex} restricts both the
+ * search and the count request by the caller's read access.
  */
 @Slf4j
 final class LanguageAwareFacets {

@@ -19,6 +19,7 @@ package org.entrystore.rest.it
 import groovy.json.JsonSlurper
 import org.apache.solr.client.solrj.jetty.HttpJettySolrClient
 import org.entrystore.impl.SolrSchemaCheck
+import org.entrystore.repository.util.SolrSearchIndex
 
 import static java.net.HttpURLConnection.HTTP_OK
 
@@ -30,11 +31,6 @@ import static java.net.HttpURLConnection.HTTP_OK
  * configset indexes, which search results alone cannot show.
  */
 class SolrSchemaProbeIT extends BaseSpec {
-
-	private static final List<String> REQUIRED_DYNAMIC_FIELDS = [
-		'metadata.predicate.literal_l.*',
-		'related.metadata.predicate.literal_l.*'
-	]
 
 	private static String coreUrl() {
 		return 'http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core'
@@ -104,18 +100,18 @@ class SolrSchemaProbeIT extends BaseSpec {
 		readSchemaFieldType('date')['docValues'] == true
 	}
 
-	def "the startup guard reads the required dynamic fields from the Solr core used by the ITs"() {
+	def "the startup guard reads the required fields and dynamic fields from the Solr core used by the ITs"() {
 		given:
 		def client = new HttpJettySolrClient.Builder(coreUrl()).useHttp1_1(true).build()
 
 		when:
-		def declared = SolrSchemaCheck.dynamicFieldNames(client)
-		def verified = SolrSchemaCheck.requireDynamicFields(client, coreUrl(), REQUIRED_DYNAMIC_FIELDS)
+		def declared = SolrSchemaCheck.fieldNames(client) + SolrSchemaCheck.dynamicFieldNames(client)
+		def verified = SolrSchemaCheck.requireFields(client, coreUrl(), SolrSearchIndex.REQUIRED_SCHEMA_FIELDS)
 
 		then:
-		// the exact read the guard performs at startup: if it ever stops parsing the names, startup would run
+		// the exact reads the guard performs at startup: if it ever stops parsing the names, startup would run
 		// unverified, so the names must come back and the guard must report the schema verified
-		declared.containsAll(REQUIRED_DYNAMIC_FIELDS)
+		declared.containsAll(SolrSearchIndex.REQUIRED_SCHEMA_FIELDS)
 		verified
 
 		cleanup:

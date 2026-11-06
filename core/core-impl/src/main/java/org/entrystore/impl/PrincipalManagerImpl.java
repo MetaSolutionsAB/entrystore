@@ -511,6 +511,29 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		return isUserAdminOrAdminGroup(currentUserUri);
 	}
 
+	@Override
+	public Set<URI> getAclPrincipalsOfAuthenticatedUser() {
+		URI currentUserURI = getAuthenticatedUserURI();
+		URI guestURI = getGuestUser().getURI();
+		URI userURI = currentUserURI != null ? currentUserURI : guestURI;
+		try {
+			// as in checkAuthenticatedUserAuthorized: resolving principals must not be hindered by their own ACLs
+			setAuthenticatedUserURI(getAdminUser().getURI());
+			if (getUser(userURI) == null) {
+				return Set.of();
+			}
+			Set<URI> principals = new HashSet<>(getGroupUrisCached(userURI));
+			principals.add(userURI);
+			principals.add(guestURI);
+			if (!guestURI.equals(userURI)) {
+				principals.add(getUserGroup().getURI());
+			}
+			return Set.copyOf(principals);
+		} finally {
+			setAuthenticatedUserURI(currentUserURI);
+		}
+	}
+
 	/**
 	 * Checks if the authenticated user it authorized to perform a specific task on a Entry. The task is defined by an access property.
 	 * @param entry the entry on which to check the specified accessProperty.
