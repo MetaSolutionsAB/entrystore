@@ -36,17 +36,24 @@ import static java.net.HttpURLConnection.HTTP_OK
 // SSO-specific args, reusing this single Keycloak container. See ENTRYSTORE-1019.
 abstract class KeycloakBaseSpec extends BaseSpec {
 
+	/**
+	 * The Keycloak server version, down to the patch release. The CAS protocol jar under {@code libs/} calls
+	 * Keycloak internals that a patch release can change, so it must be built for this version; upgrade both
+	 * together.
+	 */
+	static final String KEYCLOAK_VERSION = '26.8.0'
+
 	// Merged realm test-realm-keycloak.json contains SAML, CAS and OIDC clients; the CAS
 	// protocol jar is mounted so all three flows are available from one container (Keycloak
 	// speaks OIDC natively — no extra provider jar needed for it).
 	@Shared
-	static KeycloakContainer keycloakContainer = new KeycloakContainer()
+	static KeycloakContainer keycloakContainer = new KeycloakContainer('quay.io/keycloak/keycloak:' + KEYCLOAK_VERSION)
 		.withAdminUsername('admin')
 		.withAdminPassword('admin')
 		.withRealmImportFile('test-realm-keycloak.json')
 		.withEnv('KC_DB', 'dev-file')
 		.withCopyFileToContainer(
-			MountableFile.forClasspathResource('libs/keycloak-protocol-cas-26.8.0.jar'),
+			MountableFile.forClasspathResource('libs/keycloak-protocol-cas-' + KEYCLOAK_VERSION + '.jar'),
 			'/opt/keycloak/providers/keycloak-protocol-cas.jar'
 		)
 
