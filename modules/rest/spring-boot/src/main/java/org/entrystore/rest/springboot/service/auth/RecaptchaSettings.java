@@ -17,26 +17,26 @@
 package org.entrystore.rest.springboot.service.auth;
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.repository.config.Settings;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * The reCAPTCHA configuration shared by the sign-up and password-reset forms, which render the widget
- * with the site key, and by the server-side check, which verifies the token with the secret. Keeping
- * one gate for both stops a form from minting tokens that the check can never accept.
+ * with the site key, and by the server-side check, which verifies the token with the secret.
  *
- * <p>Startup fails when reCAPTCHA is on and either key is blank: without a site key the form cannot
- * produce a token, and without a secret no token can be verified. When reCAPTCHA is off,
- * {@link #getSiteKey()} is null, which the forms read as "render no widget".
+ * <p>Startup fails when reCAPTCHA is on and the secret is blank, since no token could be verified. A
+ * blank site key only logs a WARN, as in 5.x: clients such as EntryScape render the widget with their
+ * own site key and post the token, so only EntryStore's own HTML forms lose the widget. When reCAPTCHA
+ * is off or the site key is blank, {@link #getSiteKey()} is null, which the forms read as "render no
+ * widget".
  *
  * <p>Read through {@code @Value}: {@code entrystore.auth.recaptcha} is both a scalar and the prefix of
  * the key properties, which {@code @ConfigurationProperties} cannot bind.
  */
+@Slf4j
 @Getter
 @Component
 public class RecaptchaSettings {
@@ -48,21 +48,17 @@ public class RecaptchaSettings {
 	public RecaptchaSettings(@Value("${entrystore.auth.recaptcha:false}") boolean enabled,
 							 @Value("${entrystore.auth.recaptcha.public-key:#{null}}") String siteKey,
 							 @Value("${entrystore.auth.recaptcha.private-key:#{null}}") String secret) {
-		this.enabled = enabled;
-		this.siteKey = enabled ? siteKey : null;
-		this.secret = secret;
-		if (enabled) {
-			List<String> missing = new ArrayList<>();
-			if (StringUtils.isBlank(siteKey)) {
-				missing.add(Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
-			}
-			if (StringUtils.isBlank(secret)) {
-				missing.add(Settings.AUTH_RECAPTCHA_PRIVATE_KEY);
-			}
-			if (!missing.isEmpty()) {
-				throw new IllegalStateException("EntryStore startup aborted: " + Settings.AUTH_RECAPTCHA
-						+ " is enabled but missing: " + missing);
-			}
+		if (enabled && StringUtils.isBlank(secret)) {
+			throw new IllegalStateException("EntryStore startup aborted: " + Settings.AUTH_RECAPTCHA
+					+ " is enabled but missing: [" + Settings.AUTH_RECAPTCHA_PRIVATE_KEY + "]");
 		}
+		if (enabled && StringUtils.isBlank(siteKey)) {
+			log.warn("{} is enabled but {} is not set: EntryStore's sign-up and password-reset forms render "
+					+ "without the reCAPTCHA widget, so only clients that render it themselves can pass the check",
+					Settings.AUTH_RECAPTCHA, Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
+		}
+		this.enabled = enabled;
+		this.siteKey = enabled && StringUtils.isNotBlank(siteKey) ? siteKey : null;
+		this.secret = secret;
 	}
 }
