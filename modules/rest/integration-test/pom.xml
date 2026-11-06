@@ -168,13 +168,8 @@
 		</dependency>
 
 		<!--
-			Pinned: KeycloakBaseSpec uses the no-arg KeycloakContainer(), so this version decides
-			the Keycloak server image, and that image must match the CAS protocol extension jar
-			checked in at src/test/resources/libs/keycloak-protocol-cas-26.8.0.jar. A server newer
-			than the jar fails ZzzCasLoginIT with a NoSuchMethodError raised inside Keycloak, as
-			4.3.1 did against the 26.5.6 jar (org.keycloak.protocol.oidc.utils.OAuth2Code constructor).
-			To upgrade, bump the bundled keycloak-protocol-cas jar to the same Keycloak version
-			in the same commit.
+			This version does not decide the Keycloak server: KeycloakBaseSpec.KEYCLOAK_VERSION pins
+			the image to the patch release that the bundled CAS protocol jar is built for.
 		-->
 		<dependency>
 			<groupId>com.github.dasniko</groupId>
