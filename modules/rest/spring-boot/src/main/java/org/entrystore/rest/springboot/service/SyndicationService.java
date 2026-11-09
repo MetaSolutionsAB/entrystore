@@ -70,8 +70,8 @@ public class SyndicationService {
 	 * answer {@link NotImplementedException}, and {@code feedSize} is clamped to {@code entrystore.solr.max-limit}.
 	 * Item links follow the URL template configured under {@code urlTemplate} (the {@code default} one when null),
 	 * else the resource URI; {@code feedTitle} replaces the default title "Feed of &lt;alias&gt;" and is sanitized
-	 * like a /search feed title. Entries the caller may not read, and the children of lists whose resource it may
-	 * not read, are left out.
+	 * like a /search feed title. Entries the caller may not read are left out, and a list in the feed whose resource
+	 * it may not read adds none of its children. The requested entry itself is not checked.
 	 */
 	public RenderedFeed renderFeed(Entry entry, String feedType, String language, int feedSize, String urlTemplate,
 								   String feedTitle) {
