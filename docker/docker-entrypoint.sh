@@ -39,5 +39,5 @@ if [ -z "$ENTRYSTORE_CONFIG_URI" ] && [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 exec java -jar entrystore.jar \
-  --spring.config.import=optional:file://"$CONFIG_FILE" \
+  "--spring.config.import=optional:file://${CONFIG_FILE}[encoding=utf-8]" \
   "$@"

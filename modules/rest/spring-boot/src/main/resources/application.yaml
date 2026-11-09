@@ -33,9 +33,10 @@ info.app.version: "@project.version@"
 
 
 # imported properties from "entrystore.properties" take precedence over properties here (when the same key exists in both property sources)
+# The file is UTF-8, as in 5.x; without the hint Spring Boot reads .properties as ISO-8859-1.
 spring:
   config.import:
-    - file:entrystore.properties
+    - file:entrystore.properties[encoding=utf-8]
   lifecycle:
     timeout-per-shutdown-phase: 30s
   jackson:
