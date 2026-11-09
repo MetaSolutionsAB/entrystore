@@ -149,6 +149,7 @@ public interface Settings {
 	String STORE_ENDPOINT_QUERY = "entrystore.repository.store.endpoint-query";
 	String STORE_ENDPOINT_UPDATE = "entrystore.repository.store.endpoint-update";
 	String STORE_INDEXES = "entrystore.repository.store.indexes";
+	String STORE_WAL = "entrystore.repository.store.wal";
 	String STORE_TYPE = "entrystore.repository.store.type";
 	String STORE_INIT_WITH_TEST_DATA = "entrystore.repository.store.init-with-test-data";
 
@@ -173,6 +174,7 @@ public interface Settings {
 	String REPOSITORY_PUBLIC = "entrystore.repository.public";
 	String REPOSITORY_PUBLIC_PATH = "entrystore.repository.public.path";
 	String REPOSITORY_PUBLIC_INDEXES = "entrystore.repository.public.indexes";
+	String REPOSITORY_PUBLIC_WAL = "entrystore.repository.public.wal";
 	String REPOSITORY_PUBLIC_TYPE = "entrystore.repository.public.type";
 	String REPOSITORY_PUBLIC_REBUILD_ON_STARTUP = "entrystore.repository.public.rebuild-on-startup";
 	String REPOSITORY_PUBLIC_SPARQL_MAX_EXECUTION_TIME = "entrystore.repository.public.sparql.max-execution-time";
@@ -180,6 +182,7 @@ public interface Settings {
 	String REPOSITORY_PROVENANCE = "entrystore.repository.provenance";
 	String REPOSITORY_PROVENANCE_PATH = "entrystore.repository.provenance.path";
 	String REPOSITORY_PROVENANCE_INDEXES = "entrystore.repository.provenance.indexes";
+	String REPOSITORY_PROVENANCE_WAL = "entrystore.repository.provenance.wal";
 	String REPOSITORY_PROVENANCE_TYPE = "entrystore.repository.provenance.type";
 	String REPOSITORY_PROVENANCE_REBUILD_ON_STARTUP = "entrystore.repository.provenance.rebuild-on-startup";
 

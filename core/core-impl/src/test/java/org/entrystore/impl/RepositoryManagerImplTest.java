@@ -17,6 +17,7 @@
 package org.entrystore.impl;
 
 import org.apache.solr.client.solrj.SolrClient;
+import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.rio.RDFFormat;
@@ -47,11 +48,15 @@ import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
 
@@ -288,6 +293,133 @@ public class RepositoryManagerImplTest {
 					new RepositoryEventObject(mock(Entry.class), RepositoryEvent.ResourceUpdated)));
 		} finally {
 			deregisterInstance(baseUrl);
+		}
+	}
+
+	/** Native stores in a temporary directory; each test writes to a store, shuts down and inspects its files. */
+	@Nested
+	class NativeStoreValueStoreWal {
+
+		private static final String BASE_URL = "http://localhost:8181/";
+
+		private static final String WAL_DIRECTORY = "value-store-wal";
+
+		@TempDir
+		Path tempDir;
+
+		@Test
+		public void mainStoreHasNoWalByDefault() throws Exception {
+			Path store = tempDir.resolve("store");
+
+			writeToMainStoreAndShutDown(nativeStoreConfig(store));
+
+			assertFalse(Files.exists(store.resolve(WAL_DIRECTORY)));
+		}
+
+		@Test
+		public void mainStoreHasAWalWhenEnabled() throws Exception {
+			Path store = tempDir.resolve("store");
+			Config config = nativeStoreConfig(store);
+			config.setProperty(Settings.STORE_WAL, "on");
+
+			writeToMainStoreAndShutDown(config);
+
+			assertTrue(Files.isDirectory(store.resolve(WAL_DIRECTORY)));
+		}
+
+		@Test
+		public void provenanceStoreHasNoWalByDefault() throws Exception {
+			Path provenance = tempDir.resolve("provenance");
+
+			writeToProvenanceStoreAndShutDown(nativeProvenanceConfig(provenance));
+
+			assertFalse(Files.exists(provenance.resolve(WAL_DIRECTORY)));
+		}
+
+		@Test
+		public void provenanceStoreHasAWalWhenEnabled() throws Exception {
+			Path provenance = tempDir.resolve("provenance");
+			Config config = nativeProvenanceConfig(provenance);
+			config.setProperty(Settings.REPOSITORY_PROVENANCE_WAL, "on");
+
+			writeToProvenanceStoreAndShutDown(config);
+
+			assertTrue(Files.isDirectory(provenance.resolve(WAL_DIRECTORY)));
+		}
+
+		@Test
+		public void existingWalIsLeftUntouchedWhenDisabled() throws Exception {
+			Path store = tempDir.resolve("store");
+			Config walConfig = nativeStoreConfig(store);
+			walConfig.setProperty(Settings.STORE_WAL, "on");
+			writeToMainStoreAndShutDown(walConfig);
+			Map<Path, String> walFilesBefore = filesIn(store.resolve(WAL_DIRECTORY));
+
+			writeToMainStoreAndShutDown(nativeStoreConfig(store));
+
+			assertEquals(walFilesBefore, filesIn(store.resolve(WAL_DIRECTORY)));
+		}
+
+		private Config nativeStoreConfig(Path store) throws IOException {
+			Files.createDirectories(store);
+			Config config = new PropertiesConfiguration("EntryStore Configuration");
+			config.setProperty(Settings.STORE_TYPE, "native");
+			config.setProperty(Settings.STORE_PATH, store.toUri().toString());
+			config.setProperty(Settings.STORE_INDEXES, "cspo,posc");
+			config.setProperty(Settings.BASE_URL, BASE_URL);
+			config.setProperty(Settings.SOLR, "off");
+			return config;
+		}
+
+		private Config nativeProvenanceConfig(Path provenance) throws IOException {
+			Files.createDirectories(provenance);
+			Config config = nativeStoreConfig(tempDir.resolve("store"));
+			config.setProperty(Settings.REPOSITORY_PROVENANCE, "on");
+			config.setProperty(Settings.REPOSITORY_PROVENANCE_TYPE, "native");
+			config.setProperty(Settings.REPOSITORY_PROVENANCE_PATH, provenance.toUri().toString());
+			return config;
+		}
+
+		private void writeToMainStoreAndShutDown(Config config) throws Exception {
+			RepositoryManagerImpl rm = new RepositoryManagerImpl(BASE_URL, config);
+			try {
+				addStatement(rm.getRepository());
+			} finally {
+				rm.shutdown();
+				deregisterInstance(BASE_URL);
+			}
+		}
+
+		private void writeToProvenanceStoreAndShutDown(Config config) throws Exception {
+			RepositoryManagerImpl rm = new RepositoryManagerImpl(BASE_URL, config);
+			try {
+				addStatement(rm.getProvenanceRepository());
+			} finally {
+				rm.shutdown();
+				deregisterInstance(BASE_URL);
+			}
+		}
+
+		private void addStatement(Repository repository) {
+			try (RepositoryConnection rc = repository.getConnection()) {
+				ValueFactory vf = rc.getValueFactory();
+				rc.add(vf.createIRI(BASE_URL, "subject"), vf.createIRI(BASE_URL, "predicate"),
+						vf.createLiteral("value written by " + getClass().getSimpleName()));
+			}
+		}
+
+		/** The regular files below {@code directory}, relative to it, with the SHA-256 of their content. */
+		private Map<Path, String> filesIn(Path directory) throws IOException {
+			try (Stream<Path> files = Files.walk(directory)) {
+				return files.filter(Files::isRegularFile).collect(Collectors.toMap(directory::relativize, file -> {
+					try {
+						return HexFormat.of().formatHex(
+								MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file)));
+					} catch (IOException | NoSuchAlgorithmException e) {
+						throw new IllegalStateException(e);
+					}
+				}));
+			}
 		}
 	}
 
