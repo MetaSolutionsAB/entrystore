@@ -40,6 +40,7 @@ import org.eclipse.rdf4j.sail.lmdb.LmdbStore;
 import org.eclipse.rdf4j.sail.lmdb.config.LmdbStoreConfig;
 import org.eclipse.rdf4j.sail.memory.MemoryStore;
 import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
+import org.eclipse.rdf4j.sail.nativerdf.wal.ValueStoreWalConfig;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -190,15 +191,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			} else {
 				File path = new File(configuration.getURI(Settings.STORE_PATH));
 				String indexes = configuration.getString(Settings.STORE_INDEXES);
+				boolean wal = configuration.getBoolean(Settings.STORE_WAL, false);
 				checkAndUpgradeNativeStore(path, indexes);
-				log.info("Main repository: using Native Store at {} with indexes {}", path, indexes);
-				NativeStore store;
-				if (indexes != null) {
-					store = new NativeStore(path, indexes);
-				} else {
-					store = new NativeStore(path);
-				}
-				this.repository = new SailRepository(store);
+				log.info("Main repository: using Native Store at {} with indexes {}, value-store WAL {}",
+						path, indexes, walState(wal));
+				this.repository = new SailRepository(newNativeStore(path, indexes, wal));
 			}
 		} else if (storeType.equalsIgnoreCase("http")) {
 			if (!configuration.containsKey(Settings.STORE_URL)) {
@@ -361,16 +358,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			} else {
 				File path = new File(configuration.getURI(Settings.REPOSITORY_PROVENANCE_PATH));
 				String indexes = configuration.getString(Settings.REPOSITORY_PROVENANCE_INDEXES);
+				boolean wal = configuration.getBoolean(Settings.REPOSITORY_PROVENANCE_WAL, false);
 				checkAndUpgradeNativeStore(path, indexes);
-				log.info("Provenance repository: using Native Store at {} with indexes {}", path, indexes);
-
-				NativeStore store;
-				if (indexes != null) {
-					store = new NativeStore(path, indexes);
-				} else {
-					store = new NativeStore(path);
-				}
-				this.provenanceRepository = new SailRepository(store);
+				log.info("Provenance repository: using Native Store at {} with indexes {}, value-store WAL {}",
+						path, indexes, walState(wal));
+				this.provenanceRepository = new SailRepository(newNativeStore(path, indexes, wal));
 			}
 		}
 		try {
@@ -847,6 +839,28 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		return null;
 	}
 
+	/**
+	 * Creates a Native Store with the RDF4J value-store WAL on or off. The WAL only lets RDF4J repair corrupt values
+	 * in values.dat; commits do not depend on it. RDF4J reads an existing WAL completely into the heap whenever the
+	 * store opens, so with the WAL on the heap needed at startup grows with the number of values in the store. A WAL
+	 * directory left by an earlier run is reported, never deleted: it may only be removed while EntryStore is stopped.
+	 *
+	 * @param indexes the index specification, or null for the RDF4J default
+	 */
+	static NativeStore newNativeStore(File path, String indexes, boolean walEnabled) {
+		NativeStore store = indexes != null ? new NativeStore(path, indexes) : new NativeStore(path);
+		store.setWalEnabled(walEnabled);
+		File walDirectory = new File(path, ValueStoreWalConfig.DEFAULT_DIRECTORY_NAME);
+		if (!walEnabled && walDirectory.isDirectory()) {
+			log.info("Value-store WAL at {} is unused and can be deleted while EntryStore is stopped", walDirectory);
+		}
+		return store;
+	}
+
+	static String walState(boolean walEnabled) {
+		return walEnabled ? "enabled" : "disabled";
+	}
+
 	protected void checkAndUpgradeNativeStore(File path, String indexes) {
 		if (path.exists() && path.isDirectory() && (Objects.requireNonNull(path.list()).length == 0 || new File(path, "nativerdf.ver").exists())) {
 			// no upgrade needed
@@ -882,9 +896,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			throw new RuntimeException(ioe);
 		}
 
-		SailRepository oldRepo = new SailRepository(new NativeStore(backupPath, indexes));
+		SailRepository oldRepo = new SailRepository(newNativeStore(backupPath, indexes, false));
 		oldRepo.init();
-		SailRepository newRepo = new SailRepository(new NativeStore(path, indexes));
+		SailRepository newRepo = new SailRepository(newNativeStore(path, indexes, false));
 		newRepo.init();
 
 		long oldTripleCount;
