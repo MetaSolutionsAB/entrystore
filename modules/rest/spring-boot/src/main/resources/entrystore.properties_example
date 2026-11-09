@@ -32,6 +32,14 @@ entrystore.repository.store.path=file:///srv/entrystore/store/
 ## Unset, the store keeps the indexes it was created with (RDF4J creates spoc,posc). Changing the list
 ## rebuilds the indexes on the next start, which lengthens that start.
 entrystore.repository.store.indexes=cspo,posc
+## RDF4J value-store write-ahead log of a native store. It only lets RDF4J repair corrupt values in
+## values.dat; commits do not depend on it. Off by default: RDF4J reads an existing WAL completely
+## into the heap when the store opens, so the heap needed at startup grows with the number of values.
+## Turning it on for an existing store rebuilds the WAL from all values after the next start. With
+## it off, a leftover value-store-wal directory in the store is unused and can be deleted while
+## EntryStore is stopped. The same applies to entrystore.repository.public.wal and
+## entrystore.repository.provenance.wal.
+# entrystore.repository.store.wal=on|off (default: off)
 ## if type=http: entrystore.repository.store.url=URL of Sesame HTTP repository
 ## if type=sparql: entrystore.repository.store.endpoint-query=Query URL of SPARQL repository
 ## if type=sparql: entrystore.repository.store.endpoint-update=Update URL of SPARQL repository
@@ -521,6 +529,7 @@ entrystore.solr.extract-fulltext=off
 # entrystore.repository.public.type=native
 # entrystore.repository.public.path=file:///srv/entrystore/store/public/
 # entrystore.repository.public.indexes=cspo,spoc,posc
+# entrystore.repository.public.wal=on|off (default: off)
 
 ## RowStore integration
 ## Rowstore pipelines only replace, append to or alias datasets on the origin of this URL,

@@ -30,7 +30,6 @@ import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.sail.SailRepository;
 import org.eclipse.rdf4j.sail.memory.MemoryStore;
-import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
@@ -264,16 +263,11 @@ public class PublicRepository {
 			} else {
 				File path = new File(config.getURI(Settings.REPOSITORY_PUBLIC_PATH));
 				String indexes = config.getString(Settings.REPOSITORY_PUBLIC_INDEXES);
+				boolean wal = config.getBoolean(Settings.REPOSITORY_PUBLIC_WAL, false);
 				((RepositoryManagerImpl) rm).checkAndUpgradeNativeStore(path, indexes);
-				log.info("Public repository: using Native Store at {} with indexes {}", path, indexes);
-				
-				NativeStore store;
-				if (indexes != null) {
-					store = new NativeStore(path, indexes);
-				} else {
-					store = new NativeStore(path);
-				}
-				this.repository = new SailRepository(store);
+				log.info("Public repository: using Native Store at {} with indexes {}, value-store WAL {}",
+						path, indexes, RepositoryManagerImpl.walState(wal));
+				this.repository = new SailRepository(RepositoryManagerImpl.newNativeStore(path, indexes, wal));
 			}
 		}
 		
