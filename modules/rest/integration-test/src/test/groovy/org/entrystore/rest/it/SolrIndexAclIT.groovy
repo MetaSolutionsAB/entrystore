@@ -20,11 +20,7 @@ import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
-import java.util.concurrent.TimeUnit
-
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
-import static java.net.HttpURLConnection.HTTP_OK
-import static org.awaitility.Awaitility.await
 
 /**
  * ACL writes that change an entry's own ACL outside a PUT of its entry information must reach the entry's Solr
@@ -119,19 +115,6 @@ class SolrIndexAclIT extends BaseSpec {
 	/** Entry information granting guest read on the given metadata URI. */
 	private static Map guestReadAcl(String metadataUri) {
 		return [(metadataUri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]]
-	}
-
-	/** Polls an admin search until the query matches exactly one document; commitWithin lets the searcher lag. */
-	private void awaitIndexed(String query) {
-		waitForSolrProcessing()
-		await()
-			.pollInterval(200, TimeUnit.MILLISECONDS)
-			.atMost(15, TimeUnit.SECONDS)
-			.until {
-				def conn = EntryStoreClient.getRequest(
-					'/search' + convertMapToQueryParams([type: 'solr', query: query]))
-				conn.getResponseCode() == HTTP_OK && JSON_PARSER.parseText(conn.inputStream.text)['results'] == 1
-			}
 	}
 
 	private static String entryUri(String entryId) {

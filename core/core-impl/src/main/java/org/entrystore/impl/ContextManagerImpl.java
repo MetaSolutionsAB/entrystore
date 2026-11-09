@@ -52,6 +52,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
+import org.entrystore.SearchIndex;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
@@ -303,7 +304,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	 * import of it are refused, reads what to remove without the repository monitor, which scans the store without an
 	 * index starting with the context. The monitor is held for one transaction that reads again the entries edited
 	 * meanwhile (see {@link EntryPurge}), removes what was read and adds the imported statements, with the index
-	 * triples and the counter of the imported entry graphs in place of those of the replaced entries.
+	 * triples and the counter of the imported entry graphs in place of those of the replaced entries. The imported
+	 * entries fire no events, so the context is reindexed in Solr once the transaction has committed.
 	 */
 	private void importContextFromUnzippedDir(Entry contextEntry, File srcFile, File unzippedDir) throws RepositoryException, IOException {
 		Date before = new Date();
@@ -414,6 +416,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				}
 			}
 			copyImportedFiles(contextId, unzippedDir);
+			reindexImportedContext(contextEntry);
 
 			log.info("Import finished in {} ms, holding the repository monitor for {} ms",
 					new Date().getTime() - before.getTime(), held);
@@ -664,6 +667,20 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				}
 			}
 			return System.currentTimeMillis() - start;
+		}
+	}
+
+	/** Starts a Solr reindex of the imported context, if Solr is used; a failure to start it is only logged. */
+	private void reindexImportedContext(Entry contextEntry) {
+		SearchIndex index = entry.getRepositoryManager().getIndex();
+		if (index == null) {
+			return;
+		}
+		try {
+			index.reindex(contextEntry.getEntryURI());
+		} catch (RuntimeException e) {
+			log.error("Context {} was imported, but its Solr reindex could not be started; reindex the context: {}",
+					contextEntry.getId(), e.getMessage(), e);
 		}
 	}
 

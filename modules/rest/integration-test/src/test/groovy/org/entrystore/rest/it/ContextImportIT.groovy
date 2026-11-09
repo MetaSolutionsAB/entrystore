@@ -389,6 +389,25 @@ class ContextImportIT extends BaseSpec {
 		JSON_PARSER.parseText(afterConn.inputStream.text)['results'] == 0
 	}
 
+	def "POST /{context-id}/import makes the imported entries searchable"() {
+		given: 'an empty context and an export of another context'
+		def solrIndexImportId = 'context-import-solr-index'
+		getOrCreateContext([contextId: solrIndexImportId, name: 'context for Solr index import'])
+		def exportConn = EntryStoreClient.getRequest('/' + contextExportId + '/export')
+		assert exportConn.getResponseCode() == HTTP_OK
+
+		when: 'importing the ZIP into the context'
+		def connection = EntryStoreClient.sendRequestAsStream(HttpMethod.POST, '/' + solrIndexImportId + '/import',
+			exportConn.getInputStream(), 'admin', 'application/zip')
+
+		then: 'the import succeeds'
+		connection.getResponseCode() == HTTP_OK
+
+		and: 'the imported entry is found by search without a manual reindex'
+		awaitIndexed('uri:"' + EntryStoreClient.baseUrl + '/' + solrIndexImportId + '/entry/'
+			+ entryIdInExportOriginally + '"')
+	}
+
 	def "POST /{context-id}/import with file entries should replace the old data file with the imported one"() {
 		given: 'an export context holding a file entry with content'
 		def fileExportId = 'context-export-files'

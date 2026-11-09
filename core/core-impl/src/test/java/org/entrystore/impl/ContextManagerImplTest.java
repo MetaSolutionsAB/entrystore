@@ -16,6 +16,7 @@
 
 package org.entrystore.impl;
 
+import org.apache.commons.lang3.reflect.FieldUtils;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
@@ -43,6 +44,7 @@ import org.entrystore.repository.security.ContextImportPendingException;
 import org.entrystore.repository.security.ContextRemovalPendingException;
 import org.entrystore.repository.test.TestSuite;
 import org.entrystore.repository.util.CommonQueries;
+import org.entrystore.repository.util.SolrSearchIndex;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -66,6 +68,7 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -82,7 +85,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
 /**
  */
@@ -861,6 +868,83 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		cm.importContext(contextEntry, createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES));
 
 		assertEquals("13", context.createLink(null, URI.create("https://digg.com/"), null).getId());
+	}
+
+	@Test
+	public void importContext_reindexesTheContextInSolr(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		SolrSearchIndex index = injectSearchIndex();
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+
+		cm.importContext(contextEntry, createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES));
+
+		verify(index).reindex(contextEntry.getEntryURI());
+	}
+
+	@Test
+	public void importContext_reindexesAfterTheReplacedEntriesAreDeleted(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		SolrSearchIndex index = injectSearchIndex();
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		Entry replaced = context.createLink("7", URI.create("https://slashdot.org/"), null);
+		URI importedOnly = URI.create(contextEntry.getResourceURI() + "/entry/12");
+		List<String> steps = new ArrayList<>();
+		RepositoryListener recorder = new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				steps.add("deleted " + ((Entry) eventObject.getSource()).getEntryURI());
+			}
+		};
+		doAnswer(invocation -> steps.add(hasGraph(importedOnly) ? "reindex after commit" : "reindex before commit"))
+				.when(index).reindex(any(URI.class));
+		rm.registerListener(recorder, RepositoryEvent.EntryDeleted);
+		try {
+			cm.importContext(contextEntry, createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES));
+		} finally {
+			rm.unregisterListener(recorder, RepositoryEvent.EntryDeleted);
+		}
+
+		// a reindex queued first would lose the imported entry 7 to the later delete of the replaced one
+		assertEquals(List.of("deleted " + replaced.getEntryURI(), "reindex after commit"), steps);
+	}
+
+	@Test
+	public void importContext_thatFailsToCommit_doesNotReindexTheContextInSolr(@TempDir Path tempDataDir)
+			throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		SolrSearchIndex index = injectSearchIndex();
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		File importZip = createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES);
+		((ContextManagerImpl) cm).whileImportPrepares = () -> cm.remove(contextEntry.getEntryURI());
+
+		assertThrows(ContextRemovalPendingException.class, () -> cm.importContext(contextEntry, importZip));
+		awaitContextRemovals();
+
+		verify(index, never()).reindex(any(URI.class));
+	}
+
+	@Test
+	public void importContext_whoseSolrReindexCannotStart_stillImports(@TempDir Path tempDataDir) throws Exception {
+		rm.getConfiguration().setProperty(Settings.DATA_FOLDER, tempDataDir.toString());
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		SolrSearchIndex index = injectSearchIndex();
+		doThrow(new RejectedExecutionException("simulated shutdown")).when(index).reindex(any(URI.class));
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+
+		cm.importContext(contextEntry, createImportZip(tempDataDir, TWO_IMPORTED_ENTRIES));
+
+		assertTrue(hasGraph(URI.create(contextEntry.getResourceURI() + "/entry/7")), "the import committed");
+	}
+
+	/** Puts a mock in place of the Solr index, which these tests run without; no Solr listener is registered. */
+	private SolrSearchIndex injectSearchIndex() throws Exception {
+		SolrSearchIndex index = mock(SolrSearchIndex.class);
+		FieldUtils.writeField(rm, "solrIndex", index, true);
+		return index;
 	}
 
 	@Test
