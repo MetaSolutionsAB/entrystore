@@ -26,8 +26,11 @@ import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
+import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.impl.LocalMetadataWrapper;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.util.CorruptData;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.configuration.SyndicationProperties;
@@ -167,17 +170,37 @@ public class SyndicationService {
 		return result;
 	}
 
-	/** Checks ReadMetadata itself, since {@code getEntry} checks it only for an entry that was already cached. */
+	/**
+	 * Checks ReadMetadata itself, since {@code getEntry} checks it only for an entry that was already cached. Like
+	 * search, it also checks the entry a reference takes its metadata from, and skips the reference if that entry is
+	 * corrupt.
+	 */
 	private @Nullable Entry readableEntry(URI uri) {
+		URI referencedEntryURI = null;
 		try {
-			Entry entry = repositoryManager.getContextManager().getEntry(uri);
-			if (entry != null) {
-				repositoryManager.getPrincipalManager()
-						.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
+			ContextManager cm = repositoryManager.getContextManager();
+			PrincipalManager pm = repositoryManager.getPrincipalManager();
+			Entry entry = cm.getEntry(uri);
+			if (entry == null) {
+				return null;
+			}
+			pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
+			if ((entry.getEntryType() == EntryType.Reference || entry.getEntryType() == EntryType.LinkReference)
+					&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper wrapper) {
+				referencedEntryURI = wrapper.getReferencedEntryURI();
+				Entry referenced = cm.getEntry(entry.getExternalMetadataURI());
+				if (referenced != null) {
+					pm.checkAuthenticatedUserAuthorized(referenced, AccessProperty.ReadMetadata);
+				}
 			}
 			return entry;
 		} catch (AuthorizationException e) {
 			return null;
+		} catch (RuntimeException e) {
+			if (CorruptData.isCorruptDataOf(e, referencedEntryURI, repositoryManager.getRepositoryURL())) {
+				return null;
+			}
+			throw e;
 		}
 	}
 }

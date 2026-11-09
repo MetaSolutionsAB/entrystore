@@ -23,7 +23,10 @@ import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.impl.LocalMetadataWrapper;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.CorruptEntryException;
+import org.entrystore.repository.RepositoryException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +48,10 @@ import static org.mockito.Mockito.when;
 class SyndicationServiceTest {
 
 	private static final String BASE = "http://localhost/store/1/entry/";
+
+	private static final URI REFERENCED_ENTRY = URI.create("http://localhost/store/2/entry/referenced");
+
+	private static final URI REFERENCED_METADATA = URI.create("http://localhost/store/2/metadata/referenced");
 
 	@Mock
 	private RepositoryManagerImpl repositoryManager;
@@ -82,6 +89,39 @@ class SyndicationServiceTest {
 		URI unreadable = uri("unreadable");
 		when(contextManager.getEntry(unreadable)).thenThrow(denied());
 		Entry list = listEntry("list", List.of(uri("readable"), unreadable));
+
+		assertEquals(Set.of(readable), service.feedEntries(list));
+	}
+
+	@Test
+	void skipsAReferenceChildWhoseReferencedEntryTheCallerMayNotRead() {
+		Entry readable = childEntry("readable");
+		Entry referenced = mock(Entry.class);
+		when(contextManager.getEntry(REFERENCED_METADATA)).thenReturn(referenced);
+		// lenient: the children reach the same method with other arguments
+		lenient().doThrow(denied()).when(principalManager)
+				.checkAuthenticatedUserAuthorized(referenced, AccessProperty.ReadMetadata);
+		Entry reference = referenceChild("reference");
+		Entry list = listEntry("list", readable, reference);
+
+		assertEquals(Set.of(readable), service.feedEntries(list));
+	}
+
+	@Test
+	void keepsAReferenceChildWhoseReferencedEntryDoesNotExist() {
+		when(contextManager.getEntry(REFERENCED_METADATA)).thenReturn(null);
+		Entry reference = referenceChild("reference");
+		Entry list = listEntry("list", reference);
+
+		assertEquals(Set.of(reference), service.feedEntries(list));
+	}
+
+	@Test
+	void skipsAReferenceChildWhoseReferencedEntryIsCorrupt() {
+		Entry readable = childEntry("readable");
+		when(contextManager.getEntry(REFERENCED_METADATA)).thenThrow(corruptEntryFailure(REFERENCED_ENTRY));
+		Entry reference = referenceChild("reference");
+		Entry list = listEntry("list", readable, reference);
 
 		assertEquals(Set.of(readable), service.feedEntries(list));
 	}
@@ -127,6 +167,21 @@ class SyndicationServiceTest {
 		return entry;
 	}
 
+	/** A Reference that {@code getEntry} returns, whose metadata is the local metadata of the referenced entry. */
+	private Entry referenceChild(String id) {
+		LocalMetadataWrapper wrapper = mock(LocalMetadataWrapper.class);
+		when(wrapper.getReferencedEntryURI()).thenReturn(REFERENCED_ENTRY);
+		Entry reference = mock(Entry.class);
+		// lenient: a skipped reference is never asked for its graph type
+		lenient().when(reference.getGraphType()).thenReturn(GraphType.None);
+		when(reference.getEntryType()).thenReturn(EntryType.Reference);
+		when(reference.getEntryURI()).thenReturn(uri(id));
+		when(reference.getCachedExternalMetadata()).thenReturn(wrapper);
+		when(reference.getExternalMetadataURI()).thenReturn(REFERENCED_METADATA);
+		when(contextManager.getEntry(uri(id))).thenReturn(reference);
+		return reference;
+	}
+
 	private static Entry listEntry(String id, Entry... children) {
 		return listEntry(id, Arrays.stream(children).map(Entry::getEntryURI).toList());
 	}
@@ -141,5 +196,10 @@ class SyndicationServiceTest {
 
 	private static AuthorizationException denied() {
 		return new AuthorizationException(null, null, AccessProperty.ReadMetadata);
+	}
+
+	private static RepositoryException corruptEntryFailure(URI entryURI) {
+		return new RepositoryException("Unable to load entry " + entryURI,
+				new CorruptEntryException(entryURI, "Entry graph <" + entryURI + "> is corrupt"));
 	}
 }
