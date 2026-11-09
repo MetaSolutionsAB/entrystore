@@ -94,8 +94,7 @@ public class UserService {
 				.user(authenticatedUser.getName())
 				.uri(authenticatedUser.getEntry().getEntryURI().toString())
 				.language(authenticatedUser.getLanguage())
-				.clientAcceptLanguage(clientAcceptedLanguages)
-				.externalId(authenticatedUser.getExternalID());
+				.clientAcceptLanguage(clientAcceptedLanguages);
 
 		if (!guest && authTokenExpires != null) {
 			response.authTokenExpires(LocalDateTime.ofInstant(authTokenExpires, ZoneId.systemDefault()));

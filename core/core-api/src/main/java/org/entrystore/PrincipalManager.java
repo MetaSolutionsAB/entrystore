@@ -63,8 +63,6 @@ public interface PrincipalManager extends Context {
 
 	Group getUserGroup();
 
-	User getUserByExternalID(String openid);
-
 	boolean currentUserIsGuest();
 
 	boolean currentUserIsAdminOrAdminGroup();

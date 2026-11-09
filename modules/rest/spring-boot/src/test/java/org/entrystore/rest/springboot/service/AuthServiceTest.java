@@ -340,7 +340,6 @@ class AuthServiceTest {
 		assertEquals("A confirmation message was sent to " + ADA, message);
 		verifyNoInteractions(emailSender);
 		verify(principalManager, never()).getPrincipalEntry(any());
-		verify(principalManager, never()).getUserByExternalID(any());
 		assertEquals(0, tokens.caffeineCaches().get("signup-tokens").estimatedSize());
 		ArgumentCaptor<Runnable> task = ArgumentCaptor.forClass(Runnable.class);
 		verify(executor).execute(task.capture());
@@ -368,7 +367,6 @@ class AuthServiceTest {
 		assertEquals("A confirmation message was sent to " + ADA, message);
 		verifyNoInteractions(emailSender);
 		verify(principalManager, never()).getPrincipalEntry(any());
-		verify(principalManager, never()).getUserByExternalID(any());
 		verify(user, never()).isDisabled();
 		ArgumentCaptor<Runnable> task = ArgumentCaptor.forClass(Runnable.class);
 		verify(executor).execute(task.capture());
@@ -414,27 +412,14 @@ class AuthServiceTest {
 	}
 
 	@Test
-	void signup_existingAccountByName_stillRunsTheExternalIdLookup() throws Exception {
+	void signup_existingAccountWithoutName_greetsWithTheAddress() throws Exception {
 		PrincipalManager principalManager = principalManagerWithAdmin();
-		Entry account = userEntryNamed("Ada", "Lovelace");
+		Entry account = mock(Entry.class);
+		User user = mock(User.class);
+		when(account.getGraphType()).thenReturn(GraphType.User);
+		when(account.getResource()).thenReturn(user);
+		when(user.getEntry()).thenReturn(account);
 		when(principalManager.getPrincipalEntry(ADA)).thenReturn(account);
-		EmailSender emailSender = mock(EmailSender.class);
-		when(emailSender.sendExistingAccountNotice("Ada Lovelace", ADA)).thenReturn(NoticeOutcome.SENT);
-		AuthService service = signupService(principalManager, emailSender,
-				new SignupTokenCache(Ticker.systemTicker()), Runnable::run);
-
-		service.signup(new MockHttpServletRequest(), signupBody(ADA), "Sign-up");
-
-		// A new address runs both lookups, so an existing one does too: the lookup's store work does not depend on it.
-		verify(principalManager).getUserByExternalID(ADA);
-	}
-
-	@Test
-	void signup_existingAccountByExternalIdWithoutName_greetsWithTheAddress() throws Exception {
-		PrincipalManager principalManager = principalManagerWithAdmin();
-		User account = mock(User.class);
-		when(account.getEntry()).thenReturn(mock(Entry.class));
-		when(principalManager.getUserByExternalID(ADA)).thenReturn(account);
 		EmailSender emailSender = mock(EmailSender.class);
 		when(emailSender.sendExistingAccountNotice(ADA, ADA)).thenReturn(NoticeOutcome.SENT);
 		AuthService service = signupService(principalManager, emailSender,
