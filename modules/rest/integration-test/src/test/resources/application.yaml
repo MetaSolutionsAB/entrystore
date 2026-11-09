@@ -18,7 +18,7 @@ info.app.version: @project.version@
 # imported properties from "entrystore-it.properties" take precedence over properties here (when same key exists in both property sources)
 spring:
   config.import:
-    - classpath:entrystore-it.properties
+    - classpath:entrystore-it.properties[encoding=utf-8]
   lifecycle:
     timeout-per-shutdown-phase: 5s
   mvc.problemdetails.enabled: false

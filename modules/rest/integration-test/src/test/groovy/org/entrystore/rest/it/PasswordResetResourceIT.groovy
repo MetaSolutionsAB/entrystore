@@ -341,7 +341,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		messages.size() == 2
 		def message = messages[1]
 		message.getFrom().contains(new InternetAddress('info@meta.se'))
-		message.getSubject() == "Your password has been changed"
+		message.getSubject() == 'Ditt lösenord har ändrats'
 		message.getAllRecipients().contains(new InternetAddress(username.toLowerCase()))
 	}
 
