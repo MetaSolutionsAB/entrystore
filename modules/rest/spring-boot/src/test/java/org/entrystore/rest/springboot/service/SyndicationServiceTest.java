@@ -127,6 +127,16 @@ class SyndicationServiceTest {
 	}
 
 	@Test
+	void includesTheReadableChildrenOfANestedList() {
+		Entry grandchild = childEntry("grandchild");
+		Entry nested = listEntry("nested", grandchild);
+		when(contextManager.getEntry(uri("nested"))).thenReturn(nested);
+		Entry list = listEntry("list", nested);
+
+		assertEquals(Set.of(grandchild), service.feedEntries(list));
+	}
+
+	@Test
 	void addsNothingForANestedListWhoseChildrenTheCallerMayNotRead() {
 		Entry readable = childEntry("readable");
 		Entry nested = entry("nested", GraphType.List);
