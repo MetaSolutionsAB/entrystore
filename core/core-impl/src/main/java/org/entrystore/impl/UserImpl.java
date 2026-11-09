@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,8 +61,6 @@ public class UserImpl extends RDFResource implements User {
 	private String language;
 
 	private URI homeContext;
-	
-	private String externalID;
 	
 	private RepositoryManager rm;
 
@@ -401,76 +399,6 @@ public class UserImpl extends RDFResource implements User {
 		return false;
 	}
 	
-	/**
-	 * @return An E-Mail address that can be mapped to an external authentication service, e.g. OpenID.
-	 * 
-	 * @see org.entrystore.User#getExternalID()
-	 */
-	public String getExternalID() {
-		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
-		if (externalID == null) {
-			RepositoryConnection rc = null;
-			try {
-				rc = this.entry.repository.getConnection();
-				List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.externalID, null, false, resourceURI).asList();
-				if (!matches.isEmpty()) {
-					externalID = matches.get(0).getObject().stringValue();
-					String prefix = "mailto:";
-					if (externalID.contains(prefix)) {
-						externalID = externalID.substring(externalID.lastIndexOf(prefix) + prefix.length());
-					}
-				}
-			} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
-				log.error(e.getMessage(), e);
-				throw new RepositoryException("Failed to connect to repository", e);
-			} finally {
-				try {
-					rc.close();
-				} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
-					log.error(e.getMessage(), e);
-				}
-			}
-		}
-		return this.externalID;
-	}
-
-	/**
-	 * @param eid External ID, expects an E-Mail address.
-	 * 
-	 * @see org.entrystore.User#setExternalID(java.lang.String)
-	 */
-	public boolean setExternalID(String eid) {
-		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
-
-		try {
-			synchronized (this.entry.repository) {
-				RepositoryConnection rc = this.entry.repository.getConnection();
-				ValueFactory vf = this.entry.repository.getValueFactory();
-				rc.begin();
-				try {
-					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.externalID, null, false, resourceURI), resourceURI);
-					if (eid != null) {
-						rc.add(resourceURI, RepositoryProperties.externalID, vf.createIRI("mailto:", eid), resourceURI);
-						this.entry.updateModifiedDateSynchronized(rc, vf);
-					}
-					rc.commit();
-					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
-					return true;
-				} catch (Exception e) {
-					log.error(e.getMessage(), e);
-					rc.rollback();
-				} finally {
-					rc.close();
-					this.externalID = eid;
-				}
-			}
-		} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
-			log.error(e.getMessage(), e);
-			throw new RepositoryException("Failed to connect to repository", e);
-		}
-		return false;
-	}
-
 	public Set<URI> getGroups() {
 		Set<URI> set = new HashSet<>();
 		Model relations = this.entry.getRelations();

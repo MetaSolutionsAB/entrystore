@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,10 +42,6 @@ public interface User extends Resource, java.security.Principal {
 	boolean setSecret(String newSecret);
 
 	boolean setSaltedHashedSecret(String newSaltedHashedSecret);
-	
-	String getExternalID();
-	
-	boolean setExternalID(String id);
 	
 	/**
 	 * @return a list of groups, each group represented by a URI

@@ -360,14 +360,7 @@ public class AuthService {
 	private String applyPasswordReset(SignupInfo ci, String title) {
 		PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(ci.getEmail());
-			User u;
-			if (userEntry != null) {
-				log.debug("Loaded user entry via email adress");
-				u = (User) userEntry.getResource();
-			} else {
-				log.debug("Trying to load user entry via external ID");
-				u = principalManager.getUserByExternalID(ci.getEmail());
-			}
+			User u = userEntry != null ? (User) userEntry.getResource() : null;
 			if (u == null) {
 				throw failWithRedirectOr(ci.getUrlFailure(),
 						() -> new PwResetEntityNotFoundHtmlException(USER_NOT_FOUND_MESSAGE, title));
@@ -443,14 +436,7 @@ public class AuthService {
 
 		boolean shouldSend = PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(ci.getEmail());
-			User u;
-			if (userEntry != null) {
-				log.debug("Loaded user entry via email adress");
-				u = (User) userEntry.getResource();
-			} else {
-				log.debug("Trying to load user entry via external ID");
-				u = principalManager.getUserByExternalID(ci.getEmail());
-			}
+			User u = userEntry != null ? (User) userEntry.getResource() : null;
 
 			// Nonexistent and disabled users receive the same success response as a real send so the
 			// endpoint does not leak which usernames exist or are active; the actual outcome is only logged.
@@ -830,17 +816,10 @@ public class AuthService {
 		}
 	}
 
-	/**
-	 * The account whose name or external ID is {@code email}, disabled ones included, or null. Must run as admin.
-	 * Runs both lookups even when the first one matches, so its store work does not depend on the address.
-	 */
+	/** The account whose name is {@code email}, disabled ones included, or null. Must run as admin. */
 	private @Nullable User findAccount(String email) {
 		Entry byName = principalManager.getPrincipalEntry(email);
-		User byExternalId = principalManager.getUserByExternalID(email);
-		if (byName != null && GraphType.User.equals(byName.getGraphType())) {
-			return (User) byName.getResource();
-		}
-		return byExternalId;
+		return byName != null && GraphType.User.equals(byName.getGraphType()) ? (User) byName.getResource() : null;
 	}
 
 	// Runs on the signupExecutor. Stores no token, since the notice carries no link. A disabled account gets no
