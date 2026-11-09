@@ -22,6 +22,7 @@ import static org.eclipse.rdf4j.model.util.Values.literal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -41,6 +42,7 @@ import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -101,6 +103,25 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 					+ "enumeration no longer depends on the index");
 		} finally {
 			publicRepository.shutdown();
+		}
+	}
+
+	/**
+	 * ENTRYSTORE-1189. The rebuild runs at construction, where no user is set: it runs as guest, since checking each
+	 * entry it loads as nobody would warn that guest is assumed, once per entry.
+	 */
+	@Test
+	public void rebuildRepository_doesNotWarnThatNoUserIsSet() {
+		URI previous = pm.getAuthenticatedUserURI();
+		pm.setAuthenticatedUserURI(null);
+		try (LogCapture warnings = new LogCapture(PrincipalManagerImpl.class, Level.WARN)) {
+			// Rebuilds in its constructor, because the store starts empty.
+			new PublicRepository(rm).shutdown();
+
+			assertEquals(0, warnings.count(Level.WARN, "Authenticated user not set"));
+			assertNull(pm.getAuthenticatedUserURI(), "the rebuild restores the caller's principal");
+		} finally {
+			pm.setAuthenticatedUserURI(previous);
 		}
 	}
 
@@ -329,6 +350,35 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 			assertEquals(0, logs.count(Level.WARN, ""), "leaving out a non-public entry is not a warning");
 		}
 
+		/**
+		 * ENTRYSTORE-1189. Updating a context removes each of its entries before adding back what guest may read, so
+		 * an entry guest can no longer read leaves the public repository, although looking it up as guest is denied.
+		 */
+		@Test
+		public void entryOfAContextTurnedPrivate_isGoneFromPublicRepository() {
+			EntryImpl child = entryInPublicContext("turned private");
+			publicRepository.enqueue(child);
+			awaiting().until(() -> hasTitle("turned private"));
+
+			Entry contextEntry = makePrivate(child.getContext());
+			publicRepository.enqueue(contextEntry);
+
+			awaiting().until(() -> !hasTitle("turned private"));
+		}
+
+		@Test
+		public void uncachedEntryOfAContextTurnedPrivate_isGoneFromPublicRepository() {
+			EntryImpl child = entryInPublicContext("turned private, uncached");
+			publicRepository.enqueue(child);
+			awaiting().until(() -> hasTitle("turned private, uncached"));
+
+			Entry contextEntry = makePrivate(child.getContext());
+			evictFromSoftCache(child);
+			publicRepository.enqueue(contextEntry);
+
+			awaiting().until(() -> !hasTitle("turned private, uncached"));
+		}
+
 		private LogEvent awaitEvent(Level level, String needle) {
 			return awaiting().until(() -> logs.first(level, needle), Optional::isPresent).orElseThrow();
 		}
@@ -383,13 +433,34 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 		return entry;
 	}
 
+	/** An entry guest may read through ReadResource on its context, created with authorization checked. */
+	private EntryImpl entryInPublicContext(String title) {
+		return asUser(pm.getAdminUser(), () -> {
+			Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+			contextEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, pm.getGuestUser().getURI());
+			return titledLink((Context) contextEntry.getResource(), title);
+		});
+	}
+
+	/** Withdraws guest's read access from the context. */
+	private Entry makePrivate(Context context) {
+		return asUser(pm.getAdminUser(), () -> {
+			Entry contextEntry = context.getEntry();
+			contextEntry.removeAllowedPrincipalsFor(AccessProperty.ReadResource, pm.getGuestUser().getURI());
+			return contextEntry;
+		});
+	}
+
 	/**
 	 * A link with the given title in a new context. The submitter reads entries as guest, so authorization checks
 	 * are turned off for it to publish the title.
 	 */
 	private EntryImpl publishableEntry(String title) {
 		rm.setCheckForAuthorization(false);
-		Context context = (Context) cm.createResource(null, GraphType.Context, null, null).getResource();
+		return titledLink((Context) cm.createResource(null, GraphType.Context, null, null).getResource(), title);
+	}
+
+	private EntryImpl titledLink(Context context, String title) {
 		URI resource = URI.create("http://example.com/" + UUID.randomUUID());
 		EntryImpl link = (EntryImpl) context.createLink(null, resource, null);
 		addTitle(link, title);

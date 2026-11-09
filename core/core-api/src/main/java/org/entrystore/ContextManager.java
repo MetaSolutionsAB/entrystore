@@ -85,11 +85,12 @@ public interface ContextManager extends Context {
 	 * @param repositoryURI is a repository URI, it can point to the metametadata, 
 	 * the metadata, or to the resource itself.
 	 * 
-	 * @return an Entry, if null the given URI was not a repository URI. If the 
+	 * @return an Entry, or null if the URI is not a repository URI or names no entry. If the
 	 * anyURI corresponds to a repository managed resource the returned entry 
 	 * will be {@link EntryType#Local} (guaranteed to be unique).
-	 * @throws RepositoryException if something goes wrong, e.g. connection problems 
-	 * with the underlying storage or plainly that no item was found for the given URI.
+	 * @throws RepositoryException if the entry cannot be loaded, e.g. the store fails or its data is corrupt.
+	 * @throws AuthorizationException if the current user may not read the entry's metadata, whether or not the
+	 * entry is cached.
 	 */
 	Entry getEntry(URI repositoryURI);
 	

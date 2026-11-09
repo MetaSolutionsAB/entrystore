@@ -170,9 +170,7 @@ public class MetadataImpl implements Metadata {
 				if (obj instanceof IRI
 						&& obj.stringValue().startsWith(base)
 						&& subj.stringValue().startsWith(base)) {
-					URI entryURI = URI.create(statement.getObject().stringValue());
-
-					EntryImpl sourceEntry = (EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(entryURI);
+					EntryImpl sourceEntry = EntryImpl.relationTarget(this.entry.getRepositoryManager(), statement);
 					if (sourceEntry != null) {
 						sourceEntry.removeRelationSynchronized(statement, rc);
 					}
@@ -204,11 +202,7 @@ public class MetadataImpl implements Metadata {
 				if (obj instanceof IRI
 						&& obj.stringValue().startsWith(base)
 						&& subj.stringValue().startsWith(base)) {
-					URI entryURI = URI.create(statement.getObject().stringValue());
-
-					// we fetch the entry without respecting the ACL (in case the modifying user lacks read access), otherwise we
-					// can't update the inverse relational cache and the whole operation would fail
-					EntryImpl sourceEntry = (EntryImpl) ((ContextManagerImpl) this.entry.getRepositoryManager().getContextManager()).getEntryIgnoreACL(entryURI);
+					EntryImpl sourceEntry = EntryImpl.relationTarget(this.entry.getRepositoryManager(), statement);
 					if (sourceEntry != null) {
 						sourceEntry.addRelationSynchronized(statement, rc);
 					}

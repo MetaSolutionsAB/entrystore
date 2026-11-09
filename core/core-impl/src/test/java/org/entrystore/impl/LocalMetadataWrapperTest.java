@@ -21,10 +21,8 @@ import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
 import org.entrystore.AuthorizationException;
-import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
-import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.CorruptEntryException;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryManager;
@@ -167,12 +165,19 @@ public class LocalMetadataWrapperTest extends AbstractCoreTest {
 		assertTrue(graph.isEmpty());
 	}
 
+	/** ENTRYSTORE-1189. The referenced entry is looked up unchecked, so reading its metadata is what denies access. */
 	@Test
-	public void getGraphPropagatesAnAuthorizationFailureOfTheReferencedEntry() throws Exception {
-		AuthorizationException denied = new AuthorizationException(null, null, AccessProperty.ReadMetadata);
+	public void getGraphDeniesAnUncachedReferencedEntryTheUserMayNotRead() {
+		Entry referenced = context.createResource(null, GraphType.None, null, null);
+		setTitle(referenced, "referenced title");
+		// in a context guest may read, so only the referenced entry can deny
+		Entry reference = cm.getContext("duck").createLinkReference(null, URI.create("http://example.com/resource"),
+				referenced.getLocalMetadataURI(), null);
+		evictFromSoftCache(referenced);
+		rm.setCheckForAuthorization(true);
 
-		assertSame(denied, assertThrows(AuthorizationException.class,
-				() -> wrapperWhoseReferencedEntryLookupFailsWith(denied).getGraph()));
+		assertThrows(AuthorizationException.class,
+				() -> asUser(pm.getGuestUser(), () -> reference.getCachedExternalMetadata().getGraph()));
 	}
 
 	@Test
@@ -185,7 +190,7 @@ public class LocalMetadataWrapperTest extends AbstractCoreTest {
 
 	@Test
 	public void getGraphPropagatesAFailureCausedByAnotherCorruptEntry() throws Exception {
-		// As when the access check on the referenced entry loads a corrupt principal
+		// Corrupt data of an entry other than the referenced one or its context entry, here a principal
 		URI principalEntryURI = URI.create(rm.getRepositoryURL() + "_principals/entry/5");
 		RepositoryException principalCorrupt = new RepositoryException("Unable to load entry " + principalEntryURI,
 				new CorruptEntryException(principalEntryURI, "Entry graph <" + principalEntryURI + "> is corrupt"));
@@ -200,8 +205,8 @@ public class LocalMetadataWrapperTest extends AbstractCoreTest {
 	private LocalMetadataWrapper wrapperWhoseReferencedEntryLookupFailsWith(RuntimeException failure)
 			throws Exception {
 		URI externalMetadataURI = URI.create(rm.getRepositoryURL() + "2/metadata/1");
-		ContextManager contextManager = mock(ContextManager.class);
-		when(contextManager.getEntry(URI.create(rm.getRepositoryURL() + "2/entry/1"))).thenThrow(failure);
+		ContextManagerImpl contextManager = mock(ContextManagerImpl.class);
+		when(contextManager.getEntryIgnoreACL(URI.create(rm.getRepositoryURL() + "2/entry/1"))).thenThrow(failure);
 		RepositoryManager repositoryManager = mock(RepositoryManager.class);
 		when(repositoryManager.getContextManager()).thenReturn(contextManager);
 		when(repositoryManager.getRepositoryURL()).thenReturn(rm.getRepositoryURL());

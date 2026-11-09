@@ -27,9 +27,7 @@ import java.time.Year
 import java.util.concurrent.TimeUnit
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
-import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
-import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static org.awaitility.Awaitility.await
 
 class SearchIT extends BaseSpec {
@@ -279,8 +277,6 @@ class SearchIT extends BaseSpec {
 				probe.getResponseCode() == HTTP_OK && JSON_PARSER.parseText(probe.inputStream.text)['results'] >= 1
 			}
 	}
-
-	// TODO: Fix inconsistency - guest users get empty results for Solr searches but an authorization error for SPARQL searches
 
 	def "GET /search?type=solr with complex Solr query as guest should return empty search results"() {
 		when:
@@ -768,18 +764,19 @@ class SearchIT extends BaseSpec {
 		results[0]['metadata'] != null
 	}
 
-	def "GET /search?type=sparql&query=dc:title as guest should respond with Unauthorized 401"() {
+	def "GET /search?type=sparql as guest should return only the entries guest may read"() {
 		given:
-		def queryParams = [type: 'sparql', query: 'dc:title']
+		def queryParams = [type: 'sparql', query: '<' + SORT_MARKER_IRI + '>']
 
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams), '')
 
 		then:
-		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(conn.errorStream.text)
-		respJson['error'] == 'Not authorized'
+		def resultIds = JSON_PARSER.parseText(conn.inputStream.text)['resource']['children'].collect { it['entryId'] }
+		// both carry the sort marker, and only B grants guest read
+		resultIds == ['searchSortEntryB']
 	}
 
 	def "GET /search?type=sparql with test-only marker predicate as admin should return entries json response with this IT's entries"() {
@@ -1011,7 +1008,7 @@ class SearchIT extends BaseSpec {
 		entry1PlAtomEntry['summary'][0].value()[0] == 'lokalne metadane opissearch jawnie po polsku'
 	}
 
-	def "GET /search?type=sparql&query=dc:title&syndication=random-string as guest should respond with Unauthorized 401"() {
+	def "GET /search?type=sparql&query=dc:title&syndication=random-string as guest should return BAD-REQUEST 400 due to invalid syndication format"() {
 		given:
 		def queryParams = [type: 'sparql', query: 'dc:title', syndication: 'random-string']
 
@@ -1019,8 +1016,9 @@ class SearchIT extends BaseSpec {
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams), '')
 
 		then:
-		conn.getResponseCode() == HTTP_UNAUTHORIZED
-		JSON_PARSER.parseText(conn.errorStream.text)['error'] == 'Not authorized'
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('application/json')
+		JSON_PARSER.parseText(conn.errorStream.text)['error'] == 'Invalid syndication feed type: \'random-string\''
 	}
 
 	def "GET /search?type=sparql&query=dc:title&syndication=random-string as admin should return BAD-REQUEST 400 due to invalid syndication format"() {
