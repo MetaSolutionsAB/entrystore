@@ -204,6 +204,8 @@ public class SyndicationService {
 			return null;
 		} catch (RuntimeException e) {
 			if (CorruptData.isCorruptDataOf(e, referencedEntryURI, repositoryManager.getRepositoryURL())) {
+				log.warn("Leaving reference {} out of the feed because its referenced entry {} is corrupt: {}", uri,
+						referencedEntryURI, CorruptData.describe(e));
 				return null;
 			}
 			throw e;
