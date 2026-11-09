@@ -341,14 +341,7 @@ public class AuthService {
 	private String applyPasswordReset(SignupInfo ci, String title) {
 		PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(ci.getEmail());
-			User u;
-			if (userEntry != null) {
-				log.debug("Loaded user entry via email adress");
-				u = (User) userEntry.getResource();
-			} else {
-				log.debug("Trying to load user entry via external ID");
-				u = principalManager.getUserByExternalID(ci.getEmail());
-			}
+			User u = userEntry != null ? (User) userEntry.getResource() : null;
 			if (u == null) {
 				throw failWithRedirectOr(ci.getUrlFailure(),
 						() -> new PwResetEntityNotFoundHtmlException(USER_NOT_FOUND_MESSAGE, title));
@@ -424,14 +417,7 @@ public class AuthService {
 
 		boolean shouldSend = PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(ci.getEmail());
-			User u;
-			if (userEntry != null) {
-				log.debug("Loaded user entry via email adress");
-				u = (User) userEntry.getResource();
-			} else {
-				log.debug("Trying to load user entry via external ID");
-				u = principalManager.getUserByExternalID(ci.getEmail());
-			}
+			User u = userEntry != null ? (User) userEntry.getResource() : null;
 
 			// Nonexistent and disabled users receive the same success response as a real send so the
 			// endpoint does not leak which usernames exist or are active; the actual outcome is only logged.
@@ -553,8 +539,7 @@ public class AuthService {
 		PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
 			Entry userEntry = principalManager.getPrincipalEntry(signupInfo.getEmail());
 
-			if ((userEntry != null && GraphType.User.equals(userEntry.getGraphType())) ||
-					principalManager.getUserByExternalID(signupInfo.getEmail()) != null) {
+			if (userEntry != null && GraphType.User.equals(userEntry.getGraphType())) {
 				throw failWithRedirectOr(signupInfo.getUrlFailure(),
 						() -> new DataConflictHtmlException(USER_ALREADY_EXISTS_MESSAGE, title));
 			}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -108,7 +108,6 @@ public class RepositoryProperties {
 	public static final IRI saltedHashedSecret;
 	public static final IRI language;
 	public static final IRI originallyCreatedIn;
-	public static final IRI externalID;
 	public static final IRI disabled;
 
 	public static final IRI Graph;
@@ -189,7 +188,6 @@ public class RepositoryProperties {
 		saltedHashedSecret = vf.createIRI(NSbase + "saltedHashedSecret");
 		homeContext = vf.createIRI(NSbase + "homeContext");
 		language = vf.createIRI(NSbase + "language");
-		externalID = vf.createIRI(NSbase, "externalID");
 		disabled = vf.createIRI(NSbase, "disabled");
 		
 		originallyCreatedIn = vf.createIRI(NSbase + "originallyCreatedIn");
