@@ -99,6 +99,7 @@ springboot/
 ### Solr configset (`solr/conf/`)
 
 - A change to how a field is stored in the index (adding `docValues`, or changing a field type's `class`) is rejected by Lucene on an existing index, even after all documents are deleted. The startup reindex only deletes documents and the startup schema check passes, so Solr rejects every document and the version markers are still written, which leaves an empty index. Such a change needs a `Deployment note:` (see Git Conventions): empty the index before the upgrade (dedicated: the core's data directory; cluster: `ecli solr-collection-rotate`). Analyzer changes don't need this; they take effect with the next reindex.
+- `SolrReadAccessFilter` restricts every search by a caller who isn't an admin, using same-core joins (single-shard cores only). It evaluates `PrincipalManagerImpl.checkAuthenticatedUserAuthorized` in Solr, so keep the two in sync. A new field written for it goes into `SolrSearchIndex.REQUIRED_SCHEMA_FIELDS`, which the startup schema check requires.
 - Clients query the `text_ngram` fields through entrystore.js. It splits a search term on whitespace into one AND clause per word, cuts each word to 15 characters, and appends `*` to words shorter than 3 characters. Facets on `metadata.predicate.literal.*` are rewritten to `literal_s.*` (5.x and 6.x). Check analyzer changes against these query shapes.
 
 ## Code Style

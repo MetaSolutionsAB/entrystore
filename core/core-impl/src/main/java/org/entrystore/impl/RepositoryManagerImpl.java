@@ -54,7 +54,6 @@ import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.DataCorrection;
-import org.entrystore.repository.util.LangFacetValue;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.repository.util.StringUtils;
@@ -712,8 +711,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			throw new IllegalStateException("Embedded Solr is no longer supported; '" + Settings.SOLR_URL + "' must be an http(s) URL");
 		}
 		if (solrServer != null) {
-			boolean schemaVerified = SolrSchemaCheck.requireDynamicFields(solrServer, solrURL,
-					List.of(LangFacetValue.FIELD_PREFIX + "*", "related." + LangFacetValue.FIELD_PREFIX + "*"));
+			boolean schemaVerified = SolrSchemaCheck.requireFields(solrServer, solrURL,
+					SolrSearchIndex.REQUIRED_SCHEMA_FIELDS);
 			solrIndex = new SolrSearchIndex(this, solrServer);
 			boolean reindexSucceeded = false;
 			SearchIndex.ReindexResult reindexResult = null;

@@ -104,6 +104,7 @@ class ManagementStatusIT extends BaseSpec {
 		responseJson['solr'] != null
 		responseJson['solr']['enabled']
 		responseJson['solr']['status'] == 'online'
+		responseJson['solr']['readFilterMismatches'] instanceof Number
 		responseJson['startupTime'] != null
 		responseJson['stats'] == null
 		// Reported from the same EchoProperties bean EchoService enforces, so this pins both the wiring

@@ -23,6 +23,8 @@ import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import groovy.transform.PackageScope
 import org.awaitility.core.ConditionEvaluationLogger
+import org.entrystore.repository.util.HashType
+import org.entrystore.repository.util.Hashing
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 import org.entrystore.rest.it.util.UserUtil
@@ -457,6 +459,33 @@ abstract class BaseSpec extends Specification {
 					'/search' + convertMapToQueryParams([type: 'solr', query: query]))
 				conn.getResponseCode() == HTTP_OK && JSON_PARSER.parseText(conn.inputStream.text)['results'] == 1
 			}
+	}
+
+	/**
+	 * Polls an admin search until it counts the expected hits: waitForSolrProcessing only proves the post queue
+	 * drained, and commitWithin lets the searcher lag behind it.
+	 */
+	def awaitAdminSearchCount(String query, int expected) {
+		waitForSolrProcessing()
+		await()
+			.pollInterval(200, TimeUnit.MILLISECONDS)
+			.atMost(15, TimeUnit.SECONDS)
+			.until {
+				def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams([type: 'solr', query: query]))
+				conn.getResponseCode() == HTTP_OK && JSON_PARSER.parseText(conn.inputStream.text)['results'] == expected
+			}
+	}
+
+	/** The string field the indexer writes a predicate's literals to (SolrSearchIndex.addGenericMetadataFields). */
+	static String literalField(String predicateIri) {
+		return 'metadata.predicate.literal_s.' + Hashing.hash(predicateIri, HashType.MD5).substring(0, 8)
+	}
+
+	/** A facet's buckets of a /search response as name to count; the facet.missing bucket has the name null. */
+	static Map bucketsOf(Object searchResponse, String field) {
+		def facetField = searchResponse['facetFields'].find { it['name'] == field }
+		assert facetField != null: 'no facet field ' + field + ' in the response'
+		return facetField['values'].collectEntries { [(it['name']): it['count']] }
 	}
 
 	/**

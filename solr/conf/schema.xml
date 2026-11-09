@@ -250,6 +250,10 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="acl.metadata.rw" type="string" indexed="true" multiValued="true"/>
         <field name="acl.resource.r" type="string" indexed="true" multiValued="true"/>
         <field name="acl.resource.rw" type="string" indexed="true" multiValued="true"/>
+        <!-- whether the entry has an ACL of its own, which then replaces the one of its context -->
+        <field name="acl.explicit" type="boolean" indexed="true"/>
+        <!-- entry URI of a reference's local target, whose ACL governs the metadata indexed for the reference -->
+        <field name="referencedEntry" type="string" indexed="true"/>
 
         <field name="title" type="text_ngram" indexed="true" multiValued="true"/>
         <field name="description" type="text_ngram" indexed="true" multiValued="true"/>

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,4 +68,15 @@ public interface PrincipalManager extends Context {
 	boolean currentUserIsGuest();
 
 	boolean currentUserIsAdminOrAdminGroup();
+
+	/**
+	 * The principals that, named in an entry's ACL, grant the authenticated user access, matched as
+	 * {@link #checkAuthenticatedUserAuthorized} matches them: the user, the groups it is a direct member of, the guest
+	 * user, and the users group unless the user is the guest. A thread without an authenticated user counts as the
+	 * guest. Empty when the user cannot be resolved, since an ACL then grants nothing.
+	 *
+	 * <p>Access that needs no ACL is not covered: the admin user and admin-group members may do anything, and a
+	 * principal may read any entry whose resource URI is its own, such as its own entry.
+	 */
+	Set<URI> getAclPrincipalsOfAuthenticatedUser();
 }

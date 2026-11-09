@@ -23,10 +23,13 @@ import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
+import org.entrystore.User;
 import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.test.TestSuite;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.net.URI;
 import java.util.HashSet;
@@ -39,6 +42,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -343,5 +347,93 @@ public class PrincipalManagerImplTest extends AbstractCoreTest {
 		pm.setAuthenticatedUserURI(daisy.getResourceURI());
 
 		assertEquals(Set.of(AccessProperty.ReadResource), pm.getRights(reloaded));
+	}
+
+	private URI principalURI(String name) {
+		return switch (name) {
+			case "_guest" -> pm.getGuestUser().getURI();
+			case "_users" -> pm.getUserGroup().getURI();
+			default -> pm.getPrincipalEntry(name).getResourceURI();
+		};
+	}
+
+	private User user(String name) {
+		return "_guest".equals(name) ? pm.getGuestUser() : (User) pm.getPrincipalEntry(name).getResource();
+	}
+
+	@Test
+	public void aclPrincipalsOfAUserNameTheUserItsGroupsTheUsersGroupAndTheGuest() {
+		pm.setAuthenticatedUserURI(principalURI("Donald"));
+
+		Set<URI> principals = pm.getAclPrincipalsOfAuthenticatedUser();
+
+		assertEquals(Set.of(principalURI("Donald"), principalURI("friendsOfMickey"), principalURI("_users"),
+				principalURI("_guest")), principals);
+	}
+
+	@Test
+	public void aclPrincipalsOfTheGuestNameOnlyTheGuest() {
+		pm.setAuthenticatedUserURI(principalURI("_guest"));
+
+		assertEquals(Set.of(principalURI("_guest")), pm.getAclPrincipalsOfAuthenticatedUser());
+	}
+
+	@Test
+	public void aclPrincipalsOfAThreadWithoutUserAreTheGuests() {
+		pm.setAuthenticatedUserURI(null);
+
+		assertEquals(Set.of(principalURI("_guest")), pm.getAclPrincipalsOfAuthenticatedUser());
+	}
+
+	@Test
+	public void aclPrincipalsOfAnUnresolvableUserAreEmpty() {
+		pm.setAuthenticatedUserURI(URI.create(rm.getRepositoryURL() + "_principals/resource/no-such-user"));
+
+		// as in hasAccess, an ACL grants a principal that cannot be resolved nothing, not even a guest grant
+		assertEquals(Set.of(), pm.getAclPrincipalsOfAuthenticatedUser());
+	}
+
+	@Test
+	public void aclPrincipalsLeaveTheAuthenticatedUserInPlace() {
+		pm.setAuthenticatedUserURI(principalURI("Daisy"));
+
+		pm.getAclPrincipalsOfAuthenticatedUser();
+
+		assertEquals(principalURI("Daisy"), pm.getAuthenticatedUserURI());
+	}
+
+	@Test
+	public void aclPrincipalsFollowAMembershipChangeOnTheNextCall() {
+		pm.setAuthenticatedUserURI(principalURI("Daisy"));
+		assertFalse(pm.getAclPrincipalsOfAuthenticatedUser().contains(principalURI("friendsOfMickey")));
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		((Group) pm.getPrincipalEntry("friendsOfMickey").getResource()).addMember(user("Daisy"));
+
+		pm.setAuthenticatedUserURI(principalURI("Daisy"));
+
+		assertTrue(pm.getAclPrincipalsOfAuthenticatedUser().contains(principalURI("friendsOfMickey")));
+	}
+
+	/**
+	 * The read-access filter of Solr searches grants exactly what an ACL naming one of these principals grants, so
+	 * for every caller and grantee, an entry readable only through a ReadMetadata grant to the grantee must be
+	 * readable exactly when the grantee is among the caller's principals.
+	 */
+	@ParameterizedTest(name = "{0} reading an entry granted to {1}")
+	@CsvSource({
+			"Donald, Donald", "Donald, Daisy", "Donald, friendsOfMickey", "Donald, _users", "Donald, _guest",
+			"Daisy, Donald", "Daisy, friendsOfMickey", "Daisy, _users", "Daisy, _guest",
+			"_guest, Donald", "_guest, friendsOfMickey", "_guest, _users", "_guest, _guest"
+	})
+	public void aclPrincipalsGrantExactlyWhatTheAccessCheckGrants(String caller, String grantee) {
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		// owned by the admin and granting nothing, so the entry's own ACL is the caller's only way in
+		Entry entry = newContext().createResource(null, GraphType.None, null, null);
+		entry.setAllowedPrincipalsFor(AccessProperty.ReadMetadata, Set.of(principalURI(grantee)));
+
+		Set<URI> principals = asUser(user(caller), pm::getAclPrincipalsOfAuthenticatedUser);
+
+		assertEquals(principals.contains(principalURI(grantee)),
+				isAuthorized(user(caller), entry, AccessProperty.ReadMetadata));
 	}
 }
