@@ -80,7 +80,7 @@ class SyndicationServiceTest {
 				.checkAuthenticatedUserAuthorized(unreadable, AccessProperty.ReadMetadata);
 		Entry list = listEntry("list", readable, unreadable);
 
-		assertEquals(Set.of(readable), service.feedEntries(list));
+		assertEquals(List.of(readable), service.feedEntries(List.of(list)));
 	}
 
 	@Test
@@ -90,7 +90,7 @@ class SyndicationServiceTest {
 		when(contextManager.getEntry(unreadable)).thenThrow(denied());
 		Entry list = listEntry("list", List.of(uri("readable"), unreadable));
 
-		assertEquals(Set.of(readable), service.feedEntries(list));
+		assertEquals(List.of(readable), service.feedEntries(List.of(list)));
 	}
 
 	@Test
@@ -104,7 +104,7 @@ class SyndicationServiceTest {
 		Entry reference = referenceChild("reference");
 		Entry list = listEntry("list", readable, reference);
 
-		assertEquals(Set.of(readable), service.feedEntries(list));
+		assertEquals(List.of(readable), service.feedEntries(List.of(list)));
 	}
 
 	@Test
@@ -113,7 +113,7 @@ class SyndicationServiceTest {
 		Entry reference = referenceChild("reference");
 		Entry list = listEntry("list", reference);
 
-		assertEquals(Set.of(reference), service.feedEntries(list));
+		assertEquals(List.of(reference), service.feedEntries(List.of(list)));
 	}
 
 	@Test
@@ -123,7 +123,7 @@ class SyndicationServiceTest {
 		Entry reference = referenceChild("reference");
 		Entry list = listEntry("list", readable, reference);
 
-		assertEquals(Set.of(readable), service.feedEntries(list));
+		assertEquals(List.of(readable), service.feedEntries(List.of(list)));
 	}
 
 	@Test
@@ -133,7 +133,7 @@ class SyndicationServiceTest {
 		when(contextManager.getEntry(uri("nested"))).thenReturn(nested);
 		Entry list = listEntry("list", nested);
 
-		assertEquals(Set.of(grandchild), service.feedEntries(list));
+		assertEquals(List.of(grandchild), service.feedEntries(List.of(list)));
 	}
 
 	@Test
@@ -146,7 +146,7 @@ class SyndicationServiceTest {
 		when(contextManager.getEntry(uri("nested"))).thenReturn(nested);
 		Entry list = listEntry("list", nested, readable);
 
-		assertEquals(Set.of(readable), service.feedEntries(list));
+		assertEquals(List.of(readable), service.feedEntries(List.of(list)));
 	}
 
 	@Test
@@ -155,7 +155,32 @@ class SyndicationServiceTest {
 		Entry list = listEntry("list", List.of(uri("list"), uri("readable")));
 		when(contextManager.getEntry(uri("list"))).thenReturn(list);
 
-		assertEquals(Set.of(readable), service.feedEntries(list));
+		assertEquals(List.of(readable), service.feedEntries(List.of(list)));
+	}
+
+	@Test
+	void expandsAListReachedFromTwoHitsOnce() {
+		Entry grandchild = childEntry("grandchild");
+		Entry nested = listEntry("nested", grandchild);
+		when(contextManager.getEntry(uri("nested"))).thenReturn(nested);
+		Entry outer = listEntry("outer", nested);
+
+		assertEquals(List.of(grandchild), service.feedEntries(List.of(outer, nested)));
+	}
+
+	@Test
+	void expandsAListCycleReachedFromTwoHitsOnce() {
+		Entry childOfA = childEntry("child-of-a");
+		Entry childOfB = childEntry("child-of-b");
+		Entry a = listEntry("a", List.of(uri("b"), uri("child-of-a")));
+		Entry b = listEntry("b", List.of(uri("a"), uri("child-of-b")));
+		when(contextManager.getEntry(uri("a"))).thenReturn(a);
+		when(contextManager.getEntry(uri("b"))).thenReturn(b);
+
+		List<Entry> entries = service.feedEntries(List.of(a, b));
+
+		assertEquals(2, entries.size());
+		assertEquals(Set.of(childOfA, childOfB), Set.copyOf(entries));
 	}
 
 	private static URI uri(String id) {

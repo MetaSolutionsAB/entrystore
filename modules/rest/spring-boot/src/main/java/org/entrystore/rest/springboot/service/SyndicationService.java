@@ -44,8 +44,9 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -133,18 +134,23 @@ public class SyndicationService {
 		solrQuery.setSort("modified", SolrQuery.ORDER.desc);
 
 		Set<Entry> searchEntries = ((SolrSearchIndex) repositoryManager.getIndex()).sendQuery(solrQuery).getEntries();
-		List<Entry> recursiveEntries = new LinkedList<>();
-		for (Entry e : searchEntries) {
-			recursiveEntries.addAll(feedEntries(e));
-		}
+		List<Entry> recursiveEntries = feedEntries(searchEntries);
 		EntryUtil.sortAfterModificationDate(recursiveEntries, false, null);
 
 		return recursiveEntries;
 	}
 
-	/** The hit itself, or for a local list the entries reachable through its children that the caller may read. */
-	Set<Entry> feedEntries(Entry hit) {
-		return feedEntries(hit, new HashSet<>());
+	/**
+	 * Each hit itself, or for a local list the entries reachable through its children that the caller may read. A list
+	 * is expanded at most once, so one reached from several hits is walked once and adds its children once.
+	 */
+	List<Entry> feedEntries(Collection<Entry> hits) {
+		Set<URI> visitedLists = new HashSet<>();
+		List<Entry> result = new ArrayList<>();
+		for (Entry hit : hits) {
+			result.addAll(feedEntries(hit, visitedLists));
+		}
+		return result;
 	}
 
 	private Set<Entry> feedEntries(Entry entry, Set<URI> visitedLists) {
