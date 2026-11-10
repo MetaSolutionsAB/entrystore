@@ -59,6 +59,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -499,14 +500,9 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 	@Test
 	public void getLinks_excludesLinksTheUserMayNotRead() {
 		URI sharedResource = URI.create("http://slashdot.org/shared");
-
-		// ContextImpl.checkAccess asks for ReadMetadata on the context entry first and returns as soon
-		// as that grants, and the Disney fixture grants guest exactly that on both duck and mouse, so
-		// an unreadable entry needs a context that grants guest nothing rather than an entry-level ACL
 		Context duck = cm.getContext("duck");
-		Context privateContext = (Context) cm.createResource(null, GraphType.Context, null, null).getResource();
 		Entry readable = duck.createLink(null, sharedResource, null);
-		Entry unreadable = privateContext.createLink(null, sharedResource, null);
+		Entry unreadable = linkInPrivateContext(sharedResource);
 
 		rm.setCheckForAuthorization(true);
 		pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
@@ -515,6 +511,98 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		assertEquals(1, links.size());
 		assertTrue(links.contains(readable));
 		assertFalse(links.contains(unreadable));
+	}
+
+	/** ENTRYSTORE-1189. The miss path loads the entry from the store, and checks it as the hit path does. */
+	@Test
+	public void getLinks_excludesUncachedLinksTheUserMayNotRead() {
+		URI sharedResource = URI.create("http://slashdot.org/shared");
+		Entry readable = cm.getContext("duck").createLink(null, sharedResource, null);
+		Entry unreadable = linkInPrivateContext(sharedResource);
+		evictFromSoftCache(unreadable);
+		rm.setCheckForAuthorization(true);
+
+		Set<Entry> links = asUser(pm.getGuestUser(), () -> cm.getLinks(sharedResource));
+
+		assertEquals(Set.of(readable.getEntryURI()), entryURIs(links));
+	}
+
+	@Test
+	public void getEntry_deniesACachedEntryTheUserMayNotRead() {
+		Entry unreadable = linkInPrivateContext(URI.create("http://example.com/private"));
+		assertNotNull(rm.getSoftCache().getByEntryURI(unreadable.getEntryURI()),
+				"the entry must be cached for this test to mean anything");
+		rm.setCheckForAuthorization(true);
+
+		assertThrows(AuthorizationException.class,
+				() -> asUser(pm.getGuestUser(), () -> cm.getEntry(unreadable.getEntryURI())));
+	}
+
+	/** ENTRYSTORE-1189. Uncached, the entry is denied the same way, rather than loaded and handed out unchecked. */
+	@Test
+	public void getEntry_deniesAnUncachedEntryTheUserMayNotRead() {
+		Entry unreadable = linkInPrivateContext(URI.create("http://example.com/private"));
+		evictFromSoftCache(unreadable);
+		rm.setCheckForAuthorization(true);
+
+		assertThrows(AuthorizationException.class,
+				() -> asUser(pm.getGuestUser(), () -> cm.getEntry(unreadable.getEntryURI())));
+	}
+
+	@Test
+	public void getEntry_returnsAnUncachedEntryTheUserMayRead() {
+		Entry readable = cm.getContext("duck").createLink(null, URI.create("http://example.com/readable"), null);
+		evictFromSoftCache(readable);
+		rm.setCheckForAuthorization(true);
+
+		Entry found = asUser(pm.getGuestUser(), () -> cm.getEntry(readable.getEntryURI()));
+
+		assertEquals(readable.getEntryURI(), found.getEntryURI());
+	}
+
+	@Test
+	public void getEntryIgnoreACL_returnsAnUncachedEntryTheUserMayNotRead() {
+		Entry unreadable = linkInPrivateContext(URI.create("http://example.com/private"));
+		evictFromSoftCache(unreadable);
+		rm.setCheckForAuthorization(true);
+
+		Entry found = asUser(pm.getGuestUser(),
+				() -> ((ContextManagerImpl) cm).getEntryIgnoreACL(unreadable.getEntryURI()));
+
+		assertEquals(unreadable.getEntryURI(), found.getEntryURI());
+	}
+
+	/** ENTRYSTORE-1189. One unreadable match is left out rather than failing the whole search. */
+	@Test
+	public void search_entryQueryLeavesOutEntriesTheUserMayNotRead() throws Exception {
+		URI searched = URI.create("http://example.com/searched");
+		Entry readable = cm.getContext("duck").createLink(null, searched, null);
+		linkInPrivateContext(searched);
+		String entryQuery = "SELECT ?x WHERE { ?x <" + RepositoryProperties.resource + "> <" + searched + "> }";
+		rm.setCheckForAuthorization(true);
+
+		List<Entry> found = asUser(pm.getGuestUser(), () -> {
+			try {
+				return cm.search(entryQuery, null, null);
+			} catch (Exception e) {
+				throw new IllegalStateException(e);
+			}
+		});
+
+		assertEquals(Set.of(readable.getEntryURI()), entryURIs(found));
+	}
+
+	/**
+	 * A link guest may not read. ContextImpl.checkAccess grants as soon as the context entry grants ReadMetadata, as
+	 * duck and mouse do to guest, so the link needs a context that grants guest nothing.
+	 */
+	private Entry linkInPrivateContext(URI resource) {
+		return newContext().createLink(null, resource, null);
+	}
+
+	/** Compared by URI, since an evicted entry is loaded again as a new instance. */
+	private static Set<URI> entryURIs(Collection<Entry> entries) {
+		return entries.stream().map(Entry::getEntryURI).collect(Collectors.toSet());
 	}
 
 	@Test

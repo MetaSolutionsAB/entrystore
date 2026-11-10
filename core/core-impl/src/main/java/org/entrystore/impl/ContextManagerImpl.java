@@ -1022,6 +1022,10 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		return getEntry(uri, true);
 	}
 
+	/**
+	 * Like {@link #getEntry(URI)}, but without checking ReadMetadata. For core code that maintains entries the current
+	 * user may not read, such as their inverse relations, or that checks access itself before reading from the entry.
+	 */
 	protected Entry getEntryIgnoreACL(URI uri) {
 		return getEntry(uri, false);
 	}
@@ -1038,24 +1042,28 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			return null;
 		}
 		Entry item = softCache.getByEntryURI(entryURI);
-		if (item != null) {
-			if (withACL) {
-				((ContextImpl) item.getContext()).checkAccess(item, AccessProperty.ReadMetadata);
-			}
-			return item;
+		if (item == null) {
+			item = loadEntry(split.get(), entryURI, uri);
 		}
+		if (item != null && withACL) {
+			((ContextImpl) item.getContext()).checkAccess(item, AccessProperty.ReadMetadata);
+		}
+		return item;
+	}
+
+	private Entry loadEntry(URISplit split, URI entryURI, URI requestedURI) {
 		log.debug("SoftCache miss for entry URI {}, falling back to repository lookup", entryURI);
-		URI contextEntryURI = split.get().getContextMetaMetadataURI();
+		URI contextEntryURI = split.getContextMetaMetadataURI();
 		Entry contextEntry = getByEntryURI(contextEntryURI);
-		if (contextEntry != null) {
-			Entry resolved = ((Context) contextEntry.getResource()).getByEntryURI(entryURI);
-			if (resolved == null) {
-				log.warn("Context {} found but entry not resolvable for URI {}", contextEntryURI, uri);
-			}
-			return resolved;
+		if (contextEntry == null) {
+			log.warn("No context found for entry with URI {} (context URI: {})", requestedURI, contextEntryURI);
+			return null;
 		}
-		log.warn("No context found for entry with URI {} (context URI: {})", uri, contextEntryURI);
-		return null;
+		Entry resolved = ((Context) contextEntry.getResource()).getByEntryURI(entryURI);
+		if (resolved == null) {
+			log.warn("Context {} found but entry not resolvable for URI {}", contextEntryURI, requestedURI);
+		}
+		return resolved;
 	}
 
 	public Set<Entry> getLinks(URI resourceURI) {
@@ -1076,9 +1084,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	 * base URL), or that resolve to no entry because the entry has since been removed. Each such
 	 * triple is skipped and reported through one warning per call.
 	 * <p>
-	 * Entries the current user may not read metadata for are excluded, but only where
-	 * {@code getItemInRepositoryByMMdURI} checks — its soft-cache-miss path does not, so this is not
-	 * a guarantee the caller can rely on for access control.
+	 * Entries the current user may not read metadata for are excluded.
 	 *
 	 * @param uri the subject of the index triples: a resource URI for resHasEntry, a metadata URI
 	 * for mdHasEntry.
@@ -1173,20 +1179,20 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	}
 
 	protected Entry getItemInRepositoryByMMdURI(URI mmdURI) {
-		Entry entry = softCache.getByEntryURI(mmdURI);
-		if (entry != null) {
-			if (entry.getContext().isDeleted()) {
+		Entry found = softCache.getByEntryURI(mmdURI);
+		if (found == null) {
+			Entry contextItem = getByEntryURI(Util.getContextMMdURIFromURI(entry.getRepositoryManager(), mmdURI));
+			if (contextItem == null) {
 				return null;
 			}
-			((ContextImpl) entry.getContext()).checkAccess(entry, AccessProperty.ReadMetadata);
-			return entry;
-		}
-
-		Entry contextItem = getByEntryURI(Util.getContextMMdURIFromURI(this.entry.getRepositoryManager(), mmdURI));
-		if (contextItem == null) {
+			found = ((Context) contextItem.getResource()).getByEntryURI(mmdURI);
+		} else if (found.getContext().isDeleted()) {
 			return null;
 		}
-		return ((Context) contextItem.getResource()).getByEntryURI(mmdURI);
+		if (found != null) {
+			((ContextImpl) found.getContext()).checkAccess(found, AccessProperty.ReadMetadata);
+		}
+		return found;
 	}
 
 	public void initResource(EntryImpl newEntry) throws RepositoryException {
@@ -1551,7 +1557,12 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				while(itr.hasNext())  {
 					Binding obj = itr.next();
 					if(obj.getValue() instanceof IRI) {
-						Entry entry = this.getEntry(new URI(obj.getValue().toString()));
+						Entry entry;
+						try {
+							entry = this.getEntry(new URI(obj.getValue().toString()));
+						} catch (AuthorizationException ae) {
+							continue;
+						}
 						if (!entries.contains(entry))
 							entries.add(entry);
 					}

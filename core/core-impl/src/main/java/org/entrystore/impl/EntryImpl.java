@@ -1625,8 +1625,7 @@ public class EntryImpl implements Entry {
 				String base = repositoryManager.getRepositoryURL().toString();
 				for (Statement statement : rr) {
 					if (isStatementInvRelationCandidate(statement, base)) {
-						URI entryURI = URI.create(statement.getObject().stringValue());
-						EntryImpl sourceEntry = (EntryImpl) repositoryManager.getContextManager().getEntry(entryURI);
+						EntryImpl sourceEntry = relationTarget(repositoryManager, statement);
 						if (sourceEntry != null && sourceEntry != this) {
 							sourceEntry.removeRelationSynchronized(statement, rc);
 						}
@@ -1641,8 +1640,7 @@ public class EntryImpl implements Entry {
         String base = repositoryManager.getRepositoryURL().toString();
         for (Statement statement : graph) {
             if (isStatementInvRelationCandidate(statement, base)) {
-                URI entryURI = URI.create(statement.getObject().stringValue());
-				EntryImpl sourceEntry = (EntryImpl) repositoryManager.getContextManager().getEntry(entryURI);
+				EntryImpl sourceEntry = relationTarget(repositoryManager, statement);
                 if (sourceEntry != null && sourceEntry != this) {
                     sourceEntry.addRelationSynchronized(statement, rc);
                 }
@@ -2089,6 +2087,15 @@ public class EntryImpl implements Entry {
 			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
+	}
+
+	/**
+	 * The entry the object of {@code relation} denotes, looked up without checking ReadMetadata: inverse relations are
+	 * bookkeeping, kept also on entries the current user may not read.
+	 */
+	static EntryImpl relationTarget(RepositoryManager rm, Statement relation) {
+		return (EntryImpl) ((ContextManagerImpl) rm.getContextManager())
+				.getEntryIgnoreACL(URI.create(relation.getObject().stringValue()));
 	}
 
 	protected void addRelationSynchronized(Statement statement, RepositoryConnection rc) {

@@ -114,8 +114,7 @@ public class GroupImpl extends ListImpl implements Group {
 				RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
 				while (iter.hasNext()) {
 					Statement statement = iter.next();
-					URI sourceEntryURI = URI.create(statement.getObject().stringValue());
-					EntryImpl sourceEntry = (EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
+					EntryImpl sourceEntry = EntryImpl.relationTarget(this.entry.getRepositoryManager(), statement);
 					if (sourceEntry != null) {
 						sourceEntry.removeRelationSynchronized(statement, rc);
 					}

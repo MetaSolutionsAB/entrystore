@@ -46,6 +46,8 @@ public class LocalMetadataWrapper implements Metadata {
 	}
 
 	/**
+	 * Looks the referenced entry up without an access check: reading its local metadata checks ReadMetadata on it.
+	 *
 	 * @return the local metadata of the referenced entry, or an empty graph if the external metadata URI does not
 	 * denote an entry, there is no such entry, it has no local metadata, or it cannot be loaded because its data or
 	 * that of its context entry is corrupt; a reference is then treated like a reference to a missing entry
@@ -62,7 +64,8 @@ public class LocalMetadataWrapper implements Metadata {
 		// an entry of a removed context stays cached while the context's graphs are being deleted
 		if (e == null || e.getContext().isDeleted()) {
 			try {
-				e = entry.getRepositoryManager().getContextManager().getEntry(refEntryURI);
+				e = ((ContextManagerImpl) entry.getRepositoryManager().getContextManager())
+						.getEntryIgnoreACL(refEntryURI);
 			} catch (RuntimeException failure) {
 				URL repositoryURL = entry.getRepositoryManager().getRepositoryURL();
 				if (!CorruptData.isCorruptDataOf(failure, refEntryURI, repositoryURL)) {

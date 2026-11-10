@@ -490,6 +490,10 @@ public class PublicRepository {
 		}
 	}
 
+	/**
+	 * A context's entries are looked up without an access check, so that an entry guest can no longer read is still
+	 * removed; {@link #addEntry} decides as guest whether it is added again.
+	 */
 	private void updateEntry(Entry e, RepositoryConnection rc) throws RepositoryException {
 		if (e == null) {
 			return;
@@ -505,11 +509,7 @@ public class PublicRepository {
 				Set<URI> entries = context.getEntries();
 				for (URI entryURI : entries) {
 					if (entryURI != null) {
-						try {
-							updateEntry(rm.getContextManager().getEntry(entryURI), rc);
-						} catch (AuthorizationException ae) {
-							continue;
-						}
+						updateEntry(((ContextManagerImpl) rm.getContextManager()).getEntryIgnoreACL(entryURI), rc);
 					}
 				}
 			}
@@ -563,7 +563,9 @@ public class PublicRepository {
 
 		synchronized (repository) {
 			RepositoryConnection rc = null;
+			URI currentUser = pm.getAuthenticatedUserURI();
 			try {
+				pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 				rc = repository.getConnection();
 				Date before = new Date();
 				rc.begin();
@@ -637,6 +639,7 @@ public class PublicRepository {
 				}
 				log.error(re.getMessage());
 			} finally {
+				pm.setAuthenticatedUserURI(currentUser);
 				try {
 					rc.close();
 				} catch (RepositoryException re) {

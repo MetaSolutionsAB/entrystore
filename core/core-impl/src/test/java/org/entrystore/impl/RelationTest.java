@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,16 @@
 
 package org.entrystore.impl;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.RDFS;
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -78,5 +83,116 @@ public class RelationTest extends AbstractCoreTest {
 		Model lg = lmd.getGraph();
 		lg.add(vf.createStatement(link.getSesameResourceURI(), RDFS.ISDEFINEDBY, list2.getSesameResourceURI()));
 		assertTrue(list2.getRelations().size() == 3); //Should not be changed since resourceURI is not a repository URI.
+	}
+
+	private static final IRI RELATED = SimpleValueFactory.getInstance().createIRI("http://example.com/related");
+
+	/**
+	 * ENTRYSTORE-1189. Inverse relations are bookkeeping, so they are kept on an entry the editor may not read; a
+	 * cached one used to fail the write.
+	 */
+	@Test
+	public void entryRelation_toACachedEntryTheEditorMayNotRead_isAddedAndRemoved() {
+		EntryImpl target = entryInPrivateContext();
+		EntryImpl source = entryInDuck();
+		Statement relation = rm.getValueFactory().createStatement(source.getSesameResourceURI(), RELATED,
+				target.getSesameResourceURI());
+		Model graph = source.getGraph();
+
+		graph.add(relation);
+		asDonald(() -> source.setGraph(graph));
+		assertTrue(hasRelation(target, relation));
+
+		graph.remove(relation);
+		asDonald(() -> source.setGraph(graph));
+		assertFalse(hasRelation(target, relation));
+	}
+
+	/** ENTRYSTORE-1189. Uncached, the entry is loaded without the check that getEntry now applies on a miss too. */
+	@Test
+	public void entryRelation_toAnUncachedEntryTheEditorMayNotRead_isAddedAndRemoved() {
+		EntryImpl target = entryInPrivateContext();
+		EntryImpl source = entryInDuck();
+		Statement relation = rm.getValueFactory().createStatement(source.getSesameResourceURI(), RELATED,
+				target.getSesameResourceURI());
+		Model graph = source.getGraph();
+
+		graph.add(relation);
+		evictFromSoftCache(target);
+		asDonald(() -> source.setGraph(graph));
+		assertTrue(hasRelation(target, relation));
+
+		graph.remove(relation);
+		evictFromSoftCache(target);
+		asDonald(() -> source.setGraph(graph));
+		assertFalse(hasRelation(target, relation));
+	}
+
+	/**
+	 * ENTRYSTORE-1189. Adding such a relation was already allowed (ENTRYSTORE-803), but replacing it failed once the
+	 * target was cached.
+	 */
+	@Test
+	public void metadataRelation_toACachedEntryTheEditorMayNotRead_canBeReplaced() {
+		EntryImpl target = entryInPrivateContext();
+		EntryImpl source = entryInDuck();
+		Metadata metadata = source.getLocalMetadata();
+		Statement relation = rm.getValueFactory().createStatement(source.getSesameResourceURI(), RELATED,
+				target.getSesameResourceURI());
+		Model graph = new LinkedHashModel();
+		graph.add(relation);
+
+		asDonald(() -> metadata.setGraph(graph));
+		assertTrue(hasRelation(target, relation));
+
+		asDonald(() -> metadata.setGraph(new LinkedHashModel()));
+		assertFalse(hasRelation(target, relation));
+	}
+
+	@Test
+	public void metadataRelation_toAnUncachedEntryTheEditorMayNotRead_canBeReplaced() {
+		EntryImpl target = entryInPrivateContext();
+		EntryImpl source = entryInDuck();
+		Metadata metadata = source.getLocalMetadata();
+		Statement relation = rm.getValueFactory().createStatement(source.getSesameResourceURI(), RELATED,
+				target.getSesameResourceURI());
+		Model graph = new LinkedHashModel();
+		graph.add(relation);
+
+		evictFromSoftCache(target);
+		asDonald(() -> metadata.setGraph(graph));
+		assertTrue(hasRelation(target, relation));
+
+		evictFromSoftCache(target);
+		asDonald(() -> metadata.setGraph(new LinkedHashModel()));
+		assertFalse(hasRelation(target, relation));
+	}
+
+	/** An entry Donald may not read: in a context the admin creates, which grants Donald nothing. */
+	private EntryImpl entryInPrivateContext() {
+		return asUser(pm.getAdminUser(),
+				() -> (EntryImpl) newContext().createResource(null, GraphType.None, null, null));
+	}
+
+	/** An entry Donald administers, as an owner of duck. */
+	private EntryImpl entryInDuck() {
+		return asUser(donald(),
+				() -> (EntryImpl) cm.getContext("duck").createResource(null, GraphType.None, null, null));
+	}
+
+	private void asDonald(Runnable action) {
+		asUser(donald(), () -> {
+			action.run();
+			return null;
+		});
+	}
+
+	/** Matches by subject, predicate and object, since the stored relation carries the target's relation graph. */
+	private static boolean hasRelation(EntryImpl target, Statement relation) {
+		return target.getRelations().contains(relation.getSubject(), relation.getPredicate(), relation.getObject());
+	}
+
+	private User donald() {
+		return (User) pm.getPrincipalEntry("Donald").getResource();
 	}
 }
