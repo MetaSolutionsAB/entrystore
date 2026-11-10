@@ -462,9 +462,64 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 
 		then: "it is rejected and the token survives so a valid retry still works"
 		conn.getResponseCode() == HTTP_BAD_REQUEST
-		conn.errorStream.text.contains('at least 8 characters')
+		conn.errorStream.text.contains('The password must conform to the configured rules.')
 		def retryBody = 'confirm=' + token + '&email=' + username + '&password=freshPass4567'
 		def retryConn = EntryStoreClient.postRequest('/auth/pwreset/confirm', retryBody, null, formUrlEncoded)
 		retryConn.getResponseCode() == HTTP_OK
+	}
+
+	def "POST /auth/pwreset/confirm rejects a new password that breaks a configured rule and keeps the old one"() {
+		given: "a user with a password, and a password that meets the default rules but breaks the no-whitespace rule"
+		def username = 'newResetRuleViolation@test.com'
+		def oldPassword = 'oldPass12345'
+		def rejectedPassword = 'New pass1234'
+		UserUtil.createUserWithPassword(username, oldPassword)
+		// Setting the password mails a password-change notice; drop it so the reset link is the only mail.
+		assert greenMail.waitForIncomingEmail(5000, 1)
+		greenMail.purgeEmailFromAllMailboxes()
+		def token = startPwreset(username)
+		def body = createFormBody([confirm: token, email: username, password: rejectedPassword])
+
+		when: "it is submitted as often as a wrong email would be allowed (max-attempts=3)"
+		def first = EntryStoreClient.postRequest('/auth/pwreset/confirm', body, null, formUrlEncoded)
+		def second = EntryStoreClient.postRequest('/auth/pwreset/confirm', body, null, formUrlEncoded)
+		def third = EntryStoreClient.postRequest('/auth/pwreset/confirm', body, null, formUrlEncoded)
+
+		then: "each is rejected"
+		first.getResponseCode() == HTTP_BAD_REQUEST
+		first.errorStream.text.contains('The password must conform to the configured rules.')
+		second.getResponseCode() == HTTP_BAD_REQUEST
+		third.getResponseCode() == HTTP_BAD_REQUEST
+		third.errorStream.text.contains('The password must conform to the configured rules.')
+
+		and: "the password is unchanged and no password-change confirmation email is sent"
+		greenMail.getReceivedMessages().size() == 1
+		def oldLoginBody = createFormBody([auth_username: username, auth_password: oldPassword])
+		def oldLoginConn = EntryStoreClient.postRequest('/auth/cookie', oldLoginBody, '', formUrlEncoded)
+		oldLoginConn.getResponseCode() == HTTP_OK
+
+		and: "no attempt was used up, so the same link still sets a password that conforms"
+		def retryBody = createFormBody([confirm: token, email: username, password: 'freshPass4567'])
+		def retryConn = EntryStoreClient.postRequest('/auth/pwreset/confirm', retryBody, null, formUrlEncoded)
+		retryConn.getResponseCode() == HTTP_OK
+	}
+
+	def "POST /auth/pwreset/confirm checks and stores the new password without its surrounding whitespace"() {
+		given: "a conforming password padded with spaces, which the no-whitespace rule would reject as sent"
+		def username = 'newResetPaddedPassword@test.com'
+		UserUtil.createUser(username)
+		def token = startPwreset(username)
+		def body = createFormBody([confirm: token, email: username, password: ' freshPass4567 '])
+
+		when:
+		def conn = EntryStoreClient.postRequest('/auth/pwreset/confirm', body, null, formUrlEncoded)
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+
+		and: "the password without the padding logs in"
+		def loginBody = createFormBody([auth_username: username, auth_password: 'freshPass4567'])
+		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
+		loginConn.getResponseCode() == HTTP_OK
 	}
 }

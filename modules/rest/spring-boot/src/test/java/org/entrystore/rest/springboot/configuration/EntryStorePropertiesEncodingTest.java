@@ -73,7 +73,7 @@ class EntryStorePropertiesEncodingTest {
 		assertTrue(matcher.find(), "no --spring.config.import argument in " + ENTRYPOINT);
 		Path mounted = Files.writeString(dir.resolve("mounted.properties"),
 				SUBJECT_KEY + "=Ditt lösenord har ändrats\n", UTF_8);
-		String importArgument = matcher.group(1).replace("${CONFIG_FILE}", mounted.toAbsolutePath().toString());
+		String importArgument = matcher.group(1).replace("${CONFIG_FILE}", mounted.toUri().getPath());
 
 		StandardEnvironment environment = load("", "--spring.config.import=" + importArgument);
 
