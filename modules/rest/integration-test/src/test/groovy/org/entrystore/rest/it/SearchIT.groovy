@@ -116,6 +116,7 @@ class SearchIT extends BaseSpec {
 	static final String UNTYPED_ENTRY = 'searchCtxTypeUntypedEntry'
 	static final String CHANGING_ENTRY = 'searchCtxTypeChangingEntry'
 	static final String QUOTE_ENTRY = 'searchCtxTypeQuoteEntry'
+	static final String CTX_TYPE_CONTEXT_LINK_DECOY = 'searchCtxTypeContextLinkDecoy'
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
@@ -291,6 +292,10 @@ class SearchIT extends BaseSpec {
 		def workbenchUri = EntryStoreClient.baseUrl + '/' + WORKBENCH_CTX
 		assert getOrCreateEntry(UNTYPED_CTX, [id: 'searchCtxTypeDecoy', entrytype: 'link', resource: workbenchUri],
 			[metadata: [(workbenchUri): [(NameSpaceConst.RDF_TYPE): [[type: 'uri', value: ESTERMS + 'CatalogContext']]]]]).length() > 0
+		// The same decoy created with graph type Context, which a writer of any context may set on a link
+		assert getOrCreateEntry(UNTYPED_CTX, [id: CTX_TYPE_CONTEXT_LINK_DECOY, entrytype: 'link', graphtype: 'context',
+			resource: workbenchUri], [metadata: [(workbenchUri): [
+				(NameSpaceConst.RDF_TYPE): [[type: 'uri', value: ESTERMS + 'CatalogContext']]]]]).length() > 0
 
 		// Entry whose DECIMAL_PREDICATE_IRI value is typed xsd:double but has a non-numeric lexical
 		// form. The indexer's isDecimalLiteral guard matches (datatype is xsd:double), l.doubleValue()
@@ -1669,6 +1674,27 @@ class SearchIT extends BaseSpec {
 		then: 'without graphType:Context the decoy pulls in the Workbench entry'
 		entryIds(unguardedConn) == [CATALOG_ENTRY, CATALOG_PRIVATE_ENTRY, WORKBENCH_ENTRY] as Set
 		entryIds(guardedConn) == [CATALOG_ENTRY, CATALOG_PRIVATE_ENTRY] as Set
+	}
+
+	/**
+	 * The graphType:Context guard holds only while the indexer writes that graph type for context entries alone (Local
+	 * entries of _contexts): building the document of a link with graph type Context fails on its null resource, so it
+	 * keeps the document it had before.
+	 */
+	def "GET /search?type=solr with the context-type join should ignore a link created with graph type Context"() {
+		given: 'the second decoy: like the first, but created with graph type Context'
+		def workbenchUri = EntryStoreClient.baseUrl + '/' + WORKBENCH_CTX
+		def decoyConn = EntryStoreClient.getRequest('/' + UNTYPED_CTX + '/entry/' + CTX_TYPE_CONTEXT_LINK_DECOY)
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: CTX_TYPE_MARKER_QUERY + ' AND ' + contextTypeFilter(['CatalogContext'])]))
+
+		then: 'the link has graph type Context, and the join still leaves out the Workbench entry'
+		decoyConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(decoyConn.inputStream.text)['info'][workbenchUri][NameSpaceConst.RDF_TYPE]*.value
+			.contains(NameSpaceConst.TERM_CONTEXT)
+		entryIds(conn) == [CATALOG_ENTRY, CATALOG_PRIVATE_ENTRY] as Set
 	}
 
 	def "GET /search?type=solr with the context-type join as guest should return only the entries guest may read"() {
