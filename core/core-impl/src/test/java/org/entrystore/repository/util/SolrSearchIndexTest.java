@@ -1740,6 +1740,73 @@ public class SolrSearchIndexTest {
 	}
 
 	@Test
+	public void sendQuerySkipsReferenceHitTheCallerMayNotReadThoughItsTargetIsReadable() throws Exception {
+		ContextManager cm = contextManagerListing();
+		Entry reference = referenceTo(cm, ENTRY_1_1, METADATA_2_1, ENTRY_2_1);
+		when(cm.getEntry(METADATA_2_1)).thenReturn(mock(Entry.class));
+		deny(reference);
+		solrReturnsHits(ENTRY_1_1);
+
+		QueryResult result = index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		assertTrue(result.getEntries().isEmpty());
+		assertEquals(0, result.getHits());
+	}
+
+	@Test
+	public void sendQuerySkipsReferenceHitTheCallerMayNotReadWhoseTargetIsMissing() throws Exception {
+		ContextManager cm = contextManagerListing();
+		Entry reference = referenceTo(cm, ENTRY_1_1, METADATA_2_1, ENTRY_2_1);
+		when(cm.getEntry(METADATA_2_1)).thenReturn(null);
+		deny(reference);
+		solrReturnsHits(ENTRY_1_1);
+
+		QueryResult result = index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		assertTrue(result.getEntries().isEmpty());
+		assertEquals(0, result.getHits());
+	}
+
+	@Test
+	public void sendQuerySkipsReadableReferenceHitWhoseTargetTheCallerMayNotRead() throws Exception {
+		ContextManager cm = contextManagerListing();
+		referenceTo(cm, ENTRY_1_1, METADATA_2_1, ENTRY_2_1);
+		Entry target = mock(Entry.class);
+		when(cm.getEntry(METADATA_2_1)).thenReturn(target);
+		deny(target);
+		solrReturnsHits(ENTRY_1_1);
+
+		QueryResult result = index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		assertTrue(result.getEntries().isEmpty());
+		assertEquals(0, result.getHits());
+	}
+
+	@Test
+	public void sendQueryKeepsReferenceHitWhenTheCallerMayReadItAndItsTarget() throws Exception {
+		ContextManager cm = contextManagerListing();
+		Entry reference = referenceTo(cm, ENTRY_1_1, METADATA_2_1, ENTRY_2_1);
+		Entry target = mock(Entry.class);
+		when(cm.getEntry(METADATA_2_1)).thenReturn(target);
+		solrReturnsHits(ENTRY_1_1);
+
+		QueryResult result = index.sendQuery(new SolrQuery("*:*").setStart(0).setRows(10));
+
+		assertEquals(Set.of(reference), result.getEntries());
+		PrincipalManager pm = rm.getPrincipalManager();
+		verify(pm).checkAuthenticatedUserAuthorized(reference, AccessProperty.ReadMetadata);
+		verify(pm).checkAuthenticatedUserAuthorized(target, AccessProperty.ReadMetadata);
+	}
+
+	/** Makes the access check deny the caller ReadMetadata on the given entry. */
+	private void deny(Entry entry) {
+		// fetched first: a call on another mock between doThrow and when leaves the stubbing unfinished
+		PrincipalManager pm = rm.getPrincipalManager();
+		doThrow(new AuthorizationException(null, entry, AccessProperty.ReadMetadata)).when(pm)
+				.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
+	}
+
+	@Test
 	public void sendQueryFailsWhenLoadingAHitFailsForAnotherReason() throws Exception {
 		ContextManager cm = contextManagerListing();
 		// A failure of the store must not turn into an empty search result

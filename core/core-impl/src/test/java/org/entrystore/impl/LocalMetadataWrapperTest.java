@@ -26,6 +26,7 @@ import org.entrystore.GraphType;
 import org.entrystore.repository.CorruptEntryException;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryManager;
+import org.entrystore.repository.test.TestSuite;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -163,6 +164,34 @@ public class LocalMetadataWrapperTest extends AbstractCoreTest {
 		Model graph = reference.getCachedExternalMetadata().getGraph();
 
 		assertTrue(graph.isEmpty());
+	}
+
+	@Test
+	public void getGraphDeniesAReferenceTheUserMayNotReadThoughItsTargetIsReadable() {
+		Entry referenced = context.createResource(null, GraphType.None, null, null);
+		setTitle(referenced, "referenced title");
+		TestSuite.addGuestToMetadataACL(referenced);
+		Entry reference = context.createLinkReference(null, URI.create("http://example.com/resource"),
+				referenced.getLocalMetadataURI(), null);
+		rm.setCheckForAuthorization(true);
+
+		assertThrows(AuthorizationException.class,
+				() -> asUser(pm.getGuestUser(), () -> reference.getCachedExternalMetadata().getGraph()));
+	}
+
+	@Test
+	public void getGraphReturnsTheTargetsMetadataToAUserWhoMayReadTheReferenceAndItsTarget() {
+		Entry referenced = context.createResource(null, GraphType.None, null, null);
+		setTitle(referenced, "referenced title");
+		TestSuite.addGuestToMetadataACL(referenced);
+		Entry reference = context.createLinkReference(null, URI.create("http://example.com/resource"),
+				referenced.getLocalMetadataURI(), null);
+		TestSuite.addGuestToMetadataACL(reference);
+		rm.setCheckForAuthorization(true);
+
+		Model graph = asUser(pm.getGuestUser(), () -> reference.getCachedExternalMetadata().getGraph());
+
+		assertTrue(graph.contains(null, DCTERMS.TITLE, vf.createLiteral("referenced title")));
 	}
 
 	/** ENTRYSTORE-1189. The referenced entry is looked up unchecked, so reading its metadata is what denies access. */

@@ -734,6 +734,55 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		assertTrue(((ContextManagerImpl) cm).isEntryMetadataReadable(loaded));
 	}
 
+	@Test
+	public void entryMetadataOfAReferenceTheUserMayNotReadIsNotReadableThoughItsTargetIs() {
+		ContextImpl context = newContext();
+		Entry target = context.createResource(null, GraphType.None, null, null);
+		TestSuite.addGuestToMetadataACL(target);
+		Entry reference = context.createLinkReference(null, URI.create("http://example.com/resource"),
+				target.getLocalMetadataURI(), null);
+		rm.setCheckForAuthorization(true);
+
+		assertFalse(asUser(pm.getGuestUser(), () -> ((ContextManagerImpl) cm).isEntryMetadataReadable(reference)));
+	}
+
+	@Test
+	public void entryMetadataOfAReferenceTheUserMayNotReadIsNotReadableWhenItsTargetIsMissing() {
+		ContextImpl context = newContext();
+		Entry target = context.createResource(null, GraphType.None, null, null);
+		Entry reference = context.createLinkReference(null, URI.create("http://example.com/resource"),
+				target.getLocalMetadataURI(), null);
+		context.remove(target.getEntryURI());
+		rm.setCheckForAuthorization(true);
+
+		assertFalse(asUser(pm.getGuestUser(), () -> ((ContextManagerImpl) cm).isEntryMetadataReadable(reference)));
+	}
+
+	@Test
+	public void entryMetadataOfAReadableReferenceIsNotReadableWhenItsTargetIsNot() {
+		ContextImpl context = newContext();
+		Entry target = context.createResource(null, GraphType.None, null, null);
+		Entry reference = context.createLinkReference(null, URI.create("http://example.com/resource"),
+				target.getLocalMetadataURI(), null);
+		TestSuite.addGuestToMetadataACL(reference);
+		rm.setCheckForAuthorization(true);
+
+		assertFalse(asUser(pm.getGuestUser(), () -> ((ContextManagerImpl) cm).isEntryMetadataReadable(reference)));
+	}
+
+	@Test
+	public void entryMetadataOfAReferenceIsReadableWhenTheUserMayReadItAndItsTarget() {
+		ContextImpl context = newContext();
+		Entry target = context.createResource(null, GraphType.None, null, null);
+		TestSuite.addGuestToMetadataACL(target);
+		Entry reference = context.createLinkReference(null, URI.create("http://example.com/resource"),
+				target.getLocalMetadataURI(), null);
+		TestSuite.addGuestToMetadataACL(reference);
+		rm.setCheckForAuthorization(true);
+
+		assertTrue(asUser(pm.getGuestUser(), () -> ((ContextManagerImpl) cm).isEntryMetadataReadable(reference)));
+	}
+
 	/**
 	 * An import removes the ordinary entries but keeps lists whose id starts with an underscore, so those lists
 	 * are pruned inside the import transaction, which fires nothing of its own.

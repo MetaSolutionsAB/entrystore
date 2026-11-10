@@ -1384,24 +1384,34 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		if (entry == null) {
 			return false;
 		}
-		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
 		try {
-			//If linkReference or reference to an entry in the same repository
-			//check that the referenced metadata is accessible.
-			if ((entry.getEntryType() == EntryType.Reference
-					|| entry.getEntryType() == EntryType.LinkReference)
-					&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper) {
-				Entry refEntry = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());
-				// Without a referenced entry, e.g. for a URI that does not denote an entry, the entry itself is checked
-				pm.checkAuthenticatedUserAuthorized(refEntry != null ? refEntry : entry, AccessProperty.ReadMetadata);
-			} else {
-				//Check that the local metadata is accessible.
-				pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
-			}
+			checkEntryMetadataReadable(entry);
 		} catch (AuthorizationException ae) {
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * Checks that the current user may read all metadata of {@code entry}: ReadMetadata on the entry itself and,
+	 * for a Reference or LinkReference whose external metadata is the local metadata of an entry in this repository,
+	 * also on that entry. A referenced entry that does not exist adds no check. The entry itself is checked first,
+	 * so that a caller who may not read it does not load the referenced entry.
+	 *
+	 * @throws AuthorizationException if the user lacks ReadMetadata on the entry or on the entry it references
+	 */
+	public static void checkEntryMetadataReadable(Entry entry) {
+		RepositoryManager rm = entry.getRepositoryManager();
+		PrincipalManager pm = rm.getPrincipalManager();
+		pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
+		if ((entry.getEntryType() == EntryType.Reference || entry.getEntryType() == EntryType.LinkReference)
+				&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper) {
+			// Null as well for a URI that does not denote an entry
+			Entry refEntry = rm.getContextManager().getEntry(entry.getExternalMetadataURI());
+			if (refEntry != null) {
+				pm.checkAuthenticatedUserAuthorized(refEntry, AccessProperty.ReadMetadata);
+			}
+		}
 	}
 
 	public Map sortMapByValue(Map map, final boolean ascending) {

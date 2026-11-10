@@ -105,6 +105,18 @@ class SolrReadAccessFilterTest {
 				dereferenced.toString());
 	}
 
+	@Test
+	void aLocalReferencePassesOnlyIfItsTargetAndTheReferenceItselfAreReadable() {
+		SolrQuery query = new SolrQuery("*:*");
+
+		filterFor(USER, GUEST).applyTo(query);
+
+		// the reference's own document must pass the same rules as any other document: its context entry's
+		// metadata being readable is not enough
+		assertEquals("{!bool must=$esacl.targetReadable filter=$esacl.readable}", query.get("esacl.viaReference"));
+		assertNull(query.get("esacl.inReadableContext"));
+	}
+
 	/**
 	 * The parameters the filter query dereferences, directly or through other parameters. Solr answers 400 for a
 	 * $name it cannot resolve, so this fails on every reference to a parameter that is not set.

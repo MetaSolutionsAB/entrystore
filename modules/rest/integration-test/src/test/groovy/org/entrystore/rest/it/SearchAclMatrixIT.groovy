@@ -42,7 +42,7 @@ class SearchAclMatrixIT extends BaseSpec {
 	static final String BASE = EntryStoreClient.baseUrl
 	/** Owned by OWNER and readable by the members of the group; holds the entries of every ACL shape. */
 	static final String CONTEXT = 'search-acl-matrix'
-	/** Readable by guest; holds the references, so that only their targets decide. */
+	/** Readable by guest; holds the references without an ACL of their own, so that their targets decide. */
 	static final String REF_CONTEXT = 'search-acl-matrix-refs'
 	/** Readable by none of the callers who are not admins. */
 	static final String PRIVATE_CONTEXT = 'search-acl-matrix-private'
@@ -64,8 +64,8 @@ class SearchAclMatrixIT extends BaseSpec {
 	static final String OWNER = 'searchAclMatrixOwner@test.com'
 	static final List<String> SHAPES = ['inherited', 'own-user', 'own-group', 'own-users', 'own-guest',
 										'own-excludes', 'own-user-write', 'own-resource-only', 'context-write',
-										'ref-readable', 'ref-unreadable', 'ref-via-context-entry', 'self',
-										'context-entry']
+										'ref-readable', 'ref-unreadable', 'ref-via-context-entry',
+										'ref-own-acl-excludes', 'self', 'context-entry']
 
 	/** Documents written straight into Solr, of entries in _contexts that name CONTEXT as their resource. */
 	static final List<String> FAKE_CONTEXT_ENTRY_URIS = [BASE + '/_contexts/entry/search-acl-matrix-fake-link',
@@ -122,6 +122,9 @@ class SearchAclMatrixIT extends BaseSpec {
 		addReferenceShape('ref-unreadable', 'inherited')
 		// neither the reference nor its context is readable, only its context entry's metadata and its target
 		addReferenceShape('ref-via-context-entry', 'own-guest', META_CONTEXT)
+		// its target and its context are readable by guest, but its own ACL replaces the context's (ENTRYSTORE-1188)
+		addReferenceShape('ref-own-acl-excludes', 'own-guest', REF_CONTEXT,
+			[(BASE + '/' + REF_CONTEXT + '/metadata/_newId'): [(NameSpaceConst.TERM_READ): [uriValue(ADMIN)]]])
 		addSelfShape()
 		putJson('/_contexts/metadata/' + CONTEXT, markerMetadata(BASE + '/' + CONTEXT))
 		shapes['context-entry'] = [uri      : BASE + '/_contexts/entry/' + CONTEXT,
@@ -254,20 +257,22 @@ class SearchAclMatrixIT extends BaseSpec {
 	}
 
 	/**
-	 * A reference without an ACL of its own to the local metadata of another shape's entry. Its indexed metadata is
-	 * the target's, and reading it is checked on the target.
+	 * A reference to the local metadata of another shape's entry, with the given entry information as its own ACL, or
+	 * none if null. Its indexed metadata is the target's, and reading it is checked on the reference and on the target.
 	 */
-	private static void addReferenceShape(String shape, String targetShape, String contextId = REF_CONTEXT) {
-		def referenceId = createReference(contextId, shapes[targetShape]['entryId'])
-		shapes[shape] = [uri      : BASE + '/' + contextId + '/entry/' + referenceId,
+	private static void addReferenceShape(String shape, String targetShape, String contextId = REF_CONTEXT,
+										  Map info = null) {
+		def referenceId = createReference(contextId, shapes[targetShape]['entryId'], info)
+		shapes[shape] = [entryId  : referenceId, uri: BASE + '/' + contextId + '/entry/' + referenceId,
 						 readCheck: '/' + contextId + '/cached-external-metadata/' + referenceId]
 	}
 
 	/** Creates a reference in the given context to the local metadata of an entry of CONTEXT; returns its ID. */
-	private static String createReference(String contextId, String targetId) {
+	private static String createReference(String contextId, String targetId, Map info = null) {
 		return createEntry(contextId, [entrytype: 'reference',
 			resource: 'https://example.org/search-acl-matrix/' + contextId + '/' + targetId,
-			'cached-external-metadata': BASE + '/' + CONTEXT + '/metadata/' + targetId])
+			'cached-external-metadata': BASE + '/' + CONTEXT + '/metadata/' + targetId],
+			info != null ? [info: info] : [:])
 	}
 
 	/**
@@ -321,15 +326,34 @@ class SearchAclMatrixIT extends BaseSpec {
 
 		where:
 		caller             | readableShapes
-		''                 | ['own-guest', 'ref-readable', 'ref-via-context-entry']
+		''                 | ['own-guest', 'ref-readable']
 		PLAIN              | ['own-user', 'own-users', 'own-guest', 'own-user-write', 'context-write', 'ref-readable',
-							  'ref-via-context-entry', 'self']
-		MEMBER             | ['inherited', 'own-group', 'own-users', 'own-guest', 'ref-readable', 'ref-unreadable',
-							  'ref-via-context-entry']
-		// a context owner reads every entry of the context, whatever the entry's own ACL says
-		OWNER              | SHAPES - ['self', 'context-write']
+							  'self']
+		MEMBER             | ['inherited', 'own-group', 'own-users', 'own-guest', 'ref-readable', 'ref-unreadable']
+		// a context owner reads every entry of the context, whatever the entry's own ACL says, but owns neither
+		// context of the references it may not read
+		OWNER              | SHAPES - ['self', 'context-write', 'ref-via-context-entry', 'ref-own-acl-excludes']
 		'userInAdminGroup' | SHAPES
 		'admin'            | SHAPES
+		callerName = caller ?: 'guest'
+	}
+
+	def "GET /#type of a local reference #callerName may not read should respond with #status, though its target is readable"() {
+		when:
+		def conn = EntryStoreClient.getRequest(
+			'/' + REF_CONTEXT + '/' + type + '/' + shapes['ref-own-acl-excludes']['entryId'], caller)
+
+		then:
+		conn.getResponseCode() == status
+
+		where:
+		type                       | caller  | status
+		'cached-external-metadata' | ''      | HTTP_UNAUTHORIZED
+		'cached-external-metadata' | PLAIN   | HTTP_FORBIDDEN
+		'cached-external-metadata' | 'admin' | HTTP_OK
+		'merged-metadata'          | ''      | HTTP_UNAUTHORIZED
+		'merged-metadata'          | PLAIN   | HTTP_FORBIDDEN
+		'merged-metadata'          | 'admin' | HTTP_OK
 		callerName = caller ?: 'guest'
 	}
 

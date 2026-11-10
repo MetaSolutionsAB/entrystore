@@ -20,6 +20,8 @@ import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.Entry;
 import org.entrystore.Metadata;
+import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.util.CorruptData;
 import org.entrystore.repository.util.URISplit;
 import org.slf4j.Logger;
@@ -46,13 +48,19 @@ public class LocalMetadataWrapper implements Metadata {
 	}
 
 	/**
-	 * Looks the referenced entry up without an access check: reading its local metadata checks ReadMetadata on it.
+	 * Requires ReadMetadata on the referring entry, as {@link MetadataImpl#getGraph()} does for external metadata
+	 * cached in the entry. The referenced entry is looked up without an access check: reading its local metadata
+	 * checks ReadMetadata on it.
 	 *
 	 * @return the local metadata of the referenced entry, or an empty graph if the external metadata URI does not
 	 * denote an entry, there is no such entry, it has no local metadata, or it cannot be loaded because its data or
 	 * that of its context entry is corrupt; a reference is then treated like a reference to a missing entry
 	 */
 	public Model getGraph() {
+		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
+		if (pm != null) {
+			pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
+		}
 		URI externalMetadataURI = entry.getExternalMetadataURI();
 		URI refEntryURI = getReferencedEntryURI();
 		if (refEntryURI == null) {

@@ -49,6 +49,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.SearchIndex;
 import org.entrystore.User;
+import org.entrystore.impl.ContextManagerImpl;
 import org.entrystore.impl.LocalMetadataWrapper;
 import org.entrystore.impl.RegularContext;
 import org.entrystore.repository.CorruptEntryException;
@@ -2096,24 +2097,11 @@ public class SolrSearchIndex implements SearchIndex {
 							removeEntry(entry);
 							throw new IllegalStateException("Cannot return deleted entry in search result: " + uri);
 						}
-						PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
-						// If linkReference or reference to an entry in the same repository
-						// check that the referenced metadata is accessible.
 						if ((entry.getEntryType() == EntryType.Reference || entry.getEntryType() == EntryType.LinkReference)
 								&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper wrapper) {
 							referencedEntryURI = wrapper.getReferencedEntryURI();
-							// Null as well for a URI that does not denote an entry
-							Entry refEntry = entry.getRepositoryManager().getContextManager()
-									.getEntry(entry.getExternalMetadataURI());
-							if (refEntry != null) {
-								pm.checkAuthenticatedUserAuthorized(refEntry, AccessProperty.ReadMetadata);
-							} else {
-								log.error("Entry {} contains reference to non-existing resource.", entry.getEntryURI());
-							}
-						} else {
-							// Check that the local metadata is accessible.
-							pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
 						}
+						ContextManagerImpl.checkEntryMetadataReadable(entry);
 						result.add(entry);
 						if (result.size() == limit) {
 							// we have enough results

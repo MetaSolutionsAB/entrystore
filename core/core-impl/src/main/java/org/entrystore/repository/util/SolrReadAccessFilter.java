@@ -43,9 +43,9 @@ import java.util.Optional;
  *     <li>its resource URI is the caller's URI, as for the caller's own entry.</li>
  * </ol>
  * The document of a reference with a local target ({@value SolrSearchIndex#FIELD_REFERENCED_ENTRY}) holds the
- * target's metadata, so it passes only if the target's document is readable and, as the soft-cache lookup of the
- * reference requires, the reference itself or its context entry is readable. A reference whose target has no
- * document is not admitted.
+ * target's metadata, so it passes only if both the target's document and the reference itself are readable, as
+ * {@link org.entrystore.impl.ContextManagerImpl#checkEntryMetadataReadable} requires. A reference whose target has
+ * no document is not admitted, although that check admits it.
  *
  * <p>A context entry's document has {@code context} {@code {base}/_contexts} and its context's URI as
  * {@code resource}, which every document of that context has as {@code context}, so rules 1 and 3 are joins. Only Local
@@ -134,19 +134,13 @@ record SolrReadAccessFilter(URI user, List<String> principals, String contextsRe
 	private static Map<String, String> params() {
 		Map<String, String> params = new LinkedHashMap<>();
 		params.put("esacl.direct", "{!bool filter=$esacl.readable must_not=$esacl.localReference}");
-		params.put("esacl.viaReference", "{!bool must=$esacl.targetReadable must=$esacl.referenceVisible}");
+		params.put("esacl.viaReference", "{!bool must=$esacl.targetReadable filter=$esacl.readable}");
 		params.put("esacl.targetReadable", "{!join from=uri to=" + SolrSearchIndex.FIELD_REFERENCED_ENTRY
 				+ " score=none v=$esacl.readableTargets}");
 		params.put("esacl.readableTargets", "{!bool filter=$esacl.readable filter=$esacl.referenced}");
 		// the documents some local reference points to: the same for every caller, so cached once per searcher
 		params.put("esacl.referenced", "{!join from=" + SolrSearchIndex.FIELD_REFERENCED_ENTRY
 				+ " to=uri score=none v=$esacl.localReference}");
-		params.put("esacl.referenceVisible", "{!bool should=$esacl.cachedReadable should=$esacl.inReadableContext}");
-		// a should clause bypasses the filterCache, so readable would run its joins a second time without this
-		params.put("esacl.cachedReadable", "{!bool filter=$esacl.readable}");
-		params.put("esacl.inReadableContext",
-				"{!join from=resource to=context score=none v=$esacl.readableContextEntries}");
-		params.put("esacl.readableContextEntries", "{!bool filter=$esacl.contextEntry filter=$esacl.readable}");
 		params.put("esacl.localReference", LOCAL_REFERENCE);
 		params.put("esacl.readable",
 				"{!bool should=$esacl.contextOwner should=$esacl.ownAcl should=$esacl.inherited should=$esacl.self}");
