@@ -221,6 +221,23 @@ class OidcCustomConfigurationTest {
 		assertRequestLifetimeRejected("false", "2h");
 	}
 
+	// "15" meant as minutes is 15 ms; whole seconds would report it as 0s.
+	@Test
+	void requestLifetime_withoutUnit_isRejectedNamingTheValueAndTheUnitRule() {
+		String message = requestLifetimeRejection("15");
+
+		assertTrue(message.contains("got PT0.015S"), message);
+		assertTrue(message.contains("a value without a unit is read as milliseconds"), message);
+	}
+
+	// Whole seconds would report 3600s, which reads as in range.
+	@Test
+	void requestLifetime_justAboveOneHour_isReportedWithoutTruncation() {
+		String message = requestLifetimeRejection("3600500ms");
+
+		assertTrue(message.contains("got PT1H0.5S"), message);
+	}
+
 	@Test
 	void requestLifetime_atOneMinuteAndOneHour_isAccepted() {
 		assertEquals(Duration.ofMinutes(1), bind(Map.of(
@@ -239,6 +256,13 @@ class OidcCustomConfigurationTest {
 		String message = ExceptionUtils.getRootCauseMessage(ex);
 		assertTrue(message.contains("entrystore.auth.oidc.request-lifetime must be between 1m and 60m"),
 				"request-lifetime=" + value + " should be rejected naming the key, got: " + message);
+	}
+
+	private static String requestLifetimeRejection(String value) {
+		var ex = assertThrows(BindException.class, () -> bind(Map.of(
+				"entrystore.auth.oidc.enabled", "true",
+				"entrystore.auth.oidc.request-lifetime", value)));
+		return ExceptionUtils.getRootCauseMessage(ex);
 	}
 
 	private static OidcCustomConfiguration bind(Map<String, String> properties) {

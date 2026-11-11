@@ -105,7 +105,7 @@ public record OidcCustomConfiguration(
 				|| requestLifetime.compareTo(MAX_REQUEST_LIFETIME) > 0) {
 			throw new IllegalArgumentException("entrystore.auth.oidc.request-lifetime must be between "
 					+ MIN_REQUEST_LIFETIME.toMinutes() + "m and " + MAX_REQUEST_LIFETIME.toMinutes() + "m, got "
-					+ requestLifetime.toSeconds() + "s");
+					+ requestLifetime + " (a value without a unit is read as milliseconds)");
 		}
 	}
 
