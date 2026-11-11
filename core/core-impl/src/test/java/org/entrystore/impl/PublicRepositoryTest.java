@@ -952,7 +952,7 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 	}
 
 	@Test
-	public void removeEntries_contextWithAnotherResourceURI_clearsItsEntriesButNotTheGraphItsResourceURINames() {
+	public void removeEntries_contextWithAnotherResourceURI_removesItsStatementsFromTheGraphItNames() {
 		rm.setCheckForAuthorization(false);
 		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
 		ContextImpl context = (ContextImpl) contextEntry.getResource();
@@ -961,12 +961,18 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 		newEntryStating(other, "in-other", SHARED_TITLE);
 		Entry renamed = withResourceURI(contextEntry, other.getURI());
 		PublicRepository publicRepository = new PublicRepository(rm);
-		try {
+		try (RepositoryConnection rc = publicRepository.getConnection()) {
+			// as published while the context's resource URI named that graph
+			rc.add(SUBJECT, TITLE, literal("a"), contextGraph(other));
+
 			publicRepository.removeEntries(Set.of(renamed));
 
 			assertFalse(holdsAnything(publicRepository, a.getSesameLocalMetadataURI()));
+			assertFalse(holds(publicRepository, contextGraph(other), title("a")));
 			assertTrue(holds(publicRepository, contextGraph(other), title("in-other")),
 					"the graph the resource URI names is another context's");
+			assertTrue(holds(publicRepository, contextGraph(other), title(SHARED_TITLE)),
+					"an entry of the other context still states the shared title");
 		} finally {
 			publicRepository.shutdown();
 		}
@@ -1050,6 +1056,48 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 
 			assertTrue(holds(publicRepository, contextGraph(other), title("in-other")));
 			assertTrue(holds(publicRepository, inOther.getSesameLocalMetadataURI(), title("in-other")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void rebuildRepository_entriesReadablePerPart_publishesOnlyTheReadableParts() {
+		URI guest = pm.getGuestUser().getURI();
+		Entry contextEntry = newPublicContext();
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		EntryImpl metadataOnly = newGraphEntry(context, "md-public", "resource-private");
+		metadataOnly.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, guest);
+		EntryImpl resourceOnly = newGraphEntry(context, "md-private", "resource-public");
+		resourceOnly.addAllowedPrincipalsFor(AccessProperty.ReadResource, guest);
+
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			assertTrue(holds(publicRepository, metadataOnly.getSesameLocalMetadataURI(), title("md-public")));
+			assertFalse(holdsAnything(publicRepository, resourceGraph(metadataOnly)));
+			assertFalse(holds(publicRepository, contextGraph(context), title("resource-private")));
+			assertFalse(holdsAnything(publicRepository, resourceOnly.getSesameLocalMetadataURI()));
+			assertFalse(holds(publicRepository, contextGraph(context), title("md-private")));
+			assertTrue(holds(publicRepository, resourceGraph(resourceOnly), title("resource-public")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateEntries_publicReferenceToPrivateMetadataInTheRepository_publishesNothingOfThatMetadata() {
+		Entry contextEntry = newPublicContext();
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		EntryImpl described = newEntryStating(context, "described", SHARED_TITLE);
+		described.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getAdminUser().getURI());
+		EntryImpl reference = (EntryImpl) context.createReference(null, URI.create("http://example.com/referenced"),
+				described.getLocalMetadataURI(), null);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			publicRepository.updateEntries(Set.of(reference));
+
+			assertFalse(holdsAnything(publicRepository, reference.getSesameCachedExternalMetadataURI()));
+			assertFalse(holds(publicRepository, contextGraph(context), title("described")));
 		} finally {
 			publicRepository.shutdown();
 		}
