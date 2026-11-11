@@ -403,8 +403,8 @@ class SparqlIT extends BaseSpec {
 	@Unroll
 	def "POST #path with #urlQuery in the URL query string should return Bad-Request 400"() {
 		given:
-		// Defends against the URL-bypass of the 32 KB body cap: a tiny body but the actual query in
-		// the URL would otherwise satisfy @RequestParam binding (also via its name[] alias) and slip past the cap.
+		// query and output are read from the form body only; @RequestParam would otherwise also bind them
+		// (or their name[] alias) from the URL.
 		def body = createFormBody(formFields)
 
 		when:

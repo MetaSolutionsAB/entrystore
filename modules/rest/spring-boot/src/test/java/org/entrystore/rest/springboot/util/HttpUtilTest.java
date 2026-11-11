@@ -307,9 +307,18 @@ class HttpUtilTest {
 	@Test
 	void hasQueryParameter_ignoresBodyParameters() {
 		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/x");
+		request.setQueryString("infer=false");
 		request.addParameter("query", "from-body");
 
 		assertFalse(HttpUtil.hasQueryParameter(request, "query"));
+	}
+
+	@Test
+	void hasQueryParameter_decodesBracketedName() {
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/x");
+		request.setQueryString("query%5B%5D=x");
+
+		assertTrue(HttpUtil.hasQueryParameter(request, "query[]"));
 	}
 
 	@Test
