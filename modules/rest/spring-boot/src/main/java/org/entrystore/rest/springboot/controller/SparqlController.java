@@ -94,8 +94,7 @@ public class SparqlController {
 	}
 
 	private ResponseEntity<StreamingResponseBody> runFormQuery(HttpServletRequest request, String query, String output, String contextId) {
-		// @RequestParam also binds from the URL, so a query there would bypass the 32 KB body cap.
-		// Other URL parameters (e.g. RDF4J's infer) are ignored, as in 5.x.
+		// Body-only query/output as in 5.x (the request-header limit caps the URL); other URL parameters are ignored.
 		if (FORM_PARAMETERS.stream().anyMatch(name -> HttpUtil.hasQueryParameter(request, name))) {
 			throw new BadRequestException(
 					"The query and output parameters must be supplied in the form body, not the URL query string");
