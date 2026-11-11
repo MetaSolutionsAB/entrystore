@@ -30,7 +30,6 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.api.ModifyListResourceResponse;
 import org.entrystore.rest.springboot.model.api.ResourceQuery;
-import org.entrystore.rest.springboot.model.api.converter.MediaTypeConverter;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
 import org.entrystore.rest.springboot.model.dto.ResourceRepresentation;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
@@ -86,7 +85,7 @@ public class ResourceController {
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
 			@RequestParam(required = false) MediaType format,
-			@RequestParam(required = false) String rdfFormat,
+			@RequestParam(required = false) MediaType rdfFormat,
 			@RequestParam(required = false) String syndication,
 			@RequestParam(required = false, defaultValue = "50") int feedSize,
 			@RequestParam(name = "urltemplate", required = false) String urlTemplate,
@@ -100,8 +99,8 @@ public class ResourceController {
 			@Parameter(hidden = true) WebRequest webRequest
 	) {
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		ResourceQuery query = new ResourceQuery(format, MediaTypeConverter.parseLeniently(rdfFormat), acceptHeader,
-				syndication, language, feedSize, urlTemplate, feedTitle, listFilter);
+		ResourceQuery query = new ResourceQuery(format, rdfFormat, acceptHeader, syndication, language, feedSize,
+				urlTemplate, feedTitle, listFilter);
 		Date modified = entry.getModifiedDate();
 
 		return switch (resourceService.getResourceRepresentation(entry, query)) {

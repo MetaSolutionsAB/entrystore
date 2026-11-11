@@ -443,19 +443,13 @@ public class GraphUtil {
 	 * @return the value to pass to {@link #serializeGraphToJson}
 	 */
 	public static String resolveJsonRdfFormat(@Nullable String rdfFormat) {
-		return resolveJsonRdfFormat(MediaTypeConverter.parseLeniently(rdfFormat));
+		return JSON_LD.equals(MediaTypeConverter.parseLeniently(rdfFormat)) ? JSON_LD_VALUE
+				: MediaType.APPLICATION_JSON_VALUE;
 	}
 
 	/**
-	 * See {@link #resolveJsonRdfFormat(String)}, for a parameter already bound to a media type.
-	 */
-	public static String resolveJsonRdfFormat(@Nullable MediaType rdfFormat) {
-		return JSON_LD.equals(rdfFormat) ? JSON_LD_VALUE : MediaType.APPLICATION_JSON_VALUE;
-	}
-
-	/**
-	 * Serializes a graph embedded in a JSON representation: as JSON-LD for {@code application/ld+json}, else as
-	 * RDF/JSON. Callers pass the {@code rdfFormat} parameter through {@link #resolveJsonRdfFormat(String)} first.
+	 * Serializes a graph embedded in a JSON representation: as JSON-LD for {@code application/ld+json}, else, for
+	 * any other value or none, as RDF/JSON.
 	 */
 	public static JSONObject serializeGraphToJson(Model graph, @Nullable String rdfFormat) {
 		if (JSON_LD_VALUE.equals(rdfFormat)) {
