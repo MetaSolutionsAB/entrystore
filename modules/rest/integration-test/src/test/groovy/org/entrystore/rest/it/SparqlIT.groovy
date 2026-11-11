@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNSUPPORTED_TYPE
 import static org.awaitility.Awaitility.await
@@ -623,6 +624,39 @@ class SparqlIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		(JSON_PARSER.parseText(conn.inputStream.text)['results']['bindings'] as List).isEmpty()
+	}
+
+	def "GET /sparql keeps a statement after one of two entries of the context stating it is deleted"() {
+		given:
+		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
+		def sharedTitle = 'sparql-it-shared-statement'
+		def first = createEntryStatingSharedTitle('sparql-it-shared-first', sharedTitle, guestUri)
+		createEntryStatingSharedTitle('sparql-it-shared-second', sharedTitle, guestUri)
+		await().atMost(5, TimeUnit.SECONDS).pollInterval(200, TimeUnit.MILLISECONDS).until {
+			sparqlContainsTitle('sparql-it-shared-first') && sparqlContainsTitle('sparql-it-shared-second')
+		}
+
+		when:
+		def deleted = EntryStoreClient.deleteRequest('/' + CONTEXT_ID + '/entry/' + first)
+
+		then:
+		deleted.getResponseCode() == HTTP_NO_CONTENT
+		// The other statements of the deleted entry are gone once the removal reached the public repository.
+		await().atMost(5, TimeUnit.SECONDS).pollInterval(200, TimeUnit.MILLISECONDS).until {
+			!sparqlContainsTitle('sparql-it-shared-first')
+		}
+		sparqlContainsTitle(sharedTitle)
+	}
+
+	/** Its own title about its resource, and the shared title about a subject that both entries describe. */
+	private static String createEntryStatingSharedTitle(String ownTitle, String sharedTitle, String guestUri) {
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/resource/_newId'
+		def newMetadataIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/metadata/_newId'
+		def body = createTitleMetadataBody(newResourceIri, ownTitle)
+		body.metadata['https://example.org/sparql-it-shared-subject'] =
+			[(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: sharedTitle]]]
+		body.info = [(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]]
+		return createEntry(CONTEXT_ID, [entrytype: 'link', resource: 'https://example.org/' + ownTitle], body)
 	}
 
 	@Unroll

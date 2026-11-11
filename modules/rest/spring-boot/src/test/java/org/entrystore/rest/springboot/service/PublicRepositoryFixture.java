@@ -31,7 +31,8 @@ import java.util.List;
 
 /**
  * A public repository filled as PublicRepository fills it: each entry's statements in its own graph (metadata,
- * resource or cached external metadata) and in its context's graph. Three contexts; one triple is in two contexts.
+ * resource or cached external metadata) and in its context's graph. Three contexts; one triple is in two
+ * contexts, and one is stated by two entries of the same context.
  */
 final class PublicRepositoryFixture {
 
@@ -52,6 +53,7 @@ final class PublicRepositoryFixture {
 					"ex:a2 a ex:Award ; ex:laureate ex:p2 ; ex:year 1902 ; ex:label \"A2\"@en ; ex:next ex:a3 ."),
 			new Entry("1", "metadata/3", "ex:p1 ex:name \"P1\" ."),
 			new Entry("1", "resource/4", "ex:r1 ex:label \"R1\" ."),
+			new Entry("1", "metadata/5", "ex:a2 ex:label \"A2\"@en ."),
 			new Entry("2", "metadata/1", "ex:a3 a ex:Award ; ex:laureate ex:p1 ; ex:year 1903 ."),
 			new Entry("2", "metadata/2", "ex:p2 ex:name \"P2\" ."),
 			new Entry("2", "metadata/3", "ex:shared ex:name \"Shared\" ."),

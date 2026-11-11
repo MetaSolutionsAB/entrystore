@@ -17,6 +17,7 @@
 package org.entrystore.impl;
 
 import static org.awaitility.Awaitility.await;
+import static org.eclipse.rdf4j.model.util.Statements.statement;
 import static org.eclipse.rdf4j.model.util.Values.iri;
 import static org.eclipse.rdf4j.model.util.Values.literal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,11 +32,13 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.LogEvent;
 import org.awaitility.core.ConditionFactory;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
@@ -59,6 +62,11 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 	private static final IRI TITLE = iri("http://purl.org/dc/terms/title");
 
 	private static final Duration TIMEOUT = Duration.ofSeconds(10);
+
+	/** Every entry states its titles about the same subject, so equal titles are equal statements. */
+	private static final IRI SUBJECT = iri("http://example.com/shared-subject");
+
+	private static final String SHARED_TITLE = "shared";
 
 	/**
 	 * ENTRYSTORE-1095. {@code rebuildRepository} clears the whole public repository and then re-adds only
@@ -465,6 +473,118 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 		EntryImpl link = (EntryImpl) context.createLink(null, resource, null);
 		addTitle(link, title);
 		return link;
+	}
+
+	@Test
+	public void removeEntries_oneOfTwoEntriesStatingAStatement_keepsItInTheContextGraph() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		EntryImpl a = newEntryStating(context, "a", SHARED_TITLE);
+		EntryImpl b = newEntryStating(context, "b", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			publicRepository.removeEntries(Set.of(a));
+
+			assertTrue(holds(publicRepository, contextGraph(context), title(SHARED_TITLE)),
+					"b still states the shared title");
+			assertFalse(holds(publicRepository, contextGraph(context), title("a")));
+			assertFalse(holds(publicRepository, a.getSesameLocalMetadataURI(), title(SHARED_TITLE)),
+					"the removed entry's own graph is cleared");
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void removeEntries_bothEntriesStatingAStatement_removeItFromTheContextGraph() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		EntryImpl a = newEntryStating(context, "a", SHARED_TITLE);
+		EntryImpl b = newEntryStating(context, "b", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			publicRepository.removeEntries(Set.of(a, b));
+
+			assertFalse(holds(publicRepository, contextGraph(context), title(SHARED_TITLE)));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateEntries_entryNoLongerStatingASharedStatement_keepsItInTheContextGraph() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		EntryImpl a = newEntryStating(context, "a", SHARED_TITLE);
+		EntryImpl b = newEntryStating(context, "b", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			removeTitle(a, SHARED_TITLE);
+
+			publicRepository.updateEntries(Set.of(a));
+
+			assertTrue(holds(publicRepository, contextGraph(context), title(SHARED_TITLE)),
+					"b still states the shared title");
+			assertFalse(holds(publicRepository, a.getSesameLocalMetadataURI(), title(SHARED_TITLE)));
+			assertTrue(holds(publicRepository, contextGraph(context), title("a")),
+					"the rest of a is published again");
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void removeEntries_statementAlsoStatedInAnotherContext_leavesThatContextAlone() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl first = newContext();
+		ContextImpl second = newContext();
+		EntryImpl inFirst = newEntryStating(first, "a", SHARED_TITLE);
+		newEntryStating(second, "b", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			publicRepository.removeEntries(Set.of(inFirst));
+
+			assertFalse(holds(publicRepository, contextGraph(first), title(SHARED_TITLE)),
+					"an entry of another context does not keep the statement in this context's graph");
+			assertTrue(holds(publicRepository, contextGraph(second), title(SHARED_TITLE)));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	private ContextImpl newContext() {
+		return (ContextImpl) cm.createResource(null, GraphType.Context, null, null).getResource();
+	}
+
+	private EntryImpl newEntryStating(ContextImpl context, String ownTitle, String sharedTitle) {
+		EntryImpl entry = (EntryImpl) context.createLink(null, URI.create("http://example.com/" + ownTitle), null);
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			rc.add(SUBJECT, TITLE, vf.createLiteral(ownTitle), entry.getSesameLocalMetadataURI());
+			rc.add(SUBJECT, TITLE, vf.createLiteral(sharedTitle), entry.getSesameLocalMetadataURI());
+		}
+		return entry;
+	}
+
+	private void removeTitle(EntryImpl entry, String title) {
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.remove(SUBJECT, TITLE, rc.getValueFactory().createLiteral(title), entry.getSesameLocalMetadataURI());
+		}
+	}
+
+	private static IRI contextGraph(ContextImpl context) {
+		return iri(context.getURI().toString());
+	}
+
+	private static Statement title(String title) {
+		return statement(SUBJECT, TITLE, literal(title), null);
+	}
+
+	private static boolean holds(PublicRepository publicRepository, IRI graph, Statement statement) {
+		try (RepositoryConnection rc = publicRepository.getConnection()) {
+			return rc.hasStatement(statement.getSubject(), statement.getPredicate(), statement.getObject(), false,
+					graph);
+		}
 	}
 
 	@Disabled("To be implemented")
