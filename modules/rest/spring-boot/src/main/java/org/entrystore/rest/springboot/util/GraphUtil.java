@@ -49,10 +49,12 @@ import org.eclipse.rdf4j.rio.trix.TriXWriter;
 import org.eclipse.rdf4j.rio.turtle.TurtleParser;
 import org.eclipse.rdf4j.rio.turtle.TurtleWriter;
 import org.entrystore.repository.util.NS;
+import org.entrystore.rest.springboot.model.api.converter.MediaTypeConverter;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.json.JSONObject;
+import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
@@ -86,6 +88,10 @@ public class GraphUtil {
 	public static final String DEFAULT_RDF_MEDIA_TYPE = "application/rdf+xml";
 
 	private static final String LEGACY_N3_MEDIA_TYPE = "text/rdf+n3";
+
+	private static final String JSON_LD_VALUE = RDFFormat.JSONLD.getDefaultMIMEType();
+
+	private static final MediaType JSON_LD = MediaType.valueOf(JSON_LD_VALUE);
 
 	private static final Map<String, Class<? extends RDFWriter>> MEDIATYPE_TO_RDFWRITER_MAP = Map.of(
 			RDFFormat.RDFXML.getDefaultMIMEType(), RDFXMLPrettyWriter.class,
@@ -429,18 +435,27 @@ public class GraphUtil {
 		return serializeGraph(graph, writerClass);
 	}
 
-	public static JSONObject serializeGraphToJson(Model graph, String rdfFormat) {
-		if (rdfFormat == null || MediaType.APPLICATION_JSON_VALUE.equals(rdfFormat)) {
-			// We don't use GraphUtil.serializeGraph() because we need a JSONObject here and
-			// converting back and forth between String and JSONObject would not be very efficient
-			return RDFJSON.graphToRdfJsonObject(graph);
-		}
-		rdfFormat = normalizeLegacyMediaType(rdfFormat);
-		if (RDFFormat.JSONLD.getDefaultMIMEType().equals(rdfFormat)) {
+	/**
+	 * Resolves the {@code rdfFormat} parameter of a JSON representation: JSON-LD for {@code application/ld+json}
+	 * (case-insensitive, also when its '+' arrived unencoded), RDF/JSON for any other value or none.
+	 *
+	 * @return the value to pass to {@link #serializeGraphToJson}
+	 */
+	public static String resolveJsonRdfFormat(@Nullable String rdfFormat) {
+		return JSON_LD.equals(MediaTypeConverter.parseLeniently(rdfFormat)) ? JSON_LD_VALUE
+				: MediaType.APPLICATION_JSON_VALUE;
+	}
+
+	/**
+	 * Serializes a graph embedded in a JSON representation: as JSON-LD for {@code application/ld+json}, else, for
+	 * any other value or none, as RDF/JSON.
+	 */
+	public static JSONObject serializeGraphToJson(Model graph, @Nullable String rdfFormat) {
+		if (JSON_LD_VALUE.equals(rdfFormat)) {
 			return new JSONObject(GraphUtil.serializeGraph(graph, rdfFormat));
 		}
-		log.warn("Model could not be serialized, returning empty JSON object");
-		return new JSONObject();
+		// RDFJSON builds the JSONObject directly, which saves a round trip through a String
+		return RDFJSON.graphToRdfJsonObject(graph);
 	}
 
 	/**

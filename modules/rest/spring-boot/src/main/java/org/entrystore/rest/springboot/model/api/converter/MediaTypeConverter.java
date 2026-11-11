@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.model.api.converter;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
@@ -41,6 +42,14 @@ public class MediaTypeConverter implements Converter<String, MediaType> {
 
 	@Override
 	public MediaType convert(@NonNull String input) {
+		return parse(input);
+	}
+
+	/**
+	 * @return {@code null} for blank input
+	 * @throws InvalidMediaTypeException if the input is not a media type, also with '+' restored
+	 */
+	private static @Nullable MediaType parse(@NonNull String input) {
 		if (input.isBlank()) {
 			return null;
 		}
@@ -50,6 +59,21 @@ public class MediaTypeConverter implements Converter<String, MediaType> {
 		} catch (InvalidMediaTypeException e) {
 			// an unencoded '+' arrives as a space after servlet decoding; retry with it restored
 			return MediaType.parseMediaType(trimmed.replace(' ', '+'));
+		}
+	}
+
+	/**
+	 * Converts like {@link #convert}, but answers {@code null} instead of throwing for input that is not a media
+	 * type, for parameters that fall back to a default for a value they do not recognise.
+	 */
+	public static @Nullable MediaType parseLeniently(@Nullable String input) {
+		if (input == null) {
+			return null;
+		}
+		try {
+			return parse(input);
+		} catch (InvalidMediaTypeException e) {
+			return null;
 		}
 	}
 }
