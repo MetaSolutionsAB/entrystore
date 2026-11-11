@@ -41,6 +41,8 @@ class SparqlIT extends BaseSpec {
 	private static final String PRIVATE_TITLE = 'sparql-it-private-marker'
 	private static final String CTX2_PUBLIC_TITLE = 'sparql-it-ctx2-public-marker'
 
+	private static String publicEntryId
+
 	def setupSpec() {
 		getOrCreateContext([contextId: CONTEXT_ID])
 		getOrCreateContext([contextId: CONTEXT_ID_2])
@@ -52,7 +54,7 @@ class SparqlIT extends BaseSpec {
 		// is queryable the private entry has been considered (and rejected) at least once,
 		// regardless of whether the three entries shipped in one or several batches.
 		createSegregationTestEntry(CONTEXT_ID, PRIVATE_TITLE, null)
-		createSegregationTestEntry(CONTEXT_ID, PUBLIC_TITLE, guestUri)
+		publicEntryId = createSegregationTestEntry(CONTEXT_ID, PUBLIC_TITLE, guestUri)
 		createSegregationTestEntry(CONTEXT_ID_2, CTX2_PUBLIC_TITLE, guestUri)
 
 		// Wait until the public entries become queryable. PublicRepository.EntrySubmitter is signalled
@@ -67,7 +69,7 @@ class SparqlIT extends BaseSpec {
 			.until { sparqlContainsTitle(PUBLIC_TITLE) && sparqlContainsTitle(CTX2_PUBLIC_TITLE) }
 	}
 
-	private static void createSegregationTestEntry(String contextId, String title, String guestUriOrNull) {
+	private static String createSegregationTestEntry(String contextId, String title, String guestUriOrNull) {
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def newMetadataIri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/_newId'
 
@@ -77,7 +79,7 @@ class SparqlIT extends BaseSpec {
 			// Grant guest ReadMetadata so the entry is indexed with public:true in Solr
 			body.info = [(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUriOrNull]]]]
 		}
-		createEntry(contextId, params, body)
+		return createEntry(contextId, params, body)
 	}
 
 	private static boolean sparqlContainsTitle(String title) {
@@ -592,6 +594,35 @@ class SparqlIT extends BaseSpec {
 		def bindings = JSON_PARSER.parseText(conn.inputStream.text)['results']['bindings'] as List
 		bindings.size() == 1
 		bindings[0]['t']['value'] == PUBLIC_TITLE
+	}
+
+	def "GET /sparql binds GRAPH ?g only to context graphs by default"() {
+		given:
+		def query = 'SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s <' + NameSpaceConst.DC_TERM_TITLE + '> "' +
+			PUBLIC_TITLE + '" } }'
+		def queryParams = [query: query, format: 'application/sparql-results+json']
+
+		when:
+		def conn = EntryStoreClient.getRequest('/sparql' + convertMapToQueryParams(queryParams), '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def bindings = JSON_PARSER.parseText(conn.inputStream.text)['results']['bindings'] as List
+		bindings.collect { it['g']['value'] } == [EntryStoreClient.baseUrl + '/' + CONTEXT_ID]
+	}
+
+	def "GET /sparql matches nothing in an entry's metadata graph by default"() {
+		given:
+		def metadataGraph = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/metadata/' + publicEntryId
+		def query = 'SELECT ?s ?p ?o WHERE { GRAPH <' + metadataGraph + '> { ?s ?p ?o } }'
+		def queryParams = [query: query, format: 'application/sparql-results+json']
+
+		when:
+		def conn = EntryStoreClient.getRequest('/sparql' + convertMapToQueryParams(queryParams), '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		(JSON_PARSER.parseText(conn.inputStream.text)['results']['bindings'] as List).isEmpty()
 	}
 
 	@Unroll

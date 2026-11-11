@@ -84,6 +84,7 @@ public class SparqlService {
 	private final long maxResponseBytes;
 	private final Semaphore queryPermits;
 	private final Duration permitWait;
+	private final boolean exposeEntryGraphs;
 
 	@Autowired
 	public SparqlService(
@@ -92,9 +93,10 @@ public class SparqlService {
 			ReservedNamesService reservedNames,
 			@Value("${entrystore.repository.public.sparql.max-execution-time:10}") int maxExecutionTime,
 			@Value("${entrystore.repository.public.sparql.max-response-bytes:67108864}") long maxResponseBytes,
-			@Value("${entrystore.repository.public.sparql.max-concurrent-queries:4}") int maxConcurrentQueries) {
+			@Value("${entrystore.repository.public.sparql.max-concurrent-queries:4}") int maxConcurrentQueries,
+			@Value("${entrystore.repository.public.sparql.expose-entry-graphs:false}") boolean exposeEntryGraphs) {
 		this(repositoryManager, contextService, reservedNames, maxExecutionTime, maxResponseBytes, maxConcurrentQueries,
-				PERMIT_WAIT);
+				exposeEntryGraphs, PERMIT_WAIT);
 	}
 
 	/** {@code permitWait} is how long a query waits for a running one to end before it is answered 503. */
@@ -105,6 +107,7 @@ public class SparqlService {
 			int maxExecutionTime,
 			long maxResponseBytes,
 			int maxConcurrentQueries,
+			boolean exposeEntryGraphs,
 			Duration permitWait) {
 		// Reject misconfigured limits at construction so the app fails to start rather than silently
 		// disabling timeouts/caps on this anonymous endpoint (RDF4J treats setMaxExecutionTime(0) as unlimited).
@@ -128,8 +131,10 @@ public class SparqlService {
 		this.maxResponseBytes = maxResponseBytes;
 		this.queryPermits = new Semaphore(maxConcurrentQueries, true);
 		this.permitWait = permitWait;
-		log.debug("Public SPARQL max execution time: {} seconds; max response bytes: {}; max concurrent queries: {}",
-				maxExecutionTime, maxResponseBytes, maxConcurrentQueries);
+		this.exposeEntryGraphs = exposeEntryGraphs;
+		log.debug("Public SPARQL max execution time: {} seconds; max response bytes: {}; max concurrent queries: {}; "
+				+ "entry graphs exposed: {}", maxExecutionTime, maxResponseBytes, maxConcurrentQueries,
+				exposeEntryGraphs);
 	}
 
 	/**
@@ -158,9 +163,10 @@ public class SparqlService {
 	 * @param contextId   when non-null, both the default graph and the named-graph set are replaced with the
 	 *                    context's resource URI (or a synthesised URI for missing/reserved contexts), so the
 	 *                    dataset is exactly that one graph in both positions; when null the query runs against
-	 *                    the full public repository, and unless it declares FROM or FROM NAMED, its triple
-	 *                    patterns outside GRAPH read the context graphs only (see {@link ContextGraphRewriter});
-	 *                    GRAPH patterns and FROM lists keep their per-graph semantics
+	 *                    the public repository as if it held only the context graphs; with
+	 *                    {@code expose-entry-graphs} the query also sees the entry graphs, and only its triple patterns
+	 *                    outside GRAPH, unless it declares FROM or FROM NAMED, read the context graphs only (see
+	 *                    {@link ContextGraphRewriter})
 	 * @param out         the stream that the serialised tuple result is written to; the caller owns its
 	 *                    lifecycle (the wrapping {@code SizeLimitedOutputStream} does not close it)
 	 * @throws NotImplementedException     when the public repository is disabled
@@ -237,8 +243,10 @@ public class SparqlService {
 				ds.addDefaultGraph(contextURI);
 				ds.addNamedGraph(contextURI);
 				query.setDataset(ds);
+			} else if (!exposeEntryGraphs) {
+				// Evaluation reads this algebra and dataset, so the restriction applies with the limits set above.
+				ContextGraphRewriter.hideEntryGraphs(parsedQuery, contextUriPrefix());
 			} else if (parsedQuery.getDataset() == null) {
-				// Evaluation reads this algebra, so the rewrite applies with the limits set above.
 				ContextGraphRewriter.restrictDefaultGraph(parsedQuery.getTupleExpr(), contextUriPrefix());
 			}
 

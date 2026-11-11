@@ -78,9 +78,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class SparqlServiceContextGraphTest {
 
-	private static final String BASE = "http://example.org/store/";
-	private static final String PREFIXES = "PREFIX ex: <http://example.org/ns#> ";
-	private static final List<String> CONTEXT_GRAPHS = List.of(BASE + "1", BASE + "2", BASE + "3");
+	private static final String BASE = PublicRepositoryFixture.BASE;
+	private static final String PREFIXES = PublicRepositoryFixture.PREFIXES;
+	private static final List<String> CONTEXT_GRAPHS = PublicRepositoryFixture.CONTEXT_GRAPHS;
 
 	private static Repository repository;
 
@@ -98,34 +98,9 @@ class SparqlServiceContextGraphTest {
 
 	private SparqlService service;
 
-	/** Filled as PublicRepository fills it: each entry's metadata in its own graph and in its context's graph. */
 	@BeforeAll
 	static void fillRepository() throws IOException {
-		repository = new SailRepository(new MemoryStore());
-		repository.init();
-		try (RepositoryConnection rc = repository.getConnection()) {
-			addEntry(rc, "1", "metadata/1", """
-					ex:a1 a ex:Award ; ex:laureate ex:p1 ; ex:year 1901 ; ex:label "A1"@en, "A1"@sv ; ex:next ex:a2 .
-					""");
-			addEntry(rc, "1", "metadata/2", """
-					ex:a2 a ex:Award ; ex:laureate ex:p2 ; ex:year 1902 ; ex:label "A2"@en ; ex:next ex:a3 .
-					""");
-			addEntry(rc, "1", "metadata/3", "ex:p1 ex:name \"P1\" .");
-			addEntry(rc, "1", "resource/4", "ex:r1 ex:label \"R1\" .");
-			addEntry(rc, "2", "metadata/1", "ex:a3 a ex:Award ; ex:laureate ex:p1 ; ex:year 1903 .");
-			addEntry(rc, "2", "metadata/2", "ex:p2 ex:name \"P2\" .");
-			addEntry(rc, "2", "metadata/3", "ex:shared ex:name \"Shared\" .");
-			addEntry(rc, "3", "metadata/1", "ex:shared ex:name \"Shared\" .");
-			addEntry(rc, "3", "cached-external-metadata/2", "ex:p3 ex:name \"P3\" ; ex:next ex:p3 .");
-		}
-	}
-
-	private static void addEntry(RepositoryConnection rc, String contextId, String graphPath, String turtle)
-			throws IOException {
-		ValueFactory vf = rc.getValueFactory();
-		Model metadata = Rio.parse(new StringReader("@prefix ex: <http://example.org/ns#> . " + turtle),
-				RDFFormat.TURTLE);
-		rc.add(metadata, vf.createIRI(BASE + contextId + "/" + graphPath), vf.createIRI(BASE + contextId));
+		repository = PublicRepositoryFixture.create(false);
 	}
 
 	@AfterAll
@@ -138,7 +113,7 @@ class SparqlServiceContextGraphTest {
 		lenient().when(repositoryManager.getPublicRepository()).thenReturn(publicRepository);
 		lenient().when(publicRepository.getConnection()).thenAnswer(_ -> repository.getConnection());
 		lenient().when(repositoryManager.getRepositoryURL()).thenReturn(URI.create(BASE).toURL());
-		service = new SparqlService(repositoryManager, contextService, reservedNames, 10, 64L * 1024 * 1024, 4);
+		service = new SparqlService(repositoryManager, contextService, reservedNames, 10, 64L * 1024 * 1024, 4, true);
 	}
 
 	static Stream<Arguments> queriesWithoutGraphClause() {
@@ -232,7 +207,10 @@ class SparqlServiceContextGraphTest {
 				Arguments.of("SELECT DISTINCT * subselect",
 						"SELECT ?a ?p WHERE { { SELECT DISTINCT * WHERE { ?a ex:laureate ?p } } ?a ex:year ?y }"),
 				Arguments.of("VALUES with UNDEF",
-						"SELECT ?a ?y WHERE { VALUES (?a ?y) { (ex:a1 UNDEF) (UNDEF 1903) } ?a ex:year ?y }"));
+						"SELECT ?a ?y WHERE { VALUES (?a ?y) { (ex:a1 UNDEF) (UNDEF 1903) } ?a ex:year ?y }"),
+				Arguments.of("triple term in a pattern", "SELECT * WHERE { ?a ex:cites <<( ?s ?p ?o )>> }"),
+				Arguments.of("reified triple", "SELECT ?s ?y ?src WHERE { << ?s ex:year ?y >> ex:source ?src }"),
+				Arguments.of("zero-length path", "SELECT ?x WHERE { ?x ex:unused* ?y FILTER(?x = ?y) }"));
 	}
 
 	@ParameterizedTest(name = "{0}")
