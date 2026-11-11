@@ -56,10 +56,14 @@ import java.util.Set;
  * subqueries, the step of a {@code p+} or {@code p*} path), reads all named graphs into a fresh anonymous variable
  * and keeps only the statements whose graph is a context graph. The condition sits directly on the pattern, so
  * OPTIONAL and MINUS keep their meaning, and the variable is never projected. A statement then matches once per
- * context that holds it. Patterns inside a GRAPH clause are left unchanged, and so is the zero-length step of
- * {@code p*} and {@code p?} ({@link org.eclipse.rdf4j.query.algebra.ZeroLengthPath}), which RDF4J evaluates
- * without a triple pattern. {@code COUNT(DISTINCT *)} compares whole solutions, so the solutions it counts are
- * first projected onto the variables of the query, without the helper variables.
+ * context that holds it. {@code COUNT(DISTINCT *)} compares whole solutions, so the solutions it counts are first
+ * projected onto the variables of the query, without the helper variables.
+ *
+ * <p>Only these patterns lose the duplicate copies. Patterns inside a GRAPH clause, including {@code GRAPH ?g},
+ * and queries with FROM or FROM NAMED keep their per-graph semantics: each graph they name or bind contributes its
+ * copy, so a query can still repeat solutions through them. Not rewritten either are the zero-length step of
+ * {@code p*} and {@code p?} ({@link org.eclipse.rdf4j.query.algebra.ZeroLengthPath}) and RDF 1.2 triple terms
+ * ({@link org.eclipse.rdf4j.query.algebra.ReifiedTripleRef}), which RDF4J evaluates without a triple pattern.
  */
 final class ContextGraphRewriter {
 
@@ -72,8 +76,8 @@ final class ContextGraphRewriter {
 	 * Rewrites {@code expr} in place.
 	 *
 	 * @param expr                the parsed algebra of a query that declares no dataset (no FROM or FROM NAMED)
-	 * @param contextGraphPrefix  the repository URL ending with {@code /}; a context graph is this prefix followed
-	 *                            by a context id without {@code /}
+	 * @param contextGraphPrefix  the repository URL as core prefixes context ids with it; a context graph is this
+	 *                            prefix followed by a context id without {@code /}
 	 */
 	static void restrictDefaultGraph(TupleExpr expr, String contextGraphPrefix) {
 		List<StatementPattern> defaultPatterns = new ArrayList<>();
