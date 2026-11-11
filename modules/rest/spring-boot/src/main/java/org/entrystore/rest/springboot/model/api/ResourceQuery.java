@@ -24,6 +24,7 @@ import org.springframework.http.MediaType;
  * {@code syndication} asks for a feed of the given ROME feed type instead of the resource itself; {@code urlTemplate}
  * names a configured feed-link template and {@code feedTitle} overrides the feed title, both null when not given.
  * The RDF format of a Graph or List resource follows {@code format}, then {@code rdfFormat}, then the Accept header.
+ * {@code rdfFormat} is null when the parameter is not a media type, which 5.x ignored.
  */
 public record ResourceQuery(MediaType format,
 							MediaType rdfFormat,

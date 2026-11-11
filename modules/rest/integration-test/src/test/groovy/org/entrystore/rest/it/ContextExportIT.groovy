@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
 package org.entrystore.rest.it
 
 import groovy.xml.XmlParser
@@ -123,6 +140,22 @@ class ContextExportIT extends BaseSpec {
 		exportedZip['export.properties'].contains('contextEntryURI=http\\://localhost\\:8181/store/_contexts/entry/context-export-test')
 		exportedZip['export.properties'].contains('baseURI=http\\://localhost\\:8181/store/')
 		exportedZip['export.properties'].contains('exportDate=')
+	}
+
+	def "GET /{context-id}/export?rdfFormat=garbage should return context data in TriG format as zip-file, as 5.x did"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/' + contextExportId + '/export?rdfFormat=garbage')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		def zipFile = new ZipInputStream(connection.getInputStream())
+		def exportedZip = new HashMap<String, String>()
+		ZipEntry ze
+		while ((ze = zipFile.getNextEntry()) != null) {
+			exportedZip[ze.name] = new String(zipFile.readAllBytes())
+		}
+		// a named graph block, which Turtle, the other format with @prefix lines, does not have
+		exportedZip['triples.rdf'].contains('> {')
 	}
 
 	def "GET /{context-id}/export?rdfFormat=text/turtle should return context data in Turtle format as zip-file"() {

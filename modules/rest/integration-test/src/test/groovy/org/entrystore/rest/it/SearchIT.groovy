@@ -841,6 +841,57 @@ class SearchIT extends BaseSpec {
 		dcTitle.find { it['@value'] == 'local metadata title explicitly in EN' } != null
 	}
 
+	def "GET /search?type=sparql&rdfFormat=application/ld+json with an unencoded '+' should return metadata in JSON-LD"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'sparql', query: MARKER_PREDICATE_QUERY]) + '&rdfFormat=application/ld+json')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		def searchTestEntry = respJson['resource']['children'].find { it['entryId'] == entryId }
+		def metadata = searchTestEntry['metadata']['@graph'].collect()[0] as Map
+		metadata['dcterms:title'].collect().find { it['@value'] == 'local metadata title explicitly in EN' } != null
+	}
+
+	def "GET /search?type=solr&rdfFormat=application/ld+json with an unencoded '+' should return metadata and info in JSON-LD"() {
+		given: 'a Solr query that relies on + decoding to a space, as in a hand-written URL'
+		def query = 'id:randomNonExistingId+OR+description.pl:opissearch'
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search?type=solr&query=' + query + '&rdfFormat=application/ld+json')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		respJson['results'] == 1
+		def result = respJson['resource']['children'][0]
+		result['info']['@graph'].collect().find { it['@id'] == 'store:' + contextId + '/entry/' + entryId } != null
+		def metadata = result['metadata']['@graph'].collect()[0] as Map
+		metadata['dcterms:title'].collect().find { it['@value'] == 'local metadata title explicitly in EN' } != null
+	}
+
+	@Unroll
+	def "GET /search?type=solr&rdfFormat=#rdfFormat should return metadata and info in RDF/JSON, as 5.x did"() {
+		given:
+		def query = 'id:randomNonExistingId+OR+description.pl:opissearch'
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search?type=solr&query=' + query + '&rdfFormat=' + rdfFormat)
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		respJson['results'] == 1
+		def result = respJson['resource']['children'][0]
+		result['info'][EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId] != null
+		def metadata = result['metadata'][EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryId]
+		metadata[NameSpaceConst.DC_TERM_TITLE].collect().size() == 3
+
+		where:
+		rdfFormat << ['application/json', 'application/rdf+json', 'application/rdf%2Bjson', 'text/turtle', 'garbage']
+	}
+
 	def "GET /search?type=sparql&query=dc:title&syndication=rss_2.0 should return well-formed RSS feed (curie predicate smoke test)"() {
 		// Smoke-tests the SPARQL curie+syndication code path. Does not assert specific item content
 		// because the dc:title query is repository-wide and not isolated to this IT's entries —

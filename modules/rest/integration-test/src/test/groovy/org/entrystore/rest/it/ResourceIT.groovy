@@ -384,6 +384,56 @@ class ResourceIT extends BaseSpec {
 		resourceResp['children'] == []
 	}
 
+	def "GET /_principals/resource/{entry-id} on Group graph with Accept */* should return the member info in RDF/JSON"() {
+		given: 'the Accept header used to select the member graphs format, which left them empty for */*'
+		def groupId = createGroupWithUserAsMember('rdfFormatAcceptGroup')
+		def userEntryId = EntryStoreClient.createdEsUsers['user']['entryId'].toString()
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + groupId, 'admin', '*/*')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		def member = JSON_PARSER.parseText(resourceConn.inputStream.text)['children'][0]
+		member['info'][EntryStoreClient.baseUrl + '/_principals/entry/' + userEntryId] != null
+	}
+
+	def "GET /_principals/resource/{entry-id}?rdfFormat=application/ld+json on Group graph with an unencoded '+' should return the member info in JSON-LD"() {
+		given:
+		def groupId = createGroupWithUserAsMember('rdfFormatJsonLdGroup')
+		def userEntryId = EntryStoreClient.createdEsUsers['user']['entryId'].toString()
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + groupId + '?rdfFormat=application/ld+json')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		def member = JSON_PARSER.parseText(resourceConn.inputStream.text)['children'][0]
+		member['info']['@graph'].collect().find { it['@id'] == 'store:_principals/entry/' + userEntryId } != null
+	}
+
+	def "GET /_principals/resource/{entry-id}?rdfFormat=garbage on Group graph should return the member info in RDF/JSON, as 5.x did"() {
+		given:
+		def groupId = createGroupWithUserAsMember('rdfFormatGarbageGroup')
+		def userEntryId = EntryStoreClient.createdEsUsers['user']['entryId'].toString()
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + groupId + '?rdfFormat=garbage')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		def member = JSON_PARSER.parseText(resourceConn.inputStream.text)['children'][0]
+		member['info'][EntryStoreClient.baseUrl + '/_principals/entry/' + userEntryId] != null
+	}
+
+	private static String createGroupWithUserAsMember(String name) {
+		def groupId = createEntry('_principals', [graphtype: 'group'], [resource: [name: name]])
+		def userEntryId = EntryStoreClient.createdEsUsers['user']['entryId'].toString()
+		assert EntryStoreClient.putRequest('/_principals/resource/' + groupId, JsonOutput.toJson([userEntryId]))
+			.getResponseCode() == HTTP_NO_CONTENT
+		return groupId
+	}
+
 	def "GET /{context-id}/resource/{entry-id} as guest on None graph should respond with Unauthorized 401"() {
 		given:
 		def requestResourceName = [name: 'None graph entryyyy']

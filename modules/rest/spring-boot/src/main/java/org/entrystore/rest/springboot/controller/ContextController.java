@@ -29,6 +29,7 @@ import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.rest.springboot.model.api.CreateEntryRequestBody;
 import org.entrystore.rest.springboot.model.api.CreateEntryResponse;
+import org.entrystore.rest.springboot.model.api.converter.MediaTypeConverter;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.ContextService;
 import org.entrystore.rest.springboot.service.EntryService;
@@ -56,6 +57,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.util.List;
+import java.util.Objects;
 
 @Slf4j
 @RestController
@@ -120,12 +122,12 @@ public class ContextController {
 	public ResponseEntity<InputStreamResource> createContextExport(
 			@PathVariable("context-id") String contextId,
 			@RequestParam(required = false) String metadataOnly,
-			@RequestParam(required = false) MediaType rdfFormat
+			@RequestParam(required = false) String rdfFormat
 	) throws FileNotFoundException {
 
 		Context context = contextService.getContextOrThrow(contextId);
 		File zipFile = contextService.exportContextToAZipFile(context, metadataOnly != null,
-				rdfFormat != null ? rdfFormat.toString() : null);
+				Objects.toString(MediaTypeConverter.parseLeniently(rdfFormat), null));
 
 		InputStreamResource fileStream = new InputStreamResource(new FileInputStream(zipFile));
 
