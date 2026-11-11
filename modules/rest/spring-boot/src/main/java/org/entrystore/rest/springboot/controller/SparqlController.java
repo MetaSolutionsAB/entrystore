@@ -42,7 +42,8 @@ public class SparqlController {
 
 	private static final int MAX_POST_REQUEST_SIZE = 32 * 1024;
 
-	private static final List<String> FORM_PARAMETERS = List.of("query", "output");
+	/** The form parameters, with the {@code name[]} aliases @RequestParam falls back to. */
+	private static final List<String> FORM_PARAMETERS = List.of("query", "query[]", "output", "output[]");
 
 	private final SparqlService sparqlService;
 
