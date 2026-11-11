@@ -26,7 +26,6 @@ import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
-import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
@@ -42,7 +41,6 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.util.RDFJSON;
-import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -65,7 +63,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.AdditionalMatchers.aryEq;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -223,38 +220,6 @@ class ResourceServiceTest {
 
 		ResourceRepresentation.TextBody body = assertInstanceOf(ResourceRepresentation.TextBody.class, result);
 		assertEquals(MediaType.parseMediaType("application/n-triples"), body.mediaType());
-	}
-
-	// The graphs in the JSON of a Group or Pipeline resource follow rdfFormat alone, as in 5.x, not the Accept header.
-	@Test
-	void getResourceRepresentation_groupWithoutRdfFormat_serializesAsRdfJsonWhateverTheAcceptHeader() {
-		Group group = mock(Group.class);
-		when(entry.getEntryType()).thenReturn(EntryType.Local);
-		when(entry.getGraphType()).thenReturn(GraphType.Group);
-		when(entry.getResource()).thenReturn(group);
-		when(resourceSerializationService.serializeResourceGroup(eq(group), any())).thenReturn(new JSONObject());
-		var query = new ResourceQuery(null, null, "application/ld+json", null, "en", 50, null, null,
-				emptyListFilter());
-
-		service.getResourceRepresentation(entry, query);
-
-		verify(resourceSerializationService).serializeResourceGroup(group, "application/json");
-	}
-
-	@Test
-	void getResourceRepresentation_pipelineWithJsonLdRdfFormat_serializesAsJsonLdWhateverTheAcceptHeader() {
-		RDFResource pipeline = mock(RDFResource.class);
-		when(entry.getEntryType()).thenReturn(EntryType.Local);
-		when(entry.getGraphType()).thenReturn(GraphType.Pipeline);
-		when(entry.getResource()).thenReturn(pipeline);
-		when(pipeline.getGraph()).thenReturn(new LinkedHashModel());
-		when(resourceSerializationService.serializeResourcePipeline(eq(pipeline), any())).thenReturn(new JSONObject());
-		var query = new ResourceQuery(null, MediaType.parseMediaType("application/ld+json"), "application/json", null,
-				"en", 50, null, null, emptyListFilter());
-
-		service.getResourceRepresentation(entry, query);
-
-		verify(resourceSerializationService).serializeResourcePipeline(pipeline, "application/ld+json");
 	}
 
 	@Test

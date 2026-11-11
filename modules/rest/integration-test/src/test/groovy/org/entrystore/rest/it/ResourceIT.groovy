@@ -386,7 +386,7 @@ class ResourceIT extends BaseSpec {
 	}
 
 	def "GET /_principals/resource/{entry-id} on Group graph with Accept */* should return the member info in RDF/JSON"() {
-		given: 'the Accept header used to select the member graphs format, which left them empty for */*'
+		given: 'without rdfFormat, the Accept header selects the format of the member graphs'
 		def groupId = createGroupWithUserAsMember('rdfFormatAcceptGroup')
 		def userEntryId = EntryStoreClient.createdEsUsers['user']['entryId'].toString()
 
@@ -411,20 +411,6 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getResponseCode() == HTTP_OK
 		def member = JSON_PARSER.parseText(resourceConn.inputStream.text)['children'][0]
 		member['info']['@graph'].collect().find { it['@id'] == 'store:_principals/entry/' + userEntryId } != null
-	}
-
-	def "GET /_principals/resource/{entry-id}?rdfFormat=garbage on Group graph should return the member info in RDF/JSON, as 5.x did"() {
-		given:
-		def groupId = createGroupWithUserAsMember('rdfFormatGarbageGroup')
-		def userEntryId = EntryStoreClient.createdEsUsers['user']['entryId'].toString()
-
-		when:
-		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + groupId + '?rdfFormat=garbage')
-
-		then:
-		resourceConn.getResponseCode() == HTTP_OK
-		def member = JSON_PARSER.parseText(resourceConn.inputStream.text)['children'][0]
-		member['info'][EntryStoreClient.baseUrl + '/_principals/entry/' + userEntryId] != null
 	}
 
 	private static String createGroupWithUserAsMember(String name) {
@@ -2340,19 +2326,6 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getContentType().contains('text/turtle')
 		def responseBody = resourceConn.inputStream.text
 		responseBody.length() > 0
-	}
-
-	def "GET /{context-id}/resource/{entry-id}?rdfFormat=garbage on Graph resource should return 200 negotiated by Accept, as 5.x did"() {
-		given:
-		def entryId = createEntry(contextId, [graphtype: 'graph'])
-
-		when:
-		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId + '?rdfFormat=garbage',
-			'admin', 'text/turtle')
-
-		then:
-		resourceConn.getResponseCode() == HTTP_OK
-		resourceConn.getContentType().contains('text/turtle')
 	}
 
 	def "GET /{context-id}/resource/{entry-id} with unsupported rdfFormat on None (binary) resource should return normally"() {

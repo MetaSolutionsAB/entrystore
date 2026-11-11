@@ -66,7 +66,7 @@ public class MediaTypeConverter implements Converter<String, MediaType> {
 
 	/**
 	 * Converts like {@link #parse}, but answers {@code null} instead of throwing for input that is not a media
-	 * type, for parameters that 5.x ignored when it did not recognise their value.
+	 * type, for parameters that fall back to a default for a value they do not recognise.
 	 */
 	public static @Nullable MediaType parseLeniently(@Nullable String input) {
 		if (input == null) {
