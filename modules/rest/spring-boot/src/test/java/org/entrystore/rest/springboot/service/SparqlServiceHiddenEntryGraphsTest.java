@@ -48,6 +48,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -162,6 +163,16 @@ class SparqlServiceHiddenEntryGraphsTest {
 				Arguments.of("GRAPH <metadata graph> in MINUS", "SELECT ?a WHERE { ?a a ex:Award "
 						+ "MINUS { GRAPH <" + METADATA_GRAPH + "> { ?a ?p ?o } } }"),
 				Arguments.of("path p+ in GRAPH", "SELECT ?g ?a ?b WHERE { GRAPH ?g { ?a ex:next+ ?b } }"),
+				Arguments.of("p* from a bound node in GRAPH ?g",
+						"SELECT ?g ?b WHERE { GRAPH ?g { ex:a1 ex:next* ?b } }"),
+				Arguments.of("p? from a bound node in GRAPH ?g",
+						"SELECT ?g ?b WHERE { GRAPH ?g { ex:a1 ex:next? ?b } }"),
+				Arguments.of("p? in GRAPH ?g in OPTIONAL",
+						"SELECT ?a ?g ?b WHERE { ?a a ex:Award OPTIONAL { GRAPH ?g { ?a ex:next? ?b } } }"),
+				Arguments.of("p* in GRAPH ?g in OPTIONAL",
+						"SELECT ?a ?g ?b WHERE { ?a a ex:Award OPTIONAL { GRAPH ?g { ?a ex:next* ?b } } }"),
+				Arguments.of("p* from a node that does not occur",
+						"SELECT ?g ?b WHERE { GRAPH ?g { ex:nonexistent ex:next* ?b } }"),
 				Arguments.of("path p* in GRAPH <context>",
 						"SELECT ?a ?b WHERE { GRAPH <" + BASE + "1> { ?a ex:next* ?b } }"),
 				Arguments.of("path p? in GRAPH <metadata graph>",
@@ -205,27 +216,59 @@ class SparqlServiceHiddenEntryGraphsTest {
 	}
 
 	/**
-	 * RDF4J binds an unbound graph variable of a zero-length step to the first graph that holds the node, which in the
-	 * public repository is usually the entry graph. That binding is dropped, so the zero-length match is missing; an
-	 * entry graph is never bound. Matches of one step or more are those of the context graphs.
+	 * With both ends of a zero-length step unbound, RDF4J binds the graph variable to the first graph that holds the
+	 * node, which in the public repository is usually the entry graph. That binding is dropped, so the zero-length
+	 * match is missing; an entry graph is never bound. For {@code p*}, RDF4J reports each pair of ends once across
+	 * graphs, so a loop such as {@code ex:p3 ex:next ex:p3} goes with its zero-length match. Every other row equals
+	 * the context graphs' rows; for {@code p?}, which RDF4J evaluates differently, the loop does too.
 	 */
 	@ParameterizedTest(name = "{0}")
 	@CsvSource(delimiter = '|', value = {
-			"p* | SELECT ?g ?a ?b WHERE { GRAPH ?g { ?a ex:next* ?b } }",
-			"p? | SELECT ?g ?a ?b WHERE { GRAPH ?g { ?a ex:next? ?b } }",
-			"zero length only | SELECT ?g ?a ?b WHERE { GRAPH ?g { ?a ex:unused* ?b } }"})
-	void runQuery_zeroLengthStepInGraphVariable_neverBindsAnEntryGraph(String name, String query) throws Exception {
+			"p* | SELECT ?g ?a ?b WHERE { GRAPH ?g { ?a ex:next* ?b } }"
+					+ " | SELECT ?g ?a ?b WHERE { GRAPH ?g { ?a ex:next+ ?b } } | true",
+			"inverse p* | SELECT ?g ?a ?b WHERE { GRAPH ?g { ?a ^ex:next* ?b } }"
+					+ " | SELECT ?g ?a ?b WHERE { GRAPH ?g { ?a ^ex:next+ ?b } } | true",
+			"p? | SELECT ?g ?a ?b WHERE { GRAPH ?g { ?a ex:next? ?b } }"
+					+ " | SELECT ?g ?a ?b WHERE { GRAPH ?g { ?a ex:next ?b } } | false",
+			"zero length only | SELECT ?g ?a ?b WHERE { GRAPH ?g { ?a ex:unused* ?b } }"
+					+ " | SELECT ?g ?a ?b WHERE { GRAPH ?g { ?a ex:unused+ ?b } } | false",
+			"both ends one variable | SELECT ?s ?g WHERE { ?s ex:name ?n . GRAPH ?g { ?s ex:name* ?s } }"
+					+ " | SELECT ?s ?g WHERE { ?s ex:name ?n . GRAPH ?g { ?s ex:name+ ?s } } | false"})
+	void runQuery_zeroLengthStepWithUnboundEnds_neverBindsAnEntryGraph(String name, String query,
+			String withAtLeastOneStep, boolean loopsGoWithZeroLengthMatches) throws Exception {
+		Result expected = evaluate(contextGraphsOnly, query, null);
+		Set<Map<String, Value>> zeroLengthOnly = new HashSet<>(expected.rows().keySet());
+		zeroLengthOnly.removeAll(evaluate(contextGraphsOnly, withAtLeastOneStep, null).rows().keySet());
+		if (loopsGoWithZeroLengthMatches) {
+			expected.rows().keySet().stream()
+					.filter(row -> row.get("a").equals(row.get("b")))
+					.forEach(zeroLengthOnly::add);
+		}
+
 		Result actual = runQuery(query, null);
 
 		assertTrue(actual.rows().keySet().stream()
-				.allMatch(row -> CONTEXT_GRAPHS.contains(row.get("g").stringValue())));
-		assertEquals(withAtLeastOneStep(evaluate(contextGraphsOnly, query, null)), withAtLeastOneStep(actual));
+				.map(row -> row.get("g"))
+				.allMatch(graph -> graph == null || CONTEXT_GRAPHS.contains(graph.stringValue())));
+		assertEquals(without(expected, zeroLengthOnly), without(actual, zeroLengthOnly));
 	}
 
-	private static Map<Map<String, Value>, Long> withAtLeastOneStep(Result result) {
+	private static Map<Map<String, Value>, Long> without(Result result, Set<Map<String, Value>> rows) {
 		return result.rows().entrySet().stream()
-				.filter(row -> !row.getKey().get("a").equals(row.getKey().get("b")))
+				.filter(row -> !rows.contains(row.getKey()))
 				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+	}
+
+	/**
+	 * A graph that the query cannot see is not in its dataset, and SPARQL evaluates GRAPH on a graph outside the
+	 * dataset to no solution, also for a zero-length path whose end is bound. RDF4J itself answers the bound end for
+	 * any graph, so the repository of only the context graphs is no oracle here.
+	 */
+	@Test
+	void runQuery_zeroLengthStepInAnEntryGraph_matchesNothing() throws Exception {
+		Result actual = runQuery("SELECT ?b WHERE { GRAPH <" + METADATA_GRAPH + "> { ex:a1 ex:next* ?b } }", null);
+
+		assertEquals(Map.of(), actual.rows());
 	}
 
 	@Test

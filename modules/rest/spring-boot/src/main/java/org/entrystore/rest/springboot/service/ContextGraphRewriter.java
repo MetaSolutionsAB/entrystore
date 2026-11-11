@@ -23,6 +23,7 @@ import org.eclipse.rdf4j.query.Dataset;
 import org.eclipse.rdf4j.query.algebra.And;
 import org.eclipse.rdf4j.query.algebra.ArbitraryLengthPath;
 import org.eclipse.rdf4j.query.algebra.BindingSetAssignment;
+import org.eclipse.rdf4j.query.algebra.Bound;
 import org.eclipse.rdf4j.query.algebra.Count;
 import org.eclipse.rdf4j.query.algebra.ExtensionElem;
 import org.eclipse.rdf4j.query.algebra.Filter;
@@ -31,6 +32,7 @@ import org.eclipse.rdf4j.query.algebra.Group;
 import org.eclipse.rdf4j.query.algebra.GroupElem;
 import org.eclipse.rdf4j.query.algebra.IsURI;
 import org.eclipse.rdf4j.query.algebra.Not;
+import org.eclipse.rdf4j.query.algebra.Or;
 import org.eclipse.rdf4j.query.algebra.Projection;
 import org.eclipse.rdf4j.query.algebra.ProjectionElem;
 import org.eclipse.rdf4j.query.algebra.ProjectionElemList;
@@ -75,10 +77,15 @@ import java.util.Set;
  * <p>Two forms read no graph and are left as they are: the zero-length step of {@code p*} and {@code p?} outside
  * GRAPH ({@link ZeroLengthPath}), which matches the nodes of all graphs, and RDF 1.2 triple terms
  * ({@link org.eclipse.rdf4j.query.algebra.ReifiedTripleRef}), which match triple terms wherever they occur. Both match
- * the same values in the entry graphs as in the context graphs, which hold copies of the same statements. Inside
- * GRAPH with an unbound graph variable, RDF4J binds a zero-length match only to the first graph that holds the node,
- * usually its entry graph; {@link #hideEntryGraphs} drops that binding, so such a match is missing rather than shown
- * with the context graph.
+ * the same values in the entry graphs as in the context graphs, since a context graph holds the union of its entry
+ * graphs.
+ *
+ * <p>Inside GRAPH, a path keeps a row whose graph variable is unbound: RDF4J leaves it unbound for a zero-length
+ * match with a bound end, which reads no graph. With both ends unbound, RDF4J binds a zero-length match only to the
+ * first graph that holds the node, usually its entry graph, and for {@code p*} reports each pair of ends once across
+ * graphs; {@link #hideEntryGraphs} drops that binding, so the zero-length match, and for {@code p*} a loop from a node
+ * to itself, is missing rather than shown with the context graph. A zero-length path in {@code GRAPH <entry graph>}
+ * matches nothing even with a bound end, as SPARQL evaluates GRAPH on a graph outside the dataset to no solution.
  */
 final class ContextGraphRewriter {
 
@@ -223,10 +230,15 @@ final class ContextGraphRewriter {
 				case ZeroLengthPath path -> path.getContextVar();
 				default -> throw new IllegalStateException("Unexpected graph pattern " + graphPattern);
 			};
+			ValueExpr condition = isContextGraph(graph, contextGraphPrefix);
+			if (!(graphPattern instanceof StatementPattern) && !graph.hasValue()) {
+				// A zero-length match with a bound end reads no graph, so RDF4J leaves the graph variable unbound.
+				condition = new Or(new Not(new Bound(graph.clone())), condition);
+			}
 			Filter filter = new Filter();
 			graphPattern.replaceWith(filter);
 			filter.setArg(graphPattern);
-			filter.setCondition(isContextGraph(graph, contextGraphPrefix));
+			filter.setCondition(condition);
 		}
 
 		Set<String> helperNames = new HashSet<>();
