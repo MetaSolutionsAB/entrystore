@@ -514,6 +514,19 @@ class SparqlIT extends BaseSpec {
 		!sparqlContainsTitle(PRIVATE_TITLE)
 	}
 
+	def "GET /sparql returns a public statement once, not once per graph that stores it"() {
+		given:
+		def query = 'SELECT ?s WHERE { ?s <' + NameSpaceConst.DC_TERM_TITLE + '> "' + PUBLIC_TITLE + '" }'
+		def queryParams = [query: query, format: 'application/sparql-results+json']
+
+		when:
+		def conn = EntryStoreClient.getRequest('/sparql' + convertMapToQueryParams(queryParams), '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		(JSON_PARSER.parseText(conn.inputStream.text)['results']['bindings'] as List).size() == 1
+	}
+
 	@Unroll
 	def "GET /#requestedContext/sparql exposes only that context's triples"() {
 		given:
