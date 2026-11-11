@@ -1018,6 +1018,44 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void updateEntries_privateLinkReferenceToPublicMetadataInTheRepository_publishesNothingOfIt() {
+		Entry contextEntry = newPublicContext();
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		EntryImpl described = newEntryStating(context, "described", SHARED_TITLE);
+		EntryImpl reference = (EntryImpl) context.createLinkReference(null, URI.create("http://example.com/referenced"),
+				described.getLocalMetadataURI(), null);
+		reference.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getAdminUser().getURI());
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			publicRepository.updateEntries(Set.of(reference));
+
+			assertTrue(holds(publicRepository, described.getSesameLocalMetadataURI(), title("described")),
+					"the metadata the reference names is public");
+			assertFalse(holdsAnything(publicRepository, reference.getSesameCachedExternalMetadataURI()));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateEntries_emptyContextWithAnotherResourceURI_leavesEveryOtherGraphAlone() {
+		rm.setCheckForAuthorization(false);
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl other = newContext();
+		EntryImpl inOther = newEntryStating(other, "in-other", SHARED_TITLE);
+		Entry renamed = withResourceURI(contextEntry, URI.create("http://example.com/not-a-context"));
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			publicRepository.updateEntries(Set.of(renamed));
+
+			assertTrue(holds(publicRepository, contextGraph(other), title("in-other")));
+			assertTrue(holds(publicRepository, inOther.getSesameLocalMetadataURI(), title("in-other")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
 	public void removeEntries_entryLargerThanOneChunkInANativeStore_keepsOnlyWhatAnotherEntryStates(
 			@TempDir Path storeDirectory) {
 		rm.getConfiguration().setProperty(Settings.REPOSITORY_PUBLIC_TYPE, "native");
