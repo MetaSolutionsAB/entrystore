@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.it
 
+import groovy.json.JsonOutput
 import org.awaitility.core.ConditionEvaluationLogger
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
@@ -601,18 +602,8 @@ class SparqlIT extends BaseSpec {
 
 	def "GET /sparql finds a public graph entry's resource statement in its context graph, not in its resource graph"() {
 		given:
-		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
 		def resourceTitle = 'sparql-it-graph-resource'
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/resource/_newId'
-		def newMetadataIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/metadata/_newId'
-		def body = createTitleMetadataBody(newResourceIri, 'sparql-it-graph-metadata')
-		body.resource = ['https://example.org/sparql-it-graph-subject':
-			[(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: resourceTitle]]]]
-		body.info = [
-			(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]],
-			(newResourceIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]
-		]
-		def entryId = createEntry(CONTEXT_ID, [graphtype: 'graph'], body)
+		def entryId = createPublicGraphEntry(resourceTitle)
 		def resourceGraph = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/resource/' + entryId
 
 		when:
@@ -624,6 +615,44 @@ class SparqlIT extends BaseSpec {
 		sparqlBindings('SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s <' + NameSpaceConst.DC_TERM_TITLE + '> "' +
 			resourceTitle + '" } }').collect { it['g']['value'] } == [EntryStoreClient.baseUrl + '/' + CONTEXT_ID]
 		sparqlBindings('SELECT ?s ?p ?o WHERE { GRAPH <' + resourceGraph + '> { ?s ?p ?o } }').isEmpty()
+	}
+
+	def "GET /sparql finds the statements of a public graph entry's replaced resource instead of the old ones"() {
+		given:
+		def entryId = createPublicGraphEntry('sparql-it-graph-before')
+		await().atMost(5, TimeUnit.SECONDS).pollInterval(200, TimeUnit.MILLISECONDS).until {
+			sparqlContainsTitle('sparql-it-graph-before')
+		}
+
+		when:
+		def put = EntryStoreClient.putRequest('/' + CONTEXT_ID + '/resource/' + entryId,
+			JsonOutput.toJson(graphResource('sparql-it-graph-after')), 'admin', 'application/rdf+json')
+
+		then:
+		put.getResponseCode() < 300
+		await().atMost(5, TimeUnit.SECONDS).pollInterval(200, TimeUnit.MILLISECONDS).until {
+			sparqlContainsTitle('sparql-it-graph-after')
+		}
+		!sparqlContainsTitle('sparql-it-graph-before')
+	}
+
+	/** A graph entry whose metadata and resource the guest can read, with {@code resourceTitle} in its resource. */
+	private static String createPublicGraphEntry(String resourceTitle) {
+		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/resource/_newId'
+		def newMetadataIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/metadata/_newId'
+		def body = createTitleMetadataBody(newResourceIri, resourceTitle + '-metadata')
+		body.resource = graphResource(resourceTitle)
+		body.info = [
+			(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]],
+			(newResourceIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]
+		]
+		return createEntry(CONTEXT_ID, [graphtype: 'graph'], body)
+	}
+
+	private static Map graphResource(String title) {
+		return ['https://example.org/sparql-it-graph-subject':
+			[(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: title]]]]
 	}
 
 	private static List sparqlBindings(String query) {

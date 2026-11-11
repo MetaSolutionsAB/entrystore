@@ -37,6 +37,7 @@ import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
@@ -313,8 +314,7 @@ public class PublicRepository {
 			IRI contextGraph = repository.getValueFactory().createIRI(e.getContext().getURI().toString());
 			publishPart(() -> e.getLocalMetadata() == null ? null : e.getLocalMetadata().getGraph(),
 					e::getLocalMetadataURI, contextGraph, rc);
-			publishPart(() -> e.getCachedExternalMetadata() == null ? null : e.getCachedExternalMetadata().getGraph(),
-					e::getCachedExternalMetadataURI, contextGraph, rc);
+			publishPart(() -> cachedExternalMetadata(e), e::getCachedExternalMetadataURI, contextGraph, rc);
 			if (isLocalGraph(e)) {
 				publishPart(() -> e.getResource() instanceof RDFResource resource ? resource.getGraph() : null,
 						e::getResourceURI, contextGraph, rc);
@@ -322,6 +322,18 @@ public class PublicRepository {
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
+	}
+
+	/**
+	 * The entry's cached external metadata, if the current user may read the entry's metadata. External metadata in
+	 * this repository is read from the entry it names, with that entry's access check only.
+	 */
+	private Model cachedExternalMetadata(Entry e) {
+		if (e.getCachedExternalMetadata() == null) {
+			return null;
+		}
+		pm.checkAuthenticatedUserAuthorized(e, AccessProperty.ReadMetadata);
+		return e.getCachedExternalMetadata().getGraph();
 	}
 
 	/** Adds the part to its graph and the context graph if the guest can read it and it exists. */
@@ -619,7 +631,10 @@ public class PublicRepository {
 				}
 			}
 		}
-		rc.clear(graphs.toArray(Resource[]::new));
+		// clear() without a graph clears the whole repository
+		if (!graphs.isEmpty()) {
+			rc.clear(graphs.toArray(Resource[]::new));
+		}
 	}
 
 	/**
