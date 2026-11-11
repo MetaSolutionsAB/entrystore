@@ -24,10 +24,13 @@ import org.eclipse.rdf4j.query.algebra.Count;
 import org.eclipse.rdf4j.query.algebra.ExtensionElem;
 import org.eclipse.rdf4j.query.algebra.Filter;
 import org.eclipse.rdf4j.query.algebra.FunctionCall;
+import org.eclipse.rdf4j.query.algebra.Group;
 import org.eclipse.rdf4j.query.algebra.GroupElem;
 import org.eclipse.rdf4j.query.algebra.IsURI;
 import org.eclipse.rdf4j.query.algebra.Not;
+import org.eclipse.rdf4j.query.algebra.Projection;
 import org.eclipse.rdf4j.query.algebra.ProjectionElem;
+import org.eclipse.rdf4j.query.algebra.ProjectionElemList;
 import org.eclipse.rdf4j.query.algebra.StatementPattern;
 import org.eclipse.rdf4j.query.algebra.Str;
 import org.eclipse.rdf4j.query.algebra.TupleExpr;
@@ -55,8 +58,8 @@ import java.util.Set;
  * OPTIONAL and MINUS keep their meaning, and the variable is never projected. A statement then matches once per
  * context that holds it. Patterns inside a GRAPH clause are left unchanged, and so is the zero-length step of
  * {@code p*} and {@code p?} ({@link org.eclipse.rdf4j.query.algebra.ZeroLengthPath}), which RDF4J evaluates
- * without a triple pattern. A query with {@code COUNT(DISTINCT *)} is left unchanged: it compares whole solutions,
- * helper variables included, and already counts each solution once without the rewrite.
+ * without a triple pattern. {@code COUNT(DISTINCT *)} compares whole solutions, so the solutions it counts are
+ * first projected onto the variables of the query, without the helper variables.
  */
 final class ContextGraphRewriter {
 
@@ -75,7 +78,7 @@ final class ContextGraphRewriter {
 	static void restrictDefaultGraph(TupleExpr expr, String contextGraphPrefix) {
 		List<StatementPattern> defaultPatterns = new ArrayList<>();
 		Set<String> names = new HashSet<>();
-		boolean[] countsDistinctSolutions = {false};
+		List<Group> distinctSolutionCounts = new ArrayList<>();
 		expr.visit(new AbstractQueryModelVisitor<RuntimeException>() {
 			@Override
 			public void meet(StatementPattern node) {
@@ -114,26 +117,36 @@ final class ContextGraphRewriter {
 			}
 
 			@Override
-			public void meet(Count node) {
-				countsDistinctSolutions[0] |= node.isDistinct() && node.getArg() == null;
+			public void meet(Group node) {
+				if (node.getGroupElements().stream().anyMatch(e -> e.getOperator() instanceof Count count
+						&& count.isDistinct() && count.getArg() == null)) {
+					distinctSolutionCounts.add(node);
+				}
 				super.meet(node);
 			}
 		});
-		if (countsDistinctSolutions[0]) {
-			return;
-		}
 
+		Set<String> helperNames = new HashSet<>();
 		int counter = 0;
 		for (StatementPattern pattern : defaultPatterns) {
 			String name;
 			do {
 				name = GRAPH_VAR_PREFIX + counter++;
 			} while (names.contains(name));
+			helperNames.add(name);
 			Var graph = Var.of(name, true);
 			StatementPattern allGraphs = new StatementPattern(StatementPattern.Scope.NAMED_CONTEXTS,
 					pattern.getSubjectVar().clone(), pattern.getPredicateVar().clone(),
 					pattern.getObjectVar().clone(), graph);
 			pattern.replaceWith(new Filter(allGraphs, isContextGraph(graph, contextGraphPrefix)));
+		}
+
+		for (Group group : distinctSolutionCounts) {
+			ProjectionElemList queryVariables = new ProjectionElemList();
+			group.getArg().getBindingNames().stream()
+					.filter(name -> !helperNames.contains(name))
+					.forEach(name -> queryVariables.addElement(new ProjectionElem(name)));
+			group.setArg(new Projection(group.getArg(), queryVariables, true));
 		}
 	}
 

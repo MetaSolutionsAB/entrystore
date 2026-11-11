@@ -26,7 +26,11 @@ import org.eclipse.rdf4j.query.BindingSet;
 import org.eclipse.rdf4j.query.QueryLanguage;
 import org.eclipse.rdf4j.query.TupleQuery;
 import org.eclipse.rdf4j.query.TupleQueryResult;
+import org.eclipse.rdf4j.query.algebra.StatementPattern;
+import org.eclipse.rdf4j.query.algebra.TupleExpr;
+import org.eclipse.rdf4j.query.algebra.helpers.collectors.StatementPatternCollector;
 import org.eclipse.rdf4j.query.impl.SimpleDataset;
+import org.eclipse.rdf4j.query.parser.QueryParserUtil;
 import org.eclipse.rdf4j.query.resultio.QueryResultIO;
 import org.eclipse.rdf4j.query.resultio.TupleQueryResultFormat;
 import org.eclipse.rdf4j.query.resultio.helpers.QueryResultCollector;
@@ -165,8 +169,22 @@ class SparqlServiceContextGraphTest {
 				Arguments.of("triple in two contexts", "SELECT ?n WHERE { ex:shared ex:name ?n }"),
 				Arguments.of("resource and cached external metadata graphs",
 						"SELECT ?s ?o WHERE { ?s ex:label|ex:name ?o FILTER(?s IN (ex:r1, ex:p3)) }"),
-				Arguments.of("COUNT(DISTINCT *)",
+				Arguments.of("COUNT(DISTINCT *) over UNION",
 						"SELECT (COUNT(DISTINCT *) AS ?c) WHERE { { ?s ex:name ?n } UNION { ?s ex:name ?n } }"),
+				Arguments.of("COUNT(DISTINCT *) with OPTIONAL",
+						"SELECT (COUNT(DISTINCT *) AS ?c) WHERE { ?a a ex:Award OPTIONAL { ?a ex:label ?l } }"),
+				Arguments.of("COUNT(DISTINCT *) over a triple in two contexts",
+						"SELECT (COUNT(DISTINCT *) AS ?c) WHERE { ?s ex:name ?n }"),
+				Arguments.of("COUNT(DISTINCT *) with GROUP BY", "SELECT ?p (COUNT(DISTINCT *) AS ?c) "
+						+ "WHERE { ?a ex:laureate ?p OPTIONAL { ?p ex:name ?n } } GROUP BY ?p"),
+				Arguments.of("COUNT(*) with OPTIONAL",
+						"SELECT (COUNT(*) AS ?c) WHERE { ?a a ex:Award OPTIONAL { ?a ex:label ?l } }"),
+				Arguments.of("COUNT(*) over a triple in two contexts",
+						"SELECT (COUNT(*) AS ?c) WHERE { ex:shared ex:name ?n }"),
+				Arguments.of("COUNT(DISTINCT ?x) with OPTIONAL",
+						"SELECT (COUNT(DISTINCT ?l) AS ?c) WHERE { ?a a ex:Award OPTIONAL { ?a ex:label ?l } }"),
+				Arguments.of("COUNT(DISTINCT ?x) over a triple in two contexts",
+						"SELECT (COUNT(DISTINCT ?n) AS ?c) WHERE { ?s ex:name ?n }"),
 				Arguments.of("helper-like name in VALUES",
 						"SELECT ?a ?_entrystore_graph_0 WHERE { VALUES ?_entrystore_graph_0 { 1 } ?a a ex:Award }"),
 				Arguments.of("helper-like name in BIND",
@@ -195,6 +213,20 @@ class SparqlServiceContextGraphTest {
 
 		assertEquals(3, total(actual), "Each award once");
 		assertEquals(4 * total(actual), total(today), "Without the rewrite each of the 2 patterns matches twice");
+	}
+
+	@Test
+	void restrictDefaultGraph_countDistinctSolutions_rewritesEveryDefaultGraphPattern() {
+		String query = "SELECT (COUNT(DISTINCT *) AS ?c) "
+				+ "WHERE { ?a a ex:Award ; ex:laureate ?p OPTIONAL { ?a ex:label ?l } }";
+		TupleExpr expr = QueryParserUtil.parseTupleQuery(QueryLanguage.SPARQL, PREFIXES + query, null).getTupleExpr();
+
+		ContextGraphRewriter.restrictDefaultGraph(expr, BASE);
+
+		List<StatementPattern> patterns = StatementPatternCollector.process(expr);
+		assertEquals(3, patterns.size());
+		assertTrue(patterns.stream().allMatch(p -> p.getScope() == StatementPattern.Scope.NAMED_CONTEXTS),
+				"A COUNT(DISTINCT *) query must not fall back to the union of all graphs");
 	}
 
 	@Test
