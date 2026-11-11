@@ -174,7 +174,22 @@ class SparqlServiceHiddenEntryGraphsTest {
 						"SELECT ?g ?s WHERE { GRAPH ?g { ?a ex:cites <<( ?s ?p ?o )>> } }"),
 				Arguments.of("reified triple in GRAPH",
 						"SELECT ?g ?s WHERE { GRAPH ?g { << ?s ex:year ?y >> ex:source ?src } }"),
-				Arguments.of("empty GRAPH ?g", "SELECT ?g WHERE { GRAPH ?g { } }"));
+				Arguments.of("empty GRAPH ?g", "SELECT ?g WHERE { GRAPH ?g { } }"),
+				Arguments.of("inverse path in GRAPH", "SELECT ?g ?x ?y WHERE { GRAPH ?g { ?x ^ex:laureate ?y } }"),
+				Arguments.of("negated property set in GRAPH",
+						"SELECT ?g ?x ?y WHERE { GRAPH ?g { ?x !(ex:laureate|^ex:next) ?y } }"),
+				Arguments.of("alternative path in GRAPH",
+						"SELECT ?g ?x ?y WHERE { GRAPH ?g { ?x (ex:next|ex:laureate) ?y } }"),
+				Arguments.of("?g bound by a subselect", "SELECT ?g ?a WHERE { { SELECT ?g WHERE { VALUES ?g { <"
+						+ METADATA_GRAPH + "> <" + BASE + "1> } } } GRAPH ?g { ?a a ex:Award } }"),
+				Arguments.of("?g bound in OPTIONAL", "SELECT ?g ?a ?p WHERE { OPTIONAL { BIND(<" + METADATA_GRAPH
+						+ "> AS ?g) } GRAPH ?g { ?a ex:laureate ?p } }"),
+				Arguments.of("FROM with a path", "SELECT ?a ?b FROM <" + BASE + "1> FROM <" + METADATA_GRAPH
+						+ "> WHERE { ?a ex:next+ ?b }"),
+				Arguments.of("FROM and FROM NAMED listing graphs twice", "SELECT ?g ?a FROM <" + BASE + "1> FROM <"
+						+ BASE + "1> FROM <" + METADATA_GRAPH + "> FROM <" + METADATA_GRAPH + "> FROM NAMED <" + BASE
+						+ "2> FROM NAMED <" + BASE + "2> "
+						+ "WHERE { { ?a a ex:Award } UNION { GRAPH ?g { ?a a ex:Award } } }"));
 	}
 
 	@ParameterizedTest(name = "{0}")

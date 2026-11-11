@@ -28,8 +28,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RejectedQueryWarningTest {
 
@@ -93,9 +96,15 @@ class RejectedQueryWarningTest {
 		clock.advance(Duration.ofMinutes(1));
 		warning.record();
 
+		// Rejections that race the first warning are counted in it or in the next one, never in neither.
 		assertEquals(2, warnings.size());
-		assertEquals("Rejected 8 public SPARQL queries in the last 60 s: all 4 slots busy for longer than 1 s; "
-				+ "consider raising entrystore.repository.public.sparql.max-concurrent-queries", warnings.get(1));
+		assertEquals(9, warnings.stream().mapToLong(RejectedQueryWarningTest::rejectedCount).sum());
+	}
+
+	private static long rejectedCount(String warning) {
+		Matcher matcher = Pattern.compile("^Rejected (\\d+) ").matcher(warning);
+		assertTrue(matcher.find(), "Unexpected warning: " + warning);
+		return Long.parseLong(matcher.group(1));
 	}
 
 	private static final class MutableClock extends Clock {
