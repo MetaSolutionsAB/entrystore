@@ -43,8 +43,18 @@ class EntryIT extends BaseSpec {
 	def resourceUrl = 'https://bbc.co.uk'
 	def encodedUrl = 'http://example.com/test%20ing'
 
+	// Its own context, as several specs assert an exact entry count in contextId.
+	static final String RDF_FORMAT_CONTEXT_ID = 'entryRdfFormatContext'
+
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
+	}
+
+	def getOrCreateRdfFormatEntry() {
+		getOrCreateContext([contextId: RDF_FORMAT_CONTEXT_ID])
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + RDF_FORMAT_CONTEXT_ID + '/resource/_newId'
+		return getOrCreateEntry(RDF_FORMAT_CONTEXT_ID, [id: 'rdfFormatEntry'],
+			createTitleMetadataBody(newResourceIri, 'rdfFormat title'))
 	}
 
 	/**
@@ -1737,6 +1747,40 @@ class EntryIT extends BaseSpec {
 		dcTitles.size() == 1
 		dcTitles[0]['type'] == 'literal'
 		dcTitles[0]['value'] == 'local metadata title'
+	}
+
+	def "GET /{context-id}/entry/{entry-id}?rdfFormat=application/rdf+json with an unencoded '+' should return info and metadata in RDF/JSON"() {
+		given:
+		def entryId = getOrCreateRdfFormatEntry()
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + RDF_FORMAT_CONTEXT_ID + '/entry/' + entryId +
+			'?includeAll&rdfFormat=application/rdf+json')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
+		def base = EntryStoreClient.baseUrl + '/' + RDF_FORMAT_CONTEXT_ID
+		entryRespJson['info'][base + '/entry/' + entryId] != null
+		def dcTitles = entryRespJson['metadata'][base + '/resource/' + entryId][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcTitles == [[type: 'literal', value: 'rdfFormat title']]
+	}
+
+	def "GET /{context-id}/entry/{entry-id}?rdfFormat=text/turtle should return info and metadata in RDF/JSON"() {
+		given:
+		def entryId = getOrCreateRdfFormatEntry()
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + RDF_FORMAT_CONTEXT_ID + '/entry/' + entryId +
+			'?includeAll&rdfFormat=text/turtle')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
+		def base = EntryStoreClient.baseUrl + '/' + RDF_FORMAT_CONTEXT_ID
+		entryRespJson['info'][base + '/entry/' + entryId] != null
+		def dcTitles = entryRespJson['metadata'][base + '/resource/' + entryId][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcTitles == [[type: 'literal', value: 'rdfFormat title']]
 	}
 
 	def "GET /{context-id}/entry/{entry-id} in rdf+xml format for a linkreference entry, should return information about the entry in RDF+XML format"() {

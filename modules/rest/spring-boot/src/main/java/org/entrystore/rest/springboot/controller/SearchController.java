@@ -31,6 +31,7 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.SearchRateLimiter;
 import org.entrystore.rest.springboot.service.SearchService;
 import org.entrystore.rest.springboot.service.SolrSearchInputValidator;
+import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.Syndication;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -146,7 +147,8 @@ public class SearchController {
 			responseBody = searchService.generateSyndication(request, queryResults.entries(), syndication, lang, limit, urlTemplate, feedTitle);
 			responseMediaType = Syndication.convertFeedTypeToMediaType(syndication);
 		} else {
-			responseBody = searchService.generateJson(offset, limit, queryResults, rdfFormat);
+			responseBody = searchService.generateJson(offset, limit, queryResults,
+					GraphUtil.resolveJsonRdfFormat(rdfFormat));
 			responseMediaType = MediaType.APPLICATION_JSON;
 		}
 
