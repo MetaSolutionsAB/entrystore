@@ -280,6 +280,28 @@ public class HttpUtil {
 		return null;
 	}
 
+	/**
+	 * Whether the query string holds parameter {@code name}, with or without a value. Only names are decoded, so a
+	 * malformed value cannot hide its name, and the body is never read (see {@link #getQueryParameter}).
+	 */
+	public static boolean hasQueryParameter(HttpServletRequest request, String name) {
+		String query = request.getQueryString();
+		if (query == null) {
+			return false;
+		}
+		for (String pair : query.split("&")) {
+			int eq = pair.indexOf('=');
+			try {
+				if (URLDecoder.decode(eq < 0 ? pair : pair.substring(0, eq), StandardCharsets.UTF_8).equals(name)) {
+					return true;
+				}
+			} catch (IllegalArgumentException e) {
+				log.debug("Skipping query parameter with malformed encoding: {}", sanitizeForLog(pair));
+			}
+		}
+		return false;
+	}
+
 	private static final int LOG_VALUE_MAX_LENGTH = 128;
 	private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
 

@@ -399,17 +399,62 @@ class SparqlIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_UNSUPPORTED_TYPE
 	}
 
-	def "POST /sparql with parameters in URL query string should return Bad-Request 400"() {
+	@Unroll
+	def "POST #path with #urlQuery in the URL query string should return Bad-Request 400"() {
 		given:
 		// Defends against the URL-bypass of the 32 KB body cap: a tiny body but the actual query in
 		// the URL would otherwise satisfy @RequestParam binding and slip past the cap.
+		def body = createFormBody(formFields)
+
 		when:
-		def conn = EntryStoreClient.postRequest(
-			'/sparql' + convertMapToQueryParams([query: VALID_QUERY]),
-			'', '', 'application/x-www-form-urlencoded')
+		def conn = EntryStoreClient.postRequest(path + urlQuery, body, '', 'application/x-www-form-urlencoded')
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(conn.errorStream.text)['error'].toString().contains('form body')
+
+		where:
+		path                         | urlQuery                                               | formFields
+		'/sparql'                    | convertMapToQueryParams([query: VALID_QUERY])          | [:]
+		'/sparql'                    | '?infer=false&query'                                   | [query: VALID_QUERY]
+		'/sparql'                    | '?query='                                              | [query: VALID_QUERY]
+		'/sparql'                    | '?qu%65ry=' + URLEncoder.encode(VALID_QUERY, 'UTF-8') | [:]
+		'/sparql'                    | '?output=xml'                                          | [query: VALID_QUERY]
+		'/' + CONTEXT_ID + '/sparql' | convertMapToQueryParams([query: VALID_QUERY])          | [:]
+		'/' + CONTEXT_ID + '/sparql' | '?output=json'                                         | [query: VALID_QUERY]
+	}
+
+	def "POST /sparql form-encoded with an unrelated URL parameter should ignore it and return the results"() {
+		given:
+		// RDF4J protocol clients send ?infer=false with the query in the body; 5.x ignored URL parameters.
+		def query = 'SELECT ?title WHERE { VALUES ?title { "sparql-it-infer" } }'
+		def body = createFormBody([query: query, output: 'json'])
+
+		when:
+		def conn = EntryStoreClient.postRequest('/sparql?infer=false', body, '', 'application/x-www-form-urlencoded')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/sparql-results+json')
+		def json = JSON_PARSER.parseText(conn.inputStream.text)
+		(json['results']['bindings'] as List).collect { it['title']['value'] } == ['sparql-it-infer']
+	}
+
+	def "POST /{contextId}/sparql form-encoded with an unrelated URL parameter should ignore it and return the results"() {
+		given:
+		def query = 'SELECT ?title WHERE { ?s <' + NameSpaceConst.DC_TERM_TITLE + '> ?title } LIMIT 100'
+		def body = createFormBody([query: query, output: 'json'])
+
+		when:
+		def conn = EntryStoreClient.postRequest(
+			'/' + CONTEXT_ID + '/sparql?infer=false', body, '', 'application/x-www-form-urlencoded')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def json = JSON_PARSER.parseText(conn.inputStream.text)
+		def titles = (json['results']['bindings'] as List).collect { it['title']['value'] }
+		titles.contains(PUBLIC_TITLE)
+		!titles.contains(CTX2_PUBLIC_TITLE)
 	}
 
 	def "GET /{contextId}/sparql with valid query should return 200"() {
