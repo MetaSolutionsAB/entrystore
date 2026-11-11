@@ -26,6 +26,7 @@ import org.eclipse.rdf4j.query.TupleQuery;
 import org.eclipse.rdf4j.query.TupleQueryResultHandler;
 import org.eclipse.rdf4j.query.TupleQueryResultHandlerException;
 import org.eclipse.rdf4j.query.impl.SimpleDataset;
+import org.eclipse.rdf4j.query.parser.ParsedTupleQuery;
 import org.eclipse.rdf4j.query.resultio.binary.BinaryQueryResultWriter;
 import org.eclipse.rdf4j.query.resultio.sparqljson.SPARQLResultsJSONWriter;
 import org.eclipse.rdf4j.query.resultio.sparqlxml.SPARQLResultsXMLWriter;
@@ -33,6 +34,7 @@ import org.eclipse.rdf4j.query.resultio.text.csv.SPARQLResultsCSVWriter;
 import org.eclipse.rdf4j.query.resultio.text.tsv.SPARQLResultsTSVWriter;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.sail.SailTupleQuery;
 import org.entrystore.Context;
 import org.entrystore.impl.PublicRepository;
 import org.entrystore.impl.RepositoryManagerImpl;
@@ -156,7 +158,8 @@ public class SparqlService {
 	 * @param contextId   when non-null, both the default graph and the named-graph set are replaced with the
 	 *                    context's resource URI (or a synthesised URI for missing/reserved contexts), so the
 	 *                    dataset is exactly that one graph in both positions; when null the query runs against
-	 *                    the full public repository
+	 *                    the full public repository, and unless it declares FROM or FROM NAMED, its triple
+	 *                    patterns outside GRAPH read the context graphs only (see {@link ContextGraphRewriter})
 	 * @param out         the stream that the serialised tuple result is written to; the caller owns its
 	 *                    lifecycle (the wrapping {@code SizeLimitedOutputStream} does not close it)
 	 * @throws NotImplementedException     when the public repository is disabled
@@ -220,6 +223,8 @@ public class SparqlService {
 			TupleQuery query = rc.prepareTupleQuery(QueryLanguage.SPARQL, queryString);
 			FederatedQueryGuard.rejectServiceClauses(query,
 					"SPARQL SERVICE clauses are not permitted on the public endpoint");
+			// The guard refuses every query that is not Sail-backed.
+			ParsedTupleQuery parsedQuery = ((SailTupleQuery) query).getParsedQuery();
 			query.setMaxExecutionTime(maxExecutionTime);
 			query.setIncludeInferred(false);
 
@@ -230,6 +235,9 @@ public class SparqlService {
 				ds.addDefaultGraph(contextURI);
 				ds.addNamedGraph(contextURI);
 				query.setDataset(ds);
+			} else if (parsedQuery.getDataset() == null) {
+				// Evaluation reads this algebra, so the rewrite applies with the limits set above.
+				ContextGraphRewriter.restrictDefaultGraph(parsedQuery.getTupleExpr(), contextUriPrefix());
 			}
 
 			TupleQueryResultHandler resultHandler = createWriter(format,
@@ -279,11 +287,13 @@ public class SparqlService {
 		// Synthesise the URI a real context with this id would have ({baseUrl}/{contextId} per
 		// the project's URI conventions) so a missing or reserved context produces the same
 		// shape of named-graph filter as an existing one — just against a graph with no triples.
+		return contextUriPrefix() + contextId;
+	}
+
+	/** The URI of a context is this prefix followed by the context id. */
+	private String contextUriPrefix() {
 		String base = repositoryManager.getRepositoryURL().toString();
-		if (!base.endsWith("/")) {
-			base += "/";
-		}
-		return base + contextId;
+		return base.endsWith("/") ? base : base + "/";
 	}
 
 	private static SparqlResultTooLargeException findSizeCap(Throwable root) {
