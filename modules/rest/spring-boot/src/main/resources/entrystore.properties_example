@@ -509,14 +509,17 @@ entrystore.solr.extract-fulltext=off
 ## and a result larger than max-response-bytes is answered 413 or cut off.
 # entrystore.repository.public.sparql.max-execution-time=10
 # entrystore.repository.public.sparql.max-response-bytes=67108864
-## Queries evaluated at the same time. A query waits up to a second for a running one
-## to end and is otherwise answered 503 with Retry-After. Each running query can hold
+## Queries evaluated at the same time. A query waits up to max-wait-time for a running
+## one to end and is otherwise answered 503 with Retry-After. Each running query can hold
 ## a large share of the heap, so raise this only together with the heap size. A query
 ## holds its slot until its result is fully written or the connection times out, so a
 ## client that stops reading keeps it until the container's idle timeout. The limit is
 ## shared by all callers, so a few long-running queries can make others wait or get 503
 ## until they end or time out; limit per client in the reverse proxy.
 # entrystore.repository.public.sparql.max-concurrent-queries=4
+## Seconds a query waits for a free slot (>= 0; 0 answers 503 at once when all are busy).
+## While queries are rejected, one WARN line per minute says how many.
+# entrystore.repository.public.sparql.max-wait-time=1
 ## The public repository stores each public statement in its context's graph and in its
 ## entry's graph (metadata, cached external metadata or resource graph). By default
 ## /sparql sees only the context graphs: GRAPH ?g binds only context graphs, and GRAPH,
