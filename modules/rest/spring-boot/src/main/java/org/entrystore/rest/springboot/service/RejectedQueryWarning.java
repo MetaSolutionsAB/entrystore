@@ -27,7 +27,7 @@ import java.util.function.Consumer;
  * Warns about public SPARQL queries rejected for lack of a free slot, at most once per minute. Each rejection is also
  * logged on its own at INFO, which an operator does not watch; this line says how often it happens and what to tune.
  * The first rejection after a quiet minute warns at once; the ones within the minute after a warning are counted into
- * the next one.
+ * the next one. Rejections after the last warning are reported with the next rejection.
  */
 final class RejectedQueryWarning {
 
@@ -61,8 +61,8 @@ final class RejectedQueryWarning {
 		String period = last == null
 				? "since startup"
 				: "in the last " + Duration.between(last, now).toSeconds() + " s";
-		warn.accept(("Rejected %d public SPARQL queries %s: all %d slots busy for longer than %d s; consider raising "
+		warn.accept(("Rejected %d public SPARQL %s %s: all %d slots busy for longer than %d s; consider raising "
 				+ "entrystore.repository.public.sparql.max-concurrent-queries")
-				.formatted(count, period, slots, waitSeconds));
+				.formatted(count, count == 1 ? "query" : "queries", period, slots, waitSeconds));
 	}
 }

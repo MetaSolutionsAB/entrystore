@@ -108,7 +108,10 @@ public class SparqlService {
 		return Duration.ofSeconds(maxWaitTime);
 	}
 
-	/** {@code permitWait} is how long a query waits for a running one to end before it is answered 503. */
+	/**
+	 * {@code permitWait} is how long a query waits for a running one to end before it is answered 503. Each waiting
+	 * request holds a thread of the async executor, so it should stay well below the async request timeout.
+	 */
 	SparqlService(
 			RepositoryManagerImpl repositoryManager,
 			ContextService contextService,
@@ -144,8 +147,8 @@ public class SparqlService {
 		this.rejectedQueryWarning = new RejectedQueryWarning(Clock.systemUTC(), log::warn, maxConcurrentQueries,
 				permitWait);
 		log.debug("Public SPARQL max execution time: {} seconds; max response bytes: {}; max concurrent queries: {}; "
-				+ "entry graphs exposed: {}", maxExecutionTime, maxResponseBytes, maxConcurrentQueries,
-				exposeEntryGraphs);
+				+ "max wait time: {} ms; entry graphs exposed: {}", maxExecutionTime, maxResponseBytes,
+				maxConcurrentQueries, permitWait.toMillis(), exposeEntryGraphs);
 	}
 
 	/**

@@ -45,7 +45,7 @@ class RejectedQueryWarningTest {
 	void record_firstRejection_warnsAtOnceWithTheLimitAndWait() {
 		warning.record();
 
-		assertEquals(List.of("Rejected 1 public SPARQL queries since startup: all 4 slots busy for longer than 1 s; "
+		assertEquals(List.of("Rejected 1 public SPARQL query since startup: all 4 slots busy for longer than 1 s; "
 				+ "consider raising entrystore.repository.public.sparql.max-concurrent-queries"), warnings);
 	}
 
@@ -74,7 +74,7 @@ class RejectedQueryWarningTest {
 		warning.record();
 
 		assertEquals(2, warnings.size());
-		assertEquals("Rejected 1 public SPARQL queries in the last 300 s: all 4 slots busy for longer than 1 s; "
+		assertEquals("Rejected 1 public SPARQL query in the last 300 s: all 4 slots busy for longer than 1 s; "
 				+ "consider raising entrystore.repository.public.sparql.max-concurrent-queries", warnings.get(1));
 	}
 
