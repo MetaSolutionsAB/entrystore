@@ -69,6 +69,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
 
 /**
  * Compares {@code /sparql} results with a reference: the same query evaluated with the context graphs as its
@@ -192,7 +193,46 @@ class SparqlServiceContextGraphTest {
 				Arguments.of("helper-like name projected but unbound",
 						"SELECT ?a ?_entrystore_graph_0 WHERE { ?a a ex:Award }"),
 				Arguments.of("helper-like name only in GROUP BY",
-						"SELECT (COUNT(*) AS ?n) WHERE { ?a a ex:Award } GROUP BY ?_entrystore_graph_0"));
+						"SELECT (COUNT(*) AS ?n) WHERE { ?a a ex:Award } GROUP BY ?_entrystore_graph_0"),
+				Arguments.of("HAVING",
+						"SELECT ?p (COUNT(*) AS ?c) WHERE { ?a ex:laureate ?p } GROUP BY ?p HAVING (COUNT(*) > 1)"),
+				Arguments.of("ORDER BY an aggregate", "SELECT ?p (COUNT(?a) AS ?c) WHERE { ?a ex:laureate ?p } "
+						+ "GROUP BY ?p ORDER BY DESC(COUNT(?a)) ?p"),
+				Arguments.of("MINUS containing OPTIONAL", "SELECT ?a WHERE { ?a a ex:Award "
+						+ "MINUS { ?a ex:year ?y OPTIONAL { ?a ex:label ?l } FILTER(?y = 1901) } }"),
+				Arguments.of("OPTIONAL with FILTER EXISTS", "SELECT ?a ?l WHERE { ?a a ex:Award "
+						+ "OPTIONAL { ?a ex:label ?l FILTER EXISTS { ?a ex:next ?n } } }"),
+				Arguments.of("OPTIONAL with FILTER NOT EXISTS", "SELECT ?a ?l WHERE { ?a a ex:Award "
+						+ "OPTIONAL { ?a ex:label ?l FILTER NOT EXISTS { ?a ex:next ex:a2 } } }"),
+				Arguments.of("OPTIONAL filter on an outer variable",
+						"SELECT ?a ?l WHERE { ?a ex:year ?y OPTIONAL { ?a ex:label ?l FILTER(?y < 1902) } }"),
+				Arguments.of("subselect with ORDER BY and LIMIT", "SELECT ?a ?p WHERE { ?a ex:laureate ?p "
+						+ "{ SELECT ?a WHERE { ?a ex:year ?y } ORDER BY ?y LIMIT 2 } }"),
+				Arguments.of("path ^p", "SELECT ?x ?y WHERE { ?x ^ex:laureate ?y }"),
+				Arguments.of("path !p", "SELECT ?x ?y WHERE { ?x !ex:laureate ?y }"),
+				Arguments.of("path !(p|^q)", "SELECT ?x ?y WHERE { ?x !(ex:laureate|^ex:next) ?y }"),
+				Arguments.of("path (p/q)+", "SELECT ?x ?y WHERE { ?x (ex:next/ex:next)+ ?y }"),
+				Arguments.of("path (p|q)+", "SELECT ?x ?y WHERE { ?x (ex:next|ex:laureate)+ ?y }"),
+				Arguments.of("path (p|q)?", "SELECT ?x ?y WHERE { ex:a1 (ex:next|ex:laureate)? ?y BIND(ex:a1 AS ?x) }"),
+				Arguments.of("SAMPLE", "SELECT ?a (SAMPLE(?y) AS ?s) WHERE { ?a ex:year ?y } GROUP BY ?a"),
+				Arguments.of("GROUP_CONCAT",
+						"SELECT ?a (GROUP_CONCAT(STR(?y)) AS ?g) WHERE { ?a ex:year ?y } GROUP BY ?a"),
+				Arguments.of("SUM", "SELECT (SUM(?y) AS ?s) WHERE { ?a ex:year ?y }"),
+				Arguments.of("AVG",
+						"SELECT ?p (AVG(?y) AS ?avg) WHERE { ?a ex:laureate ?p ; ex:year ?y } GROUP BY ?p"),
+				Arguments.of("EXISTS in a SELECT expression",
+						"SELECT ?a (EXISTS { ?a ex:label ?l } AS ?labelled) WHERE { ?a a ex:Award }"),
+				Arguments.of("EXISTS in ORDER BY",
+						"SELECT ?a WHERE { ?a a ex:Award } ORDER BY DESC(EXISTS { ?a ex:label ?l }) ?a"),
+				Arguments.of("EXISTS in HAVING", "SELECT ?p (COUNT(*) AS ?c) WHERE { ?a ex:laureate ?p } "
+						+ "GROUP BY ?p HAVING EXISTS { ?p ex:name ?n }"),
+				Arguments.of("nested COUNT(DISTINCT *)", "SELECT (SUM(?c) AS ?total) WHERE { { SELECT ?p "
+						+ "(COUNT(DISTINCT *) AS ?c) WHERE { ?a ex:laureate ?p OPTIONAL { ?p ex:name ?n } } "
+						+ "GROUP BY ?p } }"),
+				Arguments.of("SELECT DISTINCT * subselect",
+						"SELECT ?a ?p WHERE { { SELECT DISTINCT * WHERE { ?a ex:laureate ?p } } ?a ex:year ?y }"),
+				Arguments.of("VALUES with UNDEF",
+						"SELECT ?a ?y WHERE { VALUES (?a ?y) { (ex:a1 UNDEF) (UNDEF 1903) } ?a ex:year ?y }"));
 	}
 
 	@ParameterizedTest(name = "{0}")
@@ -229,6 +269,47 @@ class SparqlServiceContextGraphTest {
 		assertEquals(3, patterns.size());
 		assertTrue(patterns.stream().allMatch(p -> p.getScope() == StatementPattern.Scope.NAMED_CONTEXTS),
 				"A COUNT(DISTINCT *) query must not fall back to the union of all graphs");
+	}
+
+	/** Deliberately unchanged: a GRAPH variable binds every graph, so each copy of a statement still matches. */
+	@Test
+	void runQuery_graphVariable_keepsEveryGraphCopy() throws Exception {
+		String query = "SELECT ?a ?p WHERE { GRAPH ?g { ?a a ex:Award ; ex:laureate ?p } }";
+		String withoutGraph = "SELECT ?a ?p WHERE { ?a a ex:Award ; ex:laureate ?p }";
+
+		Result actual = runQuery(query);
+
+		assertEquals(evaluate(query, null), actual);
+		assertEquals(2 * total(runQuery(withoutGraph)), total(actual),
+				"Each award is in its metadata graph and in its context graph");
+	}
+
+	/** Core appends the context id to the repository URL as it is, also when it does not end with a slash. */
+	@Test
+	void runQuery_repositoryUrlWithoutTrailingSlash_readsTheContextGraphs() throws Exception {
+		String base = "http://example.org/store";
+		Repository unslashed = new SailRepository(new MemoryStore());
+		unslashed.init();
+		try (RepositoryConnection rc = unslashed.getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			Model metadata = Rio.parse(new StringReader("@prefix ex: <http://example.org/ns#> . "
+					+ "ex:a1 a ex:Award ; ex:laureate ex:p1 ."), RDFFormat.TURTLE);
+			rc.add(metadata, vf.createIRI(base + "1/metadata/1"), vf.createIRI(base + "1"));
+		}
+		when(repositoryManager.getRepositoryURL()).thenReturn(URI.create(base).toURL());
+		when(publicRepository.getConnection()).thenAnswer(_ -> unslashed.getConnection());
+
+		try {
+			Result actual = runQuery("SELECT ?a ?p WHERE { ?a a ex:Award ; ex:laureate ?p }");
+
+			assertEquals(Map.of(Map.of("a", iri("ex:a1"), "p", iri("ex:p1")), 1L), actual.rows());
+		} finally {
+			unslashed.shutDown();
+		}
+	}
+
+	private static IRI iri(String prefixed) {
+		return SimpleValueFactory.getInstance().createIRI("http://example.org/ns#" + prefixed.substring(3));
 	}
 
 	@Test

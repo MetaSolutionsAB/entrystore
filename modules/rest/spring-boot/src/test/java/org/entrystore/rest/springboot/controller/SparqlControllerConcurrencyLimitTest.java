@@ -71,7 +71,8 @@ class SparqlControllerConcurrencyLimitTest {
 		repository.init();
 		try (RepositoryConnection rc = repository.getConnection()) {
 			ValueFactory vf = rc.getValueFactory();
-			rc.add(vf.createIRI("http://example.org/s"), vf.createIRI("http://example.org/p"), vf.createLiteral("o"));
+			rc.add(vf.createIRI("http://example.org/s"), vf.createIRI("http://example.org/p"), vf.createLiteral("o"),
+					vf.createIRI("http://example.org/store/1"));
 		}
 		RepositoryManagerImpl repositoryManager = mock(RepositoryManagerImpl.class);
 		PublicRepository publicRepository = mock(PublicRepository.class);

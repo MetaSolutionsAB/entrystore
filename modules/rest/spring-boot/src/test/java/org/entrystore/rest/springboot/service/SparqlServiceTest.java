@@ -95,6 +95,8 @@ class SparqlServiceTest {
 	private static final String SELECT_ALL = "SELECT * WHERE { ?s ?p ?o } LIMIT 1";
 	private static final String CONTEXT_ID = "ctx-1";
 	private static final String CONTEXT_URI = "http://example.org/ctx-1";
+	/** The graph of context 1 under the mocked repository URL, which /sparql reads as default graph. */
+	private static final String CONTEXT_GRAPH = "http://example.org/store/1";
 
 	private static final int MAX_EXECUTION_TIME = 10;
 	private static final long MAX_RESPONSE_BYTES = 64L * 1024L * 1024L;
@@ -353,7 +355,8 @@ class SparqlServiceTest {
 			ValueFactory vf = rc.getValueFactory();
 			rc.add(vf.createIRI("http://example.org/s"),
 					vf.createIRI("http://example.org/p"),
-					vf.createIRI("http://example.org/o"));
+					vf.createIRI("http://example.org/o"),
+					vf.createIRI(CONTEXT_GRAPH));
 		}
 
 		CustomResponseException ex = assertThrows(CustomResponseException.class,
@@ -623,7 +626,7 @@ class SparqlServiceTest {
 		}
 
 		assertNull(waiterFailure.get(), "The waiting query should run once the permit is free");
-		assertTrue(waiterOut.size() > 0, "Expected the waiting query's result");
+		assertFixtureRow(waiterOut);
 	}
 
 	@Test
@@ -639,7 +642,7 @@ class SparqlServiceTest {
 		// A permit lost by the failed or rejected query would make this one wait and be rejected.
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		selectAll(limited, out);
-		assertTrue(out.size() > 0, "Expected a result once all permits are free");
+		assertFixtureRow(out);
 	}
 
 	@Test
@@ -676,7 +679,13 @@ class SparqlServiceTest {
 		// A permit lost by the interrupted waiter would make this query wait 10 s and be rejected.
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		selectAll(limited, out);
-		assertTrue(out.size() > 0, "Expected a result once the permit is free");
+		assertFixtureRow(out);
+	}
+
+	private static void assertFixtureRow(ByteArrayOutputStream out) {
+		var bindings = new JsonMapper().readTree(out.toByteArray()).path("results").path("bindings");
+		assertEquals(1, bindings.size(), "Expected the fixture triple once, got: " + bindings);
+		assertEquals("http://example.org/s", bindings.get(0).path("s").path("value").asString());
 	}
 
 	private static void selectAll(SparqlService service, OutputStream out) {
@@ -722,7 +731,8 @@ class SparqlServiceTest {
 	private SparqlService serviceWithConcurrencyLimit(int maxConcurrentQueries, Duration permitWait) {
 		try (RepositoryConnection rc = backingRepository.getConnection()) {
 			ValueFactory vf = rc.getValueFactory();
-			rc.add(vf.createIRI("http://example.org/s"), vf.createIRI("http://example.org/p"), vf.createLiteral("o"));
+			rc.add(vf.createIRI("http://example.org/s"), vf.createIRI("http://example.org/p"), vf.createLiteral("o"),
+					vf.createIRI(CONTEXT_GRAPH));
 		}
 		return new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME,
 				MAX_RESPONSE_BYTES, maxConcurrentQueries, permitWait);
