@@ -97,8 +97,6 @@ import java.util.stream.Collectors;
 public class AuthService {
 
 	private static final int TTL = 24 * 3600 * 1000;
-	/** Password reset's only rule, as in 5.x; sign-up applies the configured password rules instead. */
-	private static final int MIN_PASSWORD_LENGTH = 8;
 
 	private static final String PWRESET_POST_SUCCESS_MESSAGE = "A confirmation message was sent to {}, if the user exists.";
 	// The same for a new and an existing account, so the answer does not tell them apart.
@@ -110,7 +108,6 @@ public class AuthService {
 	private static final String CUSTOM_PROPERTY_PREFIX = "custom_";
 	// Bounds what one pending sign-up weighs in SignupTokenCache, so a flood cannot evict real tokens cheaply.
 	private static final int MAX_CUSTOM_PROPERTIES = 50;
-	private static final String SHORT_PASSWORD_MESSAGE = "The password has to consist of at least 8 characters.";
 	private static final String BAD_PASSWORD_FORMAT_MESSAGE = "The password must conform to the configured rules.";
 	// Shared with @ValidEmail, which the sign-up body uses instead of validateAndSetEmail. The two paths
 	// must render the same string, so the placeholder is spelled the Bean Validation way in both.
@@ -334,15 +331,13 @@ public class AuthService {
 	 * wrong recipient or email scanner that clicks the link does not know which account it is for and
 	 * cannot set a password. The token is invalidated after the configured number of failed email
 	 * attempts. The new password is collected here (not at request time) so the requester never picks
-	 * the password that ends up on the account. It is format-validated (non-empty, at least 8 characters)
-	 * before the token is touched, so a malformed password neither consumes the token nor counts as a
+	 * the password that ends up on the account. It is checked against the configured password rules
+	 * before the token is touched, so a rejected password neither consumes the token nor counts as a
 	 * failed email attempt.
 	 */
 	public ConfirmationResult confirmPassword(HttpServletRequest request, String token, String email, String newPassword, String title) {
 		passwordResetRateLimiter.acquirePermit(request.getRemoteAddr());
-		// Validate the chosen password before touching the token so a malformed password neither
-		// consumes the token nor counts as a failed email attempt.
-		String validatedPassword = validatePasswordFormat(newPassword, title);
+		String validatedPassword = validatePasswordRules(newPassword, title);
 		ConfirmAttemptResult attempt = signupTokenCache.confirmAttempt(token,
 				ci -> emailMatches(ci, email), maxConfirmationAttempts());
 		return switch (attempt.status()) {
@@ -413,17 +408,7 @@ public class AuthService {
 		// Legacy mode collects the new password now and applies it on link click. New mode collects the
 		// new password on the confirmation form instead, so the requester never picks the password that
 		// ends up on the account (ENTRYSTORE-529); only the email is needed to start the flow.
-		String password = null;
-		if (isLegacyConfirmationMode()) {
-			if (StringUtils.isNotEmpty(requestBody.password())) {
-				password = requestBody.password().trim();
-				if (password.length() < 8) {
-					throw new BadRequestHtmlException(SHORT_PASSWORD_MESSAGE, title);
-				}
-			} else {
-				throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
-			}
-		}
+		String password = isLegacyConfirmationMode() ? validatePasswordRules(requestBody.password(), title) : null;
 
 		setRedirectUrlIfPermitted(requestBody.urlFailure(), ci::setUrlFailure, "failure");
 		setRedirectUrlIfPermitted(requestBody.urlSuccess(), ci::setUrlSuccess, "success");
@@ -680,32 +665,16 @@ public class AuthService {
 		return StringUtils.isNotEmpty(email) && ci.getEmail().equalsIgnoreCase(email.trim());
 	}
 
-	/**
-	 * Returns the trimmed password, which is the value that gets hashed — so a password padded with
-	 * spaces is not accepted as long enough on the strength of the padding.
-	 */
-	private String validatePasswordFormat(String password, String title) {
-		String trimmed = requirePassword(password, title);
-		if (trimmed.length() < MIN_PASSWORD_LENGTH) {
-			throw new BadRequestHtmlException(SHORT_PASSWORD_MESSAGE, title);
-		}
-		return trimmed;
-	}
-
 	/** Returns the trimmed password, which is the value that gets hashed and so the one the rules apply to. */
 	private String validatePasswordRules(String password, String title) {
-		String trimmed = requirePassword(password, title);
+		if (StringUtils.isEmpty(password)) {
+			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
+		}
+		String trimmed = password.trim();
 		if (!Password.conformsToRules(trimmed)) {
 			throw new BadRequestHtmlException(BAD_PASSWORD_FORMAT_MESSAGE, title);
 		}
 		return trimmed;
-	}
-
-	private String requirePassword(String password, String title) {
-		if (StringUtils.isEmpty(password)) {
-			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
-		}
-		return password.trim();
 	}
 
 	/**

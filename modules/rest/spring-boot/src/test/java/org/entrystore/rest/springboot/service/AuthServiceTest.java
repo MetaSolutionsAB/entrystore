@@ -44,6 +44,7 @@ import org.entrystore.rest.springboot.model.exception.ExpectationFailedHtmlExcep
 import org.entrystore.rest.springboot.security.ESUserSessionDetails;
 import org.entrystore.rest.springboot.service.auth.ConfirmationLinkBuilder;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
+import org.entrystore.rest.springboot.service.auth.PasswordResetRateLimiter;
 import org.entrystore.rest.springboot.service.auth.RecaptchaSettings;
 import org.entrystore.rest.springboot.service.auth.SignupRateLimiter;
 import org.entrystore.rest.springboot.service.auth.SignupTokenCache;
@@ -57,6 +58,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -80,12 +83,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -147,12 +152,53 @@ class AuthServiceTest {
 	void pwReset_invalidEmail_reportsTheRejectedAddress(String email) {
 		var body = new PwResetRequestBody(email, null, null, null, null);
 
-		// request is null: validateAndSetEmail runs before clientIp(request)
+		// request is null: validateAndSetEmail runs before the rate limiter reads request.getRemoteAddr()
 		BadRequestHtmlException thrown = assertThrows(BadRequestHtmlException.class,
 				() -> authService.pwReset(null, body, "Password reset"));
 
 		assertEquals("Invalid email address: " + email + ".", thrown.getMessage());
 		assertEquals("Password reset", thrown.getTitle());
+	}
+
+	static Stream<Arguments> passwordsBreakingTheDefaultRules() {
+		return Stream.of(
+				Arguments.of("shorter than 10 characters", "Abcdefgh1"),
+				Arguments.of("no number", "Abcdefghij"),
+				// The rules apply to the trimmed value, which is the one that gets hashed.
+				Arguments.of("long enough only with its padding", "  Abcdefg1   "),
+				Arguments.of("longer than the maximum", "Aa1" + "a".repeat(Password.PASSWORD_MAX_LENGTH)));
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("passwordsBreakingTheDefaultRules")
+	void pwReset_legacyModePasswordBreakingTheRules_isRejectedBeforeAnythingIsDispatched(String rule, String password) {
+		ReflectionTestUtils.setField(authService, "confirmationLegacy", true);
+		var body = new PwResetRequestBody(ADA, password, null, null, null);
+
+		// request is null: the password is checked before the rate limiter reads request.getRemoteAddr()
+		BadRequestHtmlException thrown = assertThrows(BadRequestHtmlException.class,
+				() -> authService.pwReset(null, body, "Password reset"));
+
+		assertEquals("The password must conform to the configured rules.", thrown.getMessage());
+		verifyNoInteractions(executor);
+	}
+
+	@Test
+	void confirmPassword_passwordBreakingTheRules_leavesTheTokenAndItsAttemptsUntouched() throws Exception {
+		SignupTokenCache tokens = new SignupTokenCache(Ticker.systemTicker());
+		SignupInfo pending = new SignupInfo();
+		pending.setEmail(ADA);
+		pending.setExpirationDate(new Date(System.currentTimeMillis() + Duration.ofDays(1).toMillis()));
+		tokens.putToken("token", pending);
+		AuthService service = passwordResetService(null, tokens);
+
+		BadRequestHtmlException thrown = assertThrows(BadRequestHtmlException.class,
+				() -> service.confirmPassword(new MockHttpServletRequest(), "token", ADA, "Abcdefgh1",
+						"Password reset"));
+
+		assertEquals("The password must conform to the configured rules.", thrown.getMessage());
+		assertSame(pending, tokens.getTokenValue("token"));
+		assertEquals(0, pending.getConfirmationAttempts());
 	}
 
 	@Test
@@ -644,9 +690,13 @@ class AuthServiceTest {
 				signupExecutor);
 	}
 
-	/** Only the collaborators the password-reset dispatch reaches are set; it runs on the calling thread. */
+	/**
+	 * Only the collaborators the password-reset dispatch and confirmPassword's password check reach are set; the
+	 * dispatch runs on the calling thread and the rate limit is off.
+	 */
 	private AuthService passwordResetService(EmailSender emailSender, SignupTokenCache tokens) throws Exception {
-		return new AuthService(null, null, null, null, null, tokens, null, emailValidator, emailSender, null, null, null,
+		return new AuthService(null, null, null, null, null, tokens, null, emailValidator, emailSender, null, null,
+				new PasswordResetRateLimiter(0, Duration.ofHours(1), Ticker.systemTicker()),
 				confirmationLinks(), meterRegistry, new MockEnvironment(), Runnable::run, executor);
 	}
 

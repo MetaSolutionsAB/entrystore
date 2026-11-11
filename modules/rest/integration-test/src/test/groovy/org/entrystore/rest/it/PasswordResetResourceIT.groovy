@@ -163,8 +163,66 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
 		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.errorStream.text.contains('The password has to consist of at least 8 characters.')
+		resetPasswordConn.errorStream.text.contains('The password must conform to the configured rules.')
 		greenMail.getReceivedMessages().size() == 0
+	}
+
+	def "POST /auth/pwreset should not send an email when a long enough password breaks a configured rule"() {
+		given:
+		def username = 'userResetRuleViolation@test.com'
+		UserUtil.createUser(username)
+		// Long enough and meets the default rules, but entrystore-it.properties adds a custom rule that
+		// rejects whitespace
+		def requestBody = createPwResetBody(username, 'New pass1234')
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
+		resetPasswordConn.getContentType().contains('text/html')
+		resetPasswordConn.errorStream.text.contains('The password must conform to the configured rules.')
+		greenMail.getReceivedMessages().size() == 0
+	}
+
+	def "POST /auth/pwreset as an html form should not send an email when a long enough password breaks a default rule"() {
+		given:
+		def username = 'userResetFormRuleViolation@test.com'
+		UserUtil.createUser(username)
+		def bodyParams = createFormBody([email: username, password: 'noDigitsHere', 'g-recaptcha-response': grecaptcharesponse])
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', bodyParams, null, 'application/x-www-form-urlencoded')
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
+		resetPasswordConn.getContentType().contains('text/html')
+		resetPasswordConn.errorStream.text.contains('The password must conform to the configured rules.')
+		greenMail.getReceivedMessages().size() == 0
+	}
+
+	def "POST /auth/pwreset should check and set the password without its surrounding whitespace"() {
+		given: "a conforming password padded with spaces, which the no-whitespace rule would reject as sent"
+		def username = 'userResetPaddedPassword@test.com'
+		UserUtil.createUser(username)
+		def requestBody = createPwResetBody(username, ' ' + newPassword + ' ')
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_OK
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/pwreset?confirm=' + extractConfirmationToken(greenMail))
+
+		then:
+		confirmConn.getResponseCode() == HTTP_OK
+
+		and: "the password without the padding logs in"
+		def loginBody = createFormBody([auth_username: username, auth_password: newPassword])
+		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', 'application/x-www-form-urlencoded')
+		loginConn.getResponseCode() == HTTP_OK
 	}
 
 	def "POST /auth/pwreset should not send an email with generated token to an user with invalid email"() {
