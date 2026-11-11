@@ -190,7 +190,9 @@ class SparqlServiceContextGraphTest {
 				Arguments.of("helper-like name in BIND",
 						"SELECT ?a ?_entrystore_graph_0 WHERE { ?a a ex:Award BIND(1 AS ?_entrystore_graph_0) }"),
 				Arguments.of("helper-like name projected but unbound",
-						"SELECT ?a ?_entrystore_graph_0 WHERE { ?a a ex:Award }"));
+						"SELECT ?a ?_entrystore_graph_0 WHERE { ?a a ex:Award }"),
+				Arguments.of("helper-like name only in GROUP BY",
+						"SELECT (COUNT(*) AS ?n) WHERE { ?a a ex:Award } GROUP BY ?_entrystore_graph_0"));
 	}
 
 	@ParameterizedTest(name = "{0}")
