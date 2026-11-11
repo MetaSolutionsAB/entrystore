@@ -59,7 +59,7 @@ class SsoLoginRateLimitFilterTest {
 	private final SsoLoginRateLimitFilter oidcFilter = SsoLoginRateLimitFilter.forOidc(
 			new OidcLoginRateLimiter(1, Duration.ofHours(1), Ticker.systemTicker()),
 			new OidcAuthService(new OidcCustomConfiguration(true, null, List.of("app.example.org"), Map.of(), null,
-					new OidcCustomConfiguration.RedirectUrl("/auth/oidc-failed"))));
+					new OidcCustomConfiguration.RedirectUrl("/auth/oidc-failed"), null)));
 
 	@Test
 	void loginStartWithinTheLimitContinues() throws Exception {

@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.security;
 
 import org.apache.logging.log4j.Level;
+import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration;
 import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,8 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -41,14 +44,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CacheOAuth2AuthorizationRequestRepositoryTest {
 
 	private static final String STATE = "state-token";
-	private static final int FLOOD_PER_SECOND = 100;
+	private static final int FLOOD_PER_SECOND = 55;
 
 	private final AtomicLong nanos = new AtomicLong();
 	private CacheOAuth2AuthorizationRequestRepository repository;
 
 	@BeforeEach
 	void setUp() {
-		repository = new CacheOAuth2AuthorizationRequestRepository(nanos::get);
+		repository = repositoryWithLifetime(null);
+	}
+
+	private CacheOAuth2AuthorizationRequestRepository repositoryWithLifetime(Duration requestLifetime) {
+		var oidcConfiguration =
+				new OidcCustomConfiguration(true, null, List.of(), Map.of(), null, null, requestLifetime);
+		return new CacheOAuth2AuthorizationRequestRepository(oidcConfiguration, nanos::get);
 	}
 
 	private static OAuth2AuthorizationRequest authorizationRequest(String state) {
@@ -91,27 +100,51 @@ class CacheOAuth2AuthorizationRequestRepositoryTest {
 		assertNull(repository.loadAuthorizationRequest(callbackRequest("other-state")));
 	}
 
+	// A user may spend minutes at the provider (MFA, consent, password change).
 	@Test
-	void requestExpiresTwoMinutesAfterItWasSaved() {
+	void requestIsStillLoadedFiveMinutesAfterItWasSaved() {
 		var authorizationRequest = authorizationRequest(STATE);
 		repository.saveAuthorizationRequest(authorizationRequest, callbackRequest(null), new MockHttpServletResponse());
 
-		nanos.addAndGet(Duration.ofSeconds(119).toNanos());
+		nanos.addAndGet(Duration.ofMinutes(5).toNanos());
+
+		assertSame(authorizationRequest, repository.loadAuthorizationRequest(callbackRequest(STATE)));
+	}
+
+	@Test
+	void requestExpiresAfterTheDefaultLifetimeOfFifteenMinutes() {
+		repository.saveAuthorizationRequest(authorizationRequest(STATE), callbackRequest(null),
+				new MockHttpServletResponse());
+
+		nanos.addAndGet(Duration.ofMinutes(15).toNanos());
+
+		assertNull(repository.loadAuthorizationRequest(callbackRequest(STATE)));
+	}
+
+	@Test
+	void requestHonoursAConfiguredLifetime() {
+		repository = repositoryWithLifetime(Duration.ofMinutes(30));
+		var authorizationRequest = authorizationRequest(STATE);
+		repository.saveAuthorizationRequest(authorizationRequest, callbackRequest(null), new MockHttpServletResponse());
+
+		nanos.addAndGet(Duration.ofMinutes(20).toNanos());
 		assertSame(authorizationRequest, repository.loadAuthorizationRequest(callbackRequest(STATE)));
 
-		nanos.addAndGet(Duration.ofSeconds(1).toNanos());
+		nanos.addAndGet(Duration.ofMinutes(10).toNanos());
 		assertNull(repository.loadAuthorizationRequest(callbackRequest(STATE)));
 	}
 
 	// A flood from many clients keeps the cache full. Oldest-first eviction keeps a login started during it for
-	// MAX_ENTRIES ÷ rate, 100 s at 100 req/s; Caffeine's maximumSize would evict it within about a second.
+	// MAX_ENTRIES ÷ rate, about 15 minutes at 55 req/s; Caffeine's maximumSize would evict it within seconds. The
+	// one-hour lifetime makes the cap, not expiry, bound the cache.
 	@Test
-	void loginStartedDuringAFloodIsStillLoadedOneMinuteLater() {
+	void loginStartedDuringAFloodIsStillLoadedFiveMinutesLater() {
+		repository = repositoryWithLifetime(Duration.ofHours(1));
 		var authorizationRequest = authorizationRequest(STATE);
 
 		flood(CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES);
 		repository.saveAuthorizationRequest(authorizationRequest, callbackRequest(null), new MockHttpServletResponse());
-		flood(60 * FLOOD_PER_SECOND);
+		flood(5 * 60 * FLOOD_PER_SECOND);
 
 		assertSame(authorizationRequest, repository.loadAuthorizationRequest(callbackRequest(STATE)));
 		assertSame(authorizationRequest, repository.removeAuthorizationRequest(callbackRequest(STATE),
@@ -134,7 +167,7 @@ class CacheOAuth2AuthorizationRequestRepositoryTest {
 			assertEquals(CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES,
 					repository.caffeineCaches().get("oauth2-authz-requests").estimatedSize());
 			// Below this, legitimate concurrent logins would fail with authorization_request_not_found
-			assertTrue(CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES >= 10_000,
+			assertTrue(CacheOAuth2AuthorizationRequestRepository.MAX_ENTRIES >= 50_000,
 					"cap shrunk below legitimate login concurrency");
 			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));

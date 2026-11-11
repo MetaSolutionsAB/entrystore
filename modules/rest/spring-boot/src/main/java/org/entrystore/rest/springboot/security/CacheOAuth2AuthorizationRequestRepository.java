@@ -38,6 +38,9 @@ import java.util.Map;
  * back to the {@code /login/oauth2/code/{registrationId}} callback — the OIDC counterpart of
  * {@link CacheSaml2AuthenticationRequestRepository}.
  *
+ * <p>Entries expire after {@link OidcCustomConfiguration#requestLifetime()}: Spring matches the callback's
+ * {@code state} against the request loaded here, so a login that outlives its entry fails.
+ *
  * <p>The cache is written on the anonymous login-start path, which {@link SsoLoginRateLimitFilter} limits per client.
  * Against a flood from many clients, {@link OldestFirstBoundedCache} bounds the heap and evicts the oldest login first.
  */
@@ -46,13 +49,13 @@ import java.util.Map;
 public class CacheOAuth2AuthorizationRequestRepository
 		implements AuthorizationRequestRepository<OAuth2AuthorizationRequest>, CaffeineCacheSource {
 
-	// 10k entries ≈ a few MB, far above legitimate concurrent logins
-	static final long MAX_ENTRIES = 10_000;
+	// 50k entries ≈ tens of MB at worst; a flood needs ~55 req/s for 15 minutes to fill it.
+	static final long MAX_ENTRIES = 50_000;
 
 	private final OldestFirstBoundedCache<String, OAuth2AuthorizationRequest> cache;
 
-	public CacheOAuth2AuthorizationRequestRepository(Ticker ticker) {
-		this.cache = new OldestFirstBoundedCache<>(OidcCustomConfiguration.REQUEST_LIFETIME, MAX_ENTRIES, ticker, log,
+	public CacheOAuth2AuthorizationRequestRepository(OidcCustomConfiguration oidcConfiguration, Ticker ticker) {
+		this.cache = new OldestFirstBoundedCache<>(oidcConfiguration.requestLifetime(), MAX_ENTRIES, ticker, log,
 				"OAuth2 authorization-request");
 	}
 

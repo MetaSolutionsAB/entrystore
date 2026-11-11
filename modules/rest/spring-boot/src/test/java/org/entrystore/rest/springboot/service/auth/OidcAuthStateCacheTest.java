@@ -17,11 +17,14 @@
 package org.entrystore.rest.springboot.service.auth;
 
 import org.apache.logging.log4j.Level;
+import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration;
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,13 +33,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OidcAuthStateCacheTest {
 
-	private static final int FLOOD_PER_SECOND = 100;
+	private static final int FLOOD_PER_SECOND = 55;
 
 	private final AtomicLong nanos = new AtomicLong();
-	private final OidcAuthStateCache cache = new OidcAuthStateCache(nanos::get);
 
 	@Test
 	void storedStateIsRetrievableByIdAndUnknownIdReturnsNull() {
+		var cache = cacheWithLifetime(null);
 		var authState = new AuthState("http://app.example.com/ok", "http://app.example.com/fail");
 		cache.storeAuthState("state-token", authState);
 
@@ -47,26 +50,42 @@ class OidcAuthStateCacheTest {
 	// The URLs must live exactly as long as the authorization request saved under the same state, or a slow login
 	// still completes but lands on the default URL.
 	@Test
-	void storedStateExpiresTwoMinutesAfterItWasStored() {
+	void storedStateSurvivesFiveMinutesAndExpiresAfterTheDefaultLifetime() {
+		var cache = cacheWithLifetime(null);
 		var authState = new AuthState("http://app.example.com/ok", "http://app.example.com/fail");
 		cache.storeAuthState("state-token", authState);
 
-		nanos.addAndGet(Duration.ofSeconds(119).toNanos());
+		nanos.addAndGet(Duration.ofMinutes(5).toNanos());
 		assertEquals(authState, cache.getAuthState("state-token"));
 
-		nanos.addAndGet(Duration.ofSeconds(1).toNanos());
+		nanos.addAndGet(Duration.ofMinutes(10).toNanos());
+		assertNull(cache.getAuthState("state-token"));
+	}
+
+	@Test
+	void storedStateHonoursAConfiguredLifetime() {
+		var cache = cacheWithLifetime(Duration.ofMinutes(30));
+		var authState = new AuthState("http://app.example.com/ok", null);
+		cache.storeAuthState("state-token", authState);
+
+		nanos.addAndGet(Duration.ofMinutes(20).toNanos());
+		assertEquals(authState, cache.getAuthState("state-token"));
+
+		nanos.addAndGet(Duration.ofMinutes(10).toNanos());
 		assertNull(cache.getAuthState("state-token"));
 	}
 
 	// A flood from many clients keeps the cache full. Oldest-first eviction keeps the URLs of a login started during
-	// it for MAX_ENTRIES ÷ rate, 100 s at 100 req/s; Caffeine's maximumSize would evict them within about a second.
+	// it for MAX_ENTRIES ÷ rate, about 15 minutes at 55 req/s; Caffeine's maximumSize would evict them within
+	// seconds. The one-hour lifetime makes the cap, not expiry, bound the cache.
 	@Test
-	void loginStartedDuringAFloodKeepsItsStateOneMinuteLater() {
+	void loginStartedDuringAFloodKeepsItsStateFiveMinutesLater() {
+		var cache = cacheWithLifetime(Duration.ofHours(1));
 		var authState = new AuthState("http://app.example.com/ok", "http://app.example.com/fail");
 
-		flood(OidcAuthStateCache.MAX_ENTRIES);
+		flood(cache, OidcAuthStateCache.MAX_ENTRIES);
 		cache.storeAuthState("state-token", authState);
-		flood(60 * FLOOD_PER_SECOND);
+		flood(cache, 5 * 60 * FLOOD_PER_SECOND);
 
 		assertEquals(authState, cache.getAuthState("state-token"));
 	}
@@ -77,20 +96,27 @@ class OidcAuthStateCacheTest {
 	@Test
 	void capacityEvictionIsBoundedAndWarnsOnce() {
 		try (var appender = CapturingAppender.attachTo(OidcAuthStateCache.class)) {
+			var cache = cacheWithLifetime(null);
 			var authState = new AuthState("http://app.example.com/ok", null);
 			for (int i = 0; i < OidcAuthStateCache.MAX_ENTRIES + 100; i++) {
 				cache.storeAuthState("state-" + i, authState);
 			}
 
 			assertEquals(OidcAuthStateCache.MAX_ENTRIES, cache.caffeineCaches().get("oidc-auth-state").estimatedSize());
-			assertTrue(OidcAuthStateCache.MAX_ENTRIES >= 10_000, "cap shrunk below legitimate login concurrency");
+			assertTrue(OidcAuthStateCache.MAX_ENTRIES >= 50_000, "cap shrunk below legitimate login concurrency");
 			assertEquals(1, appender.countAt(Level.WARN), appender::toString);
 			assertTrue(appender.messagesAt(Level.WARN).allMatch(message -> message.contains("capacity")));
 		}
 	}
 
+	private OidcAuthStateCache cacheWithLifetime(Duration requestLifetime) {
+		var oidcConfiguration =
+				new OidcCustomConfiguration(true, null, List.of(), Map.of(), null, null, requestLifetime);
+		return new OidcAuthStateCache(oidcConfiguration, nanos::get);
+	}
+
 	/** Starts {@code logins} logins at {@link #FLOOD_PER_SECOND}, advancing the ticker. */
-	private void flood(long logins) {
+	private void flood(OidcAuthStateCache cache, long logins) {
 		var authState = new AuthState("http://app.example.com/flood", null);
 		for (long i = 0; i < logins; i++) {
 			nanos.addAndGet(Duration.ofSeconds(1).toNanos() / FLOOD_PER_SECOND);

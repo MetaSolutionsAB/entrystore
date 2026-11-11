@@ -16,11 +16,16 @@
 
 package org.entrystore.rest.springboot.configuration;
 
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.entrystore.rest.springboot.configuration.OidcCustomConfiguration.Provider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.context.properties.bind.BindException;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -35,14 +40,14 @@ class OidcCustomConfigurationTest {
 
 	@Test
 	void redirectDefaultsAreApplied() {
-		var config = new OidcCustomConfiguration(false, null, null, null, null, null);
+		var config = new OidcCustomConfiguration(false, null, null, null, null, null, null);
 		assertEquals("/auth/user", config.redirectSuccess().url());
 		assertEquals("/auth/user", config.redirectFailure().url());
 	}
 
 	@Test
 	void nullCollectionsBecomeEmptyImmutableOnes() {
-		var config = new OidcCustomConfiguration(false, null, null, null, null, null);
+		var config = new OidcCustomConfiguration(false, null, null, null, null, null, null);
 		assertTrue(config.redirectDomainWhitelist().isEmpty());
 		assertTrue(config.provider().isEmpty());
 	}
@@ -53,7 +58,7 @@ class OidcCustomConfigurationTest {
 		var providers = new HashMap<String, Provider>();
 		providers.put("keycloak", new Provider(null, true, null));
 
-		var config = new OidcCustomConfiguration(true, "keycloak", whitelist, providers, null, null);
+		var config = new OidcCustomConfiguration(true, "keycloak", whitelist, providers, null, null, null);
 		whitelist.add("evil.com");
 		providers.clear();
 
@@ -106,7 +111,7 @@ class OidcCustomConfigurationTest {
 
 	@Test
 	void redirectDomainWhitelistIsLowercasedAtBinding() {
-		var config = new OidcCustomConfiguration(true, null, List.of("APP.Example.com"), null, null, null);
+		var config = new OidcCustomConfiguration(true, null, List.of("APP.Example.com"), null, null, null, null);
 		assertEquals(List.of("app.example.com"), config.redirectDomainWhitelist());
 	}
 
@@ -118,7 +123,7 @@ class OidcCustomConfigurationTest {
 			"app.example.com portal.example.com", "internal_app.example.com", "[foo]"})
 	void nonBareHostnameWhitelistEntryFailsFast(String entry) {
 		assertThrows(IllegalArgumentException.class,
-				() -> new OidcCustomConfiguration(true, null, List.of(entry), null, null, null));
+				() -> new OidcCustomConfiguration(true, null, List.of(entry), null, null, null, null));
 	}
 
 	// Padding survives every binding form except the comma-delimited string (indexed keys, YAML list
@@ -126,7 +131,7 @@ class OidcCustomConfigurationTest {
 	// (the multi-host mistake) still fail the round-trip above.
 	@Test
 	void whitelistEntriesAreTrimmedAtBinding() {
-		var config = new OidcCustomConfiguration(true, null, List.of(" App.Example.com "), null, null, null);
+		var config = new OidcCustomConfiguration(true, null, List.of(" App.Example.com "), null, null, null, null);
 		assertEquals(List.of("app.example.com"), config.redirectDomainWhitelist());
 	}
 
@@ -134,7 +139,7 @@ class OidcCustomConfigurationTest {
 	// whitelistable — its colons are not a port separator.
 	@Test
 	void bracketedIpv6WhitelistEntryIsAccepted() {
-		var config = new OidcCustomConfiguration(true, null, List.of("[::1]"), null, null, null);
+		var config = new OidcCustomConfiguration(true, null, List.of("[::1]"), null, null, null, null);
 		assertEquals(List.of("[::1]"), config.redirectDomainWhitelist());
 	}
 
@@ -142,7 +147,8 @@ class OidcCustomConfigurationTest {
 	// abort startup (this record binds even on deployments with OIDC disabled) — filter, not reject.
 	@Test
 	void blankWhitelistEntriesAreFilteredOut() {
-		var config = new OidcCustomConfiguration(true, null, List.of("app.example.com", "", "  "), null, null, null);
+		var config = new OidcCustomConfiguration(true, null, List.of("app.example.com", "", "  "), null, null, null,
+				null);
 		assertEquals(List.of("app.example.com"), config.redirectDomainWhitelist());
 	}
 
@@ -152,7 +158,7 @@ class OidcCustomConfigurationTest {
 	// here makes both see the same "not configured" state.
 	@Test
 	void blankDefaultProviderNormalizesToNull() {
-		var config = new OidcCustomConfiguration(true, "  ", null, null, null, null);
+		var config = new OidcCustomConfiguration(true, "  ", null, null, null, null, null);
 		assertNull(config.defaultProvider());
 	}
 
@@ -177,7 +183,66 @@ class OidcCustomConfigurationTest {
 	// OidcAuthService, which call get() with arbitrary provider ids.
 	@Test
 	void unknownProviderLookupReturnsNullInsteadOfThrowing() {
-		var config = new OidcCustomConfiguration(true, null, null, Map.of(), null, null);
+		var config = new OidcCustomConfiguration(true, null, null, Map.of(), null, null, null);
 		assertEquals(null, config.provider().get("unknown"));
+	}
+
+	@Test
+	void requestLifetime_defaultsToFifteenMinutes_whenNotConfigured() {
+		var config = bind(Map.of("entrystore.auth.oidc.enabled", "true"));
+
+		assertEquals(Duration.ofMinutes(15), config.requestLifetime());
+	}
+
+	@Test
+	void requestLifetime_bindsConfiguredValue() {
+		var config = bind(Map.of(
+				"entrystore.auth.oidc.enabled", "true",
+				"entrystore.auth.oidc.request-lifetime", "30m"));
+
+		assertEquals(Duration.ofMinutes(30), config.requestLifetime());
+	}
+
+	// Below 1m recreates the failure for users who take their time at the provider; above 1h lets a slower
+	// flood fill the anonymously writable request caches.
+	@Test
+	void requestLifetime_belowOneMinute_isRejected() {
+		assertRequestLifetimeRejected("true", "59s");
+	}
+
+	@Test
+	void requestLifetime_aboveOneHour_isRejected() {
+		assertRequestLifetimeRejected("true", "61m");
+	}
+
+	// The record binds on every deployment, so a wrong value is found before OIDC is switched on.
+	@Test
+	void requestLifetime_outOfRange_isRejectedWhenOidcIsDisabled() {
+		assertRequestLifetimeRejected("false", "2h");
+	}
+
+	@Test
+	void requestLifetime_atOneMinuteAndOneHour_isAccepted() {
+		assertEquals(Duration.ofMinutes(1), bind(Map.of(
+				"entrystore.auth.oidc.enabled", "true",
+				"entrystore.auth.oidc.request-lifetime", "1m")).requestLifetime());
+		assertEquals(Duration.ofMinutes(60), bind(Map.of(
+				"entrystore.auth.oidc.enabled", "true",
+				"entrystore.auth.oidc.request-lifetime", "60m")).requestLifetime());
+	}
+
+	private static void assertRequestLifetimeRejected(String enabled, String value) {
+		var ex = assertThrows(BindException.class, () -> bind(Map.of(
+				"entrystore.auth.oidc.enabled", enabled,
+				"entrystore.auth.oidc.request-lifetime", value)));
+
+		String message = ExceptionUtils.getRootCauseMessage(ex);
+		assertTrue(message.contains("entrystore.auth.oidc.request-lifetime must be between 1m and 60m"),
+				"request-lifetime=" + value + " should be rejected naming the key, got: " + message);
+	}
+
+	private static OidcCustomConfiguration bind(Map<String, String> properties) {
+		var source = new MapConfigurationPropertySource(properties);
+		return new Binder(source).bind("entrystore.auth.oidc", OidcCustomConfiguration.class).get();
 	}
 }

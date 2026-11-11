@@ -104,7 +104,7 @@ class OidcLoginSuccessHandlerTest {
 		var oidcConfiguration = new OidcCustomConfiguration(
 				true, null, List.of("localhost"), Map.of(),
 				new OidcCustomConfiguration.RedirectUrl(SUCCESS_URL),
-				new OidcCustomConfiguration.RedirectUrl(FAILURE_URL));
+				new OidcCustomConfiguration.RedirectUrl(FAILURE_URL), null);
 		// A spy, not a mock: the real redirect whitelist decides the custom URLs; provider lookups are stubbed
 		oidcAuthService = spy(new OidcAuthService(oidcConfiguration));
 		handler = new OidcLoginSuccessHandler(userService, oidcAuthService, oidcAuthStateCache,

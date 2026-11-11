@@ -63,6 +63,7 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 			// with password login off
 			'--entrystore.auth.password=off',
 			'--entrystore.auth.oidc.redirect-failure.url=' + failureLoginUrl,
+			'--entrystore.auth.oidc.request-lifetime=5m',
 			// Second provider against the same realm with a non-default username claim; distinct
 			// domains so it does not compete with the primary provider's wildcard routing.
 			'--entrystore.auth.oidc.provider.keycloak2.username-claim=preferred_username',

@@ -48,7 +48,7 @@ class OidcProviderRegistrationValidatorTest {
 	}
 
 	private static OidcCustomConfiguration config(String defaultProvider, Map<String, Provider> providers) {
-		return new OidcCustomConfiguration(true, defaultProvider, List.of(), providers, null, null);
+		return new OidcCustomConfiguration(true, defaultProvider, List.of(), providers, null, null, null);
 	}
 
 	private static OidcProviderRegistrationValidator validator(OidcCustomConfiguration config,

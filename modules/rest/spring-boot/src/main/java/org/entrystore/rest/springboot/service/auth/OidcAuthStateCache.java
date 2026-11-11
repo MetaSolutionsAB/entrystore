@@ -31,7 +31,7 @@ import java.util.Map;
  * A cache service for storing and retrieving OIDC authentication state keyed by the OAuth2
  * {@code state} parameter — the OIDC counterpart of {@link SamlAuthStateCache}. Entries carry
  * the whitelist-validated success/failure redirect URLs through the provider round-trip and
- * expire after {@link OidcCustomConfiguration#REQUEST_LIFETIME}, as the authorization request saved under the same
+ * expire after {@link OidcCustomConfiguration#requestLifetime()}, as the authorization request saved under the same
  * state does.
  *
  * <p>The cache is written on the anonymous login-start path, which {@link OidcLoginRateLimiter} limits per client.
@@ -41,13 +41,13 @@ import java.util.Map;
 @Service
 public class OidcAuthStateCache implements CaffeineCacheSource {
 
-	static final long MAX_ENTRIES = 10_000;
+	static final long MAX_ENTRIES = 50_000;
 
 	private final OldestFirstBoundedCache<String, AuthState> requestCache;
 
-	public OidcAuthStateCache(Ticker ticker) {
-		this.requestCache = new OldestFirstBoundedCache<>(OidcCustomConfiguration.REQUEST_LIFETIME, MAX_ENTRIES, ticker,
-				log, "OIDC auth-state");
+	public OidcAuthStateCache(OidcCustomConfiguration oidcConfiguration, Ticker ticker) {
+		this.requestCache = new OldestFirstBoundedCache<>(oidcConfiguration.requestLifetime(), MAX_ENTRIES, ticker, log,
+				"OIDC auth-state");
 	}
 
 	@Override

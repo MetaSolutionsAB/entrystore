@@ -46,8 +46,8 @@ class OidcLoginFailureHandlerTest {
 	private static final String STATE = "oauth2-state";
 
 	private final OidcCustomConfiguration oidcConfiguration = new OidcCustomConfiguration(true, null,
-			List.of("app.example.org"), Map.of(), null, new OidcCustomConfiguration.RedirectUrl("/auth/failed"));
-	private final OidcAuthStateCache authStateCache = new OidcAuthStateCache(Ticker.systemTicker());
+			List.of("app.example.org"), Map.of(), null, new OidcCustomConfiguration.RedirectUrl("/auth/failed"), null);
+	private final OidcAuthStateCache authStateCache = new OidcAuthStateCache(oidcConfiguration, Ticker.systemTicker());
 	private final OidcLoginFailureHandler handler =
 			new OidcLoginFailureHandler(new OidcAuthService(oidcConfiguration), authStateCache, oidcConfiguration);
 

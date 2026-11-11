@@ -33,6 +33,10 @@ import java.util.Objects;
  * The client registration itself (client id/secret, scopes, issuer) is configured via Spring Boot's
  * native {@code spring.security.oauth2.client.registration.{id}.*} / {@code ...client.provider.{id}.*}
  * properties — the same split SAML uses with {@code spring.security.saml2.relyingparty.*}.
+ *
+ * <p>{@code requestLifetime} is how long a started login may stay at the provider: the saved authorization request
+ * and its redirect URLs expire after it, and Spring rejects a callback whose {@code state} names an expired request.
+ * It must cover MFA, consent and password changes at the provider.
  */
 @Slf4j
 @ConfigurationProperties(prefix = "entrystore.auth.oidc")
@@ -42,13 +46,13 @@ public record OidcCustomConfiguration(
 		List<String> redirectDomainWhitelist,
 		Map<String, Provider> provider,
 		RedirectUrl redirectSuccess,
-		RedirectUrl redirectFailure
+		RedirectUrl redirectFailure,
+		Duration requestLifetime
 ) {
-	/**
-	 * How long a started login may stay at the provider: the authorization request and its redirect URLs expire
-	 * after it.
-	 */
-	public static final Duration REQUEST_LIFETIME = Duration.ofMinutes(2);
+	private static final Duration DEFAULT_REQUEST_LIFETIME = Duration.ofMinutes(15);
+	private static final Duration MIN_REQUEST_LIFETIME = Duration.ofMinutes(1);
+	// Both request caches are anonymously writable; a longer lifetime lowers the request rate that fills them.
+	private static final Duration MAX_REQUEST_LIFETIME = Duration.ofHours(1);
 
 	/**
 	 * Normalizes and validates the bound values so misconfiguration fails at binding, naming the
@@ -96,6 +100,13 @@ public record OidcCustomConfiguration(
 			}
 		}
 		provider = provider == null ? Map.of() : Map.copyOf(provider);
+		if (requestLifetime == null) requestLifetime = DEFAULT_REQUEST_LIFETIME;
+		if (requestLifetime.compareTo(MIN_REQUEST_LIFETIME) < 0
+				|| requestLifetime.compareTo(MAX_REQUEST_LIFETIME) > 0) {
+			throw new IllegalArgumentException("entrystore.auth.oidc.request-lifetime must be between "
+					+ MIN_REQUEST_LIFETIME.toMinutes() + "m and " + MAX_REQUEST_LIFETIME.toMinutes() + "m, got "
+					+ requestLifetime.toSeconds() + "s");
+		}
 	}
 
 	// Per-provider configuration, keyed in the map by the provider id (entrystore.auth.oidc.provider.{id}.*).

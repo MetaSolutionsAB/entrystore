@@ -40,7 +40,7 @@ class OidcAuthServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		var config = new OidcCustomConfiguration(true, "keycloak", List.of("localhost"), Map.of(), null, null);
+		var config = new OidcCustomConfiguration(true, "keycloak", List.of("localhost"), Map.of(), null, null, null);
 		service = new OidcAuthService(config);
 	}
 
@@ -71,13 +71,14 @@ class OidcAuthServiceTest {
 	}
 
 	private static OidcAuthService serviceWithProviders(String defaultProvider, Map<String, Provider> providers) {
-		return new OidcAuthService(new OidcCustomConfiguration(true, defaultProvider, List.of(), providers, null, null));
+		return new OidcAuthService(
+				new OidcCustomConfiguration(true, defaultProvider, List.of(), providers, null, null, null));
 	}
 
 	// Config-side case variance: an uppercase whitelist entry must still match (normalized at binding).
 	@Test
 	void isValidRedirectUrl_matchesUppercaseConfiguredWhitelistEntry() {
-		var config = new OidcCustomConfiguration(true, null, List.of("APP.example.com"), Map.of(), null, null);
+		var config = new OidcCustomConfiguration(true, null, List.of("APP.example.com"), Map.of(), null, null, null);
 		assertEquals(true, new OidcAuthService(config).isValidRedirectUrl("http://app.example.com/welcome"));
 	}
 

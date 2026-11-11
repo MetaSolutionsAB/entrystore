@@ -76,7 +76,7 @@ class AuthControllerOidcLoginTest {
 
 	private AuthController controller() {
 		var oidcConfiguration = new OidcCustomConfiguration(true, null, List.of("app.example.org"), Map.of(), null,
-				null);
+				null, null);
 		ClientRegistrationRepository registrations =
 				id -> "keycloak".equals(id) ? mock(ClientRegistration.class) : null;
 		var controller = new AuthController(null, null, null, null, new OidcAuthService(oidcConfiguration), null,
