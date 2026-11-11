@@ -52,7 +52,7 @@ public class AuthUserController {
 	@Operation(summary = "Provides basic information about the currently logged-in user.")
 	@GetMapping(path = "/auth/user", produces = MediaType.APPLICATION_JSON_VALUE)
 	public GetAuthUserResponse userInfo(
-			@RequestHeader(name = HttpHeaders.ACCEPT_LANGUAGE, defaultValue = HttpHeaders.ACCEPT_LANGUAGE) String acceptLanguage,
+			@RequestHeader(name = HttpHeaders.ACCEPT_LANGUAGE, required = false) String acceptLanguage,
 			HttpServletRequest request
 	) {
 		// Read the existing session without creating one: a guest must not get a session (and thus no
