@@ -518,7 +518,9 @@ entrystore.solr.extract-fulltext=off
 ## until they end or time out; limit per client in the reverse proxy.
 # entrystore.repository.public.sparql.max-concurrent-queries=4
 ## Seconds a query waits for a free slot (>= 0; 0 answers 503 at once when all are busy).
-## While queries are rejected, one WARN line per minute says how many.
+## Each waiting request holds a thread, so keep this well below the request timeout
+## (mvc.async.default-timeout-ms). While queries are rejected, one WARN line per minute
+## says how many.
 # entrystore.repository.public.sparql.max-wait-time=1
 ## The public repository stores each public statement in its context's graph and in its
 ## entry's graph (metadata, cached external metadata or resource graph). By default
