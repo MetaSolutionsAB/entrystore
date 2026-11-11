@@ -436,9 +436,8 @@ public class GraphUtil {
 	}
 
 	/**
-	 * Resolves the {@code rdfFormat} parameter of a JSON representation as 5.x did: JSON-LD for
-	 * {@code application/ld+json}, also when its '+' arrived unencoded, and RDF/JSON for any other value, whether a
-	 * media type or not, and for none.
+	 * Resolves the {@code rdfFormat} parameter of a JSON representation: JSON-LD for {@code application/ld+json}
+	 * (case-insensitive, also when its '+' arrived unencoded), RDF/JSON for any other value or none.
 	 *
 	 * @return the value to pass to {@link #serializeGraphToJson}
 	 */

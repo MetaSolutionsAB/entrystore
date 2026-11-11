@@ -1749,23 +1749,6 @@ class EntryIT extends BaseSpec {
 		dcTitles[0]['value'] == 'local metadata title'
 	}
 
-	def "GET /{context-id}/entry/{entry-id}?rdfFormat=application/ld+json with an unencoded '+' should return info and metadata in JSON-LD"() {
-		given:
-		def entryId = getOrCreateRdfFormatEntry()
-
-		when:
-		def entryConn = EntryStoreClient.getRequest('/' + RDF_FORMAT_CONTEXT_ID + '/entry/' + entryId +
-			'?includeAll&rdfFormat=application/ld+json')
-
-		then:
-		entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
-		def entryCurie = 'store:' + RDF_FORMAT_CONTEXT_ID + '/entry/' + entryId
-		entryRespJson['info']['@graph'].collect().find { it['@id'] == entryCurie } != null
-		def metadataGraph = entryRespJson['metadata']['@graph'].collect()[0]
-		metadataGraph['dcterms:title'] == 'rdfFormat title'
-	}
-
 	def "GET /{context-id}/entry/{entry-id}?rdfFormat=application/rdf+json with an unencoded '+' should return info and metadata in RDF/JSON"() {
 		given:
 		def entryId = getOrCreateRdfFormatEntry()
@@ -1773,23 +1756,6 @@ class EntryIT extends BaseSpec {
 		when:
 		def entryConn = EntryStoreClient.getRequest('/' + RDF_FORMAT_CONTEXT_ID + '/entry/' + entryId +
 			'?includeAll&rdfFormat=application/rdf+json')
-
-		then:
-		entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
-		def base = EntryStoreClient.baseUrl + '/' + RDF_FORMAT_CONTEXT_ID
-		entryRespJson['info'][base + '/entry/' + entryId] != null
-		def dcTitles = entryRespJson['metadata'][base + '/resource/' + entryId][NameSpaceConst.DC_TERM_TITLE].collect()
-		dcTitles == [[type: 'literal', value: 'rdfFormat title']]
-	}
-
-	def "GET /{context-id}/entry/{entry-id}?rdfFormat=application/rdf%2Bjson should return info and metadata in RDF/JSON"() {
-		given:
-		def entryId = getOrCreateRdfFormatEntry()
-
-		when:
-		def entryConn = EntryStoreClient.getRequest('/' + RDF_FORMAT_CONTEXT_ID + '/entry/' + entryId +
-			'?includeAll&rdfFormat=application/rdf%2Bjson')
 
 		then:
 		entryConn.getResponseCode() == HTTP_OK

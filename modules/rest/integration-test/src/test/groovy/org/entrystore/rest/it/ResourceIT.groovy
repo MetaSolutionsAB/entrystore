@@ -398,6 +398,20 @@ class ResourceIT extends BaseSpec {
 		member['info'][EntryStoreClient.baseUrl + '/_principals/entry/' + userEntryId] != null
 	}
 
+	def "GET /_principals/resource/{entry-id} on Group graph with Accept application/ld+json should return the member info in JSON-LD"() {
+		given: 'without rdfFormat, the Accept header selects the format of the member graphs'
+		def groupId = createGroupWithUserAsMember('rdfFormatAcceptJsonLdGroup')
+		def userEntryId = EntryStoreClient.createdEsUsers['user']['entryId'].toString()
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + groupId, 'admin', 'application/ld+json')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		def member = JSON_PARSER.parseText(resourceConn.inputStream.text)['children'][0]
+		member['info']['@graph'].collect().find { it['@id'] == 'store:_principals/entry/' + userEntryId } != null
+	}
+
 	def "GET /_principals/resource/{entry-id}?rdfFormat=application/ld+json on Group graph with an unencoded '+' should return the member info in JSON-LD"() {
 		given:
 		def groupId = createGroupWithUserAsMember('rdfFormatJsonLdGroup')
