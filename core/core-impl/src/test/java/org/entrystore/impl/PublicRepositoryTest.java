@@ -49,6 +49,7 @@ import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.util.URISplit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -685,6 +686,71 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 			assertFalse(holds(publicRepository, contextGraph(context), title("link")));
 			assertTrue(holds(publicRepository, contextGraph(context), title("sibling")),
 					"a link is no context, so the rest of its context stays");
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateEntries_contextWithAReferenceLoadedFromTheStore_publishesItsEntriesAgain() {
+		rm.setCheckForAuthorization(false);
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		EntryImpl reference = (EntryImpl) context.createReference(null, URI.create("http://example.com/referenced"),
+				URI.create("http://example.com/referenced-metadata"), null);
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.add(SUBJECT, TITLE, rc.getValueFactory().createLiteral("referenced"),
+					reference.getSesameCachedExternalMetadataURI());
+		}
+		EntryImpl a = newEntryStating(context, "a", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			((ContextManagerImpl) cm).softCache.remove(reference);
+			assertNull(context.getByEntryURI(reference.getEntryURI()).getLocalMetadataURI(),
+					"a Reference loaded from the store has no local metadata graph");
+
+			publicRepository.updateEntries(Set.of(contextEntry));
+
+			assertTrue(holds(publicRepository, a.getSesameLocalMetadataURI(), title("a")));
+			assertTrue(holds(publicRepository, reference.getSesameCachedExternalMetadataURI(), title("referenced")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateEntries_systemContextOfAllContexts_leavesTheContextsPublished() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		EntryImpl a = newEntryStating(context, "a", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			assertEquals(GraphType.SystemContext, cm.getEntry().getGraphType());
+
+			publicRepository.updateEntries(Set.of(cm.getEntry()));
+
+			assertTrue(holds(publicRepository, contextGraph(context), title("a")));
+			assertTrue(holds(publicRepository, a.getSesameLocalMetadataURI(), title("a")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void removeEntries_linkWithItsOwnResourceGraphPublished_removesThatGraph() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		EntryImpl link = newEntryStating(context, "link", SHARED_TITLE);
+		IRI ownResourceGraph = iri(URISplit.of(link.getEntryURI(), rm.getRepositoryURL()).orElseThrow()
+				.getResourceURI().toString());
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try (RepositoryConnection rc = publicRepository.getConnection()) {
+			// as published while the entry was a local Graph entry, before it became a link to another resource
+			rc.add(SUBJECT, TITLE, literal("as a graph"), ownResourceGraph);
+
+			publicRepository.removeEntries(Set.of(link));
+
+			assertFalse(holdsAnything(publicRepository, ownResourceGraph));
 		} finally {
 			publicRepository.shutdown();
 		}
