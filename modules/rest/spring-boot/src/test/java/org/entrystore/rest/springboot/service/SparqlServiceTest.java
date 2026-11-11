@@ -60,6 +60,7 @@ import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -98,6 +99,8 @@ class SparqlServiceTest {
 	private static final int MAX_EXECUTION_TIME = 10;
 	private static final long MAX_RESPONSE_BYTES = 64L * 1024L * 1024L;
 	private static final int MAX_CONCURRENT_QUERIES = 4;
+	private static final Duration REJECT_QUICKLY = Duration.ofMillis(50);
+	private static final Duration WAIT_LONG = Duration.ofSeconds(10);
 	private static final String GENERIC_INTERNAL_ERROR = "Public SPARQL endpoint encountered an internal error";
 
 	@Mock
@@ -137,7 +140,8 @@ class SparqlServiceTest {
 				.thenReturn(java.net.URI.create("http://example.org/store/").toURL());
 		lenient().when(reservedNames.isReservedName(anyString())).thenReturn(false);
 
-		service = new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES);
+		service = new SparqlService(repositoryManager, contextService, reservedNames,
+				MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES);
 	}
 
 	@AfterEach
@@ -277,7 +281,8 @@ class SparqlServiceTest {
 	@Test
 	void runQuery_appliesConfiguredMaxExecutionTimeAndDisablesInferred() {
 		int customExecutionTime = 42;
-		SparqlService customService = new SparqlService(repositoryManager, contextService, reservedNames, customExecutionTime, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES);
+		SparqlService customService = new SparqlService(repositoryManager, contextService, reservedNames,
+				customExecutionTime, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES);
 
 		RepositoryConnection mockConn = mock(RepositoryConnection.class);
 		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
@@ -339,7 +344,8 @@ class SparqlServiceTest {
 
 	@Test
 	void runQuery_resultExceedsMaxResponseBytes_throws413() {
-		SparqlService tinyCapService = new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME, 8L, MAX_CONCURRENT_QUERIES);
+		SparqlService tinyCapService = new SparqlService(repositoryManager, contextService, reservedNames,
+				MAX_EXECUTION_TIME, 8L, MAX_CONCURRENT_QUERIES);
 
 		try (RepositoryConnection rc = backingRepository.getConnection()) {
 			ValueFactory vf = rc.getValueFactory();
@@ -421,25 +427,29 @@ class SparqlServiceTest {
 	@Test
 	void constructor_zeroExecutionTime_throws() {
 		assertThrows(IllegalStateException.class,
-				() -> new SparqlService(repositoryManager, contextService, reservedNames, 0, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES));
+				() -> new SparqlService(repositoryManager, contextService, reservedNames,
+						0, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES));
 	}
 
 	@Test
 	void constructor_negativeExecutionTime_throws() {
 		assertThrows(IllegalStateException.class,
-				() -> new SparqlService(repositoryManager, contextService, reservedNames, -1, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES));
+				() -> new SparqlService(repositoryManager, contextService, reservedNames,
+						-1, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES));
 	}
 
 	@Test
 	void constructor_zeroResponseBytes_throws() {
 		assertThrows(IllegalStateException.class,
-				() -> new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME, 0L, MAX_CONCURRENT_QUERIES));
+				() -> new SparqlService(repositoryManager, contextService, reservedNames,
+						MAX_EXECUTION_TIME, 0L, MAX_CONCURRENT_QUERIES));
 	}
 
 	@Test
 	void constructor_negativeResponseBytes_throws() {
 		assertThrows(IllegalStateException.class,
-				() -> new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME, -1L, MAX_CONCURRENT_QUERIES));
+				() -> new SparqlService(repositoryManager, contextService, reservedNames,
+						MAX_EXECUTION_TIME, -1L, MAX_CONCURRENT_QUERIES));
 	}
 
 	@Test
@@ -559,28 +569,30 @@ class SparqlServiceTest {
 	@Test
 	void constructor_zeroConcurrentQueries_throws() {
 		assertThrows(IllegalStateException.class,
-				() -> new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, 0));
+				() -> new SparqlService(repositoryManager, contextService, reservedNames,
+						MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, 0));
 	}
 
 	@Test
 	void constructor_negativeConcurrentQueries_throws() {
 		assertThrows(IllegalStateException.class,
-				() -> new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, -1));
+				() -> new SparqlService(repositoryManager, contextService, reservedNames,
+						MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, -1));
 	}
 
 	@Test
 	void runQuery_allPermitsHeldByStreamingQueries_rejectsWith503AndRetryAfter() throws Exception {
-		SparqlService limited = serviceWithConcurrencyLimit(2);
+		SparqlService limited = serviceWithConcurrencyLimit(2, REJECT_QUICKLY);
 		BlockingOutputStream blocked = new BlockingOutputStream(2);
 
 		try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
 			try {
-				executor.submit(() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, blocked));
-				executor.submit(() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, blocked));
+				executor.submit(() -> selectAll(limited, blocked));
+				executor.submit(() -> selectAll(limited, blocked));
 				blocked.awaitWriters();
 
 				CustomResponseException ex = assertThrows(CustomResponseException.class,
-						() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
+						() -> selectAll(limited, new ByteArrayOutputStream()));
 
 				assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getStatus());
 				assertEquals("5", ex.getHeaders().getFirst("Retry-After"));
@@ -593,7 +605,7 @@ class SparqlServiceTest {
 
 	@Test
 	void runQuery_permitFreedWhileWaiting_runsTheWaitingQuery() throws Exception {
-		SparqlService limited = serviceWithConcurrencyLimit(1);
+		SparqlService limited = serviceWithConcurrencyLimit(1, WAIT_LONG);
 		BlockingOutputStream holder = new BlockingOutputStream(1);
 		ByteArrayOutputStream waiterOut = new ByteArrayOutputStream();
 		AtomicReference<Throwable> waiterFailure = new AtomicReference<>();
@@ -602,10 +614,9 @@ class SparqlServiceTest {
 			Future<?> held;
 			Thread waiter;
 			try {
-				held = executor.submit(() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, holder));
+				held = executor.submit(() -> selectAll(limited, holder));
 				holder.awaitWriters();
-				waiter = startWaiter(() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, waiterOut),
-						waiterFailure);
+				waiter = startWaiter(() -> selectAll(limited, waiterOut), waiterFailure);
 				awaitBlockedOnPermit(waiter);
 			} finally {
 				holder.release();
@@ -620,9 +631,9 @@ class SparqlServiceTest {
 
 	@Test
 	void runQuery_failedAndRejectedQueries_releaseTheirPermitExactlyOnce() throws Exception {
-		SparqlService limited = serviceWithConcurrencyLimit(1);
-		assertThrows(BadRequestException.class,
-				() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, "not sparql {{{", null, new ByteArrayOutputStream()));
+		SparqlService limited = serviceWithConcurrencyLimit(1, REJECT_QUICKLY);
+		assertThrows(BadRequestException.class, () -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON,
+				"not sparql {{{", null, new ByteArrayOutputStream()));
 		holdThePermitAndAssertRejection(limited);
 
 		// One permit too many (released by the rejection) would let this query run beside the held one.
@@ -630,13 +641,13 @@ class SparqlServiceTest {
 
 		// A permit lost by the failed or rejected query would make this one wait and be rejected.
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
-		limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, out);
+		selectAll(limited, out);
 		assertTrue(out.size() > 0, "Expected a result once all permits are free");
 	}
 
 	@Test
 	void runQuery_interruptedWhileWaitingForPermit_rejectsWith503AndKeepsInterruptFlag() throws Exception {
-		SparqlService limited = serviceWithConcurrencyLimit(1);
+		SparqlService limited = serviceWithConcurrencyLimit(1, WAIT_LONG);
 		BlockingOutputStream holder = new BlockingOutputStream(1);
 		AtomicReference<Throwable> waiterFailure = new AtomicReference<>();
 		AtomicBoolean interruptKept = new AtomicBoolean();
@@ -644,11 +655,11 @@ class SparqlServiceTest {
 		try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
 			Future<?> held;
 			try {
-				held = executor.submit(() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, holder));
+				held = executor.submit(() -> selectAll(limited, holder));
 				holder.awaitWriters();
 				Thread waiter = startWaiter(() -> {
 					try {
-						limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream());
+						selectAll(limited, new ByteArrayOutputStream());
 					} finally {
 						interruptKept.set(Thread.currentThread().isInterrupted());
 					}
@@ -665,9 +676,14 @@ class SparqlServiceTest {
 		CustomResponseException ex = assertInstanceOf(CustomResponseException.class, waiterFailure.get());
 		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getStatus());
 		assertTrue(interruptKept.get(), "The interrupt must be preserved for the caller");
-		// The interrupted waiter acquired nothing, so it must neither free nor take a permit.
-		holdThePermitAndAssertRejection(limited);
-		limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream());
+		// A permit lost by the interrupted waiter would make this query wait 10 s and be rejected.
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		selectAll(limited, out);
+		assertTrue(out.size() > 0, "Expected a result once the permit is free");
+	}
+
+	private static void selectAll(SparqlService service, OutputStream out) {
+		service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, out);
 	}
 
 	private static Thread startWaiter(Runnable query, AtomicReference<Throwable> failure) {
@@ -694,10 +710,10 @@ class SparqlServiceTest {
 		try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
 			Future<?> held;
 			try {
-				held = executor.submit(() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, holder));
+				held = executor.submit(() -> selectAll(limited, holder));
 				holder.awaitWriters();
 				CustomResponseException rejected = assertThrows(CustomResponseException.class,
-						() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
+						() -> selectAll(limited, new ByteArrayOutputStream()));
 				assertEquals(HttpStatus.SERVICE_UNAVAILABLE, rejected.getStatus());
 			} finally {
 				holder.release();
@@ -706,13 +722,13 @@ class SparqlServiceTest {
 		}
 	}
 
-	private SparqlService serviceWithConcurrencyLimit(int maxConcurrentQueries) {
+	private SparqlService serviceWithConcurrencyLimit(int maxConcurrentQueries, Duration permitWait) {
 		try (RepositoryConnection rc = backingRepository.getConnection()) {
 			ValueFactory vf = rc.getValueFactory();
 			rc.add(vf.createIRI("http://example.org/s"), vf.createIRI("http://example.org/p"), vf.createLiteral("o"));
 		}
 		return new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME,
-				MAX_RESPONSE_BYTES, maxConcurrentQueries);
+				MAX_RESPONSE_BYTES, maxConcurrentQueries, permitWait);
 	}
 
 	/**

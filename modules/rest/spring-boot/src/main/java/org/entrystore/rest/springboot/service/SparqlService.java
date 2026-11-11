@@ -44,6 +44,7 @@ import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.util.SparqlResultFormat;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -51,6 +52,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
@@ -71,7 +73,7 @@ public class SparqlService {
 	// preserved in the cause chain for server-side debugging.
 	private static final String INTERNAL_ERROR_MESSAGE = "Public SPARQL endpoint encountered an internal error";
 
-	private static final long PERMIT_WAIT_MILLIS = 1000;
+	private static final Duration PERMIT_WAIT = Duration.ofSeconds(1);
 
 	private static final String RETRY_AFTER_SECONDS = "5";
 
@@ -81,7 +83,9 @@ public class SparqlService {
 	private final int maxExecutionTime;
 	private final long maxResponseBytes;
 	private final Semaphore queryPermits;
+	private final Duration permitWait;
 
+	@Autowired
 	public SparqlService(
 			RepositoryManagerImpl repositoryManager,
 			ContextService contextService,
@@ -89,6 +93,19 @@ public class SparqlService {
 			@Value("${entrystore.repository.public.sparql.max-execution-time:10}") int maxExecutionTime,
 			@Value("${entrystore.repository.public.sparql.max-response-bytes:67108864}") long maxResponseBytes,
 			@Value("${entrystore.repository.public.sparql.max-concurrent-queries:4}") int maxConcurrentQueries) {
+		this(repositoryManager, contextService, reservedNames, maxExecutionTime, maxResponseBytes, maxConcurrentQueries,
+				PERMIT_WAIT);
+	}
+
+	/** {@code permitWait} is how long a query waits for a running one to end before it is answered 503. */
+	SparqlService(
+			RepositoryManagerImpl repositoryManager,
+			ContextService contextService,
+			ReservedNamesService reservedNames,
+			int maxExecutionTime,
+			long maxResponseBytes,
+			int maxConcurrentQueries,
+			Duration permitWait) {
 		// Reject misconfigured limits at construction so the app fails to start rather than silently
 		// disabling timeouts/caps on this anonymous endpoint (RDF4J treats setMaxExecutionTime(0) as unlimited).
 		if (maxExecutionTime <= 0) {
@@ -101,7 +118,8 @@ public class SparqlService {
 		}
 		if (maxConcurrentQueries <= 0) {
 			throw new IllegalStateException(
-					"entrystore.repository.public.sparql.max-concurrent-queries must be > 0, was " + maxConcurrentQueries);
+					"entrystore.repository.public.sparql.max-concurrent-queries must be > 0, was "
+							+ maxConcurrentQueries);
 		}
 		this.repositoryManager = repositoryManager;
 		this.contextService = contextService;
@@ -109,6 +127,7 @@ public class SparqlService {
 		this.maxExecutionTime = maxExecutionTime;
 		this.maxResponseBytes = maxResponseBytes;
 		this.queryPermits = new Semaphore(maxConcurrentQueries, true);
+		this.permitWait = permitWait;
 		log.debug("Public SPARQL max execution time: {} seconds; max response bytes: {}; max concurrent queries: {}",
 				maxExecutionTime, maxResponseBytes, maxConcurrentQueries);
 	}
@@ -172,12 +191,14 @@ public class SparqlService {
 	/**
 	 * Bounds the heap that concurrent evaluations can take together: the per-query time and size caps do not
 	 * bound the memory of a query that materialises its solutions. The permit is held until the result is
-	 * written, so a query that outlives its HTTP request (async timeout) still counts.
+	 * written, so a query that outlives its HTTP request (async timeout) still counts. The limit is shared by all
+	 * callers: a few long-running queries make the others wait or get 503 until they end or reach the execution
+	 * time limit; per-client limits belong in the reverse proxy.
 	 */
 	private void acquirePermit() {
 		boolean acquired;
 		try {
-			acquired = queryPermits.tryAcquire(PERMIT_WAIT_MILLIS, TimeUnit.MILLISECONDS);
+			acquired = queryPermits.tryAcquire(permitWait.toNanos(), TimeUnit.NANOSECONDS);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			acquired = false;
