@@ -531,35 +531,37 @@ public class PublicRepository {
 	}
 
 	/**
-	 * The graphs the entry published, read as admin. The resource graph counts only for a local Graph entry, the only
-	 * kind addEntry publishes one for, or when it is the entry's own resource graph, which no other entry uses: the
-	 * resource URI of other entries can name any graph.
+	 * The graphs the entry published, read as admin. Of the resource graphs, it is the one named by the entry's own
+	 * resource URI derived from its entry URI, which only this entry can have published as a local Graph entry even if
+	 * it is no longer one, and its current resource URI only if it is a local Graph entry, the only kind addEntry
+	 * publishes one for: the resource URI of other entries can name any graph.
 	 */
 	private Resource[] entryGraphs(Entry e) {
 		ValueFactory vf = repository.getValueFactory();
 		List<Resource> graphs = new ArrayList<>();
 		graphs.add(vf.createIRI(e.getEntryURI().toString()));
-		graphs.add(vf.createIRI(e.getLocalMetadataURI().toString()));
+		if (e.getLocalMetadataURI() != null) {
+			graphs.add(vf.createIRI(e.getLocalMetadataURI().toString()));
+		}
 		if (e.getExternalMetadataURI() != null) {
 			graphs.add(vf.createIRI(e.getCachedExternalMetadataURI().toString()));
 		}
-		URI resourceURI = e.getResourceURI();
-		boolean ownResourceGraph = URISplit.of(e.getEntryURI(), rm.getRepositoryURL())
-				.map(URISplit::getResourceURI)
-				.filter(resourceURI::equals)
-				.isPresent();
+		URISplit.of(e.getEntryURI(), rm.getRepositoryURL())
+				.ifPresent(split -> graphs.add(vf.createIRI(split.getResourceURI().toString())));
+		IRI resourceGraph = vf.createIRI(e.getResourceURI().toString());
 		boolean localGraph = GraphType.Graph.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType());
-		if (ownResourceGraph || localGraph) {
-			graphs.add(vf.createIRI(resourceURI.toString()));
+		if (localGraph && !graphs.contains(resourceGraph)) {
+			graphs.add(resourceGraph);
 		}
 		return graphs.toArray(Resource[]::new);
 	}
 
-	/** A local context entry, whose resource graph is the graph of that context. */
+	/**
+	 * A local context entry, whose resource graph is the graph of that context. A system context is not one: its
+	 * entries, contexts and principals, are never published.
+	 */
 	private static boolean isContextEntry(Entry e) {
-		GraphType graphType = e.getGraphType();
-		return (GraphType.Context.equals(graphType) || GraphType.SystemContext.equals(graphType))
-				&& EntryType.Local.equals(e.getEntryType());
+		return GraphType.Context.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType());
 	}
 
 	/**
