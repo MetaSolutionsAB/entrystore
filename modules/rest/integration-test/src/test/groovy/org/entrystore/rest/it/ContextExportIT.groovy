@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 package org.entrystore.rest.it
 
 import groovy.xml.XmlParser

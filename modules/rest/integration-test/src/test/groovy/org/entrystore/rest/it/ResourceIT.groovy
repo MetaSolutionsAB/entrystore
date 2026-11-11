@@ -2342,6 +2342,19 @@ class ResourceIT extends BaseSpec {
 		responseBody.length() > 0
 	}
 
+	def "GET /{context-id}/resource/{entry-id}?rdfFormat=garbage on Graph resource should return 200 negotiated by Accept, as 5.x did"() {
+		given:
+		def entryId = createEntry(contextId, [graphtype: 'graph'])
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId + '?rdfFormat=garbage',
+			'admin', 'text/turtle')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('text/turtle')
+	}
+
 	def "GET /{context-id}/resource/{entry-id} with unsupported rdfFormat on None (binary) resource should return normally"() {
 		given:
 		def body = [resource: [name: 'None graph entry for format test']]
