@@ -29,6 +29,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
@@ -47,11 +48,13 @@ import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.repository.config.Settings;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -535,7 +538,172 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void removeEntries_contextEntry_clearsTheContextAndAllItsEntriesOnly() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		ContextImpl other = newContext();
+		EntryImpl a = newEntryStating(context, "a", SHARED_TITLE);
+		EntryImpl b = newEntryStating(context, "b", SHARED_TITLE);
+		EntryImpl inOther = newEntryStating(other, "c", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			publicRepository.removeEntries(Set.of(context.getEntry()));
+
+			assertFalse(holdsAnything(publicRepository, contextGraph(context)));
+			assertFalse(holdsAnything(publicRepository, a.getSesameLocalMetadataURI()));
+			assertFalse(holdsAnything(publicRepository, b.getSesameLocalMetadataURI()));
+			assertTrue(holds(publicRepository, contextGraph(other), title(SHARED_TITLE)));
+			assertTrue(holds(publicRepository, inOther.getSesameLocalMetadataURI(), title(SHARED_TITLE)));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateEntries_contextMadeNonPublic_leavesNothingOfItAndOtherContextsAlone() {
+		rm.setCheckForAuthorization(true);
+		URI guest = pm.getGuestUser().getURI();
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		contextEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, guest);
+		Entry otherEntry = cm.createResource(null, GraphType.Context, null, null);
+		otherEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, guest);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		ContextImpl other = (ContextImpl) otherEntry.getResource();
+		EntryImpl a = newEntryStating(context, "a", SHARED_TITLE);
+		newEntryStating(context, "b", SHARED_TITLE);
+		newEntryStating(other, "c", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			assertTrue(holds(publicRepository, a.getSesameLocalMetadataURI(), title("a")), "a was public");
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+			contextEntry.removeAllowedPrincipalsFor(AccessProperty.ReadResource, guest);
+
+			publicRepository.updateEntries(Set.of(contextEntry));
+
+			assertFalse(holdsAnything(publicRepository, contextGraph(context)));
+			assertFalse(holdsAnything(publicRepository, a.getSesameLocalMetadataURI()));
+			assertTrue(holds(publicRepository, contextGraph(other), title(SHARED_TITLE)));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void removeEntries_statementAlsoInACachedExternalMetadataGraph_keepsIt() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		EntryImpl reference = (EntryImpl) context.createLinkReference(null,
+				URI.create("http://example.com/referenced"), URI.create("http://example.com/referenced-metadata"),
+				null);
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.add(SUBJECT, TITLE, rc.getValueFactory().createLiteral(SHARED_TITLE),
+					reference.getSesameCachedExternalMetadataURI());
+		}
+		EntryImpl stating = newEntryStating(context, "b", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			assertTrue(holds(publicRepository, reference.getSesameCachedExternalMetadataURI(), title(SHARED_TITLE)),
+					"the cached external metadata is published");
+
+			publicRepository.removeEntries(Set.of(stating));
+
+			assertTrue(holds(publicRepository, contextGraph(context), title(SHARED_TITLE)),
+					"the reference's cached external metadata still states it");
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateAndRemoveEntries_linkToAnotherEntrysMetadataGraph_leaveThatGraphAlone() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		EntryImpl described = newEntryStating(context, "described", SHARED_TITLE);
+		EntryImpl link = (EntryImpl) context.createLink(null,
+				URI.create(described.getSesameLocalMetadataURI().stringValue()), null);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			publicRepository.updateEntries(Set.of(link));
+			assertTrue(holds(publicRepository, described.getSesameLocalMetadataURI(), title("described")));
+
+			publicRepository.removeEntries(Set.of(link));
+			assertTrue(holds(publicRepository, described.getSesameLocalMetadataURI(), title("described")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateAndRemoveEntries_linkToAnotherContext_leaveThatContextsGraphAlone() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		ContextImpl other = newContext();
+		newEntryStating(other, "in-other", SHARED_TITLE);
+		EntryImpl link = (EntryImpl) context.createLink(null, other.getURI(), null);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			publicRepository.updateEntries(Set.of(link));
+			assertTrue(holds(publicRepository, contextGraph(other), title("in-other")));
+
+			publicRepository.removeEntries(Set.of(link));
+			assertTrue(holds(publicRepository, contextGraph(other), title("in-other")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateEntries_linkThatBecameGraphTypeContext_isRemovedFromTheContextGraph() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		EntryImpl link = newEntryStating(context, "link", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			link.setGraphType(GraphType.Context);
+
+			publicRepository.updateEntries(Set.of(link));
+
+			assertFalse(holds(publicRepository, contextGraph(context), title("link")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void removeEntries_linkThatBecameGraphTypeContext_isRemovedFromTheContextGraphOnly() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		EntryImpl link = newEntryStating(context, "link", SHARED_TITLE);
+		EntryImpl sibling = newEntryStating(context, "sibling", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			link.setGraphType(GraphType.Context);
+
+			publicRepository.removeEntries(Set.of(link));
+
+			assertFalse(holds(publicRepository, contextGraph(context), title("link")));
+			assertTrue(holds(publicRepository, contextGraph(context), title("sibling")),
+					"a link is no context, so the rest of its context stays");
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void removeEntries_entryLargerThanOneChunkInANativeStore_keepsOnlyWhatAnotherEntryStates(
+			@TempDir Path storeDirectory) {
+		rm.getConfiguration().setProperty(Settings.REPOSITORY_PUBLIC_TYPE, "native");
+		rm.getConfiguration().setProperty(Settings.REPOSITORY_PUBLIC_PATH, storeDirectory.toUri().toString());
+		assertLargeEntryRemoved();
+	}
+
+	@Test
 	public void removeEntries_entryLargerThanOneChunk_keepsOnlyWhatAnotherEntryStates() {
+		assertLargeEntryRemoved();
+	}
+
+	private void assertLargeEntryRemoved() {
 		rm.setCheckForAuthorization(false);
 		ContextImpl context = newContext();
 		EntryImpl large = newEntryStating(context, "large", SHARED_TITLE);
@@ -618,6 +786,12 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 
 	private static Statement title(String title) {
 		return statement(SUBJECT, TITLE, literal(title), null);
+	}
+
+	private static boolean holdsAnything(PublicRepository publicRepository, IRI graph) {
+		try (RepositoryConnection rc = publicRepository.getConnection()) {
+			return rc.hasStatement(null, null, null, false, graph);
+		}
 	}
 
 	private static boolean holds(PublicRepository publicRepository, IRI graph, Statement statement) {

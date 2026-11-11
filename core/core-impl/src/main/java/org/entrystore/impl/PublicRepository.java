@@ -96,7 +96,7 @@ public class PublicRepository {
 
 	private static final int BATCH_SIZE = 1000;
 
-	/** Statements of an entry removed at a time, so that removing a large Graph entry needs bounded memory. */
+	/** Statements of an entry read and removed at a time; see removeEntry. */
 	static final int REMOVAL_CHUNK_SIZE = 10_000;
 
 	private static final long IDLE_TIMEOUT_MS = 10_000;
@@ -510,17 +510,21 @@ public class PublicRepository {
 			return;
 		}
 		
-		// If entry is ResourceType.Context we update all its
-		// entries, just in case the ACL has changed
+		// A context's entries are published again together, just in case its ACL has changed: its graphs are cleared
+		// at once, without per-statement lookups, and the entries the guest can still read are added again.
 		if (GraphType.Context.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
 			String contextURI = e.getResourceURI().toString();
+			clearContext(repository.getValueFactory().createIRI(contextURI), rc);
 			String id = URISplit.getLastSegment(contextURI);
 			Context context = rm.getContextManager().getContext(id);
 			if (context != null) {
 				Set<URI> entries = context.getEntries();
 				for (URI entryURI : entries) {
 					if (entryURI != null) {
-						updateEntry(((ContextManagerImpl) rm.getContextManager()).getEntryIgnoreACL(entryURI), rc);
+						Entry child = ((ContextManagerImpl) rm.getContextManager()).getEntryIgnoreACL(entryURI);
+						if (child != null) {
+							addEntry(child, rc);
+						}
 					}
 				}
 			}
@@ -531,6 +535,13 @@ public class PublicRepository {
 		}
 	}
 
+	/**
+	 * Removes the entry's graphs and, from its context's graph, the statements no other entry of the context states.
+	 * A context entry instead takes its context's graph and the graphs of all its entries with it. The statements are
+	 * read and removed {@value #REMOVAL_CHUNK_SIZE} at a time, which bounds the list held in memory; the transaction
+	 * still holds every removal until it commits, and the loop relies on reading its own removals when it reads the
+	 * entry's graphs again.
+	 */
 	private void removeEntry(Entry e, RepositoryConnection rc) throws RepositoryException {
 		PrincipalManager pm = e.getRepositoryManager().getPrincipalManager();
 		URI currentUser = pm.getAuthenticatedUserURI();
@@ -550,12 +561,20 @@ public class PublicRepository {
 				extMdNG = vf.createIRI(e.getCachedExternalMetadataURI().toString());
 			}
 
-			Resource[] entryGraphs = extMdNG != null
-					? new Resource[]{entryNG, mdNG, extMdNG, resNG}
-					: new Resource[]{entryNG, mdNG, resNG};
-			// A context entry's resource graph is the graph of that context; its own context's graph never held it.
-			boolean inContextGraph = !GraphType.Context.equals(e.getGraphType())
-					&& !GraphType.SystemContext.equals(e.getGraphType());
+			List<Resource> graphs = new ArrayList<>(List.of(entryNG, mdNG));
+			if (extMdNG != null) {
+				graphs.add(extMdNG);
+			}
+			// addEntry writes a resource graph only for a local Graph entry; another resource URI can name any graph.
+			if (GraphType.Graph.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
+				graphs.add(resNG);
+			}
+			Resource[] entryGraphs = graphs.toArray(Resource[]::new);
+			// The whole context goes; its own graphs were never in its context's graph, which is _contexts.
+			boolean contextEntry = isContextEntry(e);
+			if (contextEntry) {
+				clearContext(resNG, rc);
+			}
 			List<Statement> chunk;
 			do {
 				chunk = new ArrayList<>();
@@ -565,13 +584,36 @@ public class PublicRepository {
 					}
 				}
 				rc.remove(chunk, entryGraphs);
-				if (inContextGraph) {
+				if (!contextEntry) {
 					rc.remove(notHeldByAnotherEntryGraph(chunk, contextURI, rc), contextURI);
 				}
 			} while (chunk.size() == REMOVAL_CHUNK_SIZE);
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
+	}
+
+	/** A local context entry, whose resource graph is the graph of that context. */
+	private static boolean isContextEntry(Entry e) {
+		return EntryType.Local.equals(e.getEntryType())
+				&& (GraphType.Context.equals(e.getGraphType()) || GraphType.SystemContext.equals(e.getGraphType()));
+	}
+
+	/**
+	 * Clears the graph of a context and the graphs of all its entries, without per-statement lookups: the whole
+	 * context goes. The entry graphs are found in one pass over the graph names.
+	 */
+	private void clearContext(IRI contextGraph, RepositoryConnection rc) {
+		List<Resource> graphs = new ArrayList<>();
+		graphs.add(contextGraph);
+		try (RepositoryResult<Resource> ids = rc.getContextIDs()) {
+			for (Resource id : ids) {
+				if (isGraphOfContext(id, contextGraph)) {
+					graphs.add(id);
+				}
+			}
+		}
+		rc.clear(graphs.toArray(Resource[]::new));
 	}
 
 	/**
