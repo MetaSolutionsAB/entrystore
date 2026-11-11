@@ -164,7 +164,15 @@ class SparqlServiceContextGraphTest {
 						"""),
 				Arguments.of("triple in two contexts", "SELECT ?n WHERE { ex:shared ex:name ?n }"),
 				Arguments.of("resource and cached external metadata graphs",
-						"SELECT ?s ?o WHERE { ?s ex:label|ex:name ?o FILTER(?s IN (ex:r1, ex:p3)) }"));
+						"SELECT ?s ?o WHERE { ?s ex:label|ex:name ?o FILTER(?s IN (ex:r1, ex:p3)) }"),
+				Arguments.of("COUNT(DISTINCT *)",
+						"SELECT (COUNT(DISTINCT *) AS ?c) WHERE { { ?s ex:name ?n } UNION { ?s ex:name ?n } }"),
+				Arguments.of("helper-like name in VALUES",
+						"SELECT ?a ?_entrystore_graph_0 WHERE { VALUES ?_entrystore_graph_0 { 1 } ?a a ex:Award }"),
+				Arguments.of("helper-like name in BIND",
+						"SELECT ?a ?_entrystore_graph_0 WHERE { ?a a ex:Award BIND(1 AS ?_entrystore_graph_0) }"),
+				Arguments.of("helper-like name projected but unbound",
+						"SELECT ?a ?_entrystore_graph_0 WHERE { ?a a ex:Award }"));
 	}
 
 	@ParameterizedTest(name = "{0}")
@@ -296,7 +304,6 @@ class SparqlServiceContextGraphTest {
 				bindingSet.forEach(binding -> row.put(binding.getName(), binding.getValue()));
 				rows.merge(row, 1L, Long::sum);
 			}
-			assertTrue(bindingNames.stream().noneMatch(n -> n.startsWith("_")), "Unexpected binding " + bindingNames);
 			return new Result(List.copyOf(bindingNames), rows);
 		}
 	}
