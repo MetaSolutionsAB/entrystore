@@ -648,6 +648,40 @@ class SparqlIT extends BaseSpec {
 		sparqlContainsTitle(sharedTitle)
 	}
 
+	def "GET /sparql finds a public graph entry's resource statement in its context graph, not in its resource graph"() {
+		given:
+		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
+		def resourceTitle = 'sparql-it-graph-resource'
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/resource/_newId'
+		def newMetadataIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/metadata/_newId'
+		def body = createTitleMetadataBody(newResourceIri, 'sparql-it-graph-metadata')
+		body.resource = ['https://example.org/sparql-it-graph-subject':
+			[(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: resourceTitle]]]]
+		body.info = [
+			(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]],
+			(newResourceIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]
+		]
+		def entryId = createEntry(CONTEXT_ID, [graphtype: 'graph'], body)
+		def resourceGraph = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/resource/' + entryId
+
+		when:
+		await().atMost(5, TimeUnit.SECONDS).pollInterval(200, TimeUnit.MILLISECONDS).until {
+			sparqlContainsTitle(resourceTitle)
+		}
+
+		then:
+		sparqlBindings('SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s <' + NameSpaceConst.DC_TERM_TITLE + '> "' +
+			resourceTitle + '" } }').collect { it['g']['value'] } == [EntryStoreClient.baseUrl + '/' + CONTEXT_ID]
+		sparqlBindings('SELECT ?s ?p ?o WHERE { GRAPH <' + resourceGraph + '> { ?s ?p ?o } }').isEmpty()
+	}
+
+	private static List sparqlBindings(String query) {
+		def conn = EntryStoreClient.getRequest(
+			'/sparql' + convertMapToQueryParams([query: query, format: 'application/sparql-results+json']), '')
+		assert conn.getResponseCode() == HTTP_OK
+		return JSON_PARSER.parseText(conn.inputStream.text)['results']['bindings'] as List
+	}
+
 	/** Its own title about its resource, and the shared title about a subject that both entries describe. */
 	private static String createEntryStatingSharedTitle(String ownTitle, String sharedTitle, String guestUri) {
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/resource/_newId'

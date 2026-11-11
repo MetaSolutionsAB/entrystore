@@ -47,6 +47,7 @@ import java.io.File;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -54,15 +55,18 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
- * The public entries of all contexts, for the public SPARQL endpoint. Each entry's statements are stored in the
- * entry's own graphs (metadata, cached external metadata, resource) and in its context's graph, so the context graph
- * holds the union of the context's public entry graphs.
+ * What the guest can read of the entries of all contexts, for the public SPARQL endpoint. Each part of an entry the
+ * guest can read (metadata, cached external metadata, resource graph) is stored in its own graph and in its context's
+ * graph, so the context graph holds the union of the context's public entry graphs.
  *
  * @author Hannes Ebner
  */
@@ -335,6 +339,11 @@ public class PublicRepository {
 		}
 	}
 
+	/**
+	 * Publishes each part of the entry the guest can read, its local metadata, its cached external metadata and, for a
+	 * local Graph entry, its resource graph, into the part's own graph and the context graph. A part the guest cannot
+	 * read is left out; the other parts are still published.
+	 */
 	private void addEntry(Entry e, RepositoryConnection rc) throws RepositoryException {
 		if (isAdministrative(e)) {
 			return;
@@ -342,65 +351,40 @@ public class PublicRepository {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
-			try {
-				ValueFactory vf = repository.getValueFactory();
-				IRI contextURI = vf.createIRI(e.getContext().getURI().toString());
-
-				// entry
-				/* DEACTIVATED
-				Graph entryGraph = e.getGraph();
-				URI entryNG = vf.createIRI(e.getEntryURI().toString());
-				if (entryGraph != null) {
-					rc.add(entryGraph, entryNG, contextURI);
-				}
-				*/
-
-				// metadata
-				Model mdGraph = null;
-				IRI mdNG = null;
-				if (e.getLocalMetadata() != null) {
-					mdGraph = e.getLocalMetadata().getGraph();
-					mdNG = vf.createIRI(e.getLocalMetadataURI().toString());
-				}
-
-				// ext metadata
-				Model extMdGraph = null;
-				IRI extMdNG = null;
-				if (e.getCachedExternalMetadata() != null) {
-					extMdGraph = e.getCachedExternalMetadata().getGraph();
-					extMdNG = vf.createIRI(e.getCachedExternalMetadataURI().toString());
-				}
-
-				// resource
-				Model resGraph = null;
-				IRI resNG = null;
-				if (GraphType.Graph.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
-					resGraph = (Model) e.getResource();
-					resNG = vf.createIRI(e.getResourceURI().toString());
-				}
-
-				if (mdGraph != null) {
-					rc.add(mdGraph, mdNG, contextURI);
-				}
-				if (extMdGraph != null) {
-					rc.add(extMdGraph, extMdNG, contextURI);
-				}
-				if (resGraph != null) {
-					rc.add(resGraph, resNG, contextURI);
-				}
-			} catch (AuthorizationException ae) {
+			IRI contextGraph = repository.getValueFactory().createIRI(e.getContext().getURI().toString());
+			publishPart(() -> e.getLocalMetadata() == null ? null : e.getLocalMetadata().getGraph(),
+					e::getLocalMetadataURI, contextGraph, rc);
+			publishPart(() -> e.getCachedExternalMetadata() == null ? null : e.getCachedExternalMetadata().getGraph(),
+					e::getCachedExternalMetadataURI, contextGraph, rc);
+			if (isLocalGraph(e)) {
+				publishPart(() -> e.getResource() instanceof RDFResource resource ? resource.getGraph() : null,
+						e::getResourceURI, contextGraph, rc);
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
 	}
 
+	/** Adds the part to its graph and the context graph if the guest can read it and it exists. */
+	private void publishPart(Supplier<Model> part, Supplier<URI> graph, IRI contextGraph, RepositoryConnection rc) {
+		Model model;
+		try {
+			model = part.get();
+		} catch (AuthorizationException ae) {
+			return;
+		}
+		URI graphURI = graph.get();
+		if (model != null && graphURI != null) {
+			rc.add(model, repository.getValueFactory().createIRI(graphURI.toString()), contextGraph);
+		}
+	}
+
 	void updateEntries(Set<Entry> entries) {
-		writeBatch(entries, this::updateEntry);
+		writeBatch(entries, this::updateBatch);
 	}
 
 	void removeEntries(Set<Entry> entries) {
-		writeBatch(entries, this::removeEntry);
+		writeBatch(entries, this::removeBatch);
 	}
 
 	/**
@@ -409,7 +393,7 @@ public class PublicRepository {
 	 * queued during the backoff. The RuntimeException is rethrown, so that the submitter counts it and backs off, when
 	 * the store itself fails or no entry could be written.
 	 */
-	private void writeBatch(Set<Entry> entries, BiConsumer<Entry, RepositoryConnection> write) {
+	private void writeBatch(Set<Entry> entries, BiConsumer<Set<Entry>, RepositoryConnection> write) {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
@@ -428,13 +412,11 @@ public class PublicRepository {
 		}
 	}
 
-	private void writeInOneTransaction(Set<Entry> entries, BiConsumer<Entry, RepositoryConnection> write) {
+	private void writeInOneTransaction(Set<Entry> entries, BiConsumer<Set<Entry>, RepositoryConnection> write) {
 		RepositoryConnection rc = repository.getConnection();
 		try {
 			rc.begin();
-			for (Entry e : entries) {
-				write.accept(e, rc);
-			}
+			write.accept(entries, rc);
 			rc.commit();
 		} catch (RuntimeException e) {
 			EntryImpl.rollbackQuietly(rc, e);
@@ -449,7 +431,7 @@ public class PublicRepository {
 	 * does. A failing begin or commit is a store failure and, like a batch of which no entry could be written,
 	 * rethrows {@code batchFailure}.
 	 */
-	private void writeEachAlone(Set<Entry> entries, BiConsumer<Entry, RepositoryConnection> write,
+	private void writeEachAlone(Set<Entry> entries, BiConsumer<Set<Entry>, RepositoryConnection> write,
 			RuntimeException batchFailure) {
 		Map<Entry, RuntimeException> dropped = new LinkedHashMap<>();
 		boolean anyWritten = false;
@@ -464,7 +446,7 @@ public class PublicRepository {
 			for (Entry e : entries) {
 				rc.begin();
 				try {
-					write.accept(e, rc);
+					write.accept(Collections.singleton(e), rc);
 				} catch (RuntimeException entryFailure) {
 					EntryImpl.rollbackQuietly(rc, entryFailure);
 					dropped.put(e, entryFailure);
@@ -502,36 +484,30 @@ public class PublicRepository {
 	}
 
 	/**
-	 * A context's entries are looked up without an access check, so that an entry guest can no longer read is still
-	 * removed; {@link #addEntry} decides as guest whether it is added again.
+	 * Publishes the entries again. The entries of an updated context are published again together, just in case its
+	 * ACL has changed: the graphs of all updated contexts are cleared at once, without per-statement lookups, and
+	 * each of their entries is added again with the parts the guest can still read. The entries of a context with
+	 * another resource URI are first removed one by one, as its context graph is not cleared at once. Any other entry
+	 * is removed and added again.
 	 */
-	private void updateEntry(Entry e, RepositoryConnection rc) throws RepositoryException {
-		if (e == null) {
-			return;
+	private void updateBatch(Set<Entry> entries, RepositoryConnection rc) {
+		List<Entry> contextEntries = new ArrayList<>();
+		List<Entry> otherEntries = new ArrayList<>();
+		for (Entry e : entries) {
+			if (e != null) {
+				(isContextEntry(e) ? contextEntries : otherEntries).add(e);
+			}
 		}
-		
-		// A context's entries are published again together, just in case its ACL has changed: its graphs are cleared
-		// at once, without per-statement lookups, and the entries the guest can still read are added again.
-		if (isContextEntry(e)) {
-			boolean canonical = hasCanonicalContextURI(e);
-			if (canonical) {
-				clearContext(repository.getValueFactory().createIRI(e.getResourceURI().toString()), rc);
+		for (Entry contextEntry : contextEntries) {
+			if (!hasCanonicalContextURI(contextEntry)) {
+				forEachEntryOf(contextEntry, child -> removeEntry(child, rc));
 			}
-			Context context = rm.getContextManager().getContext(e.getId());
-			if (context != null) {
-				Set<URI> entries = context instanceof ContextImpl contextImpl
-						? contextImpl.getChildEntryURIsFromStore()
-						: context.getEntries();
-				for (URI entryURI : entries) {
-					if (entryURI != null) {
-						Entry child = ((ContextManagerImpl) rm.getContextManager()).getEntryIgnoreACL(entryURI);
-						if (child != null) {
-							republishChild(child, canonical, rc);
-						}
-					}
-				}
-			}
-		} else {
+		}
+		clearContexts(contextEntries, rc);
+		for (Entry contextEntry : contextEntries) {
+			forEachEntryOf(contextEntry, child -> republishChild(child, rc));
+		}
+		for (Entry e : otherEntries) {
 			log.debug("Processing entry: {}", e.getEntryURI());
 			removeEntry(e, rc);
 			addEntry(e, rc);
@@ -539,11 +515,55 @@ public class PublicRepository {
 	}
 
 	/**
+	 * Calls {@code action} for each entry of the context, read from the store. The entries are loaded without an
+	 * access check, so that an entry whose metadata the guest cannot read still has the other parts published;
+	 * {@link #addEntry} decides what the guest can read.
+	 */
+	private void forEachEntryOf(Entry contextEntry, Consumer<Entry> action) {
+		Context context = rm.getContextManager().getContext(contextEntry.getId());
+		if (context == null) {
+			return;
+		}
+		Set<URI> entryURIs = context instanceof ContextImpl contextImpl
+				? contextImpl.getChildEntryURIsFromStore()
+				: context.getEntries();
+		for (URI entryURI : entryURIs) {
+			if (entryURI != null) {
+				Entry child = loadEntry(entryURI);
+				if (child != null) {
+					action.accept(child);
+				}
+			}
+		}
+	}
+
+	private Entry loadEntry(URI entryURI) {
+		return ((ContextManagerImpl) rm.getContextManager()).getEntryIgnoreACL(entryURI);
+	}
+
+	/** Removes the entries; a removed context takes its context graph and the graphs of all its entries with it. */
+	private void removeBatch(Set<Entry> entries, RepositoryConnection rc) {
+		List<Entry> contextEntries = new ArrayList<>();
+		for (Entry e : entries) {
+			if (e != null && isContextEntry(e)) {
+				contextEntries.add(e);
+			}
+		}
+		clearContexts(contextEntries, rc);
+		for (Entry e : entries) {
+			if (e != null) {
+				removeEntry(e, rc);
+			}
+		}
+	}
+
+	/**
 	 * Removes the entry's graphs and, from its context's graph, the statements no other entry of the context states.
-	 * A context entry instead takes its context's graph and the graphs of all its entries with it. The statements are
-	 * read and removed {@value #REMOVAL_CHUNK_SIZE} at a time, which bounds the list held in memory; the transaction
-	 * still holds every removal until it commits, and the loop relies on reading its own removals when it reads the
-	 * entry's graphs again.
+	 * The graphs of a context entry are its own, in _contexts, whose graph never holds them; the context it stands
+	 * for is cleared by {@link #clearContexts}, its context graph only if the context has the resource URI core gives
+	 * it. The statements are read and removed {@value #REMOVAL_CHUNK_SIZE} at
+	 * a time, which bounds the list held in memory; the transaction still holds every removal until it commits, and
+	 * the loop relies on reading its own removals when it reads the entry's graphs again.
 	 */
 	private void removeEntry(Entry e, RepositoryConnection rc) throws RepositoryException {
 		PrincipalManager pm = e.getRepositoryManager().getPrincipalManager();
@@ -553,14 +573,12 @@ public class PublicRepository {
 			// more restrictive since adding the entry
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			ValueFactory vf = repository.getValueFactory();
-			IRI contextURI = vf.createIRI(e.getContext().getURI().toString());
+			IRI contextGraph = vf.createIRI(e.getContext().getURI().toString());
+			Optional<String> entriesContext = URISplit.of(e.getEntryURI(), rm.getRepositoryURL())
+					.map(split -> split.getContextURI().toString());
 
 			Resource[] entryGraphs = entryGraphs(e);
-			// The whole context goes; its own graphs were never in its context's graph, which is _contexts.
 			boolean contextEntry = isContextEntry(e);
-			if (contextEntry && hasCanonicalContextURI(e)) {
-				clearContext(vf.createIRI(e.getResourceURI().toString()), rc);
-			}
 			List<Statement> chunk;
 			do {
 				chunk = new ArrayList<>();
@@ -571,7 +589,7 @@ public class PublicRepository {
 				}
 				rc.remove(chunk, entryGraphs);
 				if (!contextEntry) {
-					rc.remove(notHeldByAnotherEntryGraph(chunk, contextURI, rc), contextURI);
+					rc.remove(notHeldByAnotherEntryGraph(chunk, contextGraph, entriesContext, rc), contextGraph);
 				}
 			} while (chunk.size() == REMOVAL_CHUNK_SIZE);
 		} finally {
@@ -580,35 +598,35 @@ public class PublicRepository {
 	}
 
 	/**
-	 * After a bulk clear, only the child's graphs outside its context's URI can be left, which clearing its own
-	 * graphs covers; without one, the child is removed and added as on its own.
+	 * Clears the child's own graphs as admin and adds it again. Its graphs are below its context's URI and already
+	 * cleared with the context, or removed before; clearing them again is only a safety net.
 	 */
-	private void republishChild(Entry child, boolean afterBulkClear, RepositoryConnection rc) {
-		if (afterBulkClear) {
-			URI currentUser = pm.getAuthenticatedUserURI();
-			try {
-				pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-				rc.clear(entryGraphs(child));
-			} finally {
-				pm.setAuthenticatedUserURI(currentUser);
-			}
-		} else {
-			removeEntry(child, rc);
+	private void republishChild(Entry child, RepositoryConnection rc) {
+		URI currentUser = pm.getAuthenticatedUserURI();
+		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+			rc.clear(entryGraphs(child));
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
 		}
 		addEntry(child, rc);
 	}
 
-	/** A context whose resource URI is {@code {repository URL}{id}}, as core creates it, owns the graphs below it. */
+	/** The URI {@code {repository URL}{id}} of the context, as core names the graphs of its entries. */
+	private String contextURIOf(Entry contextEntry) {
+		return URISplit.createURI(rm.getRepositoryURL().toString(), contextEntry.getId()).toString();
+	}
+
+	/** A context whose resource URI is {@code {repository URL}{id}}, as core creates it, owns that graph. */
 	private boolean hasCanonicalContextURI(Entry contextEntry) {
-		return contextEntry.getResourceURI().equals(
-				URISplit.createURI(rm.getRepositoryURL().toString(), contextEntry.getId()));
+		return contextEntry.getResourceURI().toString().equals(contextURIOf(contextEntry));
 	}
 
 	/**
-	 * The graphs the entry published, read as admin. Of the resource graphs, it is the one named by the entry's own
-	 * resource URI derived from its entry URI, which only this entry can have published as a local Graph entry even if
-	 * it is no longer one, and its current resource URI only if it is a local Graph entry, the only kind addEntry
-	 * publishes one for: the resource URI of other entries can name any graph.
+	 * The graphs the entry published, read as admin. This includes the resource graph named by the entry's resource
+	 * URI as derived from its entry URI. Only this entry can have published that graph, as a local Graph entry, even
+	 * if it is no longer one. The current resource URI counts only for a local Graph entry, the only kind addEntry
+	 * publishes a resource graph for: the resource URI of any other entry can name any graph.
 	 */
 	private Resource[] entryGraphs(Entry e) {
 		ValueFactory vf = repository.getValueFactory();
@@ -623,31 +641,51 @@ public class PublicRepository {
 		URISplit.of(e.getEntryURI(), rm.getRepositoryURL())
 				.ifPresent(split -> graphs.add(vf.createIRI(split.getResourceURI().toString())));
 		IRI resourceGraph = vf.createIRI(e.getResourceURI().toString());
-		boolean localGraph = GraphType.Graph.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType());
-		if (localGraph && !graphs.contains(resourceGraph)) {
+		if (isLocalGraph(e) && !graphs.contains(resourceGraph)) {
 			graphs.add(resourceGraph);
 		}
 		return graphs.toArray(Resource[]::new);
 	}
 
-	/**
-	 * A local context entry, whose resource graph is the graph of that context. A system context is not one: its
-	 * entries, contexts and principals, are never published.
-	 */
-	private static boolean isContextEntry(Entry e) {
-		return GraphType.Context.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType());
+	private static boolean isLocalGraph(Entry e) {
+		return GraphType.Graph.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType());
 	}
 
 	/**
-	 * Clears the graph of a context and the graphs of all its entries, without per-statement lookups: the whole
-	 * context goes. The entry graphs are found in one pass over the graph names.
+	 * A local context entry in _contexts, whose resource graph is the graph of that context. A system context is not
+	 * one: its entries, contexts and principals, are never published.
 	 */
-	private void clearContext(IRI contextGraph, RepositoryConnection rc) {
+	private static boolean isContextEntry(Entry e) {
+		return GraphType.Context.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())
+				&& e.getContext() instanceof ContextManager;
+	}
+
+	/**
+	 * Clears, for each context entry, the graphs of all entries of its context, found below
+	 * {@code {repository URL}{id}/} in one pass over the graph names for all of them, and the context graph if the
+	 * context has that URI as its resource URI. The context graph of a context with another resource URI is left to
+	 * the caller, as it could name a graph that is not the context's.
+	 */
+	private void clearContexts(List<Entry> contextEntries, RepositoryConnection rc) {
+		if (contextEntries.isEmpty()) {
+			return;
+		}
+		ValueFactory vf = repository.getValueFactory();
+		Set<String> contexts = new HashSet<>();
 		List<Resource> graphs = new ArrayList<>();
-		graphs.add(contextGraph);
+		for (Entry contextEntry : contextEntries) {
+			String contextURI = contextURIOf(contextEntry);
+			contexts.add(contextURI);
+			if (hasCanonicalContextURI(contextEntry)) {
+				graphs.add(vf.createIRI(contextEntry.getResourceURI().toString()));
+			} else {
+				log.warn("Context {} has the resource URI {} instead of {}, so its graph in the public repository is "
+						+ "not cleared at once", contextEntry.getId(), contextEntry.getResourceURI(), contextURI);
+			}
+		}
 		try (RepositoryResult<Resource> ids = rc.getContextIDs()) {
 			for (Resource id : ids) {
-				if (isGraphOfContext(id, contextGraph)) {
+				if (isEntryGraphOfAny(id, contexts)) {
 					graphs.add(id);
 				}
 			}
@@ -659,30 +697,33 @@ public class PublicRepository {
 	 * The statements, without their graph, that no remaining entry graph of the context holds. The context graph
 	 * holds the union of the context's entry graphs, so a statement that another entry of the context also states
 	 * stays in it. Called after the statements are removed from the entry's own graphs, in the same transaction, so
-	 * that entry and entries removed earlier in the batch no longer count.
+	 * that entry and entries removed earlier in the batch no longer count. Without a context URI derived from the
+	 * entry URI, no other entry graph counts.
 	 */
-	private List<Statement> notHeldByAnotherEntryGraph(List<Statement> statements, IRI contextURI,
-			RepositoryConnection rc) {
+	private List<Statement> notHeldByAnotherEntryGraph(List<Statement> statements, IRI contextGraph,
+			Optional<String> entriesContext, RepositoryConnection rc) {
 		ValueFactory vf = repository.getValueFactory();
 		Set<Statement> distinct = new LinkedHashSet<>();
 		for (Statement statement : statements) {
 			distinct.add(vf.createStatement(statement.getSubject(), statement.getPredicate(), statement.getObject()));
 		}
+		Set<String> contexts = entriesContext.map(Set::of).orElse(Set.of());
 		List<Statement> notHeld = new ArrayList<>();
 		for (Statement statement : distinct) {
-			if (!heldByAnotherEntryGraph(statement, contextURI, rc)) {
+			if (!heldByAnotherEntryGraph(statement, contextGraph, contexts, rc)) {
 				notHeld.add(statement);
 			}
 		}
 		return notHeld;
 	}
 
-	private boolean heldByAnotherEntryGraph(Statement statement, IRI contextURI, RepositoryConnection rc) {
+	private boolean heldByAnotherEntryGraph(Statement statement, IRI contextGraph, Set<String> entriesContext,
+			RepositoryConnection rc) {
 		try (RepositoryResult<Statement> copies = rc.getStatements(statement.getSubject(), statement.getPredicate(),
 				statement.getObject(), false)) {
 			for (Statement copy : copies) {
-				if (copy.getContext() != null && !copy.getContext().equals(contextURI)
-						&& isGraphOfContext(copy.getContext(), contextURI)) {
+				if (copy.getContext() != null && !copy.getContext().equals(contextGraph)
+						&& isEntryGraphOfAny(copy.getContext(), entriesContext)) {
 					return true;
 				}
 			}
@@ -691,18 +732,25 @@ public class PublicRepository {
 	}
 
 	/**
-	 * Whether {@code graph} is the graph of an entry in the context, as core splits the URIs of its entries. An entry
-	 * graph is {@code {context URI}/{path}/{id}}; checked first, as most copies of a statement are in other contexts,
-	 * and so that the graph of another context, which splits as a resource of the context entry, never counts.
+	 * Whether {@code graph} is the graph of an entry of one of the contexts, given by their URIs
+	 * {@code {repository URL}{id}}, as core splits the URIs of its entries. An entry graph is
+	 * {@code {repository URL}{id}/{path}/{entry id}}; its context URI is cut out first, as most graphs are of other
+	 * contexts, and so that the graph of another context, which splits as a resource of _contexts, never counts.
 	 */
-	private boolean isGraphOfContext(Resource graph, IRI contextURI) {
-		if (!graph.stringValue().startsWith(contextURI.stringValue() + "/")) {
+	private boolean isEntryGraphOfAny(Resource graph, Set<String> contexts) {
+		String base = rm.getRepositoryURL().toString();
+		String name = graph.stringValue();
+		if (contexts.isEmpty() || !name.startsWith(base)) {
+			return false;
+		}
+		int slash = name.indexOf('/', base.length());
+		if (slash <= base.length() || !contexts.contains(name.substring(0, slash))) {
 			return false;
 		}
 		try {
-			return URISplit.of(URI.create(graph.stringValue()), rm.getRepositoryURL())
+			return URISplit.of(URI.create(name), rm.getRepositoryURL())
 					.map(URISplit::getContextURI)
-					.filter(context -> context.toString().equals(contextURI.stringValue()))
+					.filter(context -> contexts.contains(context.toString()))
 					.isPresent();
 		} catch (IllegalArgumentException e) {
 			return false;
@@ -771,7 +819,7 @@ public class PublicRepository {
 									}
 								}
 								try {
-									Entry entry = cm.getEntry(entryURI);
+									Entry entry = loadEntry(entryURI);
 									if (entry == null) {
 										continue;
 									}

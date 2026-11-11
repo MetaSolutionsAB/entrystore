@@ -25,7 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
@@ -40,8 +42,10 @@ import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.LogEvent;
 import org.awaitility.core.ConditionFactory;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.Context;
@@ -540,6 +544,18 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 
 	@Test
 	public void removeEntries_contextEntry_clearsTheContextAndAllItsEntriesOnly() {
+		assertContextCleared();
+	}
+
+	@Test
+	public void removeEntries_contextEntryInANativeStore_clearsTheContextAndAllItsEntriesOnly(
+			@TempDir Path storeDirectory) {
+		rm.getConfiguration().setProperty(Settings.REPOSITORY_PUBLIC_TYPE, "native");
+		rm.getConfiguration().setProperty(Settings.REPOSITORY_PUBLIC_PATH, storeDirectory.toUri().toString());
+		assertContextCleared();
+	}
+
+	private void assertContextCleared() {
 		rm.setCheckForAuthorization(false);
 		ContextImpl context = newContext();
 		ContextImpl other = newContext();
@@ -757,6 +773,251 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void addEntry_publicLocalGraphEntry_publishesItsResourceGraphAndTheContextGraph() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		EntryImpl graph = newGraphEntry(context, "graph-md", "graph-resource");
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			assertTrue(holds(publicRepository, resourceGraph(graph), title("graph-resource")));
+			assertTrue(holds(publicRepository, contextGraph(context), title("graph-resource")));
+			assertTrue(holds(publicRepository, graph.getSesameLocalMetadataURI(), title("graph-md")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateEntries_metadataPublicResourcePrivate_publishesOnlyTheMetadata() {
+		Entry contextEntry = newPublicContext();
+		EntryImpl graph = newGraphEntry((ContextImpl) contextEntry.getResource(), "graph-md", "graph-resource");
+		graph.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			publicRepository.updateEntries(Set.of(graph));
+
+			assertTrue(holds(publicRepository, graph.getSesameLocalMetadataURI(), title("graph-md")));
+			assertFalse(holdsAnything(publicRepository, resourceGraph(graph)));
+			assertFalse(holds(publicRepository, contextGraph(contextEntry), title("graph-resource")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateEntries_metadataPrivateResourcePublic_publishesOnlyTheResource() {
+		Entry contextEntry = newPublicContext();
+		EntryImpl graph = newGraphEntry((ContextImpl) contextEntry.getResource(), "graph-md", "graph-resource");
+		graph.addAllowedPrincipalsFor(AccessProperty.ReadResource, pm.getGuestUser().getURI());
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			publicRepository.updateEntries(Set.of(graph));
+
+			assertFalse(holdsAnything(publicRepository, graph.getSesameLocalMetadataURI()));
+			assertFalse(holds(publicRepository, contextGraph(contextEntry), title("graph-md")));
+			assertTrue(holds(publicRepository, resourceGraph(graph), title("graph-resource")));
+			assertTrue(holds(publicRepository, contextGraph(contextEntry), title("graph-resource")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateEntries_resourceReadRevoked_removesTheResourceGraphAndWhatOnlyItStatedFromTheContextGraph() {
+		URI guest = pm.getGuestUser().getURI();
+		Entry contextEntry = newPublicContext();
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		EntryImpl graph = newGraphEntry(context, "graph-md", "graph-resource", SHARED_TITLE);
+		graph.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, guest);
+		graph.addAllowedPrincipalsFor(AccessProperty.ReadResource, guest);
+		newEntryStating(context, "other", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			assertTrue(holds(publicRepository, resourceGraph(graph), title("graph-resource")),
+					"the resource was public");
+			graph.removeAllowedPrincipalsFor(AccessProperty.ReadResource, guest);
+
+			publicRepository.updateEntries(Set.of(graph));
+
+			assertFalse(holdsAnything(publicRepository, resourceGraph(graph)));
+			assertFalse(holds(publicRepository, contextGraph(context), title("graph-resource")));
+			assertTrue(holds(publicRepository, contextGraph(context), title(SHARED_TITLE)),
+					"another entry of the context still states the shared title");
+			assertTrue(holds(publicRepository, contextGraph(context), title("graph-md")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateEntries_contextWithEntriesReadablePerPart_publishesTheReadablePartsOfEach() {
+		URI guest = pm.getGuestUser().getURI();
+		Entry contextEntry = newPublicContext();
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		EntryImpl metadataOnly = newGraphEntry(context, "md-public", "resource-private");
+		EntryImpl resourceOnly = newGraphEntry(context, "md-private", "resource-public");
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			metadataOnly.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, guest);
+			resourceOnly.addAllowedPrincipalsFor(AccessProperty.ReadResource, guest);
+
+			publicRepository.updateEntries(Set.of(contextEntry));
+
+			assertTrue(holds(publicRepository, contextGraph(context), title("md-public")));
+			assertFalse(holds(publicRepository, contextGraph(context), title("resource-private")));
+			assertFalse(holds(publicRepository, contextGraph(context), title("md-private")));
+			assertTrue(holds(publicRepository, contextGraph(context), title("resource-public")));
+			assertTrue(holds(publicRepository, resourceGraph(resourceOnly), title("resource-public")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void removeEntries_localGraphEntryLargerThanOneChunk_removesItsResourceGraph() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		String[] titles = new String[2 * PublicRepository.REMOVAL_CHUNK_SIZE + 1];
+		for (int i = 0; i < titles.length; i++) {
+			titles[i] = "resource-" + i;
+		}
+		EntryImpl graph = newGraphEntry(context, "graph-md", titles);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try (RepositoryConnection rc = publicRepository.getConnection()) {
+			assertEquals(titles.length, rc.size(resourceGraph(graph)));
+			assertEquals(titles.length + 1, rc.size(contextGraph(context)));
+
+			publicRepository.removeEntries(Set.of(graph));
+
+			assertEquals(0, rc.size(resourceGraph(graph)));
+			assertEquals(0, rc.size(contextGraph(context)));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateEntries_contextMadeNonPublicAndPublicAgain_keepsAndRestoresEntriesByTheirOwnAcl() {
+		URI guest = pm.getGuestUser().getURI();
+		Entry contextEntry = newPublicContext();
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		EntryImpl ownAcl = newEntryStating(context, "own-acl", SHARED_TITLE);
+		ownAcl.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, guest);
+		EntryImpl inheriting = newEntryStating(context, "inheriting", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			contextEntry.removeAllowedPrincipalsFor(AccessProperty.ReadResource, guest);
+			publicRepository.updateEntries(Set.of(contextEntry));
+
+			assertTrue(holds(publicRepository, contextGraph(context), title("own-acl")));
+			assertTrue(holds(publicRepository, contextGraph(context), title(SHARED_TITLE)));
+			assertFalse(holds(publicRepository, contextGraph(context), title("inheriting")));
+			assertFalse(holdsAnything(publicRepository, inheriting.getSesameLocalMetadataURI()));
+
+			contextEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, guest);
+			publicRepository.updateEntries(Set.of(contextEntry));
+
+			assertTrue(holds(publicRepository, contextGraph(context), title("inheriting")));
+			assertTrue(holds(publicRepository, inheriting.getSesameLocalMetadataURI(), title("inheriting")));
+			assertTrue(holds(publicRepository, contextGraph(context), title("own-acl")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateEntries_twoContextsMadeNonPublicInOneBatch_clearsBothAndLeavesAThirdAlone() {
+		URI guest = pm.getGuestUser().getURI();
+		Entry first = newPublicContext();
+		Entry second = newPublicContext();
+		Entry third = newPublicContext();
+		EntryImpl inFirst = newEntryStating((ContextImpl) first.getResource(), "first", SHARED_TITLE);
+		EntryImpl inSecond = newEntryStating((ContextImpl) second.getResource(), "second", SHARED_TITLE);
+		newEntryStating((ContextImpl) third.getResource(), "third", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			first.removeAllowedPrincipalsFor(AccessProperty.ReadResource, guest);
+			second.removeAllowedPrincipalsFor(AccessProperty.ReadResource, guest);
+
+			publicRepository.updateEntries(Set.of(first, second));
+
+			assertFalse(holdsAnything(publicRepository, contextGraph(first)));
+			assertFalse(holdsAnything(publicRepository, inFirst.getSesameLocalMetadataURI()));
+			assertFalse(holdsAnything(publicRepository, contextGraph(second)));
+			assertFalse(holdsAnything(publicRepository, inSecond.getSesameLocalMetadataURI()));
+			assertTrue(holds(publicRepository, contextGraph(third), title("third")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void removeEntries_contextWithAnotherResourceURI_clearsItsEntriesButNotTheGraphItsResourceURINames() {
+		rm.setCheckForAuthorization(false);
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		ContextImpl other = newContext();
+		EntryImpl a = newEntryStating(context, "a", SHARED_TITLE);
+		newEntryStating(other, "in-other", SHARED_TITLE);
+		Entry renamed = withResourceURI(contextEntry, other.getURI());
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			publicRepository.removeEntries(Set.of(renamed));
+
+			assertFalse(holdsAnything(publicRepository, a.getSesameLocalMetadataURI()));
+			assertTrue(holds(publicRepository, contextGraph(other), title("in-other")),
+					"the graph the resource URI names is another context's");
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void updateEntries_contextWithAnotherResourceURI_publishesItsEntriesAgainAndLeavesThatGraphAlone() {
+		rm.setCheckForAuthorization(false);
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		ContextImpl context = (ContextImpl) contextEntry.getResource();
+		ContextImpl other = newContext();
+		EntryImpl a = newEntryStating(context, "a", SHARED_TITLE);
+		newEntryStating(other, "in-other", SHARED_TITLE);
+		Entry renamed = withResourceURI(contextEntry, other.getURI());
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			removeTitle(a, "a");
+
+			publicRepository.updateEntries(Set.of(renamed));
+
+			assertTrue(holds(publicRepository, contextGraph(other), title("in-other")),
+					"the graph the resource URI names is another context's");
+			assertTrue(holds(publicRepository, a.getSesameLocalMetadataURI(), title(SHARED_TITLE)));
+			assertFalse(holds(publicRepository, contextGraph(context), title("a")),
+					"each entry took its statements out of the context graph");
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void removeEntries_localEntryOfGraphTypeContextOutsideContexts_leavesTheContextWithItsIdAlone() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		Entry otherEntry = cm.createResource(null, GraphType.Context, null, null);
+		EntryImpl inOther = newEntryStating((ContextImpl) otherEntry.getResource(), "in-other", SHARED_TITLE);
+		Entry sameId = context.createResource(otherEntry.getId(), GraphType.Graph, null, null);
+		Entry contextLike = spy(sameId);
+		doReturn(GraphType.Context).when(contextLike).getGraphType();
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			publicRepository.removeEntries(Set.of(contextLike));
+
+			assertTrue(holds(publicRepository, inOther.getSesameLocalMetadataURI(), title("in-other")),
+					"only an entry of _contexts stands for a context");
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
 	public void removeEntries_entryLargerThanOneChunkInANativeStore_keepsOnlyWhatAnotherEntryStates(
 			@TempDir Path storeDirectory) {
 		rm.getConfiguration().setProperty(Settings.REPOSITORY_PUBLIC_TYPE, "native");
@@ -830,6 +1091,40 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 		}
 	}
 
+	/** A context the guest can read, created as admin with authorization checks on. */
+	private Entry newPublicContext() {
+		rm.setCheckForAuthorization(true);
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		contextEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, pm.getGuestUser().getURI());
+		return contextEntry;
+	}
+
+	/** A local Graph entry stating {@code metadataTitle} in its metadata and the other titles in its resource. */
+	private EntryImpl newGraphEntry(ContextImpl context, String metadataTitle, String... resourceTitles) {
+		EntryImpl entry = (EntryImpl) context.createResource(null, GraphType.Graph, null, null);
+		Model resource = new LinkedHashModel();
+		for (String resourceTitle : resourceTitles) {
+			resource.add(SUBJECT, TITLE, literal(resourceTitle));
+		}
+		((RDFResource) entry.getResource()).setGraph(resource);
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.add(SUBJECT, TITLE, literal(metadataTitle), entry.getSesameLocalMetadataURI());
+		}
+		return entry;
+	}
+
+	/** The context entry as the public repository would see it if its resource URI were {@code resourceURI}. */
+	private static Entry withResourceURI(Entry contextEntry, URI resourceURI) {
+		Entry renamed = spy(contextEntry);
+		doReturn(resourceURI).when(renamed).getResourceURI();
+		return renamed;
+	}
+
+	private static IRI resourceGraph(EntryImpl entry) {
+		return iri(entry.getResourceURI().toString());
+	}
+
 	private EntryImpl newEntryStating(ContextImpl context, String ownTitle, String sharedTitle) {
 		EntryImpl entry = (EntryImpl) context.createLink(null, URI.create("http://example.com/" + ownTitle), null);
 		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
@@ -848,6 +1143,10 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 
 	private static IRI contextGraph(ContextImpl context) {
 		return iri(context.getURI().toString());
+	}
+
+	private static IRI contextGraph(Entry contextEntry) {
+		return iri(contextEntry.getResourceURI().toString());
 	}
 
 	private static Statement title(String title) {
