@@ -19,10 +19,15 @@ package org.entrystore.rest.springboot.service;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.FN;
 import org.eclipse.rdf4j.query.algebra.And;
+import org.eclipse.rdf4j.query.algebra.BindingSetAssignment;
+import org.eclipse.rdf4j.query.algebra.Count;
+import org.eclipse.rdf4j.query.algebra.ExtensionElem;
 import org.eclipse.rdf4j.query.algebra.Filter;
 import org.eclipse.rdf4j.query.algebra.FunctionCall;
+import org.eclipse.rdf4j.query.algebra.GroupElem;
 import org.eclipse.rdf4j.query.algebra.IsURI;
 import org.eclipse.rdf4j.query.algebra.Not;
+import org.eclipse.rdf4j.query.algebra.ProjectionElem;
 import org.eclipse.rdf4j.query.algebra.StatementPattern;
 import org.eclipse.rdf4j.query.algebra.Str;
 import org.eclipse.rdf4j.query.algebra.TupleExpr;
@@ -50,7 +55,8 @@ import java.util.Set;
  * OPTIONAL and MINUS keep their meaning, and the variable is never projected. A statement then matches once per
  * context that holds it. Patterns inside a GRAPH clause are left unchanged, and so is the zero-length step of
  * {@code p*} and {@code p?} ({@link org.eclipse.rdf4j.query.algebra.ZeroLengthPath}), which RDF4J evaluates
- * without a triple pattern.
+ * without a triple pattern. A query with {@code COUNT(DISTINCT *)} is left unchanged: it compares whole solutions,
+ * helper variables included, and already counts each solution once without the rewrite.
  */
 final class ContextGraphRewriter {
 
@@ -68,7 +74,8 @@ final class ContextGraphRewriter {
 	 */
 	static void restrictDefaultGraph(TupleExpr expr, String contextGraphPrefix) {
 		List<StatementPattern> defaultPatterns = new ArrayList<>();
-		Set<String> varNames = new HashSet<>();
+		Set<String> names = new HashSet<>();
+		boolean[] countsDistinctSolutions = {false};
 		expr.visit(new AbstractQueryModelVisitor<RuntimeException>() {
 			@Override
 			public void meet(StatementPattern node) {
@@ -80,16 +87,48 @@ final class ContextGraphRewriter {
 
 			@Override
 			public void meet(Var node) {
-				varNames.add(node.getName());
+				names.add(node.getName());
+			}
+
+			@Override
+			public void meet(BindingSetAssignment node) {
+				names.addAll(node.getBindingNames());
+			}
+
+			@Override
+			public void meet(ExtensionElem node) {
+				names.add(node.getName());
+				super.meet(node);
+			}
+
+			@Override
+			public void meet(ProjectionElem node) {
+				names.add(node.getName());
+				node.getProjectionAlias().ifPresent(names::add);
+			}
+
+			@Override
+			public void meet(GroupElem node) {
+				names.add(node.getName());
+				super.meet(node);
+			}
+
+			@Override
+			public void meet(Count node) {
+				countsDistinctSolutions[0] |= node.isDistinct() && node.getArg() == null;
+				super.meet(node);
 			}
 		});
+		if (countsDistinctSolutions[0]) {
+			return;
+		}
 
 		int counter = 0;
 		for (StatementPattern pattern : defaultPatterns) {
 			String name;
 			do {
 				name = GRAPH_VAR_PREFIX + counter++;
-			} while (varNames.contains(name));
+			} while (names.contains(name));
 			Var graph = Var.of(name, true);
 			StatementPattern allGraphs = new StatementPattern(StatementPattern.Scope.NAMED_CONTEXTS,
 					pattern.getSubjectVar().clone(), pattern.getPredicateVar().clone(),
