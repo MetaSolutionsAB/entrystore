@@ -26,9 +26,11 @@ import org.eclipse.rdf4j.rio.jsonld.JSONLDWriter;
 import org.eclipse.rdf4j.rio.turtle.TurtleWriter;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
+import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.InvalidMediaTypeException;
@@ -39,6 +41,7 @@ import java.io.OutputStream;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -348,6 +351,43 @@ class GraphUtilTest {
 	void serializeGraph_stringDispatcher_jsonTypesMatchRdfJsonUtil(String mediaType) {
 		Model graph = sampleGraph();
 		assertEquals(RDFJSON.graphToRdfJson(graph), GraphUtil.serializeGraph(graph, mediaType));
+	}
+
+	@ParameterizedTest(name = "rdfFormat \"{0}\" -> {1}")
+	@CsvSource(delimiter = '|', nullValues = "NULL", ignoreLeadingAndTrailingWhitespace = false, value = {
+			"application/ld+json|application/ld+json",
+			"application/ld json|application/ld+json",
+			" application/ld+json |application/ld+json",
+			"APPLICATION/LD+JSON|application/ld+json",
+			"application/ld+json;charset=UTF-8|application/json",
+			"application/json|application/json",
+			"application/rdf+json|application/json",
+			"application/rdf json|application/json",
+			"text/turtle|application/json",
+			"not a media type|application/json",
+			"''|application/json",
+			"NULL|application/json"
+	})
+	void resolveJsonRdfFormat_onlyJsonLdIsKeptAndEverythingElseIsRdfJson(String rdfFormat, String expected) {
+		assertEquals(expected, GraphUtil.resolveJsonRdfFormat(rdfFormat));
+	}
+
+	@Test
+	void serializeGraphToJson_jsonLd_isJsonLdWithTheGraphContent() {
+		JSONObject result = GraphUtil.serializeGraphToJson(sampleGraph(), "application/ld+json");
+
+		assertTrue(result.has("@context"), "Expected a JSON-LD document");
+		assertTrue(result.toString().contains("Sample"), "Expected the literal value in the JSON-LD output");
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@NullSource
+	@ValueSource(strings = {"application/json", "application/rdf+json", "text/turtle", "not a media type"})
+	void serializeGraphToJson_anythingButJsonLd_isRdfJsonWithTheGraphContent(String rdfFormat) {
+		JSONObject result = GraphUtil.serializeGraphToJson(sampleGraph(), rdfFormat);
+
+		assertEquals(Set.of("http://example.com/s"), result.keySet());
+		assertTrue(result.toString().contains("Sample"), "Expected the literal value in the RDF/JSON output");
 	}
 
 	@Test

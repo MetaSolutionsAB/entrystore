@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.model.api.converter;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
@@ -39,6 +40,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class MediaTypeConverter implements Converter<String, MediaType> {
 
+	private static final MediaTypeConverter INSTANCE = new MediaTypeConverter();
+
 	@Override
 	public MediaType convert(@NonNull String input) {
 		if (input.isBlank()) {
@@ -50,6 +53,21 @@ public class MediaTypeConverter implements Converter<String, MediaType> {
 		} catch (InvalidMediaTypeException e) {
 			// an unencoded '+' arrives as a space after servlet decoding; retry with it restored
 			return MediaType.parseMediaType(trimmed.replace(' ', '+'));
+		}
+	}
+
+	/**
+	 * Converts like {@link #convert}, but answers {@code null} instead of throwing for input that is not a media
+	 * type, for parameters that 5.x ignored when it did not recognise their value.
+	 */
+	public static @Nullable MediaType parseLeniently(@Nullable String input) {
+		if (input == null) {
+			return null;
+		}
+		try {
+			return INSTANCE.convert(input);
+		} catch (InvalidMediaTypeException e) {
+			return null;
 		}
 	}
 }

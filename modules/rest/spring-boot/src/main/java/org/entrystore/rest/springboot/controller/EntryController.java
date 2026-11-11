@@ -80,12 +80,12 @@ public class EntryController {
 	public ResponseEntity<byte[]> getEntryInJsonFormat(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
-			@RequestParam(required = false) MediaType rdfFormat,
+			@RequestParam(required = false) String rdfFormat,
 			@RequestParam(required = false) String includeAll,
 			@ModelAttribute ListFilter listFilter,
 			@Parameter(hidden = true) HttpServletResponse response
 	) {
-		String mediaType = rdfFormat != null ? GraphUtil.validateRdfMediaType(rdfFormat.toString()) : null;
+		String mediaType = GraphUtil.resolveJsonRdfFormat(rdfFormat);
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 		boolean mayReadNothing = entryService.mayReadNothing(entry);
 		GetEntryResponse body = entryService.getEntryInJsonFormat(entry, mediaType, includeAll != null, listFilter,

@@ -137,8 +137,8 @@ public class ResourceService {
 					MediaType.parseMediaType(rdfMediaType));
 		}
 
-		String mediaType = query.rdfFormat() != null ? query.rdfFormat().toString() : query.acceptHeader();
-		return new ResourceRepresentation.TextBody(serializeResourceAsJson(entry, mediaType, query.listFilter()),
+		String rdfFormat = GraphUtil.resolveJsonRdfFormat(query.rdfFormat());
+		return new ResourceRepresentation.TextBody(serializeResourceAsJson(entry, rdfFormat, query.listFilter()),
 				MediaType.APPLICATION_JSON);
 	}
 

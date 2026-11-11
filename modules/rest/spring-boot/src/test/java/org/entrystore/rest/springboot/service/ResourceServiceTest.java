@@ -26,6 +26,7 @@ import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
+import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
@@ -41,6 +42,7 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.util.RDFJSON;
+import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -63,6 +65,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.AdditionalMatchers.aryEq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -220,6 +223,23 @@ class ResourceServiceTest {
 
 		ResourceRepresentation.TextBody body = assertInstanceOf(ResourceRepresentation.TextBody.class, result);
 		assertEquals(MediaType.parseMediaType("application/n-triples"), body.mediaType());
+	}
+
+	// 5.x serialized the member graphs of a group by rdfFormat alone; the Accept header used to leak in here and
+	// produced empty graphs for anything but application/json and application/ld+json.
+	@Test
+	void getResourceRepresentation_groupWithoutRdfFormat_serializesAsRdfJsonWhateverTheAcceptHeader() {
+		Group group = mock(Group.class);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.Group);
+		when(entry.getResource()).thenReturn(group);
+		when(resourceSerializationService.serializeResourceGroup(eq(group), any())).thenReturn(new JSONObject());
+		var query = new ResourceQuery(null, null, "application/ld+json", null, "en", 50, null, null,
+				emptyListFilter());
+
+		service.getResourceRepresentation(entry, query);
+
+		verify(resourceSerializationService).serializeResourceGroup(group, "application/json");
 	}
 
 	@Test

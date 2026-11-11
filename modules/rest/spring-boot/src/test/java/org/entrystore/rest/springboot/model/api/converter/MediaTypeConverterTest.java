@@ -71,4 +71,20 @@ class MediaTypeConverterTest {
 		// message is crafted in AppExceptionHandler from the MethodArgumentTypeMismatchException.
 		assertThrows(InvalidMediaTypeException.class, () -> converter.convert("not a media type"));
 	}
+
+	@Test
+	void parseLeniently_spaceRestoredToPlus() {
+		assertEquals(MediaType.parseMediaType("application/ld+json"),
+				MediaTypeConverter.parseLeniently("application/ld json"));
+	}
+
+	@Test
+	void parseLeniently_unparseable_returnsNullInsteadOfThrowing() {
+		assertNull(MediaTypeConverter.parseLeniently("not a media type"));
+	}
+
+	@Test
+	void parseLeniently_null_returnsNull() {
+		assertNull(MediaTypeConverter.parseLeniently(null));
+	}
 }
