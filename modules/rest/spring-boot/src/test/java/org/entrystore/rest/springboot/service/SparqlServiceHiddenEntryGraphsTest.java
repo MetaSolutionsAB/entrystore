@@ -271,6 +271,15 @@ class SparqlServiceHiddenEntryGraphsTest {
 		assertEquals(Map.of(), actual.rows());
 	}
 
+	/** The graph variable is bound before the path is evaluated, so the filter sees the entry graph and drops it. */
+	@Test
+	void runQuery_zeroLengthStepInAnEntryGraphBoundByValues_matchesNothing() throws Exception {
+		Result actual = runQuery("SELECT ?g ?b WHERE { VALUES ?g { <" + METADATA_GRAPH + "> } "
+				+ "GRAPH ?g { ex:a1 ex:next* ?b } }", null);
+
+		assertEquals(Map.of(), actual.rows());
+	}
+
 	@Test
 	void runQuery_fromOnlyEntryGraphs_matchesNothingInsteadOfAllGraphs() throws Exception {
 		String query = "SELECT ?s ?p ?o FROM <" + METADATA_GRAPH + "> FROM NAMED <" + RESOURCE_GRAPH + "> "
