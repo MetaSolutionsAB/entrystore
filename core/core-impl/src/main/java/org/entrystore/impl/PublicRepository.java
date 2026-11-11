@@ -399,19 +399,22 @@ public class PublicRepository {
 		
 		// A context's entries are published again together, just in case its ACL has changed: its graphs are cleared
 		// at once, without per-statement lookups, and the entries the guest can still read are added again.
-		if (GraphType.Context.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
-			String contextURI = e.getResourceURI().toString();
-			clearContext(repository.getValueFactory().createIRI(contextURI), rc);
-			String id = URISplit.getLastSegment(contextURI);
-			Context context = rm.getContextManager().getContext(id);
+		if (isContextEntry(e)) {
+			boolean canonical = hasCanonicalContextURI(e);
+			if (canonical) {
+				clearContext(repository.getValueFactory().createIRI(e.getResourceURI().toString()), rc);
+			}
+			Context context = rm.getContextManager().getContext(e.getId());
 			if (context != null) {
-				Set<URI> entries = context.getEntries();
+				Set<URI> entries = context instanceof ContextImpl contextImpl
+						? contextImpl.getChildEntryURIsFromStore()
+						: context.getEntries();
 				for (URI entryURI : entries) {
 					if (entryURI != null) {
 						try {
 							Entry child = rm.getContextManager().getEntry(entryURI);
 							if (child != null) {
-								addEntry(child, rc);
+								republishChild(child, canonical, rc);
 							}
 						} catch (AuthorizationException ae) {
 							continue;
@@ -478,28 +481,11 @@ public class PublicRepository {
 			ValueFactory vf = repository.getValueFactory();
 			IRI contextURI = vf.createIRI(e.getContext().getURI().toString());
 
-			IRI entryNG = vf.createIRI(e.getEntryURI().toString());
-			IRI mdNG = vf.createIRI(e.getLocalMetadataURI().toString());
-			IRI resNG = vf.createIRI(e.getResourceURI().toString());
-			IRI extMdNG = null;
-
-			if (e.getExternalMetadataURI() != null) {
-				extMdNG = vf.createIRI(e.getCachedExternalMetadataURI().toString());
-			}
-
-			List<Resource> graphs = new ArrayList<>(List.of(entryNG, mdNG));
-			if (extMdNG != null) {
-				graphs.add(extMdNG);
-			}
-			// addEntry writes a resource graph only for a local Graph entry; another resource URI can name any graph.
-			if (GraphType.Graph.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
-				graphs.add(resNG);
-			}
-			Resource[] entryGraphs = graphs.toArray(Resource[]::new);
+			Resource[] entryGraphs = entryGraphs(e);
 			// The whole context goes; its own graphs were never in its context's graph, which is _contexts.
 			boolean contextEntry = isContextEntry(e);
-			if (contextEntry) {
-				clearContext(resNG, rc);
+			if (contextEntry && hasCanonicalContextURI(e)) {
+				clearContext(vf.createIRI(e.getResourceURI().toString()), rc);
 			}
 			List<Statement> chunk;
 			do {
@@ -519,10 +505,61 @@ public class PublicRepository {
 		}
 	}
 
+	/**
+	 * After a bulk clear, only the child's graphs outside its context's URI can be left, which clearing its own
+	 * graphs covers; without one, the child is removed and added as on its own.
+	 */
+	private void republishChild(Entry child, boolean afterBulkClear, RepositoryConnection rc) {
+		if (afterBulkClear) {
+			URI currentUser = pm.getAuthenticatedUserURI();
+			try {
+				pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+				rc.clear(entryGraphs(child));
+			} finally {
+				pm.setAuthenticatedUserURI(currentUser);
+			}
+		} else {
+			removeEntry(child, rc);
+		}
+		addEntry(child, rc);
+	}
+
+	/** A context whose resource URI is {@code {repository URL}{id}}, as core creates it, owns the graphs below it. */
+	private boolean hasCanonicalContextURI(Entry contextEntry) {
+		return contextEntry.getResourceURI().equals(
+				URISplit.createURI(rm.getRepositoryURL().toString(), contextEntry.getId()));
+	}
+
+	/**
+	 * The graphs the entry published, read as admin. The resource graph counts only for a local Graph entry, the only
+	 * kind addEntry publishes one for, or when it is the entry's own resource graph, which no other entry uses: the
+	 * resource URI of other entries can name any graph.
+	 */
+	private Resource[] entryGraphs(Entry e) {
+		ValueFactory vf = repository.getValueFactory();
+		List<Resource> graphs = new ArrayList<>();
+		graphs.add(vf.createIRI(e.getEntryURI().toString()));
+		graphs.add(vf.createIRI(e.getLocalMetadataURI().toString()));
+		if (e.getExternalMetadataURI() != null) {
+			graphs.add(vf.createIRI(e.getCachedExternalMetadataURI().toString()));
+		}
+		URI resourceURI = e.getResourceURI();
+		boolean ownResourceGraph = URISplit.of(e.getEntryURI(), rm.getRepositoryURL())
+				.map(URISplit::getResourceURI)
+				.filter(resourceURI::equals)
+				.isPresent();
+		boolean localGraph = GraphType.Graph.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType());
+		if (ownResourceGraph || localGraph) {
+			graphs.add(vf.createIRI(resourceURI.toString()));
+		}
+		return graphs.toArray(Resource[]::new);
+	}
+
 	/** A local context entry, whose resource graph is the graph of that context. */
 	private static boolean isContextEntry(Entry e) {
-		return EntryType.Local.equals(e.getEntryType())
-				&& (GraphType.Context.equals(e.getGraphType()) || GraphType.SystemContext.equals(e.getGraphType()));
+		GraphType graphType = e.getGraphType();
+		return (GraphType.Context.equals(graphType) || GraphType.SystemContext.equals(graphType))
+				&& EntryType.Local.equals(e.getEntryType());
 	}
 
 	/**
