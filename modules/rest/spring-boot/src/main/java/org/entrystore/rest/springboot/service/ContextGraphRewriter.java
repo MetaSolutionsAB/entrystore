@@ -118,6 +118,7 @@ final class ContextGraphRewriter {
 
 			@Override
 			public void meet(Group node) {
+				names.addAll(node.getGroupBindingNames());
 				if (node.getGroupElements().stream().anyMatch(e -> e.getOperator() instanceof Count count
 						&& count.isDistinct() && count.getArg() == null)) {
 					distinctSolutionCounts.add(node);
