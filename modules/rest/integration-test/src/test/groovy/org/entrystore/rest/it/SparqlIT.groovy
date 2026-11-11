@@ -527,6 +527,24 @@ class SparqlIT extends BaseSpec {
 		(JSON_PARSER.parseText(conn.inputStream.text)['results']['bindings'] as List).size() == 1
 	}
 
+	def "GET /sparql returns each solution of a three-pattern join once"() {
+		given:
+		// Each pattern matches the entry's single title; without the rewrite each matched once per graph copy.
+		def title = '<' + NameSpaceConst.DC_TERM_TITLE + '>'
+		def query = 'SELECT ?s ?t WHERE { ?s ' + title + ' "' + PUBLIC_TITLE + '" . ?s ' + title + ' ?t . ?s ' +
+			title + ' ?t2 }'
+		def queryParams = [query: query, format: 'application/sparql-results+json']
+
+		when:
+		def conn = EntryStoreClient.getRequest('/sparql' + convertMapToQueryParams(queryParams), '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def bindings = JSON_PARSER.parseText(conn.inputStream.text)['results']['bindings'] as List
+		bindings.size() == 1
+		bindings[0]['t']['value'] == PUBLIC_TITLE
+	}
+
 	@Unroll
 	def "GET /#requestedContext/sparql exposes only that context's triples"() {
 		given:
