@@ -561,6 +561,23 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void removeEntries_entryThatBecameAdministrative_removesWhatItPublished() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		EntryImpl link = newEntryStating(context, "published-before", SHARED_TITLE);
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			link.setGraphType(GraphType.User);
+
+			publicRepository.removeEntries(Set.of(link));
+
+			assertFalse(holds(publicRepository, contextGraph(context), title("published-before")));
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
 	public void removeEntries_statementAlsoStatedInAnotherContext_leavesThatContextAlone() {
 		rm.setCheckForAuthorization(false);
 		ContextImpl first = newContext();

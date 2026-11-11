@@ -553,8 +553,9 @@ public class PublicRepository {
 			Resource[] entryGraphs = extMdNG != null
 					? new Resource[]{entryNG, mdNG, extMdNG, resNG}
 					: new Resource[]{entryNG, mdNG, resNG};
-			// addEntry skips administrative entries, so they never added anything to their context's graph.
-			boolean inContextGraph = !isAdministrative(e);
+			// A context entry's resource graph is the graph of that context; its own context's graph never held it.
+			boolean inContextGraph = !GraphType.Context.equals(e.getGraphType())
+					&& !GraphType.SystemContext.equals(e.getGraphType());
 			List<Statement> chunk;
 			do {
 				chunk = new ArrayList<>();
