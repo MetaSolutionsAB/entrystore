@@ -160,7 +160,8 @@ public class SparqlService {
 	 *                    context's resource URI (or a synthesised URI for missing/reserved contexts), so the
 	 *                    dataset is exactly that one graph in both positions; when null the query runs against
 	 *                    the full public repository, and unless it declares FROM or FROM NAMED, its triple
-	 *                    patterns outside GRAPH read the context graphs only (see {@link ContextGraphRewriter})
+	 *                    patterns outside GRAPH read the context graphs only (see {@link ContextGraphRewriter});
+	 *                    GRAPH patterns and FROM lists keep their per-graph semantics
 	 * @param out         the stream that the serialised tuple result is written to; the caller owns its
 	 *                    lifecycle (the wrapping {@code SizeLimitedOutputStream} does not close it)
 	 * @throws NotImplementedException     when the public repository is disabled
@@ -192,8 +193,9 @@ public class SparqlService {
 
 	/**
 	 * Bounds the heap that concurrent evaluations can take together: the per-query time and size caps do not
-	 * bound the memory of a query that materialises its solutions. The permit is held until the result is
-	 * written, so a query that outlives its HTTP request (async timeout) still counts. The limit is shared by all
+	 * bound the memory of a query that materialises its solutions. The permit is held until the result is fully
+	 * written or the connection times out, so a query that outlives its HTTP request (async timeout) still counts,
+	 * and a client that stops reading keeps its slot until the container's idle timeout. The limit is shared by all
 	 * callers: a few long-running queries make the others wait or get 503 until they end or reach the execution
 	 * time limit; per-client limits belong in the reverse proxy.
 	 */
@@ -306,10 +308,9 @@ public class SparqlService {
 		return contextUriPrefix() + contextId;
 	}
 
-	/** The URI of a context is this prefix followed by the context id. */
+	/** Core builds the URI of a context as this prefix followed by the context id, without adding a slash. */
 	private String contextUriPrefix() {
-		String base = repositoryManager.getRepositoryURL().toString();
-		return base.endsWith("/") ? base : base + "/";
+		return repositoryManager.getRepositoryURL().toString();
 	}
 
 	private static void rejectFederatedServices(TupleExpr expr) {

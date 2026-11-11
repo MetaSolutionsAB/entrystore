@@ -511,9 +511,11 @@ entrystore.solr.extract-fulltext=off
 # entrystore.repository.public.sparql.max-response-bytes=67108864
 ## Queries evaluated at the same time. A query waits up to a second for a running one
 ## to end and is otherwise answered 503 with Retry-After. Each running query can hold
-## a large share of the heap, so raise this only together with the heap size. The limit
-## is shared by all callers, so a few long-running queries can make others wait or get
-## 503 until they end or reach max-execution-time; limit per client in the reverse proxy.
+## a large share of the heap, so raise this only together with the heap size. A query
+## holds its slot until its result is fully written or the connection times out, so a
+## client that stops reading keeps it until the container's idle timeout. The limit is
+## shared by all callers, so a few long-running queries can make others wait or get 503
+## until they end or time out; limit per client in the reverse proxy.
 # entrystore.repository.public.sparql.max-concurrent-queries=4
 
 ## RowStore integration
