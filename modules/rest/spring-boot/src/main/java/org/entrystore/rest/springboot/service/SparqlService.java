@@ -43,6 +43,7 @@ import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.security.FederatedQueryGuard;
 import org.entrystore.rest.springboot.util.SparqlResultFormat;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -54,6 +55,8 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -66,18 +69,24 @@ public class SparqlService {
 	// preserved in the cause chain for server-side debugging.
 	private static final String INTERNAL_ERROR_MESSAGE = "Public SPARQL endpoint encountered an internal error";
 
+	private static final long PERMIT_WAIT_MILLIS = 1000;
+
+	private static final String RETRY_AFTER_SECONDS = "5";
+
 	private final RepositoryManagerImpl repositoryManager;
 	private final ContextService contextService;
 	private final ReservedNamesService reservedNames;
 	private final int maxExecutionTime;
 	private final long maxResponseBytes;
+	private final Semaphore queryPermits;
 
 	public SparqlService(
 			RepositoryManagerImpl repositoryManager,
 			ContextService contextService,
 			ReservedNamesService reservedNames,
 			@Value("${entrystore.repository.public.sparql.max-execution-time:10}") int maxExecutionTime,
-			@Value("${entrystore.repository.public.sparql.max-response-bytes:67108864}") long maxResponseBytes) {
+			@Value("${entrystore.repository.public.sparql.max-response-bytes:67108864}") long maxResponseBytes,
+			@Value("${entrystore.repository.public.sparql.max-concurrent-queries:4}") int maxConcurrentQueries) {
 		// Reject misconfigured limits at construction so the app fails to start rather than silently
 		// disabling timeouts/caps on this anonymous endpoint (RDF4J treats setMaxExecutionTime(0) as unlimited).
 		if (maxExecutionTime <= 0) {
@@ -88,13 +97,18 @@ public class SparqlService {
 			throw new IllegalStateException(
 					"entrystore.repository.public.sparql.max-response-bytes must be > 0, was " + maxResponseBytes);
 		}
+		if (maxConcurrentQueries <= 0) {
+			throw new IllegalStateException(
+					"entrystore.repository.public.sparql.max-concurrent-queries must be > 0, was " + maxConcurrentQueries);
+		}
 		this.repositoryManager = repositoryManager;
 		this.contextService = contextService;
 		this.reservedNames = reservedNames;
 		this.maxExecutionTime = maxExecutionTime;
 		this.maxResponseBytes = maxResponseBytes;
-		log.debug("Public SPARQL max execution time: {} seconds; max response bytes: {}",
-				maxExecutionTime, maxResponseBytes);
+		this.queryPermits = new Semaphore(maxConcurrentQueries, true);
+		log.debug("Public SPARQL max execution time: {} seconds; max response bytes: {}; max concurrent queries: {}",
+				maxExecutionTime, maxResponseBytes, maxConcurrentQueries);
 	}
 
 	/**
@@ -135,15 +149,44 @@ public class SparqlService {
 	 * @throws BadRequestException         {@code "Malformed SPARQL query"} on parse failure;
 	 *                                      {@code "SPARQL SERVICE clauses are not permitted on the public endpoint"}
 	 *                                      when a federated SERVICE clause is present
-	 * @throws CustomResponseException     504 if the query times out; 413 if the result exceeds
-	 *                                      {@code maxResponseBytes}
+	 * @throws CustomResponseException     503 with Retry-After if {@code max-concurrent-queries} queries are
+	 *                                      already running and none ends within a second; 504 if the query times
+	 *                                      out; 413 if the result exceeds {@code maxResponseBytes}
 	 */
 	public void runQuery(SparqlResultFormat format, String queryString, String contextId, OutputStream out) {
 		PublicRepository publicRepository = repositoryManager.getPublicRepository();
 		if (publicRepository == null) {
 			throw new NotImplementedException("Public SPARQL endpoint is not enabled");
 		}
+		// Runs before the first byte is written, so a rejection is still a clean 503.
+		acquirePermit();
+		try {
+			evaluate(publicRepository, format, queryString, contextId, out);
+		} finally {
+			queryPermits.release();
+		}
+	}
 
+	/**
+	 * Bounds the heap that concurrent evaluations can take together: the per-query time and size caps do not
+	 * bound the memory of a query that materialises its solutions. The permit is held until the result is
+	 * written, so a query that outlives its HTTP request (async timeout) still counts.
+	 */
+	private void acquirePermit() {
+		boolean acquired;
+		try {
+			acquired = queryPermits.tryAcquire(PERMIT_WAIT_MILLIS, TimeUnit.MILLISECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			acquired = false;
+		}
+		if (!acquired) {
+			throw new QueryCapacityExceededException();
+		}
+	}
+
+	private void evaluate(PublicRepository publicRepository, SparqlResultFormat format, String queryString,
+			String contextId, OutputStream out) {
 		// Don't disclose context existence on the anonymous endpoint. Both missing and
 		// existing-but-private contexts must produce the same observable response (200 with
 		// empty bindings); returning 404 for missing contexts would let a client enumerate
@@ -276,6 +319,25 @@ public class SparqlService {
 			case TSV -> new SPARQLResultsTSVWriter(out);
 			case BINARY -> new BinaryQueryResultWriter(out);
 		};
+	}
+
+	/** Has no stack trace: it marks expected load, and AppExceptionHandler logs every one. */
+	private static final class QueryCapacityExceededException extends CustomResponseException {
+		QueryCapacityExceededException() {
+			super("Too many concurrent SPARQL queries; retry later", HttpStatus.SERVICE_UNAVAILABLE,
+					retryAfterHeaders());
+		}
+
+		private static HttpHeaders retryAfterHeaders() {
+			HttpHeaders headers = new HttpHeaders();
+			headers.set(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS);
+			return headers;
+		}
+
+		@Override
+		public synchronized Throwable fillInStackTrace() {
+			return this;
+		}
 	}
 
 	private static final class SparqlResultTooLargeException extends IOException {

@@ -530,6 +530,15 @@ entrystore.solr.extract-fulltext=off
 # entrystore.repository.public.path=file:///srv/entrystore/store/public/
 # entrystore.repository.public.indexes=cspo,spoc,posc
 # entrystore.repository.public.wal=on|off (default: off)
+## Limits of GET and POST /sparql and /{context-id}/sparql; each must be > 0.
+## A query that runs longer than max-execution-time (seconds) is answered 504,
+## and a result larger than max-response-bytes is answered 413 or cut off.
+# entrystore.repository.public.sparql.max-execution-time=10
+# entrystore.repository.public.sparql.max-response-bytes=67108864
+## Queries evaluated at the same time. A query waits up to a second for a running one
+## to end and is otherwise answered 503 with Retry-After. Each running query can hold
+## a large share of the heap, so raise this only together with the heap size.
+# entrystore.repository.public.sparql.max-concurrent-queries=4
 
 ## RowStore integration
 ## Rowstore pipelines only replace, append to or alias datasets on the origin of this URL,
