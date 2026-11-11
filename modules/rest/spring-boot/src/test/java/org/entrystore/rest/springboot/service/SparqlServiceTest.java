@@ -143,7 +143,7 @@ class SparqlServiceTest {
 		lenient().when(reservedNames.isReservedName(anyString())).thenReturn(false);
 
 		service = new SparqlService(repositoryManager, contextService, reservedNames,
-				MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES);
+				MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES, false);
 	}
 
 	@AfterEach
@@ -284,7 +284,7 @@ class SparqlServiceTest {
 	void runQuery_appliesConfiguredMaxExecutionTimeAndDisablesInferred() {
 		int customExecutionTime = 42;
 		SparqlService customService = new SparqlService(repositoryManager, contextService, reservedNames,
-				customExecutionTime, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES);
+				customExecutionTime, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES, false);
 
 		RepositoryConnection mockConn = mock(RepositoryConnection.class);
 		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
@@ -347,7 +347,7 @@ class SparqlServiceTest {
 	@Test
 	void runQuery_resultExceedsMaxResponseBytes_throws413() {
 		SparqlService tinyCapService = new SparqlService(repositoryManager, contextService, reservedNames,
-				MAX_EXECUTION_TIME, 8L, MAX_CONCURRENT_QUERIES);
+				MAX_EXECUTION_TIME, 8L, MAX_CONCURRENT_QUERIES, false);
 
 		try (RepositoryConnection rc = backingRepository.getConnection()) {
 			ValueFactory vf = rc.getValueFactory();
@@ -431,28 +431,28 @@ class SparqlServiceTest {
 	void constructor_zeroExecutionTime_throws() {
 		assertThrows(IllegalStateException.class,
 				() -> new SparqlService(repositoryManager, contextService, reservedNames,
-						0, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES));
+						0, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES, false));
 	}
 
 	@Test
 	void constructor_negativeExecutionTime_throws() {
 		assertThrows(IllegalStateException.class,
 				() -> new SparqlService(repositoryManager, contextService, reservedNames,
-						-1, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES));
+						-1, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES, false));
 	}
 
 	@Test
 	void constructor_zeroResponseBytes_throws() {
 		assertThrows(IllegalStateException.class,
 				() -> new SparqlService(repositoryManager, contextService, reservedNames,
-						MAX_EXECUTION_TIME, 0L, MAX_CONCURRENT_QUERIES));
+						MAX_EXECUTION_TIME, 0L, MAX_CONCURRENT_QUERIES, false));
 	}
 
 	@Test
 	void constructor_negativeResponseBytes_throws() {
 		assertThrows(IllegalStateException.class,
 				() -> new SparqlService(repositoryManager, contextService, reservedNames,
-						MAX_EXECUTION_TIME, -1L, MAX_CONCURRENT_QUERIES));
+						MAX_EXECUTION_TIME, -1L, MAX_CONCURRENT_QUERIES, false));
 	}
 
 	@Test
@@ -573,14 +573,14 @@ class SparqlServiceTest {
 	void constructor_zeroConcurrentQueries_throws() {
 		assertThrows(IllegalStateException.class,
 				() -> new SparqlService(repositoryManager, contextService, reservedNames,
-						MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, 0));
+						MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, 0, false));
 	}
 
 	@Test
 	void constructor_negativeConcurrentQueries_throws() {
 		assertThrows(IllegalStateException.class,
 				() -> new SparqlService(repositoryManager, contextService, reservedNames,
-						MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, -1));
+						MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, -1, false));
 	}
 
 	@Test
@@ -738,7 +738,7 @@ class SparqlServiceTest {
 					vf.createIRI(CONTEXT_GRAPH));
 		}
 		return new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME,
-				MAX_RESPONSE_BYTES, maxConcurrentQueries, permitWait);
+				MAX_RESPONSE_BYTES, maxConcurrentQueries, false, permitWait);
 	}
 
 	/**

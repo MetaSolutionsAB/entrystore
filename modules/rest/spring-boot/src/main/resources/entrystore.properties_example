@@ -517,6 +517,13 @@ entrystore.solr.extract-fulltext=off
 ## shared by all callers, so a few long-running queries can make others wait or get 503
 ## until they end or time out; limit per client in the reverse proxy.
 # entrystore.repository.public.sparql.max-concurrent-queries=4
+## The public repository stores each public statement in its context's graph and in its
+## entry's graph (metadata, cached external metadata or resource graph). By default
+## /sparql sees only the context graphs: GRAPH ?g binds only context graphs, and GRAPH,
+## FROM and FROM NAMED with an entry graph match nothing. Turn this on to also expose the
+## entry graphs, as 5.x did; GRAPH and FROM then see each graph's copy of a statement.
+## /{context-id}/sparql always sees only the context's graph.
+# entrystore.repository.public.sparql.expose-entry-graphs=on|off (default: off)
 
 ## RowStore integration
 ## Rowstore pipelines only replace, append to or alias datasets on the origin of this URL,

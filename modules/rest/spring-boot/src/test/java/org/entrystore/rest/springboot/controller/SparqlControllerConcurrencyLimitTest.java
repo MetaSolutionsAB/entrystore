@@ -80,7 +80,7 @@ class SparqlControllerConcurrencyLimitTest {
 		when(publicRepository.getConnection()).thenAnswer(_ -> repository.getConnection());
 		when(repositoryManager.getRepositoryURL()).thenReturn(URI.create("http://example.org/store/").toURL());
 		service = new SparqlService(repositoryManager, mock(ContextService.class), mock(ReservedNamesService.class),
-				10, 64L * 1024 * 1024, 1);
+				10, 64L * 1024 * 1024, 1, false);
 		mvc = MockMvcBuilders.standaloneSetup(new SparqlController(service))
 				.setControllerAdvice(new AppExceptionHandler(new WebResourceUrls("http://localhost:8181/store/")))
 				.build();
