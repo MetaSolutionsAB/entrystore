@@ -113,7 +113,8 @@ class SparqlServiceContextGraphTest {
 		lenient().when(repositoryManager.getPublicRepository()).thenReturn(publicRepository);
 		lenient().when(publicRepository.getConnection()).thenAnswer(_ -> repository.getConnection());
 		lenient().when(repositoryManager.getRepositoryURL()).thenReturn(URI.create(BASE).toURL());
-		service = new SparqlService(repositoryManager, contextService, reservedNames, 10, 64L * 1024 * 1024, 4, true);
+		service = new SparqlService(repositoryManager, contextService, reservedNames, 10, 64L * 1024 * 1024, 4, true,
+				1);
 	}
 
 	static Stream<Arguments> queriesWithoutGraphClause() {

@@ -52,6 +52,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -73,8 +74,6 @@ public class SparqlService {
 	// preserved in the cause chain for server-side debugging.
 	private static final String INTERNAL_ERROR_MESSAGE = "Public SPARQL endpoint encountered an internal error";
 
-	private static final Duration PERMIT_WAIT = Duration.ofSeconds(1);
-
 	private static final String RETRY_AFTER_SECONDS = "5";
 
 	private final RepositoryManagerImpl repositoryManager;
@@ -85,6 +84,7 @@ public class SparqlService {
 	private final Semaphore queryPermits;
 	private final Duration permitWait;
 	private final boolean exposeEntryGraphs;
+	private final RejectedQueryWarning rejectedQueryWarning;
 
 	@Autowired
 	public SparqlService(
@@ -94,9 +94,18 @@ public class SparqlService {
 			@Value("${entrystore.repository.public.sparql.max-execution-time:10}") int maxExecutionTime,
 			@Value("${entrystore.repository.public.sparql.max-response-bytes:67108864}") long maxResponseBytes,
 			@Value("${entrystore.repository.public.sparql.max-concurrent-queries:4}") int maxConcurrentQueries,
-			@Value("${entrystore.repository.public.sparql.expose-entry-graphs:false}") boolean exposeEntryGraphs) {
+			@Value("${entrystore.repository.public.sparql.expose-entry-graphs:false}") boolean exposeEntryGraphs,
+			@Value("${entrystore.repository.public.sparql.max-wait-time:1}") int maxWaitTime) {
 		this(repositoryManager, contextService, reservedNames, maxExecutionTime, maxResponseBytes, maxConcurrentQueries,
-				exposeEntryGraphs, PERMIT_WAIT);
+				exposeEntryGraphs, permitWait(maxWaitTime));
+	}
+
+	private static Duration permitWait(int maxWaitTime) {
+		if (maxWaitTime < 0) {
+			throw new IllegalStateException(
+					"entrystore.repository.public.sparql.max-wait-time must be >= 0, was " + maxWaitTime);
+		}
+		return Duration.ofSeconds(maxWaitTime);
 	}
 
 	/** {@code permitWait} is how long a query waits for a running one to end before it is answered 503. */
@@ -132,6 +141,8 @@ public class SparqlService {
 		this.queryPermits = new Semaphore(maxConcurrentQueries, true);
 		this.permitWait = permitWait;
 		this.exposeEntryGraphs = exposeEntryGraphs;
+		this.rejectedQueryWarning = new RejectedQueryWarning(Clock.systemUTC(), log::warn, maxConcurrentQueries,
+				permitWait);
 		log.debug("Public SPARQL max execution time: {} seconds; max response bytes: {}; max concurrent queries: {}; "
 				+ "entry graphs exposed: {}", maxExecutionTime, maxResponseBytes, maxConcurrentQueries,
 				exposeEntryGraphs);
@@ -179,8 +190,8 @@ public class SparqlService {
 	 *                                      {@code "SPARQL SERVICE clauses are not permitted on the public endpoint"}
 	 *                                      when a federated SERVICE clause is present
 	 * @throws CustomResponseException     503 with Retry-After if {@code max-concurrent-queries} queries are
-	 *                                      already running and none ends within a second; 504 if the query times
-	 *                                      out; 413 if the result exceeds {@code maxResponseBytes}
+	 *                                      already running and none ends within {@code max-wait-time}; 504 if the
+	 *                                      query times out; 413 if the result exceeds {@code maxResponseBytes}
 	 */
 	public void runQuery(SparqlResultFormat format, String queryString, String contextId, OutputStream out) {
 		PublicRepository publicRepository = repositoryManager.getPublicRepository();
@@ -213,6 +224,7 @@ public class SparqlService {
 			acquired = false;
 		}
 		if (!acquired) {
+			rejectedQueryWarning.record();
 			throw new QueryCapacityExceededException();
 		}
 	}
