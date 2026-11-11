@@ -49,11 +49,12 @@ import java.io.File;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
@@ -302,26 +303,30 @@ public class PublicRepository {
 	/**
 	 * Publishes each part of the entry the guest can read, its local metadata, its cached external metadata and, for a
 	 * local Graph entry, its resource graph, into the part's own graph and the context graph. A part the guest cannot
-	 * read is left out; the other parts are still published.
+	 * read is left out; the other parts are still published. Returns whether any statement was published.
 	 */
-	private void addEntry(Entry e, RepositoryConnection rc) throws RepositoryException {
+	private boolean addEntry(Entry e, RepositoryConnection rc) throws RepositoryException {
 		if (isAdministrative(e)) {
-			return;
+			return false;
 		}
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 			IRI contextGraph = repository.getValueFactory().createIRI(e.getContext().getURI().toString());
-			publishPart(() -> e.getLocalMetadata() == null ? null : e.getLocalMetadata().getGraph(),
+			boolean published = publishPart(() -> e.getLocalMetadata() == null ? null : e.getLocalMetadata().getGraph(),
 					e::getLocalMetadataURI, contextGraph, rc);
-			publishPart(() -> cachedExternalMetadata(e), e::getCachedExternalMetadataURI, contextGraph, rc);
+			published |= publishPart(() -> cachedExternalMetadata(e), e::getCachedExternalMetadataURI, contextGraph, rc);
 			if (isLocalGraph(e)) {
-				publishPart(() -> e.getResource() instanceof RDFResource resource ? resource.getGraph() : null,
-						e::getResourceURI, contextGraph, rc);
+				published |= publishPart(() -> resourceGraph(e), e::getResourceURI, contextGraph, rc);
 			}
+			return published;
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
+	}
+
+	private static Model resourceGraph(Entry e) {
+		return e.getResource() instanceof RDFResource resource ? resource.getGraph() : null;
 	}
 
 	/**
@@ -336,18 +341,23 @@ public class PublicRepository {
 		return e.getCachedExternalMetadata().getGraph();
 	}
 
-	/** Adds the part to its graph and the context graph if the guest can read it and it exists. */
-	private void publishPart(Supplier<Model> part, Supplier<URI> graph, IRI contextGraph, RepositoryConnection rc) {
+	/**
+	 * Adds the part to its graph and the context graph if the guest can read it and it exists; returns whether it
+	 * added any statement.
+	 */
+	private boolean publishPart(Supplier<Model> part, Supplier<URI> graph, IRI contextGraph, RepositoryConnection rc) {
 		Model model;
 		try {
 			model = part.get();
 		} catch (AuthorizationException ae) {
-			return;
+			return false;
 		}
 		URI graphURI = graph.get();
-		if (model != null && graphURI != null) {
-			rc.add(model, repository.getValueFactory().createIRI(graphURI.toString()), contextGraph);
+		if (model == null || model.isEmpty() || graphURI == null) {
+			return false;
 		}
+		rc.add(model, repository.getValueFactory().createIRI(graphURI.toString()), contextGraph);
+		return true;
 	}
 
 	void updateEntries(Set<Entry> entries) {
@@ -500,11 +510,8 @@ public class PublicRepository {
 
 	/**
 	 * Removes the entry's graphs and, from its context's graph, the statements no other entry of the context states.
-	 * The graphs of a context entry are its own, in _contexts, whose graph never holds them; the context it stands
-	 * for is cleared by {@link #clearContexts}, its context graph only if the context has the resource URI core gives
-	 * it. The statements are read and removed {@value #REMOVAL_CHUNK_SIZE} at
-	 * a time, which bounds the list held in memory; the transaction still holds every removal until it commits, and
-	 * the loop relies on reading its own removals when it reads the entry's graphs again.
+	 * The graphs of a context entry are its own, in _contexts, whose graph never holds them; the context it stands for
+	 * is cleared by {@link #clearContexts}.
 	 */
 	private void removeEntry(Entry e, RepositoryConnection rc) throws RepositoryException {
 		PrincipalManager pm = e.getRepositoryManager().getPrincipalManager();
@@ -513,29 +520,39 @@ public class PublicRepository {
 			// we need to be admin, in case the ACL has become
 			// more restrictive since adding the entry
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			ValueFactory vf = repository.getValueFactory();
-			IRI contextGraph = vf.createIRI(e.getContext().getURI().toString());
-			Optional<String> entriesContext = URISplit.of(e.getEntryURI(), rm.getRepositoryURL())
-					.map(split -> split.getContextURI().toString());
-
-			Resource[] entryGraphs = entryGraphs(e);
-			boolean contextEntry = isContextEntry(e);
-			List<Statement> chunk;
-			do {
-				chunk = new ArrayList<>();
-				try (RepositoryResult<Statement> result = rc.getStatements(null, null, null, false, entryGraphs)) {
-					while (result.hasNext() && chunk.size() < REMOVAL_CHUNK_SIZE) {
-						chunk.add(result.next());
-					}
-				}
-				rc.remove(chunk, entryGraphs);
-				if (!contextEntry) {
-					rc.remove(notHeldByAnotherEntryGraph(chunk, contextGraph, entriesContext, rc), contextGraph);
-				}
-			} while (chunk.size() == REMOVAL_CHUNK_SIZE);
+			IRI contextGraph = isContextEntry(e)
+					? null
+					: repository.getValueFactory().createIRI(e.getContext().getURI().toString());
+			Set<String> entriesContext = URISplit.of(e.getEntryURI(), rm.getRepositoryURL())
+					.map(split -> Set.of(split.getContextURI().toString()))
+					.orElse(Set.of());
+			removeStatements(entryGraphs(e), contextGraph, entriesContext, rc);
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
+	}
+
+	/**
+	 * Removes the statements of the graphs and, from the context graph if there is one, those no entry graph of the
+	 * given contexts holds any more. The statements are read and removed {@value #REMOVAL_CHUNK_SIZE} at a time, which
+	 * bounds the list held in memory. The transaction still holds every removal until it commits, and the loop relies
+	 * on reading its own removals when it reads the graphs again.
+	 */
+	private void removeStatements(Resource[] graphs, IRI contextGraph, Set<String> entriesContexts,
+			RepositoryConnection rc) {
+		List<Statement> chunk;
+		do {
+			chunk = new ArrayList<>();
+			try (RepositoryResult<Statement> result = rc.getStatements(null, null, null, false, graphs)) {
+				while (result.hasNext() && chunk.size() < REMOVAL_CHUNK_SIZE) {
+					chunk.add(result.next());
+				}
+			}
+			rc.remove(chunk, graphs);
+			if (contextGraph != null) {
+				rc.remove(notHeldByAnotherEntryGraph(chunk, contextGraph, entriesContexts, rc), contextGraph);
+			}
+		} while (chunk.size() == REMOVAL_CHUNK_SIZE);
 	}
 
 	/**
@@ -602,34 +619,46 @@ public class PublicRepository {
 	}
 
 	/**
-	 * Clears, for each context entry, the graphs of all entries of its context, found below
-	 * {@code {repository URL}{id}/} in one pass over the graph names for all of them, and the context graph if the
-	 * context has that URI as its resource URI. The context graph of a context with another resource URI is left to
-	 * the caller, as it could name a graph that is not the context's.
+	 * Clears, for each context entry, the graphs of all entries of its context and its context graph. The entry graphs
+	 * are found below {@code {repository URL}{id}/} in one pass over the graph names for all of the contexts. The
+	 * context graph is cleared if the context has {@code {repository URL}{id}} as its resource URI. Another resource
+	 * URI could name a graph that is not only the context's. The statements of the context's entry graphs are then
+	 * removed from it as for single entries, keeping those an entry graph of this context, or of the context whose
+	 * URI that resource URI is, still holds.
 	 */
 	private void clearContexts(List<Entry> contextEntries, RepositoryConnection rc) {
 		if (contextEntries.isEmpty()) {
 			return;
 		}
 		ValueFactory vf = repository.getValueFactory();
-		Set<String> contexts = new HashSet<>();
-		List<Resource> graphs = new ArrayList<>();
+		Map<String, List<Resource>> entryGraphsByContext = new HashMap<>();
 		for (Entry contextEntry : contextEntries) {
-			String contextURI = contextURIOf(contextEntry);
-			contexts.add(contextURI);
-			if (hasCanonicalContextURI(contextEntry)) {
-				graphs.add(vf.createIRI(contextEntry.getResourceURI().toString()));
-			} else {
-				log.warn("Context {} has the resource URI {} instead of {}, so its graph in the public repository is "
-						+ "not cleared at once", contextEntry.getId(), contextEntry.getResourceURI(), contextURI);
-			}
+			entryGraphsByContext.put(contextURIOf(contextEntry), new ArrayList<>());
 		}
 		try (RepositoryResult<Resource> ids = rc.getContextIDs()) {
 			for (Resource id : ids) {
-				if (isEntryGraphOfAny(id, contexts)) {
-					graphs.add(id);
+				String context = contextOfEntryGraph(id, entryGraphsByContext.keySet());
+				if (context != null) {
+					entryGraphsByContext.get(context).add(id);
 				}
 			}
+		}
+		List<Resource> graphs = new ArrayList<>();
+		for (Entry contextEntry : contextEntries) {
+			String contextURI = contextURIOf(contextEntry);
+			List<Resource> entryGraphs = entryGraphsByContext.get(contextURI);
+			if (hasCanonicalContextURI(contextEntry)) {
+				graphs.add(vf.createIRI(contextURI));
+			} else {
+				String resourceURI = contextEntry.getResourceURI().toString();
+				log.warn("Context {} has the resource URI {} instead of {}, so its statements are removed from that "
+						+ "graph in the public repository one by one", contextEntry.getId(), resourceURI, contextURI);
+				if (!entryGraphs.isEmpty()) {
+					removeStatements(entryGraphs.toArray(Resource[]::new), vf.createIRI(resourceURI),
+							Set.of(contextURI, resourceURI), rc);
+				}
+			}
+			graphs.addAll(entryGraphs);
 		}
 		// clear() without a graph clears the whole repository
 		if (!graphs.isEmpty()) {
@@ -638,36 +667,34 @@ public class PublicRepository {
 	}
 
 	/**
-	 * The statements, without their graph, that no remaining entry graph of the context holds. The context graph
+	 * The statements, without their graph, that no remaining entry graph of the contexts holds. The context graph
 	 * holds the union of the context's entry graphs, so a statement that another entry of the context also states
-	 * stays in it. Called after the statements are removed from the entry's own graphs, in the same transaction, so
-	 * that entry and entries removed earlier in the batch no longer count. Without a context URI derived from the
-	 * entry URI, no other entry graph counts.
+	 * stays in it. Called after the statements are removed from their own graphs, in the same transaction, so that
+	 * those graphs and the ones removed earlier in the batch no longer count. With no contexts, no entry graph counts.
 	 */
 	private List<Statement> notHeldByAnotherEntryGraph(List<Statement> statements, IRI contextGraph,
-			Optional<String> entriesContext, RepositoryConnection rc) {
+			Set<String> entriesContexts, RepositoryConnection rc) {
 		ValueFactory vf = repository.getValueFactory();
 		Set<Statement> distinct = new LinkedHashSet<>();
 		for (Statement statement : statements) {
 			distinct.add(vf.createStatement(statement.getSubject(), statement.getPredicate(), statement.getObject()));
 		}
-		Set<String> contexts = entriesContext.map(Set::of).orElse(Set.of());
 		List<Statement> notHeld = new ArrayList<>();
 		for (Statement statement : distinct) {
-			if (!heldByAnotherEntryGraph(statement, contextGraph, contexts, rc)) {
+			if (!heldByAnotherEntryGraph(statement, contextGraph, entriesContexts, rc)) {
 				notHeld.add(statement);
 			}
 		}
 		return notHeld;
 	}
 
-	private boolean heldByAnotherEntryGraph(Statement statement, IRI contextGraph, Set<String> entriesContext,
+	private boolean heldByAnotherEntryGraph(Statement statement, IRI contextGraph, Set<String> entriesContexts,
 			RepositoryConnection rc) {
 		try (RepositoryResult<Statement> copies = rc.getStatements(statement.getSubject(), statement.getPredicate(),
 				statement.getObject(), false)) {
 			for (Statement copy : copies) {
 				if (copy.getContext() != null && !copy.getContext().equals(contextGraph)
-						&& isEntryGraphOfAny(copy.getContext(), entriesContext)) {
+						&& contextOfEntryGraph(copy.getContext(), entriesContexts) != null) {
 					return true;
 				}
 			}
@@ -676,28 +703,28 @@ public class PublicRepository {
 	}
 
 	/**
-	 * Whether {@code graph} is the graph of an entry of one of the contexts, given by their URIs
-	 * {@code {repository URL}{id}}, as core splits the URIs of its entries. An entry graph is
-	 * {@code {repository URL}{id}/{path}/{entry id}}; its context URI is cut out first, as most graphs are of other
-	 * contexts, and so that the graph of another context, which splits as a resource of _contexts, never counts.
+	 * The context, of the given URIs {@code {repository URL}{id}}, whose entry graph {@code graph} is, as core splits
+	 * the URIs of its entries, or null. An entry graph is {@code {repository URL}{id}/{path}/{entry id}}; its context
+	 * URI is cut out first, as most graphs are of other contexts, and so that the graph of another context, which
+	 * splits as a resource of _contexts, never counts.
 	 */
-	private boolean isEntryGraphOfAny(Resource graph, Set<String> contexts) {
+	private String contextOfEntryGraph(Resource graph, Set<String> contexts) {
 		String base = rm.getRepositoryURL().toString();
 		String name = graph.stringValue();
 		if (contexts.isEmpty() || !name.startsWith(base)) {
-			return false;
+			return null;
 		}
 		int slash = name.indexOf('/', base.length());
 		if (slash <= base.length() || !contexts.contains(name.substring(0, slash))) {
-			return false;
+			return null;
 		}
 		try {
 			return URISplit.of(URI.create(name), rm.getRepositoryURL())
-					.map(URISplit::getContextURI)
-					.filter(context -> contexts.contains(context.toString()))
-					.isPresent();
+					.map(split -> split.getContextURI().toString())
+					.filter(contexts::contains)
+					.orElse(null);
 		} catch (IllegalArgumentException e) {
-			return false;
+			return null;
 		}
 	}
 
@@ -758,15 +785,9 @@ public class PublicRepository {
 										timeTracker = new Date();
 									}
 								}
-								try {
-									Entry entry = loadEntry(entryURI);
-									if (entry == null) {
-										continue;
-									}
-									addEntry(entry, rc);
+								Entry entry = loadEntry(entryURI);
+								if (entry != null && addEntry(entry, rc)) {
 									publicEntryCount++;
-								} catch (AuthorizationException ae) {
-									continue;
 								}
 							}
 						}
