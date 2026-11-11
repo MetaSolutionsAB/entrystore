@@ -49,6 +49,8 @@ public class CustomResponseException extends RuntimeException {
 	private CustomResponseException(String message, HttpStatus status, HttpHeaders headers, Throwable cause) {
 		super(message, cause);
 		this.status = status;
-		this.headers = HttpHeaders.readOnlyHttpHeaders(headers);
+		HttpHeaders copy = new HttpHeaders();
+		copy.putAll(headers);
+		this.headers = HttpHeaders.readOnlyHttpHeaders(copy);
 	}
 }

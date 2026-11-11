@@ -66,9 +66,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -588,22 +591,28 @@ class SparqlServiceTest {
 	@Test
 	void runQuery_permitFreedWhileWaiting_runsTheWaitingQuery() throws Exception {
 		SparqlService limited = serviceWithConcurrencyLimit(1);
-		BlockingOutputStream blocked = new BlockingOutputStream(1);
+		BlockingOutputStream holder = new BlockingOutputStream(1);
+		ByteArrayOutputStream waiterOut = new ByteArrayOutputStream();
+		AtomicReference<Throwable> waiterFailure = new AtomicReference<>();
 
 		try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-			Future<?> first;
-			Future<?> waiting;
+			Future<?> held;
+			Thread waiter;
 			try {
-				first = executor.submit(() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, blocked));
-				blocked.awaitWriters();
-				waiting = executor.submit(() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
+				held = executor.submit(() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, holder));
+				holder.awaitWriters();
+				waiter = startWaiter(() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, waiterOut),
+						waiterFailure);
+				awaitBlockedOnPermit(waiter);
 			} finally {
-				blocked.release();
+				holder.release();
 			}
-
-			first.get(10, TimeUnit.SECONDS);
-			waiting.get(10, TimeUnit.SECONDS);
+			held.get(10, TimeUnit.SECONDS);
+			waiter.join(10_000);
 		}
+
+		assertNull(waiterFailure.get(), "The waiting query should run once the permit is free");
+		assertTrue(waiterOut.size() > 0, "Expected the waiting query's result");
 	}
 
 	@Test
@@ -625,23 +634,55 @@ class SparqlServiceTest {
 	@Test
 	void runQuery_interruptedWhileWaitingForPermit_rejectsWith503AndKeepsInterruptFlag() throws Exception {
 		SparqlService limited = serviceWithConcurrencyLimit(1);
-		BlockingOutputStream blocked = new BlockingOutputStream(1);
+		BlockingOutputStream holder = new BlockingOutputStream(1);
+		AtomicReference<Throwable> waiterFailure = new AtomicReference<>();
+		AtomicBoolean interruptKept = new AtomicBoolean();
 
 		try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+			Future<?> held;
 			try {
-				executor.submit(() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, blocked));
-				blocked.awaitWriters();
-
-				Thread.currentThread().interrupt();
-				CustomResponseException ex = assertThrows(CustomResponseException.class,
-						() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
-
-				assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getStatus());
-				assertTrue(Thread.interrupted(), "The interrupt must be preserved for the caller");
+				held = executor.submit(() -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, holder));
+				holder.awaitWriters();
+				Thread waiter = startWaiter(() -> {
+					try {
+						limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream());
+					} finally {
+						interruptKept.set(Thread.currentThread().isInterrupted());
+					}
+				}, waiterFailure);
+				awaitBlockedOnPermit(waiter);
+				waiter.interrupt();
+				waiter.join(10_000);
 			} finally {
-				Thread.interrupted();
-				blocked.release();
+				holder.release();
 			}
+			held.get(10, TimeUnit.SECONDS);
+		}
+
+		CustomResponseException ex = assertInstanceOf(CustomResponseException.class, waiterFailure.get());
+		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getStatus());
+		assertTrue(interruptKept.get(), "The interrupt must be preserved for the caller");
+		// The interrupted waiter acquired nothing, so it must neither free nor take a permit.
+		holdThePermitAndAssertRejection(limited);
+		limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream());
+	}
+
+	private static Thread startWaiter(Runnable query, AtomicReference<Throwable> failure) {
+		return Thread.ofPlatform().start(() -> {
+			try {
+				query.run();
+			} catch (Throwable t) {
+				failure.set(t);
+			}
+		});
+	}
+
+	/** Before its permit, runQuery only blocks in the timed semaphore wait. */
+	private static void awaitBlockedOnPermit(Thread waiter) throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (waiter.getState() != Thread.State.TIMED_WAITING) {
+			assertTrue(System.nanoTime() < deadline, "The query never waited for a permit");
+			Thread.sleep(1);
 		}
 	}
 
