@@ -35,6 +35,8 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 	// below username and password must match the creds configured in Keycloak - "test-realm-keycloak.json"
 	static def testUsername = 'testuserrr'
 	static def testUserPassword = 'passworded'
+	// The EntryStore password that step 10 gives the user, next to their Keycloak one
+	static def localPassword = 'someLocalPass123'
 	static def successLoginUrl = EntryStoreClient.origin + '/GREAT-SUCCESS/'
 	static def failureLoginUrl = EntryStoreClient.origin + '/GREAT-FAILURE/'
 
@@ -319,10 +321,8 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		assert EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: ssoCookie]).getResponseCode() == HTTP_OK
 
 		and: 'an admin disables the user and enables them again'
-		def adminLogin = EntryStoreClient.postRequest('/auth/cookie', 'auth_username=admin&auth_password=adminpass', '',
-			'application/x-www-form-urlencoded')
-		assert adminLogin.getResponseCode() == HTTP_OK
-		def adminCookie = 'auth_token=' + EntryStoreClient.findCookieValue(adminLogin, 'auth_token')
+		def adminCookie = EntryStoreClient.toCookieHeader(
+			[EntryStoreClient.loginIsolated('admin').authCookie as String])
 		[true, false].each { disabled ->
 			assert EntryStoreClient.putRequest(ssoUserResourceUri, JsonOutput.toJson([disabled: disabled]), '',
 				'application/json', [Cookie: adminCookie]).getResponseCode() == HTTP_NO_CONTENT
@@ -333,5 +333,63 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 
 		then: 'the session has ended, as 5.x removed a disabled user\'s tokens'
 		userConn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def '10. A password change by an admin ends the sessions of the SAML-authenticated user'() {
+		given: 'a new session, since step 9 ended the one from step 4'
+		def userCookie = samlLogin()
+		assert EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: userCookie]).getResponseCode() == HTTP_OK
+
+		and: 'an admin session'
+		def adminCookie = EntryStoreClient.toCookieHeader(
+			[EntryStoreClient.loginIsolated('admin').authCookie as String])
+
+		when: 'the admin sets the user\'s password'
+		def changeConn = EntryStoreClient.putRequest(ssoUserResourceUri, JsonOutput.toJson([password: localPassword]),
+			'', 'application/json', [Cookie: adminCookie])
+
+		then:
+		changeConn.getResponseCode() == HTTP_NO_CONTENT
+
+		and: 'the user\'s session has ended, as 5.x removed the user\'s tokens'
+		EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: userCookie]).getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def '11. A password change by the SAML-authenticated user keeps the session making it and ends the other one'() {
+		given: 'two sessions of the user, whose password step 10 set'
+		def currentCookie = samlLogin()
+		def otherCookie = samlLogin()
+		assert EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: otherCookie]).getResponseCode() == HTTP_OK
+
+		when: 'the user changes their password in one of the sessions'
+		def changeConn = EntryStoreClient.putRequest(ssoUserResourceUri,
+			JsonOutput.toJson([password: 'anotherLocalPass123', currentPassword: localPassword]), '', 'application/json',
+			[Cookie: currentCookie])
+
+		then:
+		changeConn.getResponseCode() == HTTP_NO_CONTENT
+
+		and: 'that session is still valid'
+		EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: currentCookie]).getResponseCode() == HTTP_OK
+
+		and: 'the other session has ended'
+		EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: otherCookie]).getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	/** Logs the test user in through SAML with no cookies and returns the new session's Cookie header. */
+	private static String samlLogin() {
+		def initiation = EntryStoreClient.getRequest(
+			'/auth/saml' + convertMapToQueryParams([successurl: successLoginUrl]), null, null)
+		initiation.setInstanceFollowRedirects(true)
+		assert initiation.getResponseCode() == HTTP_OK
+		def initiationPage = initiation.inputStream.text
+		def samlResponsePage = samlResponsePageFromKeycloak(hiddenInputValue(initiationPage, 'SAMLRequest'),
+			hiddenInputValue(initiationPage, 'RelayState'), testUsername, testUserPassword)
+		def spPostData = [SAMLResponse: hiddenInputValue(samlResponsePage, 'SAMLResponse'),
+						  RelayState  : hiddenInputValue(samlResponsePage, 'RelayState')]
+		def spCallbackConn = EntryStoreClient.postRequest(formActionUrl(samlResponsePage), createFormBody(spPostData),
+			null, 'application/x-www-form-urlencoded')
+		assert spCallbackConn.getResponseCode() in [302, 303, 307]
+		return EntryStoreClient.findSetCookie(spCallbackConn, 'auth_token').split(';')[0]
 	}
 }

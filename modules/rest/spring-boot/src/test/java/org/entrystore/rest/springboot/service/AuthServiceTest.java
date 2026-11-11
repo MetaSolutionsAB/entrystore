@@ -69,20 +69,26 @@ import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.oauth2.core.oidc.OidcIdToken;
+import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.saml2.provider.service.authentication.DefaultSaml2AuthenticatedPrincipal;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.URI;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -94,10 +100,10 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -111,6 +117,8 @@ import static org.mockito.Mockito.when;
 class AuthServiceTest {
 
 	private static final String ADA = "ada@example.org";
+	private static final URI USER_URI = URI.create("https://example.org/store/_principals/resource/7");
+	private static final URI OTHER_USER_URI = URI.create("https://example.org/store/_principals/resource/8");
 	// Meets the default password rules and any plausible custom one: long, mixed case, digits, no whitespace.
 	private static final String PASSWORD = "Secret-Pass12345";
 
@@ -254,49 +262,143 @@ class AuthServiceTest {
 	}
 
 	@Test
-	void expireUserSessions_nullExceptSessionId_expiresAllSessions() {
-		SessionRegistry sessionRegistry = mock(SessionRegistry.class);
-		AuthService service = authServiceWithSessionRegistry(sessionRegistry);
-		UserDetails principal = principalFor("http://example.com/_principals/resource/42");
-		SessionInformation first = mock(SessionInformation.class);
-		SessionInformation second = mock(SessionInformation.class);
-		when(sessionRegistry.getAllPrincipals()).thenReturn(List.of(principal));
-		when(sessionRegistry.getAllSessions(principal, false)).thenReturn(List.of(first, second));
+	void expireUserSessions_noExceptSession_expiresEveryLoginOfTheUserOnly() {
+		SessionRegistryImpl sessions = new SessionRegistryImpl();
+		AuthService service = sessionExpiryService(principalManagerNaming(USER_URI, "alice"), sessions);
+		sessions.registerNewSession("form", formLogin(USER_URI));
+		// The SSO login matches the user's name case-insensitively
+		sessions.registerNewSession("cas", springUser("ALICE"));
+		sessions.registerNewSession("saml", new DefaultSaml2AuthenticatedPrincipal("alice", Map.of()));
+		sessions.registerNewSession("oidc", oidcLogin("Alice"));
+		sessions.registerNewSession("other-form", formLogin(OTHER_USER_URI));
+		sessions.registerNewSession("other-saml", new DefaultSaml2AuthenticatedPrincipal("bob", Map.of()));
 
-		service.expireUserSessions(userWithResourceUri("http://example.com/_principals/resource/42"), null);
+		service.expireUserSessions(userAt(USER_URI), null);
 
-		verify(first).expireNow();
-		verify(second).expireNow();
+		assertEquals(Set.of("form", "cas", "saml", "oidc"), expiredSessionIds(sessions));
 	}
 
 	@Test
-	void expireUserSessions_exceptSessionId_sparesThatSession() {
-		SessionRegistry sessionRegistry = mock(SessionRegistry.class);
-		AuthService service = authServiceWithSessionRegistry(sessionRegistry);
-		UserDetails principal = principalFor("http://example.com/_principals/resource/42");
-		SessionInformation current = mock(SessionInformation.class);
-		SessionInformation other = mock(SessionInformation.class);
-		when(current.getSessionId()).thenReturn("current-session");
-		when(other.getSessionId()).thenReturn("other-session");
-		when(sessionRegistry.getAllPrincipals()).thenReturn(List.of(principal));
-		when(sessionRegistry.getAllSessions(principal, false)).thenReturn(List.of(current, other));
+	void expireUserSessions_exceptSession_sparesOnlyThatSession() {
+		SessionRegistryImpl sessions = new SessionRegistryImpl();
+		AuthService service = sessionExpiryService(principalManagerNaming(USER_URI, "alice"), sessions);
+		sessions.registerNewSession("form", formLogin(USER_URI));
+		// The two SAML logins are one registry principal, so only the session id tells them apart
+		sessions.registerNewSession("saml-current", new DefaultSaml2AuthenticatedPrincipal("alice", Map.of()));
+		sessions.registerNewSession("saml-other", new DefaultSaml2AuthenticatedPrincipal("alice", Map.of()));
 
-		service.expireUserSessions(userWithResourceUri("http://example.com/_principals/resource/42"), "current-session");
+		service.expireUserSessions(userAt(USER_URI), "saml-current");
 
-		verify(other).expireNow();
-		verify(current, never()).expireNow();
+		assertEquals(Set.of("form", "saml-other"), expiredSessionIds(sessions));
 	}
 
 	@Test
-	void expireUserSessions_noMatchingPrincipal_isNoop() {
-		SessionRegistry sessionRegistry = mock(SessionRegistry.class);
-		AuthService service = authServiceWithSessionRegistry(sessionRegistry);
-		UserDetails otherPrincipal = principalFor("http://example.com/_principals/resource/somebody-else");
-		when(sessionRegistry.getAllPrincipals()).thenReturn(List.of(otherPrincipal));
+	void expireUserSessions_callerWithoutReadAccessToTheUser_readsTheNameAsAdmin() {
+		SessionRegistryImpl sessions = new SessionRegistryImpl();
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		URI adminUri = principalManager.getAdminUser().getURI();
+		AtomicReference<URI> actingUser = new AtomicReference<>(OTHER_USER_URI);
+		when(principalManager.getAuthenticatedUserURI()).thenAnswer(_ -> actingUser.get());
+		doAnswer(call -> {
+			actingUser.set(call.getArgument(0));
+			return null;
+		}).when(principalManager).setAuthenticatedUserURI(any());
+		// Stands in for the core's ReadMetadata check, which only the admin passes here
+		when(principalManager.getPrincipalName(USER_URI)).thenAnswer(_ -> {
+			if (!adminUri.equals(actingUser.get())) {
+				throw new IllegalStateException("name read as " + actingUser.get());
+			}
+			return "alice";
+		});
+		AuthService service = sessionExpiryService(principalManager, sessions);
+		sessions.registerNewSession("saml", new DefaultSaml2AuthenticatedPrincipal("alice", Map.of()));
 
-		service.expireUserSessions(userWithResourceUri("http://example.com/_principals/resource/42"), null);
+		service.expireUserSessions(userAt(USER_URI), null);
 
-		verify(sessionRegistry, never()).getAllSessions(any(), anyBoolean());
+		assertEquals(Set.of("saml"), expiredSessionIds(sessions));
+		assertEquals(OTHER_USER_URI, actingUser.get());
+	}
+
+	@Test
+	void expireUserSessions_nameCannotBeRead_stillExpiresTheFormLoginSessions() {
+		SessionRegistryImpl sessions = new SessionRegistryImpl();
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		when(principalManager.getPrincipalName(USER_URI)).thenThrow(new RepositoryException("unreadable"));
+		AuthService service = sessionExpiryService(principalManager, sessions);
+		sessions.registerNewSession("form", formLogin(USER_URI));
+		sessions.registerNewSession("saml", new DefaultSaml2AuthenticatedPrincipal("alice", Map.of()));
+
+		assertThrows(RepositoryException.class, () -> service.expireUserSessions(userAt(USER_URI), null));
+
+		// Matched by resource URI, before the name is read
+		assertEquals(Set.of("form"), expiredSessionIds(sessions));
+	}
+
+	@Test
+	void expireUserSessions_userWithoutName_expiresTheFormLoginSessionsOnly() {
+		SessionRegistryImpl sessions = new SessionRegistryImpl();
+		AuthService service = sessionExpiryService(principalManagerNaming(USER_URI, null), sessions);
+		sessions.registerNewSession("form", formLogin(USER_URI));
+		sessions.registerNewSession("other-cas", springUser("bob"));
+		sessions.registerNewSession("other-saml", new DefaultSaml2AuthenticatedPrincipal("bob", Map.of()));
+
+		service.expireUserSessions(userAt(USER_URI), null);
+
+		assertEquals(Set.of("form"), expiredSessionIds(sessions));
+	}
+
+	@Test
+	void expireUserSessions_nameDifferingOnlyByADotlessI_isAnotherUsersLogin() {
+		SessionRegistryImpl sessions = new SessionRegistryImpl();
+		// The login resolves the lower-cased name exactly, and lower-casing keeps the dotless i apart from i
+		AuthService service = sessionExpiryService(principalManagerNaming(USER_URI, "al\u0131ce"), sessions);
+		sessions.registerNewSession("other-cas", springUser("alice"));
+		sessions.registerNewSession("other-saml", new DefaultSaml2AuthenticatedPrincipal("alice", Map.of()));
+
+		service.expireUserSessions(userAt(USER_URI), null);
+
+		assertEquals(Set.of(), expiredSessionIds(sessions));
+	}
+
+	@Test
+	void expireFormLoginSessions_expiresTheFormLoginSessionsOfThatUserOnly() {
+		SessionRegistryImpl sessions = new SessionRegistryImpl();
+		AuthService service = authServiceWithSessionRegistry(sessions);
+		sessions.registerNewSession("form-1", formLogin(USER_URI));
+		sessions.registerNewSession("form-2", formLogin(USER_URI));
+		sessions.registerNewSession("other-form", formLogin(OTHER_USER_URI));
+		// Matched by resource URI alone, as a deleted user's name is gone
+		sessions.registerNewSession("saml", new DefaultSaml2AuthenticatedPrincipal("alice", Map.of()));
+
+		service.expireFormLoginSessions(USER_URI);
+
+		assertEquals(Set.of("form-1", "form-2"), expiredSessionIds(sessions));
+	}
+
+	@Test
+	void confirmPasswordLegacy_validToken_expiresEveryLoginOfTheUser() {
+		SessionRegistryImpl sessions = new SessionRegistryImpl();
+		SignupTokenCache tokens = new SignupTokenCache(Ticker.systemTicker());
+		PrincipalManager principalManager = principalManagerNaming(USER_URI, ADA);
+		AuthService service = confirmedResetService(principalManager, sessions, mock(EmailSender.class), tokens);
+		Entry account = mock(Entry.class);
+		User user = userAt(USER_URI);
+		when(account.getResource()).thenReturn(user);
+		when(user.setSaltedHashedSecret("salted-hash")).thenReturn(true);
+		when(principalManager.getPrincipalEntry(ADA)).thenReturn(account);
+		SignupInfo reset = new SignupInfo();
+		reset.setEmail(ADA);
+		reset.setSaltedHashedPassword("salted-hash");
+		reset.setExpirationDate(new Date(System.currentTimeMillis() + Duration.ofDays(1).toMillis()));
+		tokens.putToken("reset-token", reset);
+		sessions.registerNewSession("form", formLogin(USER_URI));
+		sessions.registerNewSession("saml", new DefaultSaml2AuthenticatedPrincipal(ADA, Map.of()));
+		sessions.registerNewSession("other-form", formLogin(OTHER_USER_URI));
+
+		String message = service.confirmPasswordLegacy("reset-token", "Password reset");
+
+		assertEquals("Password reset was successful.", message);
+		assertEquals(Set.of("form", "saml"), expiredSessionIds(sessions));
 	}
 
 	@Test
@@ -315,40 +417,6 @@ class AuthServiceTest {
 		var whitelist = (Set<String>) ReflectionTestUtils.getField(service, "domainWhitelist");
 
 		assertEquals(Set.of("example.com", "other.example.org"), whitelist);
-	}
-
-	@Test
-	void expireAllSessions_expiresTheSessionsOfEveryLoginOfTheUserOnly() {
-		SessionRegistry sessionRegistry = mock(SessionRegistry.class);
-		PrincipalManager principalManager = mock(PrincipalManager.class);
-		AuthService service = new AuthService(null, principalManager, null, null, null, null, null, emailValidator,
-				null, sessionRegistry, null, null, null, meterRegistry, new MockEnvironment(), executor, executor);
-		URI userUri = URI.create("https://example.org/store/_principals/resource/7");
-		User user = mock(User.class);
-		when(user.getURI()).thenReturn(userUri);
-		when(principalManager.getPrincipalName(userUri)).thenReturn("alice");
-		var formLogin = new ESUserSessionDetails(springUser(userUri.toString()), user, null);
-		var casLogin = springUser("ALICE");
-		var ssoLogin = new DefaultSaml2AuthenticatedPrincipal("alice", Map.of());
-		var otherFormLogin = new ESUserSessionDetails(
-				springUser("https://example.org/store/_principals/resource/8"), mock(User.class), null);
-		var otherSsoLogin = new DefaultSaml2AuthenticatedPrincipal("bob", Map.of());
-		var formSession = new SessionInformation(formLogin, "form", new Date());
-		var casSession = new SessionInformation(casLogin, "cas", new Date());
-		var ssoSession = new SessionInformation(ssoLogin, "sso", new Date());
-		when(sessionRegistry.getAllPrincipals())
-				.thenReturn(List.of(formLogin, otherFormLogin, casLogin, otherSsoLogin, ssoLogin));
-		when(sessionRegistry.getAllSessions(formLogin, false)).thenReturn(List.of(formSession));
-		when(sessionRegistry.getAllSessions(casLogin, false)).thenReturn(List.of(casSession));
-		when(sessionRegistry.getAllSessions(ssoLogin, false)).thenReturn(List.of(ssoSession));
-
-		service.expireAllSessions(user);
-
-		assertTrue(formSession.isExpired());
-		assertTrue(casSession.isExpired());
-		assertTrue(ssoSession.isExpired());
-		verify(sessionRegistry, never()).getAllSessions(otherFormLogin, false);
-		verify(sessionRegistry, never()).getAllSessions(otherSsoLogin, false);
 	}
 
 	@Test
@@ -742,17 +810,47 @@ class AuthServiceTest {
 		return confirmationLink.substring(confirmationLink.indexOf("confirm=") + "confirm=".length());
 	}
 
-	private static UserDetails principalFor(String username) {
-		UserDetails principal = mock(UserDetails.class);
-		when(principal.getUsername()).thenReturn(username);
-		return principal;
+	/** Only the collaborators the session expiry reaches are set. */
+	private AuthService sessionExpiryService(PrincipalManager principalManager, SessionRegistry sessions) {
+		return confirmedResetService(principalManager, sessions, null, null);
 	}
 
-	private static User userWithResourceUri(String resourceUri) {
+	/** Only the collaborators the confirmed password reset and its session expiry reach are set. */
+	private AuthService confirmedResetService(PrincipalManager principalManager, SessionRegistry sessions,
+											  EmailSender emailSender, SignupTokenCache tokens) {
+		return new AuthService(null, principalManager, null, null, null, tokens, null, emailValidator, emailSender,
+				sessions, null, null, null, meterRegistry, new MockEnvironment(), executor, executor);
+	}
+
+	/** A principal manager with an admin, in which the user at {@code userUri} has the given name. */
+	private static PrincipalManager principalManagerNaming(URI userUri, String name) {
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		when(principalManager.getPrincipalName(userUri)).thenReturn(name);
+		return principalManager;
+	}
+
+	private static User userAt(URI userUri) {
 		User user = mock(User.class);
-		Entry entry = mock(Entry.class);
-		when(user.getEntry()).thenReturn(entry);
-		when(entry.getResourceURI()).thenReturn(URI.create(resourceUri));
+		when(user.getURI()).thenReturn(userUri);
 		return user;
+	}
+
+	private static ESUserSessionDetails formLogin(URI userUri) {
+		return new ESUserSessionDetails(springUser(userUri.toString()), mock(User.class), null);
+	}
+
+	/** The principal UsernameClaimOidcUserService produces at login, named after the username claim. */
+	private static DefaultOidcUser oidcLogin(String username) {
+		var idToken = new OidcIdToken("id-token", Instant.now(), Instant.now().plusSeconds(60),
+				Map.of("sub", "subject-" + username, "email", username));
+		return new DefaultOidcUser(List.of(new SimpleGrantedAuthority("ROLE_USER")), idToken, "email");
+	}
+
+	private static Set<String> expiredSessionIds(SessionRegistry sessions) {
+		return sessions.getAllPrincipals().stream()
+				.flatMap(principal -> sessions.getAllSessions(principal, true).stream())
+				.filter(SessionInformation::isExpired)
+				.map(SessionInformation::getSessionId)
+				.collect(Collectors.toSet());
 	}
 }

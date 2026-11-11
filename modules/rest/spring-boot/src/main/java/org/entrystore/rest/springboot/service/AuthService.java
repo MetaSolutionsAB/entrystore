@@ -265,51 +265,54 @@ public class AuthService {
 	}
 
 	/**
-	 * Expires all registered sessions of the given user. A non-null {@code exceptSessionId} is
-	 * spared — used when a user (or admin) changes their own password so the session performing
-	 * the change stays alive.
+	 * Expires every session of the user, whichever way they logged in, as 5.x removed the user's tokens. A non-null
+	 * {@code exceptSessionId} is spared: the session through which a user changes their own password. The form-login
+	 * sessions end before the user's name is read, so a failed read cannot keep them alive; the name is read as admin,
+	 * so the caller needs no read access to the user's entry.
 	 */
 	public void expireUserSessions(User user, String exceptSessionId) {
-		expireUserSessions(user.getEntry().getResourceURI(), exceptSessionId);
-	}
-
-	/**
-	 * Expires all registered form-login sessions of the user with the given resource URI, which also works for a
-	 * user that was just deleted. A non-null {@code exceptSessionId} is spared.
-	 */
-	public void expireUserSessions(URI userResourceURI, String exceptSessionId) {
-		String username = userResourceURI.toString();
-		for (Object principal : sessionRegistry.getAllPrincipals()) {
-			if (principal instanceof UserDetails userDetails && userDetails.getUsername().equals(username)) {
-				for (SessionInformation session : sessionRegistry.getAllSessions(userDetails, false)) {
-					if (exceptSessionId == null || !session.getSessionId().equals(exceptSessionId)) {
-						session.expireNow();
-					}
-				}
-				break;
-			}
-		}
-	}
-
-	/**
-	 * Expires every session of the user, whichever way they logged in, as 5.x removed a disabled user's tokens. Form
-	 * login principals carry the user's resource URI as username; SAML, CAS and OIDC principals the user's name, which
-	 * the SSO login matches case-insensitively.
-	 */
-	public void expireAllSessions(User user) {
 		String userUri = user.getURI().toString();
-		String name = principalManager.getPrincipalName(user.getURI());
-		for (Object principal : sessionRegistry.getAllPrincipals()) {
-			boolean ofUser = switch (principal) {
-				case ESUserSessionDetails form -> userUri.equals(form.getUsername());
-				case UserDetails cas -> cas.getUsername().equalsIgnoreCase(name);
-				case AuthenticatedPrincipal sso -> sso.getName().equalsIgnoreCase(name);
-				default -> false;
-			};
-			if (ofUser) {
-				sessionRegistry.getAllSessions(principal, false).forEach(SessionInformation::expireNow);
-			}
-		}
+		expireSessions(principal -> isFormLoginOf(principal, userUri), exceptSessionId);
+		String name = PrincipalManagerUtil.runAsAdmin(principalManager,
+				() -> principalManager.getPrincipalName(user.getURI()));
+		expireSessions(principal -> isSsoLoginOf(principal, name), exceptSessionId);
+	}
+
+	/**
+	 * Expires only the form-login sessions of the user with the given resource URI; a user who still exists needs
+	 * {@link #expireUserSessions(User, String)}. For a user that was just deleted, whose name, which SSO principals are
+	 * matched by, is gone.
+	 */
+	public void expireFormLoginSessions(URI userResourceURI) {
+		String userUri = userResourceURI.toString();
+		expireSessions(principal -> isFormLoginOf(principal, userUri), null);
+	}
+
+	private void expireSessions(Predicate<Object> ofUser, String exceptSessionId) {
+		sessionRegistry.getAllPrincipals().stream()
+				.filter(ofUser)
+				.flatMap(principal -> sessionRegistry.getAllSessions(principal, false).stream())
+				.filter(session -> !session.getSessionId().equals(exceptSessionId))
+				.forEach(SessionInformation::expireNow);
+	}
+
+	/** Form login principals carry the user's resource URI as username. */
+	private static boolean isFormLoginOf(Object principal, String userUri) {
+		return principal instanceof ESUserSessionDetails form && userUri.equals(form.getUsername());
+	}
+
+	/**
+	 * SAML, CAS and OIDC principals carry the name the login was made with. The login resolves the user by that name
+	 * in lower case (PrincipalManager.getPrincipalEntry), so the comparison lower-cases it the same way and folds
+	 * nothing else.
+	 */
+	private static boolean isSsoLoginOf(Object principal, String name) {
+		return switch (principal) {
+			case ESUserSessionDetails _ -> false;
+			case UserDetails cas -> cas.getUsername().toLowerCase().equals(name);
+			case AuthenticatedPrincipal sso -> sso.getName().toLowerCase().equals(name);
+			default -> false;
+		};
 	}
 
 	/**
