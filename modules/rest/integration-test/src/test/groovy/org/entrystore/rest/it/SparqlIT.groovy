@@ -33,6 +33,7 @@ import static org.awaitility.Awaitility.await
 class SparqlIT extends BaseSpec {
 
 	private static final String VALID_QUERY = 'SELECT * WHERE { ?s ?p ?o } LIMIT 1'
+	private static final String ENCODED_VALID_QUERY = URLEncoder.encode(VALID_QUERY, 'UTF-8')
 
 	private static final String CONTEXT_ID = 'sparql-it-ctx'
 	private static final String CONTEXT_ID_2 = 'sparql-it-ctx-2'
@@ -403,7 +404,7 @@ class SparqlIT extends BaseSpec {
 	def "POST #path with #urlQuery in the URL query string should return Bad-Request 400"() {
 		given:
 		// Defends against the URL-bypass of the 32 KB body cap: a tiny body but the actual query in
-		// the URL would otherwise satisfy @RequestParam binding and slip past the cap.
+		// the URL would otherwise satisfy @RequestParam binding (also via its name[] alias) and slip past the cap.
 		def body = createFormBody(formFields)
 
 		when:
@@ -414,14 +415,17 @@ class SparqlIT extends BaseSpec {
 		JSON_PARSER.parseText(conn.errorStream.text)['error'].toString().contains('form body')
 
 		where:
-		path                         | urlQuery                                               | formFields
-		'/sparql'                    | convertMapToQueryParams([query: VALID_QUERY])          | [:]
-		'/sparql'                    | '?infer=false&query'                                   | [query: VALID_QUERY]
-		'/sparql'                    | '?query='                                              | [query: VALID_QUERY]
-		'/sparql'                    | '?qu%65ry=' + URLEncoder.encode(VALID_QUERY, 'UTF-8') | [:]
-		'/sparql'                    | '?output=xml'                                          | [query: VALID_QUERY]
-		'/' + CONTEXT_ID + '/sparql' | convertMapToQueryParams([query: VALID_QUERY])          | [:]
-		'/' + CONTEXT_ID + '/sparql' | '?output=json'                                         | [query: VALID_QUERY]
+		path                         | urlQuery                                 | formFields
+		'/sparql'                    | '?query=' + ENCODED_VALID_QUERY          | [:]
+		'/sparql'                    | '?infer=false&query'                     | [query: VALID_QUERY]
+		'/sparql'                    | '?query='                                | [query: VALID_QUERY]
+		'/sparql'                    | '?qu%65ry=' + ENCODED_VALID_QUERY        | [:]
+		'/sparql'                    | '?query%5B%5D=' + ENCODED_VALID_QUERY    | [:]
+		'/sparql'                    | '?output=xml'                            | [query: VALID_QUERY]
+		'/sparql'                    | '?output%5B%5D=xml'                      | [query: VALID_QUERY]
+		'/' + CONTEXT_ID + '/sparql' | '?query=' + ENCODED_VALID_QUERY          | [:]
+		'/' + CONTEXT_ID + '/sparql' | '?query%5B%5D=' + ENCODED_VALID_QUERY    | [:]
+		'/' + CONTEXT_ID + '/sparql' | '?output=json'                           | [query: VALID_QUERY]
 	}
 
 	def "POST /sparql form-encoded with an unrelated URL parameter should ignore it and return the results"() {
