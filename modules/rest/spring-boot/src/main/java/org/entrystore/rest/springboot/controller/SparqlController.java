@@ -19,7 +19,6 @@ package org.entrystore.rest.springboot.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.SparqlService;
 import org.entrystore.rest.springboot.util.HttpUtil;
@@ -35,12 +34,16 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
 public class SparqlController {
 
 	private static final int MAX_POST_REQUEST_SIZE = 32 * 1024;
+
+	/** The form parameters, with the {@code name[]} aliases @RequestParam falls back to. */
+	private static final List<String> FORM_PARAMETERS = List.of("query", "query[]", "output", "output[]");
 
 	private final SparqlService sparqlService;
 
@@ -91,10 +94,10 @@ public class SparqlController {
 	}
 
 	private ResponseEntity<StreamingResponseBody> runFormQuery(HttpServletRequest request, String query, String output, String contextId) {
-		// @RequestParam binds from BOTH the form body AND the URL query string; without this guard a client
-		// could ship a megabyte query in the URL while keeping the body under the 32 KB cap, defeating it.
-		if (StringUtils.isNotEmpty(request.getQueryString())) {
-			throw new BadRequestException("POST /sparql parameters must be supplied in the form body, not the URL query string");
+		// Body-only query/output as in 5.x (the request-header limit caps the URL); other URL parameters are ignored.
+		if (FORM_PARAMETERS.stream().anyMatch(name -> HttpUtil.hasQueryParameter(request, name))) {
+			throw new BadRequestException(
+					"The query and output parameters must be supplied in the form body, not the URL query string");
 		}
 		HttpUtil.checkRequestSize(request, MAX_POST_REQUEST_SIZE);
 		return buildResponse(SparqlResultFormat.fromOutputForm(output), query, contextId);

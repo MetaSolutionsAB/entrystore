@@ -36,6 +36,7 @@ import java.util.Date;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doThrow;
@@ -280,6 +281,44 @@ class HttpUtilTest {
 		request.setQueryString(query);
 
 		assertEquals(expected, HttpUtil.getQueryParameter(request, "ignoreAuth"));
+	}
+
+	@ParameterizedTest(name = "{0} -> {2}")
+	@CsvSource(nullValues = "NULL", value = {
+			"no query string,     NULL,                false",
+			"bare name,           query,               true",
+			"empty value,         query=,              true",
+			"after other names,   infer=false&query=x, true",
+			"encoded name,        qu%65ry=x,           true",
+			"malformed value,     query=%zz,           true",
+			"malformed other,     a=%&query=x,         true",
+			"other names only,    infer=false&a=query, false",
+			"name prefix,         queryX=1,            false",
+			"different case,      Query=1,             false",
+			"malformed name,      query%=1,            false"
+	})
+	void hasQueryParameter_findsTheNameInTheQueryString(String description, String query, boolean expected) {
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/x");
+		request.setQueryString(query);
+
+		assertEquals(expected, HttpUtil.hasQueryParameter(request, "query"));
+	}
+
+	@Test
+	void hasQueryParameter_ignoresBodyParameters() {
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/x");
+		request.setQueryString("infer=false");
+		request.addParameter("query", "from-body");
+
+		assertFalse(HttpUtil.hasQueryParameter(request, "query"));
+	}
+
+	@Test
+	void hasQueryParameter_decodesBracketedName() {
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/x");
+		request.setQueryString("query%5B%5D=x");
+
+		assertTrue(HttpUtil.hasQueryParameter(request, "query[]"));
 	}
 
 	@Test
