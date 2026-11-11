@@ -46,12 +46,10 @@ public class MediaTypeConverter implements Converter<String, MediaType> {
 	}
 
 	/**
-	 * The conversion of {@link #convert}, for callers outside data binding.
-	 *
 	 * @return {@code null} for blank input
 	 * @throws InvalidMediaTypeException if the input is not a media type, also with '+' restored
 	 */
-	public static @Nullable MediaType parse(@NonNull String input) {
+	private static @Nullable MediaType parse(@NonNull String input) {
 		if (input.isBlank()) {
 			return null;
 		}
@@ -65,7 +63,7 @@ public class MediaTypeConverter implements Converter<String, MediaType> {
 	}
 
 	/**
-	 * Converts like {@link #parse}, but answers {@code null} instead of throwing for input that is not a media
+	 * Converts like {@link #convert}, but answers {@code null} instead of throwing for input that is not a media
 	 * type, for parameters that fall back to a default for a value they do not recognise.
 	 */
 	public static @Nullable MediaType parseLeniently(@Nullable String input) {
