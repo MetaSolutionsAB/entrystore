@@ -41,7 +41,11 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -67,9 +71,10 @@ public class UserService {
 	}
 
 	/**
+	 * @param acceptLanguage the request's Accept-Language header, or null if it has none
 	 * @param authTokenExpires when the caller's login ends, or null without a session; ignored for the guest
 	 */
-	public GetAuthUserResponse getUserInfo(String locales, Instant authTokenExpires) {
+	public GetAuthUserResponse getUserInfo(String acceptLanguage, Instant authTokenExpires) {
 
 		User authenticatedUser = principalManager.getUser(principalManager.getAuthenticatedUserURI());
 
@@ -77,7 +82,7 @@ public class UserService {
 			throw new EntityNotFoundException("The logged-in user " + principalManager.getAuthenticatedUserURI() + " does not exist anymore");
 		}
 
-		Map<String, Double> clientAcceptedLanguages = parseLocalesHeader(locales);
+		Map<String, Double> clientAcceptedLanguages = parseAcceptLanguage(acceptLanguage);
 
 		String homeContext = null;
 		boolean guest = authenticatedUser.getURI().equals(principalManager.getGuestUser().getURI());
@@ -203,14 +208,41 @@ public class UserService {
 		}
 	}
 
-	private static Map<String, Double> parseLocalesHeader(String value) {
-
+	/**
+	 * Maps each language tag of an Accept-Language header to its weight. Parses leniently, as 5.x did, since
+	 * the header comes from any client: each element is read as its range plus its first {@code q} parameter,
+	 * and an element that is still invalid is skipped instead of failing the request. Valid headers give the
+	 * same result as {@link Locale.LanguageRange#parse(String)} on the whole header: a repeated range keeps its
+	 * first weight, and ranges with the same tag (such as {@code en} and {@code en-*}) keep the lowest.
+	 *
+	 * @param header the header value, or null if the request has none
+	 */
+	static Map<String, Double> parseAcceptLanguage(String header) {
 		Map<String, Double> acceptLanguages = new HashMap<>();
-
-		List<Locale.LanguageRange> ranges = Locale.LanguageRange.parse(value);
+		if (header == null) {
+			return acceptLanguages;
+		}
+		Map<String, Locale.LanguageRange> firstByRange = new LinkedHashMap<>();
+		for (String element : header.split(",")) {
+			String[] parts = element.split(";", -1);
+			String weight = Arrays.stream(parts, 1, parts.length)
+					.map(parameter -> parameter.split("=", 2))
+					.filter(nameValue -> nameValue.length == 2 && nameValue[0].strip().equalsIgnoreCase("q"))
+					.findFirst()
+					.map(nameValue -> nameValue[1].strip())
+					.orElse("1");
+			List<Locale.LanguageRange> ranges;
+			try {
+				ranges = Locale.LanguageRange.parse(parts[0].strip() + ";q=" + weight);
+			} catch (IllegalArgumentException e) {
+				continue;
+			}
+			ranges.forEach(range -> firstByRange.putIfAbsent(range.getRange(), range));
+		}
+		List<Locale.LanguageRange> ranges = new ArrayList<>(firstByRange.values());
+		ranges.sort(Comparator.comparingDouble(Locale.LanguageRange::getWeight).reversed());
 		for (Locale.LanguageRange range : ranges) {
-			String canonicalTag = Locale.forLanguageTag(range.getRange()).toLanguageTag();
-			acceptLanguages.put(canonicalTag, range.getWeight());
+			acceptLanguages.put(Locale.forLanguageTag(range.getRange()).toLanguageTag(), range.getWeight());
 		}
 		return acceptLanguages;
 	}

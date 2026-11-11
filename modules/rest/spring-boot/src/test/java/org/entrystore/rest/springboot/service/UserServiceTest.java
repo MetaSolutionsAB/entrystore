@@ -23,15 +23,22 @@ import org.entrystore.User;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.util.EmailSender;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.lenient;
@@ -119,6 +126,30 @@ class UserServiceTest {
 				"{\"disabled\":true}".getBytes(StandardCharsets.UTF_8), "session-1"));
 
 		verify(resourceUser, never()).setDisabled(anyBoolean());
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("acceptLanguageHeaders")
+	void parseAcceptLanguage_skipsWhatCannotBeParsed(String header, Map<String, Double> expected) {
+		assertEquals(expected, UserService.parseAcceptLanguage(header));
+	}
+
+	static Stream<Arguments> acceptLanguageHeaders() {
+		return Stream.of(
+				Arguments.of(Named.of("no header", null), Map.of()),
+				Arguments.of(Named.of("empty header", ""), Map.of()),
+				Arguments.of("fr-CH;q=0.9, EN-us;q=0.7", Map.of("fr-CH", 0.9, "en-US", 0.7)),
+				Arguments.of("en;q=0.9;q=0.9", Map.of("en", 0.9)),
+				Arguments.of("sv,en;q=0.8;q=0.9", Map.of("sv", 1.0, "en", 0.8)),
+				Arguments.of("en;level=1;q=0.4", Map.of("en", 0.4)),
+				Arguments.of("en;q =0.4", Map.of("en", 0.4)),
+				Arguments.of("en_US,de;q=0.5", Map.of("de", 0.5)),
+				Arguments.of("en;q=abc,de", Map.of("de", 1.0)),
+				Arguments.of("de-CH, en;q=1.5", Map.of("de-CH", 1.0)),
+				Arguments.of(";", Map.of()),
+				Arguments.of("en,;,,de", Map.of("en", 1.0, "de", 1.0)),
+				Arguments.of("en;q=0.9,en;q=0.5", Map.of("en", 0.9)),
+				Arguments.of("en;q=0.9,en-*;q=0.3", Map.of("en", 0.3)));
 	}
 
 	private User userWithPasswordChangeAllowed(URI userUri, String newPassword, boolean accepted) {
