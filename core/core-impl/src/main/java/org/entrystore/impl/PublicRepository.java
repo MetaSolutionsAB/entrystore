@@ -19,7 +19,6 @@ package org.entrystore.impl;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
-import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Resource;
@@ -94,6 +93,9 @@ public class PublicRepository {
 	private final Object queueSignal = new Object();
 
 	private static final int BATCH_SIZE = 1000;
+
+	/** Statements of an entry removed at a time, so that removing a large Graph entry needs bounded memory. */
+	static final int REMOVAL_CHUNK_SIZE = 10_000;
 
 	private static final long IDLE_TIMEOUT_MS = 10_000;
 
@@ -477,12 +479,21 @@ public class PublicRepository {
 			Resource[] entryGraphs = extMdNG != null
 					? new Resource[]{entryNG, mdNG, extMdNG, resNG}
 					: new Resource[]{entryNG, mdNG, resNG};
-			List<Statement> statements;
-			try (RepositoryResult<Statement> result = rc.getStatements(null, null, null, false, entryGraphs)) {
-				statements = Iterations.asList(result);
-			}
-			rc.remove(statements, entryGraphs);
-			rc.remove(notHeldByAnotherEntryGraph(statements, contextURI, rc), contextURI);
+			// addEntry skips administrative entries, so they never added anything to their context's graph.
+			boolean inContextGraph = !isAdministrative(e);
+			List<Statement> chunk;
+			do {
+				chunk = new ArrayList<>();
+				try (RepositoryResult<Statement> result = rc.getStatements(null, null, null, false, entryGraphs)) {
+					while (result.hasNext() && chunk.size() < REMOVAL_CHUNK_SIZE) {
+						chunk.add(result.next());
+					}
+				}
+				rc.remove(chunk, entryGraphs);
+				if (inContextGraph) {
+					rc.remove(notHeldByAnotherEntryGraph(chunk, contextURI, rc), contextURI);
+				}
+			} while (chunk.size() == REMOVAL_CHUNK_SIZE);
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
@@ -491,8 +502,8 @@ public class PublicRepository {
 	/**
 	 * The statements, without their graph, that no remaining entry graph of the context holds. The context graph
 	 * holds the union of the context's entry graphs, so a statement that another entry of the context also states
-	 * stays in it. Called after the removed entry's own graphs are cleared, in the same transaction, so that entry
-	 * and entries removed earlier in the batch no longer count.
+	 * stays in it. Called after the statements are removed from the entry's own graphs, in the same transaction, so
+	 * that entry and entries removed earlier in the batch no longer count.
 	 */
 	private List<Statement> notHeldByAnotherEntryGraph(List<Statement> statements, IRI contextURI,
 			RepositoryConnection rc) {
@@ -523,8 +534,15 @@ public class PublicRepository {
 		return false;
 	}
 
-	/** Whether {@code graph} is the graph of an entry in the context, as core splits the URIs of its entries. */
+	/**
+	 * Whether {@code graph} is the graph of an entry in the context, as core splits the URIs of its entries. An entry
+	 * graph is {@code {context URI}/{path}/{id}}; checked first, as most copies of a statement are in other contexts,
+	 * and so that the graph of another context, which splits as a resource of the context entry, never counts.
+	 */
 	private boolean isGraphOfContext(Resource graph, IRI contextURI) {
+		if (!graph.stringValue().startsWith(contextURI.stringValue() + "/")) {
+			return false;
+		}
 		try {
 			return URISplit.of(URI.create(graph.stringValue()), rm.getRepositoryURL())
 					.map(URISplit::getContextURI)

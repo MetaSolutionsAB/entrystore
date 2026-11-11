@@ -19,10 +19,12 @@ package org.entrystore.impl;
 import static org.eclipse.rdf4j.model.util.Statements.statement;
 import static org.eclipse.rdf4j.model.util.Values.iri;
 import static org.eclipse.rdf4j.model.util.Values.literal;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Set;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Statement;
@@ -166,6 +168,32 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 			assertFalse(holds(publicRepository, a.getSesameLocalMetadataURI(), title(SHARED_TITLE)));
 			assertTrue(holds(publicRepository, contextGraph(context), title("a")),
 					"the rest of a is published again");
+		} finally {
+			publicRepository.shutdown();
+		}
+	}
+
+	@Test
+	public void removeEntries_entryLargerThanOneChunk_keepsOnlyWhatAnotherEntryStates() {
+		rm.setCheckForAuthorization(false);
+		ContextImpl context = newContext();
+		EntryImpl large = newEntryStating(context, "large", SHARED_TITLE);
+		newEntryStating(context, "other", SHARED_TITLE);
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			for (int i = 0; i < 2 * PublicRepository.REMOVAL_CHUNK_SIZE + 1; i++) {
+				rc.add(SUBJECT, TITLE, vf.createLiteral("bulk " + i), large.getSesameLocalMetadataURI());
+			}
+		}
+		PublicRepository publicRepository = new PublicRepository(rm);
+		try {
+			publicRepository.removeEntries(Set.of(large));
+
+			try (RepositoryConnection rc = publicRepository.getConnection()) {
+				assertFalse(rc.hasStatement(null, null, null, false, large.getSesameLocalMetadataURI()));
+				assertEquals(List.of("other", SHARED_TITLE), rc.getStatements(SUBJECT, TITLE, null, false,
+						contextGraph(context)).stream().map(st -> st.getObject().stringValue()).sorted().toList());
+			}
 		} finally {
 			publicRepository.shutdown();
 		}
