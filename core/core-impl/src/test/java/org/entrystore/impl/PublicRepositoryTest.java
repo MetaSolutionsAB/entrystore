@@ -596,10 +596,6 @@ public class PublicRepositoryTest extends AbstractCoreTest {
 		}
 	}
 
-	private ContextImpl newContext() {
-		return (ContextImpl) cm.createResource(null, GraphType.Context, null, null).getResource();
-	}
-
 	private EntryImpl newEntryStating(ContextImpl context, String ownTitle, String sharedTitle) {
 		EntryImpl entry = (EntryImpl) context.createLink(null, URI.create("http://example.com/" + ownTitle), null);
 		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
