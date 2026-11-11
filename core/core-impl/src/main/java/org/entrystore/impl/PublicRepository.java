@@ -19,14 +19,16 @@ package org.entrystore.impl;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
+import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Resource;
-import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.RepositoryResult;
 import org.eclipse.rdf4j.repository.sail.SailRepository;
 import org.eclipse.rdf4j.sail.memory.MemoryStore;
 import org.entrystore.AuthorizationException;
@@ -45,14 +47,21 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 
 /**
+ * The public entries of all contexts, for the public SPARQL endpoint. Each entry's statements are stored in the
+ * entry's own graphs (metadata, cached external metadata, resource) and in its context's graph, so the context graph
+ * holds the union of the context's public entry graphs.
+ *
  * @author Hannes Ebner
  */
 public class PublicRepository {
@@ -344,7 +353,7 @@ public class PublicRepository {
 		}
 	}
 
-	private void updateEntries(Set<Entry> entries) {
+	void updateEntries(Set<Entry> entries) {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
@@ -411,7 +420,7 @@ public class PublicRepository {
 		}
 	}
 
-	private void removeEntries(Set<Entry> entries) {
+	void removeEntries(Set<Entry> entries) {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
@@ -465,13 +474,64 @@ public class PublicRepository {
 				extMdNG = vf.createIRI(e.getCachedExternalMetadataURI().toString());
 			}
 
-			if (extMdNG != null) {
-				rc.remove(rc.getStatements((Resource) null, (IRI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, extMdNG, resNG);
-			} else {
-				rc.remove(rc.getStatements((Resource) null, (IRI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, resNG);
+			Resource[] entryGraphs = extMdNG != null
+					? new Resource[]{entryNG, mdNG, extMdNG, resNG}
+					: new Resource[]{entryNG, mdNG, resNG};
+			List<Statement> statements;
+			try (RepositoryResult<Statement> result = rc.getStatements(null, null, null, false, entryGraphs)) {
+				statements = Iterations.asList(result);
 			}
+			rc.remove(statements, entryGraphs);
+			rc.remove(notHeldByAnotherEntryGraph(statements, contextURI, rc), contextURI);
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
+		}
+	}
+
+	/**
+	 * The statements, without their graph, that no remaining entry graph of the context holds. The context graph
+	 * holds the union of the context's entry graphs, so a statement that another entry of the context also states
+	 * stays in it. Called after the removed entry's own graphs are cleared, in the same transaction, so that entry
+	 * and entries removed earlier in the batch no longer count.
+	 */
+	private List<Statement> notHeldByAnotherEntryGraph(List<Statement> statements, IRI contextURI,
+			RepositoryConnection rc) {
+		ValueFactory vf = repository.getValueFactory();
+		Set<Statement> distinct = new LinkedHashSet<>();
+		for (Statement statement : statements) {
+			distinct.add(vf.createStatement(statement.getSubject(), statement.getPredicate(), statement.getObject()));
+		}
+		List<Statement> notHeld = new ArrayList<>();
+		for (Statement statement : distinct) {
+			if (!heldByAnotherEntryGraph(statement, contextURI, rc)) {
+				notHeld.add(statement);
+			}
+		}
+		return notHeld;
+	}
+
+	private boolean heldByAnotherEntryGraph(Statement statement, IRI contextURI, RepositoryConnection rc) {
+		try (RepositoryResult<Statement> copies = rc.getStatements(statement.getSubject(), statement.getPredicate(),
+				statement.getObject(), false)) {
+			for (Statement copy : copies) {
+				if (copy.getContext() != null && !copy.getContext().equals(contextURI)
+						&& isGraphOfContext(copy.getContext(), contextURI)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** Whether {@code graph} is the graph of an entry in the context, as core splits the URIs of its entries. */
+	private boolean isGraphOfContext(Resource graph, IRI contextURI) {
+		try {
+			return URISplit.of(URI.create(graph.stringValue()), rm.getRepositoryURL())
+					.map(URISplit::getContextURI)
+					.filter(context -> context.toString().equals(contextURI.stringValue()))
+					.isPresent();
+		} catch (IllegalArgumentException e) {
+			return false;
 		}
 	}
 
