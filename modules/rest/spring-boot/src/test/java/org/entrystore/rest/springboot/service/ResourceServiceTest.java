@@ -222,8 +222,7 @@ class ResourceServiceTest {
 		assertEquals(MediaType.parseMediaType("application/n-triples"), body.mediaType());
 	}
 
-	// 5.x serialized the member graphs of a group by rdfFormat alone; the Accept header used to leak in here and
-	// produced empty graphs for anything but application/json and application/ld+json.
+	// The graphs in the JSON of a Group or Pipeline resource follow rdfFormat alone, as in 5.x, not the Accept header.
 	@Test
 	void getResourceRepresentation_groupWithoutRdfFormat_serializesAsRdfJsonWhateverTheAcceptHeader() {
 		Group group = mock(Group.class);
@@ -237,6 +236,22 @@ class ResourceServiceTest {
 		service.getResourceRepresentation(entry, query);
 
 		verify(resourceSerializationService).serializeResourceGroup(group, "application/json");
+	}
+
+	@Test
+	void getResourceRepresentation_pipelineWithJsonLdRdfFormat_serializesAsJsonLdWhateverTheAcceptHeader() {
+		RDFResource pipeline = mock(RDFResource.class);
+		when(entry.getEntryType()).thenReturn(EntryType.Local);
+		when(entry.getGraphType()).thenReturn(GraphType.Pipeline);
+		when(entry.getResource()).thenReturn(pipeline);
+		when(pipeline.getGraph()).thenReturn(new LinkedHashModel());
+		when(resourceSerializationService.serializeResourcePipeline(eq(pipeline), any())).thenReturn(new JSONObject());
+		var query = new ResourceQuery(null, MediaType.parseMediaType("application/ld+json"), "application/json", null,
+				"en", 50, null, null, emptyListFilter());
+
+		service.getResourceRepresentation(entry, query);
+
+		verify(resourceSerializationService).serializeResourcePipeline(pipeline, "application/ld+json");
 	}
 
 	@Test
