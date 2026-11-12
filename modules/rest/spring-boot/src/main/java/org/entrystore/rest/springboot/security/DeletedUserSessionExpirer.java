@@ -59,7 +59,7 @@ public class DeletedUserSessionExpirer extends RepositoryListener {
 		if (eventObject.getSource() instanceof Entry entry && entry.getGraphType() == GraphType.User) {
 			// Thrown from here, it would fail the already committed removal
 			try {
-				authService.expireUserSessions(entry.getResourceURI(), null);
+				authService.expireFormLoginSessions(entry.getResourceURI());
 			} catch (RuntimeException e) {
 				log.error("Failed to expire the sessions of deleted user {}", entry.getResourceURI(), e);
 			}

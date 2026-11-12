@@ -34,6 +34,8 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 
 	static def testUsername = 'testcasuser'
 	static def testUserPassword = 'caspassword'
+	// The EntryStore password that step 10 gives the user, next to their Keycloak one
+	static def localPassword = 'someLocalPass123'
 	static def successLoginUrl = EntryStoreClient.origin + '/GREAT-SUCCESS-2/'
 	static def failureLoginUrl = EntryStoreClient.origin + '/auth/login'
 
@@ -279,10 +281,8 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		assert EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: casCookie]).getResponseCode() == HTTP_OK
 
 		and: 'an admin disables the user and enables them again'
-		def adminLogin = EntryStoreClient.postRequest('/auth/cookie', 'auth_username=admin&auth_password=adminpass', '',
-			'application/x-www-form-urlencoded')
-		assert adminLogin.getResponseCode() == HTTP_OK
-		def adminCookie = 'auth_token=' + EntryStoreClient.findCookieValue(adminLogin, 'auth_token')
+		def adminCookie = EntryStoreClient.toCookieHeader(
+			[EntryStoreClient.loginIsolated('admin').authCookie as String])
 		[true, false].each { disabled ->
 			assert EntryStoreClient.putRequest(casUserResourceUri, JsonOutput.toJson([disabled: disabled]), '',
 				'application/json', [Cookie: adminCookie]).getResponseCode() == HTTP_NO_CONTENT
@@ -304,6 +304,54 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		callbackConn.getResponseCode() in [302, 303, 307]
 		callbackConn.getHeaderField('Location') == failureLoginUrl
 		EntryStoreClient.findSetCookie(callbackConn, 'auth_token') == null
+	}
+
+	def '10. A password change by an admin ends the sessions of the CAS-authenticated user'() {
+		given: 'a new session, since step 8 ended the one from step 7'
+		def userCookie = casLogin()
+		assert EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: userCookie]).getResponseCode() == HTTP_OK
+
+		and: 'an admin session'
+		def adminCookie = EntryStoreClient.toCookieHeader(
+			[EntryStoreClient.loginIsolated('admin').authCookie as String])
+
+		when: 'the admin sets the user\'s password'
+		def changeConn = EntryStoreClient.putRequest(casUserResourceUri, JsonOutput.toJson([password: localPassword]),
+			'', 'application/json', [Cookie: adminCookie])
+
+		then:
+		changeConn.getResponseCode() == HTTP_NO_CONTENT
+
+		and: 'the user\'s session has ended, as 5.x removed the user\'s tokens'
+		EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: userCookie]).getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def '11. A password change by the CAS-authenticated user keeps the session making it and ends the other one'() {
+		given: 'two sessions of the user, whose password step 10 set'
+		def currentCookie = casLogin()
+		def otherCookie = casLogin()
+		assert EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: otherCookie]).getResponseCode() == HTTP_OK
+
+		when: 'the user changes their password in one of the sessions'
+		def changeConn = EntryStoreClient.putRequest(casUserResourceUri,
+			JsonOutput.toJson([password: 'anotherLocalPass123', currentPassword: localPassword]), '', 'application/json',
+			[Cookie: currentCookie])
+
+		then:
+		changeConn.getResponseCode() == HTTP_NO_CONTENT
+
+		and: 'that session is still valid'
+		EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: currentCookie]).getResponseCode() == HTTP_OK
+
+		and: 'the other session has ended'
+		EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: otherCookie]).getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	/** Logs the test user in through CAS with no cookies and returns the new session's Cookie header. */
+	private static String casLogin() {
+		def callbackConn = EntryStoreClient.getRequest(casTicketUrl(testUsername, testUserPassword), '')
+		assert callbackConn.getResponseCode() in [302, 303, 307]
+		return EntryStoreClient.findSetCookie(callbackConn, 'auth_token').split(';')[0]
 	}
 
 	/** Plays the browser and Keycloak side of a CAS login and returns the EntryStore callback URL with the ticket. */

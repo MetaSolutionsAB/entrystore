@@ -200,7 +200,7 @@ public class UserService {
 			}
 			resourceUser.setDisabled(settings.disabledValue());
 			if (settings.disabledValue()) {
-				authService.expireAllSessions(resourceUser);
+				authService.expireUserSessions(resourceUser, null);
 			}
 		}
 		if (settings.hasCustomProperties()) {

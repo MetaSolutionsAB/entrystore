@@ -51,6 +51,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
 
+	private static final URI ADMIN_URI = URI.create("http://example.com/_principals/resource/_admin");
+
 	@Mock
 	private PrincipalManager principalManager;
 
@@ -88,6 +90,44 @@ class UserServiceTest {
 		// Own password change, so only the other sessions of this user are expired.
 		verify(authService).expireUserSessions(resourceUser, "session-1");
 		verify(emailSender).sendPasswordChangeConfirmation(entry);
+	}
+
+	@Test
+	void updateSettings_passwordChangeOfAnotherUser_expiresAllSessionsOfThatUser() {
+		URI userUri = URI.create("http://example.com/_principals/resource/3");
+		User resourceUser = userWithPasswordChangeAllowed(userUri, "Sup3rSecret!", true);
+		when(principalManager.getAuthenticatedUserURI()).thenReturn(ADMIN_URI);
+
+		service.updateSettings(entry, passwordBody("Sup3rSecret!"), "session-1");
+
+		// The session making the change is the admin's, so none of the user's sessions is spared.
+		verify(authService).expireUserSessions(resourceUser, null);
+	}
+
+	@Test
+	void updateSettings_disablingAUser_expiresAllSessionsOfThatUser() {
+		User resourceUser = mock(User.class);
+		when(entry.getResource()).thenReturn(resourceUser);
+		when(entry.getResourceURI()).thenReturn(URI.create("http://example.com/_principals/resource/3"));
+		when(principalManager.getAuthenticatedUserURI()).thenReturn(ADMIN_URI);
+
+		service.updateSettings(entry, "{\"disabled\":true}".getBytes(StandardCharsets.UTF_8), "session-1");
+
+		verify(resourceUser).setDisabled(true);
+		verify(authService).expireUserSessions(resourceUser, null);
+	}
+
+	@Test
+	void updateSettings_enablingAUser_expiresNoSessions() {
+		User resourceUser = mock(User.class);
+		when(entry.getResource()).thenReturn(resourceUser);
+		when(entry.getResourceURI()).thenReturn(URI.create("http://example.com/_principals/resource/3"));
+		when(principalManager.getAuthenticatedUserURI()).thenReturn(ADMIN_URI);
+
+		service.updateSettings(entry, "{\"disabled\":false}".getBytes(StandardCharsets.UTF_8), "session-1");
+
+		verify(resourceUser).setDisabled(false);
+		verifyNoInteractions(authService);
 	}
 
 	@Test

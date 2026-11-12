@@ -46,19 +46,19 @@ class DeletedUserSessionExpirerTest {
 	void deletedUser_hasItsSessionsExpired() {
 		expirer.repositoryUpdated(deleted(GraphType.User));
 
-		verify(authService).expireUserSessions(USER_URI, null);
+		verify(authService).expireFormLoginSessions(USER_URI);
 	}
 
 	@Test
 	void deletedEntryOfAnotherGraphType_expiresNoSessions() {
 		expirer.repositoryUpdated(deleted(GraphType.Group));
 
-		verify(authService, never()).expireUserSessions(any(URI.class), any());
+		verify(authService, never()).expireFormLoginSessions(any());
 	}
 
 	@Test
 	void failureToExpire_doesNotFailTheCommittedRemoval() {
-		doThrow(new IllegalStateException("broken")).when(authService).expireUserSessions(USER_URI, null);
+		doThrow(new IllegalStateException("broken")).when(authService).expireFormLoginSessions(USER_URI);
 
 		assertDoesNotThrow(() -> expirer.repositoryUpdated(deleted(GraphType.User)));
 	}
