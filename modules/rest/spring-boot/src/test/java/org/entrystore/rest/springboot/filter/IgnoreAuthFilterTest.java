@@ -16,7 +16,7 @@
 
 package org.entrystore.rest.springboot.filter;
 
-import org.entrystore.rest.springboot.util.ErrorResponseWriter;
+import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -26,10 +26,10 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import tools.jackson.databind.json.JsonMapper;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -39,54 +39,74 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 class IgnoreAuthFilterTest {
 
+	private final Authentication loggedIn = new UsernamePasswordAuthenticationToken("alice", "",
+			List.of(new SimpleGrantedAuthority("ROLE_USER")));
+
 	@AfterEach
 	void clearContext() {
 		SecurityContextHolder.clearContext();
 	}
 
 	@ParameterizedTest(name = "{0}")
-	@CsvSource(delimiter = '|', textBlock = """
-			ignoreAuth on a GET                | GET  | ignoreAuth  | true  | true
-			ignoreAuth on a POST               | POST | ignoreAuth  | true  | true
-			ignoreAuth with JSONP disabled     | GET  | ignoreAuth  | false | true
-			JSONP callback on a GET            | GET  | callback=cb | true  | true
-			JSONP callback with JSONP disabled | GET  | callback=cb | false | false
-			JSONP callback on a POST           | POST | callback=cb | true  | false
-			neither parameter                  | GET  | format=json | true  | false
+	@CsvSource(textBlock = """
+			ignoreAuth on a GET,                    GET,  ignoreAuth,              true,  true
+			ignoreAuth on a POST,                   POST, ignoreAuth,              true,  true
+			ignoreAuth with JSONP off,              GET,  ignoreAuth,              false, true
+			JSONP callback on a GET,                GET,  callback=cb,             true,  true
+			bare JSONP callback on a GET,           GET,  callback,                true,  true
+			JSONP callback after other parameters,  GET,  format=json&callback=cb, true,  true
+			JSONP callback with JSONP off,          GET,  callback=cb,             false, false
+			JSONP callback on a POST,               POST, callback=cb,             true,  false
+			JSONP callback with a malformed value,  GET,  callback=%zz,            true,  true
+			malformed callback with JSONP off,      GET,  callback=%zz,            false, false
+			malformed JSONP callback on a POST,     POST, callback=%zz,            true,  false
+			ignoreAuth with a malformed value,      GET,  ignoreAuth=%zz,          true,  true
+			other parameters only,                  GET,  format=json,             true,  false
 			""")
-	void servesAsGuest(String description, String method, String queryString, boolean jsonpEnabled, boolean expected) {
-		var request = new MockHttpServletRequest(method, "/search");
+	void isRequested(String description, String method, String queryString, boolean jsonpEnabled, boolean expected) {
+		var request = new MockHttpServletRequest(method, "/auth/user");
 		request.setQueryString(queryString);
 
-		assertEquals(expected, filter(jsonpEnabled).servesAsGuest(request));
+		assertEquals(expected, new IgnoreAuthFilter(jsonpEnabled).isRequested(request));
 	}
 
 	@Test
-	void callbackInTheBodyOnly_isNotServedAsGuest() {
-		var request = new MockHttpServletRequest("GET", "/search");
+	void isRequested_requestWithoutQueryString_isNot() {
+		assertFalse(new IgnoreAuthFilter(true).isRequested(new MockHttpServletRequest("GET", "/auth/user")));
+	}
+
+	@Test
+	void isRequested_callbackInTheBodyOnly_isNot() {
+		var request = new MockHttpServletRequest("GET", "/auth/user");
 		request.setParameter("callback", "cb");
 
-		assertFalse(filter(true).servesAsGuest(request));
+		assertFalse(new IgnoreAuthFilter(true).isRequested(request));
 	}
 
 	@Test
 	void jsonpRequest_runsTheChainAsGuestAndRestoresTheLogin() throws Exception {
-		var login = new UsernamePasswordAuthenticationToken("alice", "",
-				AuthorityUtils.createAuthorityList("ROLE_USER"));
-		SecurityContextHolder.getContext().setAuthentication(login);
-		var request = new MockHttpServletRequest("GET", "/search");
+		SecurityContextHolder.getContext().setAuthentication(loggedIn);
+		var request = new MockHttpServletRequest("GET", "/auth/user");
 		request.setQueryString("callback=cb");
-		var inChain = new AtomicReference<Authentication>();
+		var seenByTheChain = new AtomicReference<Authentication>();
+		FilterChain chain = (_, _) -> seenByTheChain.set(SecurityContextHolder.getContext().getAuthentication());
 
-		filter(true).doFilter(request, new MockHttpServletResponse(),
-				(_, _) -> inChain.set(SecurityContextHolder.getContext().getAuthentication()));
+		new IgnoreAuthFilter(true).doFilter(request, new MockHttpServletResponse(), chain);
 
-		assertInstanceOf(AnonymousAuthenticationToken.class, inChain.get());
-		assertSame(login, SecurityContextHolder.getContext().getAuthentication());
+		assertInstanceOf(AnonymousAuthenticationToken.class, seenByTheChain.get());
+		assertSame(loggedIn, SecurityContextHolder.getContext().getAuthentication());
 	}
 
-	private static IgnoreAuthFilter filter(boolean jsonpEnabled) {
-		return new IgnoreAuthFilter(
-				new JsonpCallbackFilter(jsonpEnabled, new ErrorResponseWriter(JsonMapper.builder().build())));
+	@Test
+	void jsonpRequestWithJsonpOff_runsTheChainWithTheLogin() throws Exception {
+		SecurityContextHolder.getContext().setAuthentication(loggedIn);
+		var request = new MockHttpServletRequest("GET", "/auth/user");
+		request.setQueryString("callback=cb");
+		var seenByTheChain = new AtomicReference<Authentication>();
+		FilterChain chain = (_, _) -> seenByTheChain.set(SecurityContextHolder.getContext().getAuthentication());
+
+		new IgnoreAuthFilter(false).doFilter(request, new MockHttpServletResponse(), chain);
+
+		assertSame(loggedIn, seenByTheChain.get());
 	}
 }

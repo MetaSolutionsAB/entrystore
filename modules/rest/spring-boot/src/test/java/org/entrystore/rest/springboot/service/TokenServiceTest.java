@@ -22,14 +22,12 @@ import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.springboot.security.ESUserSessionDetails;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.session.SessionRegistryImpl;
+import org.springframework.security.core.session.SessionInformation;
 
 import java.net.URI;
+import java.util.Date;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -41,79 +39,118 @@ class TokenServiceTest {
 
 	private static final URI USER_URI = URI.create("https://example.org/store/_principals/resource/7");
 
-	private final SessionRegistryImpl sessionRegistry = new SessionRegistryImpl();
 	private final PrincipalManager principalManager = mock(PrincipalManager.class);
 	private final AuthService authService = mock(AuthService.class);
 	private final TokenService tokenService = new TokenService(principalManager, authService);
 
 	@BeforeEach
-	void listTheSessionsOfTheRegistry() {
+	void authenticate() {
 		when(principalManager.getAuthenticatedUserURI()).thenReturn(USER_URI);
-		when(authService.getAllUserSessions(USER_URI, false))
-				.thenAnswer(_ -> sessionRegistry.getAllSessions(sessionDetails(null), false));
 	}
 
 	@Test
-	void getTokens_keysTheSessionsByHandleAndMarksTheCurrentOne() {
-		logIn("session-1", "handle-1");
-		logIn("session-2", "handle-2");
+	void getTokens_formLoginSession_reportsTheInfoItsPrincipalCarriesByItsHandle() {
+		SessionInfo formInfo = SessionInfo.builder().userName("alice").lastUsedUserAgent("Browser/1").build();
+		sessionsOfTheUser(formLogin("form-id", "form-handle", formInfo));
 
-		var tokens = tokenService.getTokens("session-1");
+		Map<String, SessionInfo> tokens = tokenService.getTokens(null);
 
-		assertEquals(Set.of("handle-1", "handle-2"), tokens.keySet());
-		assertTrue(tokens.get("handle-1").current());
-		assertFalse(tokens.get("handle-2").current());
-		assertEquals("alice", tokens.get("handle-2").userName());
+		assertEquals(Map.of("form-handle", formInfo), tokens);
 	}
 
 	@Test
-	void getTokens_withoutASessionOfTheRequest_marksNoneCurrent() {
-		logIn("session-1", "handle-1");
+	void getTokens_marksOnlyTheRequestingSessionAsCurrent() {
+		SessionInfo info = SessionInfo.builder().userName("alice").build();
+		sessionsOfTheUser(formLogin("form-id", "form-handle", info), formLogin("other-id", "other-handle", info));
 
-		var tokens = tokenService.getTokens(null);
+		Map<String, SessionInfo> tokens = tokenService.getTokens("other-id");
 
-		assertFalse(tokens.get("handle-1").current());
+		assertTrue(tokens.get("other-handle").current());
+		assertFalse(tokens.get("form-handle").current());
 	}
 
 	@Test
-	void getTokens_leavesOutASessionWhoseLoginHasNotCompleted() {
-		logIn("session-1", "handle-1");
-		logIn("session-2", null);
+	void getTokens_requestWithoutSession_marksNoSessionAsCurrent() {
+		SessionInfo info = SessionInfo.builder().userName("alice").build();
+		sessionsOfTheUser(formLogin("form-id", "form-handle", info));
 
-		assertEquals(Set.of("handle-1"), tokenService.getTokens("session-2").keySet());
+		Map<String, SessionInfo> tokens = tokenService.getTokens(null);
+
+		assertFalse(tokens.get("form-handle").current());
 	}
 
 	@Test
-	void deleteToken_withAHandle_endsThatSessionOnly() {
-		logIn("session-1", "handle-1");
-		logIn("session-2", "handle-2");
+	void getTokens_formLoginSessionWithoutHandle_isLeftOut() {
+		SessionInfo formInfo = SessionInfo.builder().userName("alice").build();
+		sessionsOfTheUser(formLogin("form-id", null, formInfo));
 
-		tokenService.deleteToken("handle-2");
+		Map<String, SessionInfo> tokens = tokenService.getTokens("form-id");
 
-		assertTrue(sessionRegistry.getSessionInformation("session-2").isExpired());
-		assertFalse(sessionRegistry.getSessionInformation("session-1").isExpired());
+		// never listed under its session id instead
+		assertEquals(Map.of(), tokens);
 	}
 
-	@ParameterizedTest(name = "\"{0}\"")
-	@ValueSource(strings = {"session-1", "session-1.node0", "unknown-handle", " "})
-	void deleteToken_withAnythingButAHandle_endsNothing(String token) {
-		logIn("session-1", "handle-1");
+	@Test
+	void deleteToken_formLoginHandle_expiresOnlyThatSession() {
+		SessionInformation form = formLogin("form-id", "form-handle", SessionInfo.builder().build());
+		SessionInformation other = formLogin("other-id", "other-handle", SessionInfo.builder().build());
+		sessionsOfTheUser(form, other);
 
-		tokenService.deleteToken(token);
+		tokenService.deleteToken("form-handle");
 
-		assertFalse(sessionRegistry.getSessionInformation("session-1").isExpired());
+		assertTrue(form.isExpired());
+		assertFalse(other.isExpired());
 	}
 
-	private void logIn(String sessionId, String handle) {
-		sessionRegistry.registerNewSession(sessionId, sessionDetails(handle));
+	@Test
+	void deleteToken_sessionId_expiresNothing() {
+		SessionInformation form = formLogin("form-id", "form-handle", SessionInfo.builder().build());
+		sessionsOfTheUser(form);
+
+		tokenService.deleteToken("form-id");
+
+		assertFalse(form.isExpired());
 	}
 
-	private static ESUserSessionDetails sessionDetails(String handle) {
-		var springUser = new org.springframework.security.core.userdetails.User(
-				USER_URI.toString(), "", List.of(new SimpleGrantedAuthority("ROLE_USER")));
-		var details = new ESUserSessionDetails(springUser, mock(User.class),
-				SessionInfo.builder().userName("alice").build());
+	@Test
+	void deleteToken_cookieValue_expiresNothing() {
+		SessionInformation form = formLogin("form-id", "form-handle", SessionInfo.builder().build());
+		sessionsOfTheUser(form);
+
+		tokenService.deleteToken("form-id.node0");
+
+		assertFalse(form.isExpired());
+	}
+
+	@Test
+	void deleteToken_blank_expiresNothing() {
+		SessionInformation form = formLogin("form-id", "form-handle", SessionInfo.builder().build());
+		sessionsOfTheUser(form);
+
+		tokenService.deleteToken(" ");
+
+		assertFalse(form.isExpired());
+	}
+
+	@Test
+	void deleteToken_handleOfNoSessionOfTheUser_expiresNothing() {
+		SessionInformation form = formLogin("form-id", "form-handle", SessionInfo.builder().build());
+		sessionsOfTheUser(form);
+
+		tokenService.deleteToken("handle-of-another-user");
+
+		assertFalse(form.isExpired());
+	}
+
+	private void sessionsOfTheUser(SessionInformation... sessions) {
+		when(authService.getAllUserSessions(USER_URI, false)).thenReturn(List.of(sessions));
+	}
+
+	private static SessionInformation formLogin(String sessionId, String handle, SessionInfo sessionInfo) {
+		var springUser = org.springframework.security.core.userdetails.User
+				.withUsername(USER_URI.toString()).password("N/A").build();
+		var details = new ESUserSessionDetails(springUser, mock(User.class), sessionInfo);
 		details.setSessionHandle(handle);
-		return details;
+		return new SessionInformation(details, sessionId, new Date());
 	}
 }

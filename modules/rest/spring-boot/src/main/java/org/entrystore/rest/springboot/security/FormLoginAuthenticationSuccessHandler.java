@@ -42,9 +42,9 @@ import java.time.ZoneId;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Completes a form login: session lifetime, the session handle and info that /auth/tokens reports, and stale cookies.
- * A login whose session info cannot be recorded fails with 500 and leaves no session, since later requests of the
- * session rely on that info.
+ * Completes a form login: session lifetime, the session info and handle that /auth/tokens reports, and stale
+ * cookies. A login whose session info cannot be recorded fails with 500 and leaves no session, since later requests
+ * of the session rely on that info.
  */
 @Slf4j
 @Component
@@ -80,8 +80,7 @@ public class FormLoginAuthenticationSuccessHandler extends SimpleUrlAuthenticati
 						.loginTokenMaxAge(request.getSession().getMaxInactiveInterval());
 
 				esUserDetails.setSessionInfo(sessionInfo.build());
-				// last: /auth/tokens lists a registered session once it has a handle
-				esUserDetails.setSessionHandle(ESUserSessionDetails.newSessionHandle());
+				esUserDetails.setSessionHandle(SessionHandle.generate());
 				// the login has just loaded the user
 				request.getSession().setAttribute(ReloadUserPropertiesFilter.LAST_RELOAD_ATTRIBUTE,
 						new AtomicReference<>(now));

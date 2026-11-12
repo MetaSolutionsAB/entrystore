@@ -822,6 +822,34 @@ class ResourceIT extends BaseSpec {
 		JSON_PARSER.parseText(editResourceConn.errorStream.text)['error'] == 'Not authorized'
 	}
 
+	def "PUT /{context-id}/resource/{entry-id} as guest should not issue an auth_token cookie"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'resourceWithoutSessionEntryId', graphtype: 'string'],
+				[resource: 'Some text'])
+
+		when:
+		def conn = EntryStoreClient.putRequest('/' + contextId + '/resource/' + entryId, 'new text', '', 'text/plain')
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		EntryStoreClient.findSetCookies(conn, 'auth_token').isEmpty()
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} with HTTP Basic should not issue an auth_token cookie"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'resourceWithoutSessionEntryId', graphtype: 'string'],
+				[resource: 'Some text'])
+		def basic = EntryStoreClient.basicAuth('admin', EntryStoreClient.creds['admin'].toString())
+
+		when:
+		def conn = EntryStoreClient.putRequest('/' + contextId + '/resource/' + entryId, 'new text', '',
+				'text/plain', [Authorization: basic])
+
+		then:
+		conn.getResponseCode() == HTTP_NO_CONTENT
+		EntryStoreClient.findSetCookies(conn, 'auth_token').isEmpty()
+	}
+
 	def "PUT /{context-id}/resource/{entry-id} as admin should edit String-resource"() {
 		given:
 		// create local String entry

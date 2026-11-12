@@ -129,8 +129,8 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 					return;
 				}
 
-				updatedUser.setSessionHandle(esUserDetails.getSessionHandle());
 				updatedUser.setSessionInfo(sessionInfo(esUserDetails, session, request, now));
+				updatedUser.setSessionHandle(esUserDetails.getSessionHandle());
 
 				UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(updatedUser,
 						updatedUser.getPassword(), updatedUser.getAuthorities());

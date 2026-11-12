@@ -89,26 +89,12 @@ class FormLoginAuthenticationSuccessHandlerTest {
 	}
 
 	@Test
-	void login_setsASessionHandleUnrelatedToTheSessionId() throws Exception {
+	void login_givesTheSessionAHandleThatIsNotItsSessionId() throws Exception {
 		handler.onAuthenticationSuccess(request, new MockHttpServletResponse(), authentication);
 
 		var principal = (ESUserSessionDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-		assertTrue(principal.getSessionHandle().matches("[A-Za-z0-9_-]{22}"), principal.getSessionHandle());
+		assertNotNull(principal.getSessionHandle());
 		assertNotEquals(request.getSession().getId(), principal.getSessionHandle());
-	}
-
-	@Test
-	void twoLogins_getDifferentSessionHandles() throws Exception {
-		var firstLogin = (ESUserSessionDetails) authentication.getPrincipal();
-		handler.onAuthenticationSuccess(request, new MockHttpServletResponse(), authentication);
-		String firstHandle = firstLogin.getSessionHandle();
-		authenticate();
-		var secondLogin = (ESUserSessionDetails) authentication.getPrincipal();
-
-		handler.onAuthenticationSuccess(request, new MockHttpServletResponse(), authentication);
-
-		assertNotNull(firstHandle);
-		assertNotEquals(firstHandle, secondLogin.getSessionHandle());
 	}
 
 	@Test

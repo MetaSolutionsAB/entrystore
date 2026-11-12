@@ -322,6 +322,13 @@ class HttpUtilTest {
 	}
 
 	@Test
+	void hasQueryParameter_rawQuery_readsItAsTheQueryString() {
+		assertTrue(HttpUtil.hasQueryParameter("infer=false&query=%zz", "query"));
+		assertFalse(HttpUtil.hasQueryParameter("infer=false", "query"));
+		assertFalse(HttpUtil.hasQueryParameter((String) null, "query"));
+	}
+
+	@Test
 	void getQueryParameter_ignoresBodyParameters() {
 		// getParameter would also return body fields, and parse a multipart body to find them.
 		MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/x");

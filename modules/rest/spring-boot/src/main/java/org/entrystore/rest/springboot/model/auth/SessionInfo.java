@@ -17,17 +17,17 @@
 package org.entrystore.rest.springboot.model.auth;
 
 import lombok.Builder;
-import lombok.With;
 
 import java.time.LocalDateTime;
 
 /**
- * A session as /auth/tokens reports it. {@code current} is set per response, for the session making the request; the
- * stored instances leave it false.
+ * What /auth/tokens reports about a login session.
+ *
+ * @param current whether the session is the one that made the request; false on the info recorded with a session
  */
-@Builder
+@Builder(toBuilder = true)
 public record SessionInfo(String userName, LocalDateTime loginTime, LocalDateTime loginExpiration,
 						  LocalDateTime lastAccessTime, String lastUsedIpAddress, String lastUsedUserAgent,
-						  int loginTokenMaxAge, @With boolean current) {
+						  int loginTokenMaxAge, boolean current) {
 
 }

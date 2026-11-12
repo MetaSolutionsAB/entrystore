@@ -74,7 +74,7 @@ class CacheControlIT extends BaseSpec {
 		conn.getHeaderField('Cache-Control') == CACHE_CONTROL_AUTHENTICATED
 	}
 
-	def "GET /auth/tokens, which lists the user's sessions, returns Cache-Control: private, no-store"() {
+	def "GET /auth/tokens, which lists the caller's sessions, returns Cache-Control: private, no-store"() {
 		when:
 		def conn = EntryStoreClient.getRequest('/auth/tokens', 'admin')
 

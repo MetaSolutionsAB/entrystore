@@ -63,8 +63,8 @@ public class CacheControlFilter extends OncePerRequestFilter {
 	public static final String CACHE_CONTROL_AUTHENTICATED = "private, no-cache";
 
 	/**
-	 * {@code Cache-Control} of responses that carry a credential, so no cache may store them: those that set or expire
-	 * the session cookie, the SSO redirects that may do so, and bodies with session ids or confirmation tokens.
+	 * {@code Cache-Control} of responses that no cache may store: those that set or expire the session cookie, the
+	 * SSO redirects that may do so, bodies with confirmation tokens, and the session list of /auth/tokens.
 	 */
 	public static final String CACHE_CONTROL_CREDENTIALS = "private, no-store";
 

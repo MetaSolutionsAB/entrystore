@@ -39,9 +39,9 @@ import java.util.TreeSet;
  * Expires an unknown or expired session cookie on the requests it applies to and lets them continue as guest, with
  * the requested session id hidden so that {@code SessionManagementFilter} does not answer them 401. Applies to every
  * request when {@code entrystore.auth.cookie.invalid-token-error} is false, otherwise only to requests that need no
- * existing session; see {@link SecurityConfig}. An {@code ignoreAuth} or JSONP request ({@link IgnoreAuthFilter})
- * keeps the cookie, as {@code ignoreAuth} did in 5.x: it must not change the browser's login, such as one completed in
- * another tab while it was underway.
+ * existing session; see {@link SecurityConfig}. A request that {@link IgnoreAuthFilter#isRequested} serves as guest
+ * ({@code ignoreAuth}, JSONP) keeps the cookie, as {@code ignoreAuth} did in 5.x: it must not change the browser's
+ * login, such as one completed in another tab while it was underway.
  * <p>
  * A guest GET or HEAD continues without {@code If-None-Match}, {@code If-Modified-Since}, {@code Range} and
  * {@code If-Range}: their validators may come from a response the session was allowed to see, and a 304 or 206
@@ -65,7 +65,7 @@ class InvalidSessionCookieFilter extends OncePerRequestFilter {
 									@NotNull FilterChain filterChain) throws ServletException, IOException {
 		if (request.getRequestedSessionId() != null && !request.isRequestedSessionIdValid()
 				&& appliesTo.matches(request)) {
-			if (!ignoreAuthFilter.servesAsGuest(request)) {
+			if (!ignoreAuthFilter.isRequested(request)) {
 				authTokenCookies.expireAll(request, response);
 			}
 			filterChain.doFilter(READ_METHODS.contains(request.getMethod())

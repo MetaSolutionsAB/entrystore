@@ -20,17 +20,23 @@ import org.entrystore.rest.it.util.EntryStoreClient
 
 import static java.net.HttpURLConnection.HTTP_OK
 
+/**
+ * With {@code entrystore.jsonp=false} a {@code callback} query parameter has no effect: the response is not wrapped
+ * and the request keeps its authentication. {@link JsonpIT} covers the default (on) against the shared app, where
+ * such a request is served as guest.
+ */
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 class ZzzJsonpDisabledIT extends BaseSpec {
 
 	def setupSpec() {
 		stopPreexistingAppIfRunning()
-		startOwnedApp(['--entrystore.jsonp=false'])
+
+		startOwnedApp(['--entrystore.jsonp=false', '--entrystore.csrf.enabled=true'])
 	}
 
-	// Intentionally no cleanupSpec — see ZzzCsrfDisabledIT.
+	// Intentionally no cleanupSpec, see ZzzCsrfDisabledIT.
 
-	def "GET with ?callback= and a session cookie should be authenticated and not wrapped when JSONP is off"() {
+	def "GET /auth/user?callback= with a session cookie should answer the logged-in user as plain JSON"() {
 		given:
 		def login = EntryStoreClient.loginIsolated('admin')
 
@@ -40,7 +46,31 @@ class ZzzJsonpDisabledIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_OK
-		conn.getContentType().startsWith('application/json')
+		conn.getContentType().contains('application/json')
 		JSON_PARSER.parseText(conn.inputStream.text)['user'] == 'admin'
+	}
+
+	def "GET /auth/user?callback= with HTTP Basic should answer the logged-in user as plain JSON"() {
+		given:
+		def basic = EntryStoreClient.basicAuth('admin', EntryStoreClient.creds['admin'].toString())
+
+		when:
+		def conn = EntryStoreClient.getRequest('/auth/user?callback=cb', '', 'application/json',
+				[Authorization: basic])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		JSON_PARSER.parseText(conn.inputStream.text)['user'] == 'admin'
+	}
+
+	def "GET /auth/user?callback= without credentials should answer the guest user as plain JSON"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/auth/user?callback=cb', '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		JSON_PARSER.parseText(conn.inputStream.text)['user'] == 'guest'
 	}
 }
