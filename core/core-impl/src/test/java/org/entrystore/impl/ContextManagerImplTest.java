@@ -731,7 +731,7 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		context.softCache.remove(reference);
 		Entry loaded = context.get(reference.getId());
 
-		assertTrue(((ContextManagerImpl) cm).isEntryMetadataReadable(loaded));
+		assertTrue(ContextManagerImpl.isEntryMetadataReadable(loaded));
 	}
 
 	@Test
@@ -743,7 +743,7 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 				target.getLocalMetadataURI(), null);
 		rm.setCheckForAuthorization(true);
 
-		assertFalse(asUser(pm.getGuestUser(), () -> ((ContextManagerImpl) cm).isEntryMetadataReadable(reference)));
+		assertFalse(asUser(pm.getGuestUser(), () -> ContextManagerImpl.isEntryMetadataReadable(reference)));
 	}
 
 	@Test
@@ -755,7 +755,7 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		context.remove(target.getEntryURI());
 		rm.setCheckForAuthorization(true);
 
-		assertFalse(asUser(pm.getGuestUser(), () -> ((ContextManagerImpl) cm).isEntryMetadataReadable(reference)));
+		assertFalse(asUser(pm.getGuestUser(), () -> ContextManagerImpl.isEntryMetadataReadable(reference)));
 	}
 
 	@Test
@@ -767,7 +767,7 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		TestSuite.addGuestToMetadataACL(reference);
 		rm.setCheckForAuthorization(true);
 
-		assertFalse(asUser(pm.getGuestUser(), () -> ((ContextManagerImpl) cm).isEntryMetadataReadable(reference)));
+		assertFalse(asUser(pm.getGuestUser(), () -> ContextManagerImpl.isEntryMetadataReadable(reference)));
 	}
 
 	@Test
@@ -780,7 +780,7 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		TestSuite.addGuestToMetadataACL(reference);
 		rm.setCheckForAuthorization(true);
 
-		assertTrue(asUser(pm.getGuestUser(), () -> ((ContextManagerImpl) cm).isEntryMetadataReadable(reference)));
+		assertTrue(asUser(pm.getGuestUser(), () -> ContextManagerImpl.isEntryMetadataReadable(reference)));
 	}
 
 	/**

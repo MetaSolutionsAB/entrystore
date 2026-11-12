@@ -1380,7 +1380,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		return result;
 	}
 
-	public boolean isEntryMetadataReadable(Entry entry) {
+	public static boolean isEntryMetadataReadable(Entry entry) {
 		if (entry == null) {
 			return false;
 		}
