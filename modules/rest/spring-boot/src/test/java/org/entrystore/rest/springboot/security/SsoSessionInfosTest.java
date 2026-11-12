@@ -27,6 +27,7 @@ import org.springframework.security.web.session.HttpSessionIdChangedEvent;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -44,7 +45,7 @@ class SsoSessionInfosTest {
 
 		sessionInfos.recordLogin(login, "Alice@Example.org");
 
-		SessionInfo recorded = sessionInfos.get(login.getSession().getId());
+		SessionInfo recorded = sessionInfos.get(login.getSession().getId()).info();
 		// lower-cased, as a form login records it
 		assertEquals("alice@example.org", recorded.userName());
 		assertEquals("192.0.2.1", recorded.lastUsedIpAddress());
@@ -56,19 +57,39 @@ class SsoSessionInfosTest {
 	}
 
 	@Test
-	void refresh_recordedSession_reportsTheRequestAndKeepsTheLogin() {
+	void recordLogin_givesEveryLoginItsOwnHandle() {
+		MockHttpServletRequest login = requestFrom("192.0.2.1", "Browser/1");
+		authTokenCookies.applySessionLifetime(login, null);
+		sessionInfos.recordLogin(login, "alice");
+		String sessionId = login.getSession().getId();
+		String firstHandle = sessionInfos.get(sessionId).handle();
+
+		// the same session logs in again
+		sessionInfos.recordLogin(login, "alice");
+
+		String secondHandle = sessionInfos.get(sessionId).handle();
+		assertNotNull(firstHandle);
+		assertNotNull(secondHandle);
+		assertNotEquals(firstHandle, secondHandle);
+		assertNotEquals(sessionId, firstHandle);
+	}
+
+	@Test
+	void refresh_recordedSession_reportsTheRequestAndKeepsTheLoginAndTheHandle() {
 		MockHttpServletRequest login = requestFrom("192.0.2.1", "Browser/1");
 		authTokenCookies.applySessionLifetime(login, null);
 		sessionInfos.recordLogin(login, "alice");
 		HttpSession session = login.getSession();
-		SessionInfo atLogin = sessionInfos.get(session.getId());
+		String handleAtLogin = sessionInfos.get(session.getId()).handle();
+		SessionInfo atLogin = sessionInfos.get(session.getId()).info();
 		MockHttpServletRequest later = requestFrom("192.0.2.2", "Browser/2");
 		later.setSession(session);
 		session.setMaxInactiveInterval(60);
 
 		sessionInfos.refresh(later);
 
-		SessionInfo refreshed = sessionInfos.get(session.getId());
+		SessionInfo refreshed = sessionInfos.get(session.getId()).info();
+		assertEquals(handleAtLogin, sessionInfos.get(session.getId()).handle());
 		assertEquals("192.0.2.2", refreshed.lastUsedIpAddress());
 		assertEquals("Browser/2", refreshed.lastUsedUserAgent());
 		assertEquals(60, refreshed.loginTokenMaxAge());

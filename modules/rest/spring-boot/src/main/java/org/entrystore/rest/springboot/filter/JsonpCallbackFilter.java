@@ -26,6 +26,7 @@ import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -46,6 +47,9 @@ import java.util.regex.Pattern;
  * Wraps JSON {@code GET} responses in a JSONP callback (<code>callback(&lt;json&gt;)</code>) when a
  * {@code ?callback=} parameter is present, porting the Restlet {@code JSCallbackFilter}. Gated by
  * {@code entrystore.jsonp} (default {@code true}). JSONP is legacy — CORS is the preferred mechanism.
+ * <p>
+ * A request that asks for JSONP is served as guest whatever credentials it carries, see {@link IgnoreAuthFilter},
+ * so the wrapped body holds only what a guest may read.
  * <p>
  * Hardening over the original Restlet filter (which echoed the raw {@code callback} parameter into an
  * {@code application/javascript} body — a reflected-XSS / content-sniffing vector): the callback name
@@ -106,6 +110,18 @@ public class JsonpCallbackFilter extends OncePerRequestFilter {
 		this.errorResponseWriter = errorResponseWriter;
 	}
 
+	/**
+	 * Returns the {@code callback} parameter of a request that asks for JSONP, which only a GET can. Only the query
+	 * string is read, as 5.x did: getParameter would parse a form or multipart body. {@link IgnoreAuthFilter} uses
+	 * the same answer, so every request this filter may wrap is served as guest.
+	 *
+	 * @return the decoded, not yet validated value, empty for a bare {@code ?callback}, or null if the request asks
+	 * for no JSONP
+	 */
+	static @Nullable String requestedCallback(HttpServletRequest request) {
+		return "GET".equals(request.getMethod()) ? HttpUtil.getQueryParameter(request, CALLBACK_PARAM) : null;
+	}
+
 	// Defense-in-depth: never re-run on the ASYNC dispatch of a request that went async.
 	@Override
 	protected boolean shouldNotFilterAsyncDispatch() {
@@ -117,16 +133,9 @@ public class JsonpCallbackFilter extends OncePerRequestFilter {
 									@NotNull HttpServletResponse response,
 									@NotNull FilterChain filterChain) throws ServletException, IOException {
 
-		// Fast path (no buffering) for the overwhelming majority of requests.
-		if (!enabled || !"GET".equals(request.getMethod())) {
-			filterChain.doFilter(request, response);
-			return;
-		}
-
-		// Query string only, as 5.x read it: getParameter would parse a form or multipart body.
-		String rawCallback = HttpUtil.getQueryParameter(request, CALLBACK_PARAM);
-		// No JSONP requested, or a streaming endpoint (e.g. /sparql) that must not be buffered:
-		// pass straight through. isStreamingPath is only evaluated for the rare ?callback= request.
+		String rawCallback = enabled ? requestedCallback(request) : null;
+		// JSONP off or not requested (the overwhelming majority), or a streaming endpoint (e.g. /sparql) that
+		// must not be buffered: pass straight through. isStreamingPath is only evaluated for a ?callback= request.
 		if (rawCallback == null || isStreamingPath(request)) {
 			filterChain.doFilter(request, response);
 			return;

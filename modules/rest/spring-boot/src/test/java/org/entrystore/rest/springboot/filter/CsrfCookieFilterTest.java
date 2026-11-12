@@ -30,7 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class CsrfCookieFilterTest {
 
-	private final CsrfCookieFilter filter = new CsrfCookieFilter("auth_token", "XSRF-TOKEN");
+	private final CsrfCookieFilter filter =
+			new CsrfCookieFilter("auth_token", "XSRF-TOKEN", new IgnoreAuthFilter(true));
 
 	@Test
 	void unsafeMethod_resolvesToken() throws Exception {
@@ -90,6 +91,37 @@ class CsrfCookieFilterTest {
 		filter.doFilter(request, new MockHttpServletResponse(), chain);
 
 		assertEquals(1, resolutions.get(), "GET with session cookie but no XSRF-TOKEN cookie must mint a new token");
+		assertEquals(request, chain.getRequest(), "Filter chain must still be invoked");
+	}
+
+	@Test
+	void jsonpRequestWithSessionCookie_skipsResolution() throws Exception {
+		// Served as guest: its response sets no cookie
+		var resolutions = new AtomicInteger();
+		var request = new MockHttpServletRequest("GET", "/auth/user");
+		request.setQueryString("callback=cb");
+		request.setCookies(new Cookie("auth_token", "session-id"));
+		request.setAttribute(CsrfToken.class.getName(), countingToken(resolutions));
+		var chain = new MockFilterChain();
+
+		filter.doFilter(request, new MockHttpServletResponse(), chain);
+
+		assertEquals(0, resolutions.get(), "A JSONP GET must not mint a token");
+		assertEquals(request, chain.getRequest(), "Filter chain must still be invoked");
+	}
+
+	@Test
+	void ignoreAuthRequestWithCsrfCookie_skipsResolution() throws Exception {
+		var resolutions = new AtomicInteger();
+		var request = new MockHttpServletRequest("GET", "/auth/user");
+		request.setQueryString("ignoreAuth");
+		request.setCookies(new Cookie("auth_token", "session-id"), new Cookie("XSRF-TOKEN", "existing-token"));
+		request.setAttribute(CsrfToken.class.getName(), countingToken(resolutions));
+		var chain = new MockFilterChain();
+
+		filter.doFilter(request, new MockHttpServletResponse(), chain);
+
+		assertEquals(0, resolutions.get(), "An ignoreAuth GET must not refresh the token");
 		assertEquals(request, chain.getRequest(), "Filter chain must still be invoked");
 	}
 

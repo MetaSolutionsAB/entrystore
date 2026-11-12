@@ -99,8 +99,8 @@ class AuthTokenCookieIT extends BaseSpec {
 		given: 'a session of the user that another of its sessions ended'
 		def ending = EntryStoreClient.loginIsolated('user')
 		def ended = EntryStoreClient.loginIsolated('user')
-		def endedSessionId = ended.authCookie.split(';')[0].substring('auth_token='.length()).split(/\.node/)[0]
-		assert EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: endedSessionId]), '',
+		def endedHandle = EntryStoreClient.handleOf(ended.authCookie)
+		assert EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: endedHandle]), '',
 				'application/json', EntryStoreClient.csrfHeaders(ending.authCookie, ending.csrf))
 				.getResponseCode() == HTTP_NO_CONTENT
 
