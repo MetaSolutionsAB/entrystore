@@ -36,7 +36,8 @@ import java.util.Set;
 
 /**
  * Shared SSO login success flow for CAS, SAML and OIDC: token-type guard, reserved-name check,
- * auto-provisioning, disabled-user check, session lifetime, and the clear-session-then-redirect failure path.
+ * auto-provisioning, disabled-user check, session lifetime, session info, and the clear-session-then-redirect
+ * failure path.
  * Subclasses contribute the protocol-specific parts through the hook methods, optionally
  * carrying per-request state of type {@code C} (resolved once via
  * {@link #resolveContext(HttpServletRequest, Authentication)}) through the flow. The token
@@ -54,6 +55,7 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 	protected final PrincipalManager principalManager;
 	protected final ErrorResponseWriter errorResponseWriter;
 	private final AuthTokenCookies authTokenCookies;
+	private final SsoSessionInfos ssoSessionInfos;
 
 	@Override
 	public final void onAuthenticationSuccess(HttpServletRequest request,
@@ -126,6 +128,7 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 		}
 
 		authTokenCookies.applySessionLifetime(request, null);
+		ssoSessionInfos.recordLogin(request, username);
 		authTokenCookies.expireStale(request, response);
 		if (tryCustomSuccessRedirect(request, response, context)) {
 			return;

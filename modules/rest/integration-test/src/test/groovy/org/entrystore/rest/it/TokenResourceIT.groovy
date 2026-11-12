@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
@@ -33,17 +49,6 @@ class TokenResourceIT extends BaseSpec {
 		EntryStoreClient.restoreCreds()
 	}
 
-	/** Token value from an auth_token Set-Cookie line, up to but excluding the '.node' suffix. */
-	private static String tokenPart(String authCookieLine) {
-		// Without both markers the split below silently returns the whole remainder — token plus the
-		// cookie attributes — so fail here instead of querying /auth/tokens with a bogus key. The
-		// '.node' check must look at the cookie value alone, not at attributes that could carry it.
-		assert authCookieLine.startsWith('auth_token='): 'not an auth_token Set-Cookie line: ' + authCookieLine
-		def value = authCookieLine.substring('auth_token='.length()).split(';')[0]
-		assert value.contains('.node'): 'auth_token cookie carries no .node suffix: ' + authCookieLine
-		return value.split(/\.node/)[0]
-	}
-
 	def "GET /auth/tokens should get unauthorized for a non-authenticated user"() {
 		when:
 		def tokensConnection = EntryStoreClient.getRequest('/auth/tokens', '')
@@ -61,12 +66,12 @@ class TokenResourceIT extends BaseSpec {
 		def loginConnection1 = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
 		assert loginConnection1.getResponseCode() == HTTP_OK
 		def cookie1 = EntryStoreClient.findSetCookie(loginConnection1, 'auth_token')
-		def tokenPart1 = tokenPart(cookie1)
+		def tokenPart1 = EntryStoreClient.sessionIdOf(cookie1)
 		def bodyParams2 = createFormBody([auth_username: username, auth_password: password, auth_maxage: '50'])
 		def loginConnection2 = EntryStoreClient.postRequest('/auth/cookie', bodyParams2, '', 'application/x-www-form-urlencoded')
 		assert loginConnection2.getResponseCode() == HTTP_OK
 		def cookie2 = EntryStoreClient.findSetCookie(loginConnection2, 'auth_token')
-		def tokenPart2 = tokenPart(cookie2)
+		def tokenPart2 = EntryStoreClient.sessionIdOf(cookie2)
 
 		when:
 		def tokensConnection = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: cookie1])
@@ -93,7 +98,7 @@ class TokenResourceIT extends BaseSpec {
 		def username = 'userForTokenManagementUpdate@test.com'
 		UserUtil.createUserWithPassword(username, password)
 		def login = EntryStoreClient.loginIsolated(username)
-		def token = tokenPart(login.authCookie)
+		def token = EntryStoreClient.sessionIdOf(login.authCookie)
 		def tokensConnection = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: login.authCookie])
 		assert tokensConnection.getResponseCode() == HTTP_OK
 		def tokensRespJson = JSON_PARSER.parseText(tokensConnection.inputStream.text)
@@ -130,9 +135,9 @@ class TokenResourceIT extends BaseSpec {
 		def username = 'userForTokenManagementDelete@test.com'
 		UserUtil.createUserWithPassword(username, password)
 		def login1 = EntryStoreClient.loginIsolated(username)
-		def tokenPart1 = tokenPart(login1.authCookie)
+		def tokenPart1 = EntryStoreClient.sessionIdOf(login1.authCookie)
 		def login2 = EntryStoreClient.loginIsolated(username)
-		def tokenPart2 = tokenPart(login2.authCookie)
+		def tokenPart2 = EntryStoreClient.sessionIdOf(login2.authCookie)
 		def body = JsonOutput.toJson([token: tokenPart2])
 
 		when:
@@ -154,7 +159,7 @@ class TokenResourceIT extends BaseSpec {
 		def username = 'userForTokenManagementDeleteCurrent@test.com'
 		UserUtil.createUserWithPassword(username, password)
 		def login = EntryStoreClient.loginIsolated(username)
-		def body = JsonOutput.toJson([token: tokenPart(login.authCookie)])
+		def body = JsonOutput.toJson([token: EntryStoreClient.sessionIdOf(login.authCookie)])
 		assert EntryStoreClient.getRequest('/auth/user', '', '', [Cookie: login.authCookie]).getResponseCode() == HTTP_OK
 
 		when:

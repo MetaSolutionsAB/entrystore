@@ -83,7 +83,6 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -91,6 +90,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -231,37 +231,15 @@ public class AuthService {
 				.register(meterRegistry);
 	}
 
-	public List<SessionInformation> getAllUserSessions(URI userURI, boolean includeExpiredSessions) {
-
-		List<SessionInformation> sessionsList = new ArrayList<>();
-
-		User user = principalManager.getUser(userURI);
-		if (user == null) {
-			log.warn("No user found for URI: {}", userURI);
-			return sessionsList;
-		}
-
-		Entry entry = user.getEntry();
-		if (entry == null) {
-			log.warn("No entry found for user: {}", userURI);
-			return sessionsList;
-		}
-
-		URI resourceURI = entry.getResourceURI();
-		if (resourceURI == null) {
-			log.warn("No resource URI found for user entry: {}", userURI);
-			return sessionsList;
-		}
-
-		String username = resourceURI.toString();
-		for (Object principal : sessionRegistry.getAllPrincipals()) {
-			if (principal instanceof UserDetails userDetails && userDetails.getUsername().equals(username)) {
-				sessionsList = sessionRegistry.getAllSessions(userDetails, includeExpiredSessions);
-				break;
-			}
-		}
-
-		return sessionsList;
+	/**
+	 * Returns the unexpired sessions of the user, whichever way they logged in. The name is read as admin, as in
+	 * {@link #expireUserSessions(User, String)}.
+	 */
+	public List<SessionInformation> getUserSessions(User user) {
+		String userUri = user.getURI().toString();
+		String name = PrincipalManagerUtil.runAsAdmin(principalManager,
+				() -> principalManager.getPrincipalName(user.getURI()));
+		return sessions(principal -> isFormLoginOf(principal, userUri) || isSsoLoginOf(principal, name)).toList();
 	}
 
 	/**
@@ -289,11 +267,16 @@ public class AuthService {
 	}
 
 	private void expireSessions(Predicate<Object> ofUser, String exceptSessionId) {
-		sessionRegistry.getAllPrincipals().stream()
-				.filter(ofUser)
-				.flatMap(principal -> sessionRegistry.getAllSessions(principal, false).stream())
+		sessions(ofUser)
 				.filter(session -> !session.getSessionId().equals(exceptSessionId))
 				.forEach(SessionInformation::expireNow);
+	}
+
+	/** The unexpired sessions of the registered principals that match. */
+	private Stream<SessionInformation> sessions(Predicate<Object> ofUser) {
+		return sessionRegistry.getAllPrincipals().stream()
+				.filter(ofUser)
+				.flatMap(principal -> sessionRegistry.getAllSessions(principal, false).stream());
 	}
 
 	/** Form login principals carry the user's resource URI as username. */

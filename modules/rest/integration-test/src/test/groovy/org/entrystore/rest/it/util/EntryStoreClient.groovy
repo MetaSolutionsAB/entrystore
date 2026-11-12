@@ -390,7 +390,7 @@ class EntryStoreClient {
 	}
 
 	/** Returns all Set-Cookie response header lines for {@code cookieName}, in response order. */
-	def static List<String> findSetCookies(HttpURLConnection connection, String cookieName) {
+	def static findSetCookies(HttpURLConnection connection, String cookieName) {
 		def headerValues = connection.getHeaderFields().get('Set-Cookie') ?: []
 		return headerValues.findAll { it != null && it.startsWith(cookieName + '=') }
 	}
@@ -399,7 +399,7 @@ class EntryStoreClient {
 	 * Maps the Path of every Set-Cookie line that expires {@code cookieName} (Max-Age=0) to that line's
 	 * attributes, keyed by lower-case attribute name; flag attributes such as Secure map to ''.
 	 */
-	def static Map<String, Map<String, String>> expiredCookies(HttpURLConnection connection, String cookieName) {
+	static Map<String, Map<String, String>> expiredCookies(HttpURLConnection connection, String cookieName) {
 		return findSetCookies(connection, cookieName)
 				.collect { parseSetCookieAttributes(it) }
 				.findAll { it['max-age'] == '0' }
@@ -407,7 +407,7 @@ class EntryStoreClient {
 	}
 
 	/** Parses the attributes after the name=value pair of a Set-Cookie line, keyed by lower-case name. */
-	def static Map<String, String> parseSetCookieAttributes(String setCookieLine) {
+	static Map<String, String> parseSetCookieAttributes(String setCookieLine) {
 		return setCookieLine.split(';').drop(1).collectEntries { String attribute ->
 			def parts = attribute.trim().split('=', 2)
 			[(parts[0].toLowerCase()): parts.length > 1 ? parts[1] : '']
@@ -467,6 +467,19 @@ class EntryStoreClient {
 	static Map<String, String> isolatedCsrfHeaders(String user) {
 		def login = loginIsolated(user)
 		return csrfHeaders(login.authCookie.toString(), login.csrf.toString())
+	}
+
+	/**
+	 * Returns the session id, which /auth/tokens keys sessions by, of an auth_token cookie: its value up to but
+	 * excluding the '.node' suffix. Takes a Set-Cookie line or a Cookie header value that starts with the cookie.
+	 */
+	static String sessionIdOf(String authCookie) {
+		// Fail here instead of querying /auth/tokens with a bogus key. The '.node' check looks at the
+		// cookie value alone, as an attribute could carry it.
+		assert authCookie.startsWith('auth_token='): 'not an auth_token cookie: ' + authCookie
+		def value = authCookie.substring('auth_token='.length()).split(';')[0]
+		assert value.contains('.node'): 'auth_token cookie carries no .node suffix: ' + authCookie
+		return value.split(/\.node/)[0]
 	}
 
 	/**

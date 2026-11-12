@@ -22,6 +22,7 @@ import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.springboot.security.AuthTokenCookies;
 import org.entrystore.rest.springboot.security.ESUserDetailsService;
 import org.entrystore.rest.springboot.security.ESUserSessionDetails;
+import org.entrystore.rest.springboot.security.SsoSessionInfos;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,17 +34,20 @@ import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.session.SessionRegistryImpl;
+import org.springframework.security.saml2.provider.service.authentication.DefaultSaml2AuthenticatedPrincipal;
 
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -70,6 +74,7 @@ class ReloadUserPropertiesFilterTest {
 	private final ESUserDetailsService userDetailsService = mock(ESUserDetailsService.class);
 	private final SessionRegistryImpl sessionRegistry = new SessionRegistryImpl();
 	private final AuthTokenCookies authTokenCookies = mock(AuthTokenCookies.class);
+	private final SsoSessionInfos ssoSessionInfos = new SsoSessionInfos(authTokenCookies);
 	private final ReloadUserPropertiesFilter filter = filterWithReloadInterval(10);
 	private MockHttpServletRequest request;
 	private String sessionId;
@@ -129,6 +134,46 @@ class ReloadUserPropertiesFilterTest {
 		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
 
 		assertSame(reloaded, sessionRegistry.getSessionInformation(sessionId).getPrincipal());
+	}
+
+	@Test
+	void ssoSession_updatesItsSessionInfoAndKeepsTheLoginTime() throws Exception {
+		logInThroughSaml();
+		var login = new MockHttpServletRequest();
+		login.setRemoteAddr("192.0.2.1");
+		login.addHeader("User-Agent", "Browser/1");
+		ssoSessionInfos.recordLogin(login, "alice");
+		String ssoSessionId = login.getSession().getId();
+		SessionInfo atLogin = ssoSessionInfos.get(ssoSessionId);
+		var later = new MockHttpServletRequest();
+		later.setSession(login.getSession());
+		later.setRemoteAddr("192.0.2.2");
+		later.addHeader("User-Agent", "Browser/2");
+		var chain = new MockFilterChain();
+
+		filter.doFilter(later, new MockHttpServletResponse(), chain);
+
+		SessionInfo updated = ssoSessionInfos.get(ssoSessionId);
+		assertEquals("192.0.2.2", updated.lastUsedIpAddress());
+		assertEquals("Browser/2", updated.lastUsedUserAgent());
+		assertEquals(atLogin.loginTime(), updated.loginTime());
+		assertEquals("alice", updated.userName());
+		assertNotNull(chain.getRequest());
+		// SetUserURIAfterAuthenticationFilter loads the user of an SSO session
+		verify(userDetailsService, never()).loadUserByUsername(any());
+	}
+
+	@Test
+	void ssoSessionWithoutRecordedInfo_getsNone() throws Exception {
+		logInThroughSaml();
+		var ssoRequest = new MockHttpServletRequest();
+		String ssoSessionId = ssoRequest.getSession().getId();
+		var chain = new MockFilterChain();
+
+		filter.doFilter(ssoRequest, new MockHttpServletResponse(), chain);
+
+		assertNull(ssoSessionInfos.get(ssoSessionId));
+		assertNotNull(chain.getRequest());
 	}
 
 	@Test
@@ -385,6 +430,7 @@ class ReloadUserPropertiesFilterTest {
 				.withBean(SessionRegistry.class, () -> sessionRegistry)
 				.withBean(ErrorResponseWriter.class, () -> new ErrorResponseWriter(JsonMapper.builder().build()))
 				.withBean(AuthTokenCookies.class, () -> authTokenCookies)
+				.withBean(SsoSessionInfos.class, () -> ssoSessionInfos)
 				.withUserConfiguration(ReloadUserPropertiesFilter.class)
 				.run(context -> {
 					reloadedAt(Instant.now().minusSeconds(secondsSinceTheLastReload));
@@ -395,7 +441,13 @@ class ReloadUserPropertiesFilterTest {
 
 	private ReloadUserPropertiesFilter filterWithReloadInterval(int seconds) {
 		return new ReloadUserPropertiesFilter(userDetailsService, sessionRegistry,
-				new ErrorResponseWriter(JsonMapper.builder().build()), authTokenCookies, seconds);
+				new ErrorResponseWriter(JsonMapper.builder().build()), authTokenCookies, ssoSessionInfos, seconds);
+	}
+
+	/** Replaces the form login of {@link #logIn()} with the Authentication of a SAML login. */
+	private static void logInThroughSaml() {
+		SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(
+				new DefaultSaml2AuthenticatedPrincipal("alice", Map.of()), null, "ROLE_USER"));
 	}
 
 	private static ESUserSessionDetails sessionDetails() {

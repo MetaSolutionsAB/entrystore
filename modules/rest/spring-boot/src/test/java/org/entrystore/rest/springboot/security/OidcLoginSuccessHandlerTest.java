@@ -83,6 +83,9 @@ class OidcLoginSuccessHandlerTest {
 	private AuthTokenCookies authTokenCookies;
 
 	@Mock
+	private SsoSessionInfos ssoSessionInfos;
+
+	@Mock
 	private HttpServletRequest request;
 
 	@Mock
@@ -109,7 +112,7 @@ class OidcLoginSuccessHandlerTest {
 		oidcAuthService = spy(new OidcAuthService(oidcConfiguration));
 		handler = new OidcLoginSuccessHandler(userService, oidcAuthService, oidcAuthStateCache,
 				principalManager, new ErrorResponseWriter(JsonMapper.builder().build()), authTokenCookies,
-				oidcConfiguration);
+				ssoSessionInfos, oidcConfiguration);
 		// Custom-success redirects route through the RedirectStrategy; the failure path writes the
 		// redirect directly to the response. Mocking the strategy keeps the success-path assertions
 		// independent of the default strategy's encodeRedirectURL handling.

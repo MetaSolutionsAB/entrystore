@@ -376,6 +376,89 @@ class AuthServiceTest {
 	}
 
 	@Test
+	void getUserSessions_returnsEveryLoginOfTheUserOnly() {
+		SessionRegistryImpl sessions = new SessionRegistryImpl();
+		AuthService service = sessionExpiryService(principalManagerNaming(USER_URI, "alice"), sessions);
+		sessions.registerNewSession("form", formLogin(USER_URI));
+		// The SSO login matches the user's name case-insensitively
+		sessions.registerNewSession("cas", springUser("ALICE"));
+		sessions.registerNewSession("saml", new DefaultSaml2AuthenticatedPrincipal("alice", Map.of()));
+		sessions.registerNewSession("oidc", oidcLogin("Alice"));
+		sessions.registerNewSession("other-form", formLogin(OTHER_USER_URI));
+		sessions.registerNewSession("other-saml", new DefaultSaml2AuthenticatedPrincipal("bob", Map.of()));
+
+		List<SessionInformation> userSessions = service.getUserSessions(userAt(USER_URI));
+
+		assertEquals(Set.of("form", "cas", "saml", "oidc"), sessionIds(userSessions));
+	}
+
+	@Test
+	void getUserSessions_expiredSession_isLeftOut() {
+		SessionRegistryImpl sessions = new SessionRegistryImpl();
+		AuthService service = sessionExpiryService(principalManagerNaming(USER_URI, "alice"), sessions);
+		sessions.registerNewSession("saml-live", new DefaultSaml2AuthenticatedPrincipal("alice", Map.of()));
+		sessions.registerNewSession("saml-ended", new DefaultSaml2AuthenticatedPrincipal("alice", Map.of()));
+		sessions.getSessionInformation("saml-ended").expireNow();
+
+		List<SessionInformation> userSessions = service.getUserSessions(userAt(USER_URI));
+
+		assertEquals(Set.of("saml-live"), sessionIds(userSessions));
+	}
+
+	@Test
+	void getUserSessions_userWithoutName_returnsTheFormLoginSessionsOnly() {
+		SessionRegistryImpl sessions = new SessionRegistryImpl();
+		AuthService service = sessionExpiryService(principalManagerNaming(USER_URI, null), sessions);
+		sessions.registerNewSession("form", formLogin(USER_URI));
+		sessions.registerNewSession("other-cas", springUser("bob"));
+		sessions.registerNewSession("other-saml", new DefaultSaml2AuthenticatedPrincipal("bob", Map.of()));
+
+		List<SessionInformation> userSessions = service.getUserSessions(userAt(USER_URI));
+
+		assertEquals(Set.of("form"), sessionIds(userSessions));
+	}
+
+	@Test
+	void getUserSessions_nameDifferingOnlyByADotlessI_isAnotherUsersLogin() {
+		SessionRegistryImpl sessions = new SessionRegistryImpl();
+		// The login resolves the lower-cased name exactly, and lower-casing keeps the dotless i apart from i
+		AuthService service = sessionExpiryService(principalManagerNaming(USER_URI, "al\u0131ce"), sessions);
+		sessions.registerNewSession("other-cas", springUser("alice"));
+		sessions.registerNewSession("other-saml", new DefaultSaml2AuthenticatedPrincipal("alice", Map.of()));
+
+		List<SessionInformation> userSessions = service.getUserSessions(userAt(USER_URI));
+
+		assertEquals(Set.of(), sessionIds(userSessions));
+	}
+
+	@Test
+	void getUserSessions_callerWithoutReadAccessToTheUser_readsTheNameAsAdmin() {
+		SessionRegistryImpl sessions = new SessionRegistryImpl();
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		URI adminUri = principalManager.getAdminUser().getURI();
+		AtomicReference<URI> actingUser = new AtomicReference<>(OTHER_USER_URI);
+		when(principalManager.getAuthenticatedUserURI()).thenAnswer(_ -> actingUser.get());
+		doAnswer(call -> {
+			actingUser.set(call.getArgument(0));
+			return null;
+		}).when(principalManager).setAuthenticatedUserURI(any());
+		// Stands in for the core's ReadMetadata check, which only the admin passes here
+		when(principalManager.getPrincipalName(USER_URI)).thenAnswer(_ -> {
+			if (!adminUri.equals(actingUser.get())) {
+				throw new IllegalStateException("name read as " + actingUser.get());
+			}
+			return "alice";
+		});
+		AuthService service = sessionExpiryService(principalManager, sessions);
+		sessions.registerNewSession("saml", new DefaultSaml2AuthenticatedPrincipal("alice", Map.of()));
+
+		List<SessionInformation> userSessions = service.getUserSessions(userAt(USER_URI));
+
+		assertEquals(Set.of("saml"), sessionIds(userSessions));
+		assertEquals(OTHER_USER_URI, actingUser.get());
+	}
+
+	@Test
 	void confirmPasswordLegacy_validToken_expiresEveryLoginOfTheUser() {
 		SessionRegistryImpl sessions = new SessionRegistryImpl();
 		SignupTokenCache tokens = new SignupTokenCache(Ticker.systemTicker());
@@ -844,6 +927,10 @@ class AuthServiceTest {
 		var idToken = new OidcIdToken("id-token", Instant.now(), Instant.now().plusSeconds(60),
 				Map.of("sub", "subject-" + username, "email", username));
 		return new DefaultOidcUser(List.of(new SimpleGrantedAuthority("ROLE_USER")), idToken, "email");
+	}
+
+	private static Set<String> sessionIds(List<SessionInformation> sessions) {
+		return sessions.stream().map(SessionInformation::getSessionId).collect(Collectors.toSet());
 	}
 
 	private static Set<String> expiredSessionIds(SessionRegistry sessions) {

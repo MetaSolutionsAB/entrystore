@@ -22,6 +22,8 @@ import org.entrystore.rest.it.util.EntryStoreClient
 import spock.lang.Shared
 import spock.lang.Stepwise
 
+import java.time.LocalDateTime
+
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
@@ -374,6 +376,62 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 
 		and: 'the other session has ended'
 		EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: otherCookie]).getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def '12. GET /auth/tokens lists the sessions of the SAML-authenticated user with their session info'() {
+		given: 'two sessions of the user'
+		def currentCookie = samlLogin()
+		def otherCookie = samlLogin()
+
+		when: 'the user lists their sessions in one of them'
+		def tokensConn = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: currentCookie])
+
+		then: 'both are listed by session id'
+		tokensConn.getResponseCode() == HTTP_OK
+		def tokens = JSON_PARSER.parseText(tokensConn.inputStream.text) as Map
+		def current = tokens[EntryStoreClient.sessionIdOf(currentCookie)]
+		def other = tokens[EntryStoreClient.sessionIdOf(otherCookie)]
+		current != null
+		other != null
+
+		and: 'with the session info a form login reports'
+		current['userName'] == testUsername
+		current['loginTime'] != null
+		current['loginExpiration'] != null
+		current['lastUsedIpAddress'] != null
+		current['lastUsedUserAgent'] != null
+		// entrystore.auth.cookie.max-age of the ITs
+		current['loginTokenMaxAge'] == 3700
+		other['userName'] == testUsername
+
+		and: 'the listing request is the last access of the session making it'
+		LocalDateTime.parse(current['lastAccessTime'] as String)
+			.isAfter(LocalDateTime.parse(current['loginTime'] as String))
+	}
+
+	def '13. DELETE /auth/tokens ends another session of the SAML-authenticated user'() {
+		given: 'two sessions of the user'
+		def currentCookie = samlLogin()
+		def otherCookie = samlLogin()
+		def otherSessionId = EntryStoreClient.sessionIdOf(otherCookie)
+		assert EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: otherCookie]).getResponseCode() == HTTP_OK
+
+		when: 'the user deletes the other session in one of them'
+		def deleteConn = EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: otherSessionId]), '',
+			'application/json', [Cookie: currentCookie])
+
+		then:
+		deleteConn.getResponseCode() == HTTP_NO_CONTENT
+
+		and: 'the other session has ended'
+		EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: otherCookie]).getResponseCode() == HTTP_UNAUTHORIZED
+
+		and: 'the session making the request is still valid and no longer lists the other one'
+		def tokensConn = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: currentCookie])
+		tokensConn.getResponseCode() == HTTP_OK
+		def tokens = JSON_PARSER.parseText(tokensConn.inputStream.text) as Map
+		tokens.containsKey(EntryStoreClient.sessionIdOf(currentCookie))
+		!tokens.containsKey(otherSessionId)
 	}
 
 	/** Logs the test user in through SAML with no cookies and returns the new session's Cookie header. */

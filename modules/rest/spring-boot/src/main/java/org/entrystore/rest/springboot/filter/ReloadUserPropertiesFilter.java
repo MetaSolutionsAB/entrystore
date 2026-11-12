@@ -27,6 +27,7 @@ import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.springboot.security.AuthTokenCookies;
 import org.entrystore.rest.springboot.security.ESUserDetailsService;
 import org.entrystore.rest.springboot.security.ESUserSessionDetails;
+import org.entrystore.rest.springboot.security.SsoSessionInfos;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jspecify.annotations.NonNull;
@@ -59,6 +60,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * A request whose session a concurrent request ends meanwhile is served as an HTTP Basic request is, without the
  * session, and the session context repository keeps it from getting a new one.
  * <p>
+ * A SAML, CAS or OIDC session has no user to reload here, as SetUserURIAfterAuthenticationFilter loads its user on
+ * every request; only its session info is updated.
+ * <p>
  * A reload replaces the Authentication in the session's own SecurityContext instance, so it lasts without an explicit
  * save; this relies on the in-memory session store of the single EntryStore instance.
  */
@@ -76,6 +80,7 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 	private final SessionRegistry sessionRegistry;
 	private final ErrorResponseWriter errorResponseWriter;
 	private final AuthTokenCookies authTokenCookies;
+	private final SsoSessionInfos ssoSessionInfos;
 	private final Duration reloadInterval;
 
 	/**
@@ -85,6 +90,7 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 	 */
 	public ReloadUserPropertiesFilter(ESUserDetailsService userDetailsService, SessionRegistry sessionRegistry,
 			ErrorResponseWriter errorResponseWriter, AuthTokenCookies authTokenCookies,
+			SsoSessionInfos ssoSessionInfos,
 			@Value("${entrystore.auth.session.reload-interval:10}") int reloadIntervalSeconds) {
 		if (reloadIntervalSeconds < 0) {
 			throw new IllegalArgumentException("entrystore.auth.session.reload-interval must be 0 (every request) or "
@@ -94,6 +100,7 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 		this.sessionRegistry = sessionRegistry;
 		this.errorResponseWriter = errorResponseWriter;
 		this.authTokenCookies = authTokenCookies;
+		this.ssoSessionInfos = ssoSessionInfos;
 		this.reloadInterval = Duration.ofSeconds(reloadIntervalSeconds);
 	}
 
@@ -168,6 +175,8 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 						.build());
 				return;
 			}
+		} else {
+			ssoSessionInfos.refresh(request);
 		}
 
 		filterChain.doFilter(request, response);
