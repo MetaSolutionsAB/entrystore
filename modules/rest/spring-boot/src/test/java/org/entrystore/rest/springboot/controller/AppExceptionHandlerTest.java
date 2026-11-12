@@ -33,6 +33,7 @@ import org.entrystore.rest.springboot.util.WebResourceUrls;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.core.MethodParameter;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
@@ -141,6 +142,22 @@ class AppExceptionHandlerTest {
 
 		assertEquals(HttpStatus.BAD_GATEWAY, response.getStatusCode());
 		assertEquals("Upstream too large", response.getBody().error());
+	}
+
+	@Test
+	void handleCustomResponseException_withHeaders_addsThemToTheJsonErrorResponse() {
+		MockHttpServletRequest req = new MockHttpServletRequest("GET", "/sparql");
+		HttpHeaders headers = new HttpHeaders();
+		headers.set(HttpHeaders.RETRY_AFTER, "5");
+
+		ResponseEntity<ErrorResponse> response = handler.handleCustomResponseException(
+				new CustomResponseException("Busy", HttpStatus.SERVICE_UNAVAILABLE, headers), req,
+				new MockHttpServletResponse());
+
+		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+		assertEquals("5", response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER));
+		assertEquals(MediaType.APPLICATION_JSON, response.getHeaders().getContentType());
+		assertEquals("Busy", response.getBody().error());
 	}
 
 	@Test

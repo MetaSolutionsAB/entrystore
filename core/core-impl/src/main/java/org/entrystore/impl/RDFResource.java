@@ -24,6 +24,8 @@ import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,8 +83,11 @@ public class RDFResource extends ResourceImpl {
 			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
+		// Outside the try, so a listener failure is never mistaken for a failed save.
+		this.entry.getRepositoryManager().fireRepositoryEvent(
+				new RepositoryEventObject(this.entry, RepositoryEvent.ResourceUpdated));
 	}
-	
+
 	@Override
 	public void remove(RepositoryConnection rc) throws Exception {
 		synchronized (this.entry.repository) {
