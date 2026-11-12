@@ -16,10 +16,14 @@
 
 package org.entrystore.rest.it
 
+import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import spock.lang.Shared
 import spock.lang.Stepwise
 
+import java.time.LocalDateTime
+
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static java.nio.charset.StandardCharsets.UTF_8
@@ -319,6 +323,76 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		callbackConn.getResponseCode() in [302, 303, 307]
 		callbackConn.getHeaderField('Location') == failureLoginUrl
 		EntryStoreClient.findSetCookie(callbackConn, 'auth_token') == null
+	}
+
+	def '11. GET /auth/tokens lists the sessions of the OIDC-authenticated user with their session info'() {
+		given: 'two sessions of the user'
+		def currentCookie = oidcLogin()
+		def otherCookie = oidcLogin()
+
+		when: 'the user lists their sessions in one of them'
+		def tokensConn = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: currentCookie])
+
+		then: 'both are listed by session id'
+		tokensConn.getResponseCode() == HTTP_OK
+		def tokens = JSON_PARSER.parseText(tokensConn.inputStream.text) as Map
+		def current = tokens[EntryStoreClient.sessionIdOf(currentCookie)]
+		def other = tokens[EntryStoreClient.sessionIdOf(otherCookie)]
+		current != null
+		other != null
+
+		and: 'with the session info a form login reports'
+		current['userName'] == testUserEmail
+		current['loginTime'] != null
+		current['loginExpiration'] != null
+		current['lastUsedIpAddress'] != null
+		current['lastUsedUserAgent'] != null
+		// entrystore.auth.cookie.max-age of the ITs
+		current['loginTokenMaxAge'] == 3700
+		other['userName'] == testUserEmail
+
+		and: 'the listing request is the last access of the session making it'
+		LocalDateTime.parse(current['lastAccessTime'] as String)
+			.isAfter(LocalDateTime.parse(current['loginTime'] as String))
+	}
+
+	def '12. DELETE /auth/tokens ends another session of the OIDC-authenticated user'() {
+		given: 'two sessions of the user'
+		def currentCookie = oidcLogin()
+		def otherCookie = oidcLogin()
+		def otherSessionId = EntryStoreClient.sessionIdOf(otherCookie)
+		assert EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: otherCookie]).getResponseCode() == HTTP_OK
+
+		when: 'the user deletes the other session in one of them'
+		def deleteConn = EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: otherSessionId]), '',
+			'application/json', [Cookie: currentCookie])
+
+		then:
+		deleteConn.getResponseCode() == HTTP_NO_CONTENT
+
+		and: 'the other session has ended'
+		EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: otherCookie]).getResponseCode() == HTTP_UNAUTHORIZED
+
+		and: 'the session making the request is still valid and no longer lists the other one'
+		def tokensConn = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: currentCookie])
+		tokensConn.getResponseCode() == HTTP_OK
+		def tokens = JSON_PARSER.parseText(tokensConn.inputStream.text) as Map
+		tokens.containsKey(EntryStoreClient.sessionIdOf(currentCookie))
+		!tokens.containsKey(otherSessionId)
+	}
+
+	/** Logs the test user in through OIDC with no cookies and returns the new session's Cookie header. */
+	private static String oidcLogin() {
+		def loginPageConn = EntryStoreClient.getRequest(redirectTarget(redirectTarget('/auth/oidc')), '', '')
+		assert loginPageConn.getResponseCode() == HTTP_OK
+		def idpCookieHeader = EntryStoreClient.toCookieHeader(loginPageConn.getHeaderFields()['Set-Cookie'])
+		def submitConn = EntryStoreClient.postRequest(extractFormActionUrl(loginPageConn.inputStream.text),
+			createFormBody([username: testUsername, password: testUserPassword]), '',
+			'application/x-www-form-urlencoded', [Cookie: idpCookieHeader])
+		assert submitConn.getResponseCode() in [302, 303, 307]
+		def callbackConn = EntryStoreClient.getRequest(submitConn.getHeaderField('Location'), '')
+		assert callbackConn.getResponseCode() in [302, 303, 307]
+		return EntryStoreClient.findSetCookie(callbackConn, 'auth_token').split(';')[0]
 	}
 
 	/** The Location of the redirect EntryStore answers a guest's GET of {@code url} with. */

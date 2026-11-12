@@ -47,8 +47,8 @@ public class OidcLoginSuccessHandler
 	public OidcLoginSuccessHandler(ESUserDetailsService userService, OidcAuthService oidcAuthService,
 								   OidcAuthStateCache oidcAuthStateCache, PrincipalManager principalManager,
 								   ErrorResponseWriter errorResponseWriter, AuthTokenCookies authTokenCookies,
-								   OidcCustomConfiguration oidcConfiguration) {
-		super(userService, principalManager, errorResponseWriter, authTokenCookies);
+								   SsoSessionInfos ssoSessionInfos, OidcCustomConfiguration oidcConfiguration) {
+		super(userService, principalManager, errorResponseWriter, authTokenCookies, ssoSessionInfos);
 		this.oidcAuthService = oidcAuthService;
 		this.oidcAuthStateCache = oidcAuthStateCache;
 		this.oidcConfiguration = oidcConfiguration;

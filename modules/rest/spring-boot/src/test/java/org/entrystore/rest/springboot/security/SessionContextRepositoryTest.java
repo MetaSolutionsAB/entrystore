@@ -266,9 +266,10 @@ class SessionContextRepositoryTest {
 	}
 
 	private ReloadUserPropertiesFilter reloadFilter() {
+		AuthTokenCookies authTokenCookies = AuthTokenCookiesTest.authTokenCookies("3600", true);
 		return new ReloadUserPropertiesFilter(userDetailsService, sessionRegistry,
-				new ErrorResponseWriter(JsonMapper.builder().build()),
-				AuthTokenCookiesTest.authTokenCookies("3600", true), 10);
+				new ErrorResponseWriter(JsonMapper.builder().build()), authTokenCookies,
+				new SsoSessionInfos(authTokenCookies), 10);
 	}
 
 	/** A session holding the Authentication of an earlier login, registered as that login did. */

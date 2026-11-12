@@ -28,8 +28,8 @@ public class CasLoginSuccessHandler extends AbstractSsoLoginSuccessHandler<CasAu
 
 	public CasLoginSuccessHandler(ESUserDetailsService userService, PrincipalManager principalManager,
 								  ErrorResponseWriter errorResponseWriter, AuthTokenCookies authTokenCookies,
-								  CasCustomConfiguration casConfiguration) {
-		super(userService, principalManager, errorResponseWriter, authTokenCookies);
+								  SsoSessionInfos ssoSessionInfos, CasCustomConfiguration casConfiguration) {
+		super(userService, principalManager, errorResponseWriter, authTokenCookies, ssoSessionInfos);
 		this.casConfiguration = casConfiguration;
 	}
 

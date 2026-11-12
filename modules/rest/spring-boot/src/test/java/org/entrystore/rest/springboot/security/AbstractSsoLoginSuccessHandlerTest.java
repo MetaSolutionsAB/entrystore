@@ -72,6 +72,9 @@ class AbstractSsoLoginSuccessHandlerTest {
 	private AuthTokenCookies authTokenCookies;
 
 	@Mock
+	private SsoSessionInfos ssoSessionInfos;
+
+	@Mock
 	private HttpServletRequest request;
 
 	@Mock
@@ -189,6 +192,27 @@ class AbstractSsoLoginSuccessHandlerTest {
 	}
 
 	@Test
+	void successfulLoginRecordsTheSessionInfoAfterTheSessionLifetimeIsSet() throws Exception {
+		when(userService.loadUser("Jane")).thenReturn(esUser);
+		givenUserIsEnabled();
+
+		handler.onAuthenticationSuccess(request, response, token("Jane"));
+
+		// The recorded info reads the lifetime from the session
+		var inOrder = inOrder(authTokenCookies, ssoSessionInfos, redirectStrategy);
+		inOrder.verify(authTokenCookies).applySessionLifetime(request, null);
+		inOrder.verify(ssoSessionInfos).recordLogin(request, "Jane");
+		inOrder.verify(redirectStrategy).sendRedirect(request, response, SUCCESS_URL);
+	}
+
+	@Test
+	void rejectedLoginRecordsNoSessionInfo() throws Exception {
+		handler.onAuthenticationSuccess(request, response, token("admin"));
+
+		verify(ssoSessionInfos, never()).recordLogin(any(), any());
+	}
+
+	@Test
 	void rejectedLoginDoesNotApplyASessionLifetime() throws Exception {
 		handler.onAuthenticationSuccess(request, response, token("admin"));
 
@@ -260,7 +284,8 @@ class AbstractSsoLoginSuccessHandlerTest {
 		callbackRequest.setSession(httpSession);
 		new HttpSessionRequestCache().saveRequest(callbackRequest, new MockHttpServletResponse());
 
-		var realRedirectHandler = new TestSsoLoginSuccessHandler(userService, principalManager, authTokenCookies, FAILURE_URL, true);
+		var realRedirectHandler = new TestSsoLoginSuccessHandler(userService, principalManager, authTokenCookies,
+				ssoSessionInfos, FAILURE_URL, true);
 		realRedirectHandler.setDefaultTargetUrl(SUCCESS_URL);
 		when(userService.loadUser("jane")).thenReturn(esUser);
 		givenUserIsEnabled();
@@ -302,8 +327,8 @@ class AbstractSsoLoginSuccessHandlerTest {
 	}
 
 	private TestSsoLoginSuccessHandler newHandler(String failureUrl, boolean autoProvisioning) {
-		var newHandler = new TestSsoLoginSuccessHandler(userService, principalManager, authTokenCookies, failureUrl,
-				autoProvisioning);
+		var newHandler = new TestSsoLoginSuccessHandler(userService, principalManager, authTokenCookies,
+				ssoSessionInfos, failureUrl, autoProvisioning);
 		// The success path routes through the RedirectStrategy; the failure path writes the redirect
 		// directly to the response. Mocking the strategy keeps the success-path assertions independent
 		// of the default strategy's encodeRedirectURL handling.
@@ -333,9 +358,10 @@ class AbstractSsoLoginSuccessHandlerTest {
 		private final boolean autoProvisioning;
 
 		private TestSsoLoginSuccessHandler(ESUserDetailsService userService, PrincipalManager principalManager,
-										   AuthTokenCookies authTokenCookies, String failureUrl, boolean autoProvisioning) {
+										   AuthTokenCookies authTokenCookies, SsoSessionInfos ssoSessionInfos,
+										   String failureUrl, boolean autoProvisioning) {
 			super(userService, principalManager, new ErrorResponseWriter(JsonMapper.builder().build()),
-					authTokenCookies);
+					authTokenCookies, ssoSessionInfos);
 			this.failureUrl = failureUrl;
 			this.autoProvisioning = autoProvisioning;
 		}
