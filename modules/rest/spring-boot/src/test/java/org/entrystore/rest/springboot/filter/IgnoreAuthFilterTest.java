@@ -52,12 +52,16 @@ class IgnoreAuthFilterTest {
 			ignoreAuth on a GET,                    GET,  ignoreAuth,              true,  true
 			ignoreAuth on a POST,                   POST, ignoreAuth,              true,  true
 			ignoreAuth with JSONP off,              GET,  ignoreAuth,              false, true
+			ignoreAuth with a malformed value,      GET,  ignoreAuth=%zz,          true,  true
+			ignoreAuth with a malformed name,       GET,  ignoreAuth%=1,           true,  false
 			JSONP callback on a GET,                GET,  callback=cb,             true,  true
 			bare JSONP callback on a GET,           GET,  callback,                true,  true
 			JSONP callback after other parameters,  GET,  format=json&callback=cb, true,  true
 			JSONP callback with JSONP off,          GET,  callback=cb,             false, false
 			JSONP callback on a POST,               POST, callback=cb,             true,  false
-			JSONP callback with a malformed value,  GET,  callback=%zz,            true,  false
+			JSONP callback with a malformed value,  GET,  callback=%zz,            true,  true
+			malformed callback value with JSONP off, GET, callback=%zz,            false, false
+			malformed callback value on a POST,     POST, callback=%zz,            true,  false
 			other parameters only,                  GET,  format=json,             true,  false
 			""")
 	void isRequested(String description, String method, String queryString, boolean jsonpEnabled, boolean expected) {

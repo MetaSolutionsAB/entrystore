@@ -86,6 +86,48 @@ class ZzzSessionLifetimeRefreshOffIT extends BaseSpec {
 		afterFourSeconds.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
+	def "GET /auth/user?ignoreAuth past the fixed lifetime should respond as guest and keep the cookie"() {
+		given:
+		def cookie = cookieOf(login('&auth_maxage=3'))
+
+		when:
+		sleep(2000)
+		assert userInfo(cookie)['user'] == 'admin'
+		// 2 seconds after the last request: within the idle timeout, so only the fixed lifetime ends the login
+		sleep(2000)
+		def afterFourSeconds = EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', null, [Cookie: cookie])
+
+		then:
+		afterFourSeconds.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(afterFourSeconds.inputStream.text)['user'] == 'guest'
+		afterFourSeconds.getHeaderFields().get('Set-Cookie') == null
+
+		and: 'the login has ended'
+		EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie]).getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "GET /auth/user?callback= past the fixed lifetime should respond as guest and keep the cookie"() {
+		given:
+		def cookie = cookieOf(login('&auth_maxage=3'))
+
+		when:
+		sleep(2000)
+		assert userInfo(cookie)['user'] == 'admin'
+		// 2 seconds after the last request: within the idle timeout, so only the fixed lifetime ends the login
+		sleep(2000)
+		def afterFourSeconds = EntryStoreClient.getRequest('/auth/user?callback=cb', '', '*/*', [Cookie: cookie])
+
+		then:
+		afterFourSeconds.getResponseCode() == HTTP_OK
+		def body = afterFourSeconds.inputStream.text
+		body.startsWith('cb(')
+		JSON_PARSER.parseText(body.substring('cb('.length(), body.length() - 1))['user'] == 'guest'
+		afterFourSeconds.getHeaderFields().get('Set-Cookie') == null
+
+		and: 'the login has ended'
+		EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie]).getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
 	private static HttpURLConnection login(String extraParams) {
 		return EntryStoreClient.postRequest('/auth/cookie', 'auth_username=admin&auth_password=adminpass' + extraParams,
 			'', 'application/x-www-form-urlencoded')

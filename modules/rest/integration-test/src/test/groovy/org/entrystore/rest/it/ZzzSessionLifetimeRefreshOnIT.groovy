@@ -84,6 +84,25 @@ class ZzzSessionLifetimeRefreshOnIT extends BaseSpec {
 		request.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
+	def "requests served as guest should not keep a login alive"() {
+		given:
+		def cookie = cookieOf(login())
+
+		when: 'JSONP and ignoreAuth requests carry the cookie for longer than max-age'
+		def statuses = (1..4).collect {
+			sleep(1500)
+			[EntryStoreClient.getRequest('/auth/user?callback=cb', '', '*/*', [Cookie: cookie]).getResponseCode(),
+			 EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', null, [Cookie: cookie]).getResponseCode()]
+		}.flatten()
+		def afterSixSeconds = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie])
+
+		then: 'they are answered, as guest'
+		statuses.every { it == HTTP_OK }
+
+		and: 'the login has ended, as the session was idle all the time'
+		afterSixSeconds.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
 	private static HttpURLConnection login() {
 		return EntryStoreClient.postRequest('/auth/cookie', 'auth_username=admin&auth_password=adminpass', '',
 			'application/x-www-form-urlencoded')

@@ -22,6 +22,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import org.entrystore.User;
+import org.entrystore.rest.springboot.filter.IgnoreAuthFilter;
 import org.entrystore.rest.springboot.filter.ReloadUserPropertiesFilter;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
@@ -269,7 +270,7 @@ class SessionContextRepositoryTest {
 		AuthTokenCookies authTokenCookies = AuthTokenCookiesTest.authTokenCookies("3600", true);
 		return new ReloadUserPropertiesFilter(userDetailsService, sessionRegistry,
 				new ErrorResponseWriter(JsonMapper.builder().build()), authTokenCookies,
-				new SsoSessionInfos(authTokenCookies), 10);
+				new SsoSessionInfos(authTokenCookies), new IgnoreAuthFilter(true), 10);
 	}
 
 	/** A session holding the Authentication of an earlier login, registered as that login did. */

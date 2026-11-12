@@ -48,8 +48,8 @@ import java.util.regex.Pattern;
  * {@code ?callback=} parameter is present, porting the Restlet {@code JSCallbackFilter}. Gated by
  * {@code entrystore.jsonp} (default {@code true}). JSONP is legacy — CORS is the preferred mechanism.
  * <p>
- * A request that asks for JSONP is served as guest whatever credentials it carries, see {@link IgnoreAuthFilter},
- * so the wrapped body holds only what a guest may read.
+ * A GET that names {@code callback} is served as guest on every path, also where this filter wraps nothing, see
+ * {@link IgnoreAuthFilter}, so the wrapped body holds only what a guest may read.
  * <p>
  * Hardening over the original Restlet filter (which echoed the raw {@code callback} parameter into an
  * {@code application/javascript} body — a reflected-XSS / content-sniffing vector): the callback name
@@ -111,14 +111,22 @@ public class JsonpCallbackFilter extends OncePerRequestFilter {
 	}
 
 	/**
-	 * Returns the {@code callback} parameter of a request that asks for JSONP, which only a GET can. Only the query
-	 * string is read, as 5.x did: getParameter would parse a form or multipart body. {@link IgnoreAuthFilter} uses
-	 * the same answer, so every request this filter may wrap is served as guest.
-	 *
-	 * @return the decoded, not yet validated value, empty for a bare {@code ?callback}, or null if the request asks
-	 * for no JSONP
+	 * Whether a request with this method and raw query string is a GET that names the {@code callback} parameter.
+	 * Only the names in the query string are read, so a value that cannot be decoded still counts.
+	 * {@link IgnoreAuthFilter} serves every such request as guest, which includes every request this filter may wrap.
 	 */
-	static @Nullable String requestedCallback(HttpServletRequest request) {
+	static boolean isCallbackRequested(String method, @Nullable String queryString) {
+		return "GET".equals(method) && HttpUtil.hasQueryParameter(queryString, CALLBACK_PARAM);
+	}
+
+	/**
+	 * Returns the {@code callback} parameter of a GET. Only the query string is read, as 5.x did: getParameter
+	 * would parse a form or multipart body.
+	 *
+	 * @return the decoded, not yet validated value, empty for a bare {@code ?callback}, or null if the request
+	 * names no callback or its value cannot be decoded, in which case nothing is wrapped
+	 */
+	private static @Nullable String requestedCallback(HttpServletRequest request) {
 		return "GET".equals(request.getMethod()) ? HttpUtil.getQueryParameter(request, CALLBACK_PARAM) : null;
 	}
 

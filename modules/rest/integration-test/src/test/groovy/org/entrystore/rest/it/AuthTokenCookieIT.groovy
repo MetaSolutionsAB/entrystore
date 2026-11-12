@@ -95,23 +95,68 @@ class AuthTokenCookieIT extends BaseSpec {
 		EntryStoreClient.findSetCookies(conn, 'auth_token').isEmpty()
 	}
 
-	def "GET /auth/user?ignoreAuth with an ended session should respond as guest and expire the cookie on /store and /store/"() {
+	def "GET /auth/user?callback= with an unknown auth_token should respond as guest and keep the cookie"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/auth/user?callback=cb', '', '*/*',
+				[Cookie: 'auth_token=' + STALE_TOKEN])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		userOf(conn.inputStream.text) == 'guest'
+		conn.getHeaderFields().get('Set-Cookie') == null
+	}
+
+	def "GET /auth/user?ignoreAuth with an ended session should respond as guest and keep the cookie"() {
 		given: 'a session of the user that another of its sessions ended'
+		def ended = endedSessionCookie()
+
+		when:
+		def conn = EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', 'application/json', [Cookie: ended])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		userOf(conn.inputStream.text) == 'guest'
+		conn.getHeaderFields().get('Set-Cookie') == null
+
+		and: 'the next request that is not served as guest expires the cookie'
+		def next = EntryStoreClient.getRequest('/auth/user', '', 'application/json', [Cookie: ended])
+		next.getResponseCode() == HTTP_UNAUTHORIZED
+		assertExpiredOnStoreAndLegacyPath(next)
+	}
+
+	def "GET /auth/user?callback= with an ended session should respond as guest and keep the cookie"() {
+		given: 'a session of the user that another of its sessions ended'
+		def ended = endedSessionCookie()
+
+		when:
+		def conn = EntryStoreClient.getRequest('/auth/user?callback=cb', '', '*/*', [Cookie: ended])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		userOf(conn.inputStream.text) == 'guest'
+		conn.getHeaderFields().get('Set-Cookie') == null
+
+		and: 'the next request that is not served as guest expires the cookie'
+		def next = EntryStoreClient.getRequest('/auth/user', '', 'application/json', [Cookie: ended])
+		next.getResponseCode() == HTTP_UNAUTHORIZED
+		assertExpiredOnStoreAndLegacyPath(next)
+	}
+
+	/** The user name in a /auth/user body, plain or wrapped as JSONP with the callback cb. */
+	private static String userOf(String body) {
+		def json = body.startsWith('cb(') ? body.substring('cb('.length(), body.length() - 1) : body
+		return JSON_PARSER.parseText(json)['user']
+	}
+
+	/** @return the Set-Cookie line of a session of 'user' that another of the user's sessions ended */
+	private static String endedSessionCookie() {
 		def ending = EntryStoreClient.loginIsolated('user')
 		def ended = EntryStoreClient.loginIsolated('user')
 		def endedHandle = EntryStoreClient.handleOf(ended.authCookie)
 		assert EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: endedHandle]), '',
 				'application/json', EntryStoreClient.csrfHeaders(ending.authCookie, ending.csrf))
 				.getResponseCode() == HTTP_NO_CONTENT
-
-		when:
-		def conn = EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', 'application/json',
-				[Cookie: ended.authCookie])
-
-		then:
-		conn.getResponseCode() == HTTP_OK
-		JSON_PARSER.parseText(conn.inputStream.text)['user'] == 'guest'
-		assertExpiredOnStoreAndLegacyPath(conn)
+		return ended.authCookie
 	}
 
 	def "POST /auth/logout with an unknown auth_token should expire the cookie on /store and /store/"() {

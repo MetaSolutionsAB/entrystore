@@ -159,6 +159,33 @@ class TokenResourceIT extends BaseSpec {
 		handleAfterReload == handleAtLogin
 	}
 
+	def "GET /auth/tokens should report a session unchanged after requests served as guest carried its cookie"() {
+		given: 'two sessions of the user; the second one reads what /auth/tokens reports about the first'
+		def login = EntryStoreClient.loginIsolated(USER_SHARED)
+		def observer = EntryStoreClient.loginIsolated(USER_SHARED)
+		def handle = EntryStoreClient.handleOf(login.authCookie)
+		def infoSeenByObserver = {
+			JSON_PARSER.parseText(EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: observer.authCookie])
+					.inputStream.text)[handle]
+		}
+		def before = infoSeenByObserver()
+
+		when: 'a JSONP and an ignoreAuth request carry the cookie of the first session'
+		def guestHeaders = [Cookie: login.authCookie, 'User-Agent': 'served-as-guest']
+		def jsonpConn = EntryStoreClient.getRequest('/auth/user?callback=cb', '', '*/*', guestHeaders)
+		def ignoreAuthConn = EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', 'application/json', guestHeaders)
+
+		then:
+		jsonpConn.getResponseCode() == HTTP_OK
+		ignoreAuthConn.getResponseCode() == HTTP_OK
+
+		and: 'the session info is as before'
+		def after = infoSeenByObserver()
+		after['lastAccessTime'] == before['lastAccessTime']
+		after['lastUsedUserAgent'] == before['lastUsedUserAgent']
+		after['loginExpiration'] == before['loginExpiration']
+	}
+
 	def "GET /auth/tokens should give every login its own handle"() {
 		when:
 		def handle1 = EntryStoreClient.handleOf(EntryStoreClient.loginIsolated(USER_SHARED).authCookie)

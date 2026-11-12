@@ -305,6 +305,13 @@ class HttpUtilTest {
 	}
 
 	@Test
+	void hasQueryParameter_readsARawQueryStringToo() {
+		assertTrue(HttpUtil.hasQueryParameter("infer=false&query=%zz", "query"));
+		assertFalse(HttpUtil.hasQueryParameter("infer=false", "query"));
+		assertFalse(HttpUtil.hasQueryParameter((String) null, "query"));
+	}
+
+	@Test
 	void hasQueryParameter_ignoresBodyParameters() {
 		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/x");
 		request.setQueryString("infer=false");

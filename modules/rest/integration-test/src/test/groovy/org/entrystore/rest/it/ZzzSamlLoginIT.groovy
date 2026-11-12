@@ -440,6 +440,32 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		!tokens.containsKey(otherHandle)
 	}
 
+	def '14. A request served as guest leaves the session info of the SAML session unchanged'() {
+		given: 'two sessions of the user; the second one reads what /auth/tokens reports about the first'
+		def cookie = samlLogin()
+		def observerCookie = samlLogin()
+		def handle = EntryStoreClient.handleOf(cookie)
+		def tokensSeenByObserver = {
+			JSON_PARSER.parseText(EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: observerCookie])
+				.inputStream.text) as Map
+		}
+		def before = tokensSeenByObserver()[handle]
+
+		when: 'a JSONP request carries the cookie of the first session'
+		def conn = EntryStoreClient.getRequest('/auth/user?callback=cb', '', '*/*',
+			[Cookie: cookie, 'User-Agent': 'served-as-guest'])
+
+		then: 'it is served as guest'
+		conn.getResponseCode() == HTTP_OK
+		def body = conn.inputStream.text
+		JSON_PARSER.parseText(body.substring('cb('.length(), body.length() - 1))['user'] == 'guest'
+
+		and: 'the session info is as before'
+		def after = tokensSeenByObserver()[handle]
+		after['lastUsedUserAgent'] == before['lastUsedUserAgent']
+		after['lastAccessTime'] == before['lastAccessTime']
+	}
+
 	/** Logs the test user in through SAML with no cookies and returns the new session's Cookie header. */
 	private static String samlLogin() {
 		def initiation = EntryStoreClient.getRequest(
