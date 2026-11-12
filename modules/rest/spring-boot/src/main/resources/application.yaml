@@ -22,6 +22,8 @@ server:
     max-http-form-post-size: 32KB
   servlet:
     context-path: /store
+    # A session is taken from its cookie only, never from a ;jsessionid= path parameter of the URL
+    session.tracking-modes: cookie
     session.cookie:
       name: auth_token
       http-only: ${entrystore.auth.cookie.httponly:true}

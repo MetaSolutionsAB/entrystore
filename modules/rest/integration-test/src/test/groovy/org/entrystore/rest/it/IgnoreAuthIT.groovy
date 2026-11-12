@@ -54,6 +54,19 @@ class IgnoreAuthIT extends BaseSpec {
 		jsonResp['id'] == '_guest'
 	}
 
+	def "GET /auth/user?ignoreAuth with a session cookie should set no cookie"() {
+		given: 'a session cookie without the XSRF-TOKEN cookie, which a request without ignoreAuth would get'
+		def login = EntryStoreClient.loginIsolated('admin')
+
+		when:
+		def connection = EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', 'application/json',
+				[Cookie: login.authCookie])
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getHeaderFields().get('Set-Cookie') == null
+	}
+
 	def "Session should be preserved after using ignoreAuth"() {
 		given:
 		def cookie = EntryStoreClient.cookies['admin'].toString()

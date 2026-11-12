@@ -115,12 +115,13 @@ import java.util.Optional;
 public class SecurityConfig {
 
 	/**
-	 * Requests that need no existing session, so a stale session cookie on them is expired and the request served as
+	 * Paths that need no existing session, so a stale session cookie on them is expired and the request served as
 	 * guest even with {@code entrystore.auth.cookie.invalid-token-error} on: the login pages and SSO initiations,
-	 * which a user whose login ended is sent to, the sign-up and password-reset flows, whose emailed links are often
-	 * opened in a browser holding an old login, and {@code ignoreAuth}, as in 5.x.
+	 * which a user whose login ended is sent to, and the sign-up and password-reset flows, whose emailed links are
+	 * often opened in a browser holding an old login. A request that {@link IgnoreAuthFilter#isRequested} serves as
+	 * guest needs none either, but keeps its cookie; see {@link #securityFilterChain}.
 	 */
-	private static final RequestMatcher SESSIONLESS_REQUESTS = new OrRequestMatcher(
+	private static final RequestMatcher SESSIONLESS_PATHS = new OrRequestMatcher(
 			PathPatternRequestMatcher.withDefaults().matcher("/auth/login"),
 			PathPatternRequestMatcher.withDefaults().matcher("/auth/saml"),
 			PathPatternRequestMatcher.withDefaults().matcher("/auth/oidc"),
@@ -128,8 +129,7 @@ public class SecurityConfig {
 			PathPatternRequestMatcher.withDefaults().matcher("/auth/signup"),
 			PathPatternRequestMatcher.withDefaults().matcher("/auth/signup/confirm"),
 			PathPatternRequestMatcher.withDefaults().matcher("/auth/pwreset"),
-			PathPatternRequestMatcher.withDefaults().matcher("/auth/pwreset/confirm"),
-			IgnoreAuthFilter::isRequested);
+			PathPatternRequestMatcher.withDefaults().matcher("/auth/pwreset/confirm"));
 
 	private final CheckUsernamePasswordFilter checkUsernamePasswordFilter;
 	private final IgnoreAuthFilter ignoreAuthFilter;
@@ -205,6 +205,8 @@ public class SecurityConfig {
 												   AuthenticationEntryPoint customEntryPoint,
 												   AccessDeniedHandler customAccessDeniedHandler) throws Exception {
 
+		RequestMatcher sessionlessRequests = new OrRequestMatcher(SESSIONLESS_PATHS, ignoreAuthFilter::isRequested);
+
 		if (corsProperties.enabled()) {
 			http.cors(Customizer.withDefaults());
 		} else {
@@ -251,7 +253,7 @@ public class SecurityConfig {
 							.maximumSessions(-1)
 							.sessionRegistry(sessionRegistry)
 							.expiredSessionStrategy(event -> {
-								if (!invalidTokenError || SESSIONLESS_REQUESTS.matches(event.getRequest())) {
+								if (!invalidTokenError || sessionlessRequests.matches(event.getRequest())) {
 									event.getFilterChain().doFilter(event.getRequest(), event.getResponse());
 									return;
 								}
@@ -299,7 +301,8 @@ public class SecurityConfig {
 				);
 
 		http.addFilterBefore(new InvalidSessionCookieFilter(authTokenCookies,
-				invalidTokenError ? SESSIONLESS_REQUESTS : AnyRequestMatcher.INSTANCE), SessionManagementFilter.class);
+				invalidTokenError ? sessionlessRequests : AnyRequestMatcher.INSTANCE, ignoreAuthFilter),
+				SessionManagementFilter.class);
 		if (!authTokenCookies.isRefreshExpirationOnAccess()) {
 			http.addFilterBefore(new SessionLifetimeFilter(authTokenCookies), SecurityContextHolderFilter.class);
 		}

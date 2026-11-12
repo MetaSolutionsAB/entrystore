@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2025 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,9 +20,14 @@ import lombok.Builder;
 
 import java.time.LocalDateTime;
 
-@Builder
+/**
+ * What /auth/tokens reports about a login session.
+ *
+ * @param current whether the session is the one that made the request; false on the info recorded with a session
+ */
+@Builder(toBuilder = true)
 public record SessionInfo(String userName, LocalDateTime loginTime, LocalDateTime loginExpiration,
 						  LocalDateTime lastAccessTime, String lastUsedIpAddress, String lastUsedUserAgent,
-						  int loginTokenMaxAge) {
+						  int loginTokenMaxAge, boolean current) {
 
 }

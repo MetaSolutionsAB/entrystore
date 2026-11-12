@@ -45,18 +45,22 @@ import java.io.IOException;
  *      CsrfFilter before this filter could mint a replacement token.
  * <p>
  * Harvesters, monitoring probes, and Basic-auth API clients send GETs without either cookie and
- * therefore skip token generation entirely.
+ * therefore skip token generation entirely. So does a request that {@link IgnoreAuthFilter#isRequested}
+ * serves as guest ({@code ignoreAuth}, JSONP), to whose response this filter adds no XSRF-TOKEN cookie.
  */
 @Component
 public class CsrfCookieFilter extends OncePerRequestFilter {
 
 	private final String sessionCookieName;
 	private final String csrfCookieName;
+	private final IgnoreAuthFilter ignoreAuthFilter;
 
 	public CsrfCookieFilter(@Value("${server.servlet.session.cookie.name:auth_token}") String sessionCookieName,
-							@Value("${entrystore.csrf.cookie-name:XSRF-TOKEN}") String csrfCookieName) {
+							@Value("${entrystore.csrf.cookie-name:XSRF-TOKEN}") String csrfCookieName,
+							IgnoreAuthFilter ignoreAuthFilter) {
 		this.sessionCookieName = sessionCookieName;
 		this.csrfCookieName = csrfCookieName;
+		this.ignoreAuthFilter = ignoreAuthFilter;
 	}
 
 	@Override
@@ -82,6 +86,9 @@ public class CsrfCookieFilter extends OncePerRequestFilter {
 	}
 
 	private boolean shouldEmitToken(HttpServletRequest request) {
+		if (ignoreAuthFilter.isRequested(request)) {
+			return false;
+		}
 		if (!CsrfRequestMatcher.SAFE_METHODS.contains(request.getMethod())) {
 			return true;
 		}

@@ -38,6 +38,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -85,6 +86,15 @@ class FormLoginAuthenticationSuccessHandlerTest {
 		assertNotNull(principal.getSessionInfo().loginExpiration());
 		var reloadClock = request.getSession().getAttribute(ReloadUserPropertiesFilter.LAST_RELOAD_ATTRIBUTE);
 		assertNotNull(assertInstanceOf(AtomicReference.class, reloadClock).get());
+	}
+
+	@Test
+	void login_givesTheSessionAHandleThatIsNotItsSessionId() throws Exception {
+		handler.onAuthenticationSuccess(request, new MockHttpServletResponse(), authentication);
+
+		var principal = (ESUserSessionDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+		assertNotNull(principal.getSessionHandle());
+		assertNotEquals(request.getSession().getId(), principal.getSessionHandle());
 	}
 
 	@Test
