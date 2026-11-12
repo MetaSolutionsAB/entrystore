@@ -46,7 +46,9 @@ import java.io.IOException;
  * <p>
  * Harvesters, monitoring probes, and Basic-auth API clients send GETs without either cookie and
  * therefore skip token generation entirely. So does a request that {@link IgnoreAuthFilter#isRequested}
- * serves as guest ({@code ignoreAuth}, JSONP), to whose response this filter adds no XSRF-TOKEN cookie.
+ * serves as guest ({@code ignoreAuth}, JSONP): its session cookie is hidden before this chain runs (see
+ * {@code GuestRequestCredentialsHandler}), and this filter also skips it when it carries an XSRF-TOKEN
+ * cookie.
  */
 @Component
 public class CsrfCookieFilter extends OncePerRequestFilter {

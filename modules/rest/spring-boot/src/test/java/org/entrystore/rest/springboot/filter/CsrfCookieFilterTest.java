@@ -126,6 +126,38 @@ class CsrfCookieFilterTest {
 	}
 
 	@Test
+	void unsafeIgnoreAuthRequestWithSessionCookie_skipsResolution() throws Exception {
+		var resolutions = new AtomicInteger();
+		var request = new MockHttpServletRequest("POST", "/_principals/groups");
+		request.setQueryString("ignoreAuth");
+		request.setCookies(new Cookie("auth_token", "session-id"));
+		request.setAttribute(CsrfToken.class.getName(), countingToken(resolutions));
+		var chain = new MockFilterChain();
+
+		filter.doFilter(request, new MockHttpServletResponse(), chain);
+
+		assertEquals(0, resolutions.get(), "An ignoreAuth POST must not make this filter mint a token");
+		assertEquals(request, chain.getRequest(), "Filter chain must still be invoked");
+	}
+
+	@Test
+	void callbackRequestWithJsonpOff_resolvesToken() throws Exception {
+		// With entrystore.jsonp off the callback parameter has no effect: the request stays authenticated
+		var jsonpOff = new CsrfCookieFilter("auth_token", "XSRF-TOKEN", new IgnoreAuthFilter(false));
+		var resolutions = new AtomicInteger();
+		var request = new MockHttpServletRequest("GET", "/auth/user");
+		request.setQueryString("callback=cb");
+		request.setCookies(new Cookie("auth_token", "session-id"));
+		request.setAttribute(CsrfToken.class.getName(), countingToken(resolutions));
+		var chain = new MockFilterChain();
+
+		jsonpOff.doFilter(request, new MockHttpServletResponse(), chain);
+
+		assertEquals(1, resolutions.get(), "A session-cookie GET must mint a token when JSONP is off");
+		assertEquals(request, chain.getRequest(), "Filter chain must still be invoked");
+	}
+
+	@Test
 	void unrelatedCookieDoesNotTriggerResolutionOnSafeMethod() throws Exception {
 		// A bare unrelated cookie on a safe-method GET does not trigger token resolution — only an
 		// unsafe method, an XSRF-TOKEN cookie, or the session cookie does. Server-to-server GETs without

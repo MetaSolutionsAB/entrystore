@@ -123,6 +123,18 @@ class JsonpIT extends BaseSpec {
 		].combinations()
 	}
 
+	def "JSONP GET /auth/user with wrong HTTP Basic credentials should answer as guest"() {
+		// HTTP Basic is on in the ITs and would answer these credentials with 401; a JSONP request carries none
+		when:
+		def conn = EntryStoreClient.getRequest('/auth/user?callback=cb', '', '*/*',
+				[Authorization: EntryStoreClient.basicAuth('admin', 'notTheAdminPassword')])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		wrappedJson(conn.inputStream.text)['user'] == 'guest'
+		conn.getHeaderFields().get('Set-Cookie') == null
+	}
+
 	def "JSONP GET /search as admin should not count the entry that only the admin may read"() {
 		given:
 		def path = guestComparisonPaths['/search']
@@ -163,8 +175,8 @@ class JsonpIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/javascript')
 		// The wrapped body no longer matches the controller's ETag/Last-Modified, so it must be
-		// non-cacheable end-to-end, and still private on this request, which carries a session cookie.
-		conn.getHeaderField('Cache-Control') == 'private, no-store'
+		// non-cacheable end-to-end. The session cookie of this request is not seen: it gets the guest's value.
+		conn.getHeaderField('Cache-Control') == 'no-store'
 		def jsonpBody = conn.getInputStream().text
 		jsonpBody.startsWith('cb(')
 		jsonpBody.endsWith(')')
@@ -194,7 +206,7 @@ class JsonpIT extends BaseSpec {
 		then:
 		etag != null
 		conn.getResponseCode() == HTTP_NOT_MODIFIED
-		conn.getHeaderField('Cache-Control') == 'private, no-store'
+		conn.getHeaderField('Cache-Control') == 'no-store'
 	}
 
 	// entrystore.js loads cross-origin GETs by JSONP with format=application/json; a script tag accepts anything.

@@ -92,10 +92,12 @@ entrystore.data.folder=/srv/entrystore/files/
 
 ## JSONP support (default: true)
 ## When on, a GET with a ?callback= parameter has its JSON response body wrapped as
-## callback(<json>) with Content-Type application/javascript. Such a request is served as
-## guest, whatever session cookie or credentials it carries, so it returns only what a guest
-## may read. Legacy technique — CORS (see entrystore.cors above) is the preferred mechanism
-## and JSONP can be disabled here.
+## callback(<json>) with Content-Type application/javascript. Every such GET is served as
+## guest, whatever session cookie or credentials it carries, and on every path, wrapped or
+## not (/sparql, /proxy, file downloads): it returns only what a guest may read, /proxy
+## accepts only the hosts of entrystore.proxy.whitelist.anonymous, and the session of the
+## cookie is neither used nor kept alive. Legacy technique — CORS (see entrystore.cors
+## above) is the preferred mechanism and JSONP can be disabled here.
 # entrystore.jsonp=true
 
 ## SMTP settings, required for e.g. sign-up
@@ -235,7 +237,7 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.auth.cookie.path=auto
 # Whether an unknown or expired auth_token is answered with 401; with off the request is served
 # as guest. The cookie is expired in both cases. The login, sign-up and password-reset routes are
-# always served as guest, and requests with ignoreAuth too, without expiring an unknown cookie. (default: on)
+# always served as guest. Requests with ignoreAuth and JSONP requests are too, and keep the cookie. (default: on)
 # entrystore.auth.cookie.invalid-token-error=on|off
 # Seconds a cookie session uses its loaded user before reloading it from the repository; 0 reloads on every request.
 # A change of the user's admin role reaches an open session up to this late. Disabling or deleting a user, a
