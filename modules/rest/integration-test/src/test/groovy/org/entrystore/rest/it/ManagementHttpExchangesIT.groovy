@@ -103,4 +103,24 @@ class ManagementHttpExchangesIT extends BaseSpec {
 					(exchange['session'] == null || exchange['session']['id'] == null)
 		}
 	}
+
+	def "GET #path as admin should carry no session id of a logged-in user"() {
+		given: 'a login of another user that made a request'
+		def userLogin = EntryStoreClient.loginIsolated('user')
+		assert EntryStoreClient.getRequest('/auth/user', '', 'application/json', [Cookie: userLogin.authCookie])
+				.getResponseCode() == HTTP_OK
+		def adminLogin = EntryStoreClient.loginIsolated('admin')
+
+		when:
+		def connection = EntryStoreClient.getRequest(path, '', 'application/json', [Cookie: adminLogin.authCookie])
+		def body = connection.inputStream.text
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		EntryStoreClient.assertNoSessionIds(connection, body, [userLogin.authCookie, adminLogin.authCookie])
+
+		where:
+		path << ['/management/httpexchanges', '/management/caches', '/management/env', '/management/loggers',
+				 '/management/status/extended']
+	}
 }

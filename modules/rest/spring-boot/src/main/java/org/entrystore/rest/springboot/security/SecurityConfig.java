@@ -106,23 +106,6 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-	/**
-	 * Requests that need no existing session, so a stale session cookie on them is expired and the request served as
-	 * guest even with {@code entrystore.auth.cookie.invalid-token-error} on: the login pages and SSO initiations,
-	 * which a user whose login ended is sent to, the sign-up and password-reset flows, whose emailed links are often
-	 * opened in a browser holding an old login, and {@code ignoreAuth}, as in 5.x.
-	 */
-	private static final RequestMatcher SESSIONLESS_REQUESTS = new OrRequestMatcher(
-			PathPatternRequestMatcher.withDefaults().matcher("/auth/login"),
-			PathPatternRequestMatcher.withDefaults().matcher("/auth/saml"),
-			PathPatternRequestMatcher.withDefaults().matcher("/auth/oidc"),
-			PathPatternRequestMatcher.withDefaults().matcher("/auth/cas"),
-			PathPatternRequestMatcher.withDefaults().matcher("/auth/signup"),
-			PathPatternRequestMatcher.withDefaults().matcher("/auth/signup/confirm"),
-			PathPatternRequestMatcher.withDefaults().matcher("/auth/pwreset"),
-			PathPatternRequestMatcher.withDefaults().matcher("/auth/pwreset/confirm"),
-			IgnoreAuthFilter::isRequested);
-
 	private final CheckUsernamePasswordFilter checkUsernamePasswordFilter;
 	private final IgnoreAuthFilter ignoreAuthFilter;
 	private final SetUserURIAfterAuthenticationFilter setUserURIAfterAuthenticationFilter;
@@ -193,6 +176,8 @@ public class SecurityConfig {
 												   AuthenticationEntryPoint customEntryPoint,
 												   AccessDeniedHandler customAccessDeniedHandler) throws Exception {
 
+		RequestMatcher sessionlessRequests = sessionlessRequests();
+
 		if (corsProperties.enabled()) {
 			http.cors(Customizer.withDefaults());
 		} else {
@@ -239,7 +224,7 @@ public class SecurityConfig {
 							.maximumSessions(-1)
 							.sessionRegistry(sessionRegistry)
 							.expiredSessionStrategy(event -> {
-								if (!invalidTokenError || SESSIONLESS_REQUESTS.matches(event.getRequest())) {
+								if (!invalidTokenError || sessionlessRequests.matches(event.getRequest())) {
 									event.getFilterChain().doFilter(event.getRequest(), event.getResponse());
 									return;
 								}
@@ -287,7 +272,8 @@ public class SecurityConfig {
 				);
 
 		http.addFilterBefore(new InvalidSessionCookieFilter(authTokenCookies,
-				invalidTokenError ? SESSIONLESS_REQUESTS : AnyRequestMatcher.INSTANCE), SessionManagementFilter.class);
+				invalidTokenError ? sessionlessRequests : AnyRequestMatcher.INSTANCE, ignoreAuthFilter),
+				SessionManagementFilter.class);
 		if (!authTokenCookies.isRefreshExpirationOnAccess()) {
 			http.addFilterBefore(new SessionLifetimeFilter(authTokenCookies), SecurityContextHolderFilter.class);
 		}
@@ -494,6 +480,26 @@ public class SecurityConfig {
 						.build());
 			}
 		};
+	}
+
+	/**
+	 * @return the requests that need no existing session, so a stale session cookie gets them no 401 even with
+	 * {@code entrystore.auth.cookie.invalid-token-error} on and they are served as guest: the login pages and SSO
+	 * initiations, which a user whose login ended is sent to, the sign-up and password-reset flows, whose emailed links
+	 * are often opened in a browser holding an old login, and the requests {@link IgnoreAuthFilter} serves as guest
+	 * ({@code ignoreAuth}, as in 5.x, and JSONP), which keep an unknown cookie (see {@link InvalidSessionCookieFilter})
+	 */
+	private RequestMatcher sessionlessRequests() {
+		return new OrRequestMatcher(
+				PathPatternRequestMatcher.withDefaults().matcher("/auth/login"),
+				PathPatternRequestMatcher.withDefaults().matcher("/auth/saml"),
+				PathPatternRequestMatcher.withDefaults().matcher("/auth/oidc"),
+				PathPatternRequestMatcher.withDefaults().matcher("/auth/cas"),
+				PathPatternRequestMatcher.withDefaults().matcher("/auth/signup"),
+				PathPatternRequestMatcher.withDefaults().matcher("/auth/signup/confirm"),
+				PathPatternRequestMatcher.withDefaults().matcher("/auth/pwreset"),
+				PathPatternRequestMatcher.withDefaults().matcher("/auth/pwreset/confirm"),
+				ignoreAuthFilter::servesAsGuest);
 	}
 
 	/** HTTP Basic carries a password, so password login off disables it too, as in 5.x. */

@@ -18,11 +18,15 @@ package org.entrystore.rest.springboot.security;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
+import org.entrystore.rest.springboot.filter.IgnoreAuthFilter;
+import org.entrystore.rest.springboot.filter.JsonpCallbackFilter;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.web.util.matcher.AnyRequestMatcher;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Collections;
 import java.util.Locale;
@@ -37,8 +41,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 class InvalidSessionCookieFilterTest {
 
-	private final InvalidSessionCookieFilter filter =
-			new InvalidSessionCookieFilter(authTokenCookies("none", false, ""), AnyRequestMatcher.INSTANCE);
+	private final IgnoreAuthFilter ignoreAuthFilter = new IgnoreAuthFilter(
+			new JsonpCallbackFilter(true, new ErrorResponseWriter(JsonMapper.builder().build())));
+	private final InvalidSessionCookieFilter filter = new InvalidSessionCookieFilter(
+			authTokenCookies("none", false, ""), AnyRequestMatcher.INSTANCE, ignoreAuthFilter);
 
 	@Test
 	void invalidRequestedSession_expiresCookieAndContinuesChain() throws Exception {
@@ -89,8 +95,25 @@ class InvalidSessionCookieFilterTest {
 	}
 
 	@Test
+	void invalidRequestedSession_jsonpKeepsCookieAndContinuesWithoutRequestedSessionId() throws Exception {
+		var request = requestWithAuthToken();
+		request.setMethod("GET");
+		request.setQueryString("callback=cb");
+		request.setRequestedSessionId("unknown");
+		request.setRequestedSessionIdValid(false);
+		var response = new MockHttpServletResponse();
+		var chain = new MockFilterChain();
+
+		filter.doFilter(request, response, chain);
+
+		assertEquals(0, response.getHeaders("Set-Cookie").size(), "JSONP must not change the browser's login");
+		assertNull(((HttpServletRequest) chain.getRequest()).getRequestedSessionId());
+	}
+
+	@Test
 	void invalidRequestedSession_notMatchedKeepsCookieAndRequest() throws Exception {
-		var notMatching = new InvalidSessionCookieFilter(authTokenCookies("none", false, ""), _ -> false);
+		var notMatching = new InvalidSessionCookieFilter(authTokenCookies("none", false, ""), _ -> false,
+				ignoreAuthFilter);
 		var request = requestWithAuthToken();
 		request.setMethod("GET");
 		request.setRequestedSessionId("unknown");

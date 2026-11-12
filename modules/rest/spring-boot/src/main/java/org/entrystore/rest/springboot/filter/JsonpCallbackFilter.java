@@ -47,6 +47,9 @@ import java.util.regex.Pattern;
  * {@code ?callback=} parameter is present, porting the Restlet {@code JSCallbackFilter}. Gated by
  * {@code entrystore.jsonp} (default {@code true}). JSONP is legacy — CORS is the preferred mechanism.
  * <p>
+ * {@link IgnoreAuthFilter} serves every JSONP request as guest, whatever session cookie or credentials it carries, so
+ * a JSONP response holds only what a guest may read.
+ * <p>
  * Hardening over the original Restlet filter (which echoed the raw {@code callback} parameter into an
  * {@code application/javascript} body — a reflected-XSS / content-sniffing vector): the callback name
  * must be a JavaScript identifier or dotted member expression, invalid names are rejected with
@@ -106,6 +109,25 @@ public class JsonpCallbackFilter extends OncePerRequestFilter {
 		this.errorResponseWriter = errorResponseWriter;
 	}
 
+	/**
+	 * @return whether JSONP is enabled and the request is a GET with a {@code callback} query parameter, which
+	 * {@link IgnoreAuthFilter} serves as guest
+	 */
+	public boolean isJsonpRequest(HttpServletRequest request) {
+		return jsonpCallback(request) != null;
+	}
+
+	/**
+	 * Reads the query string only, as 5.x did: {@code getParameter} would parse a form or multipart body.
+	 *
+	 * @return the raw {@code callback} query parameter of a JSONP request, or null if the request is none
+	 */
+	private String jsonpCallback(HttpServletRequest request) {
+		return enabled && "GET".equals(request.getMethod())
+				? HttpUtil.getQueryParameter(request, CALLBACK_PARAM)
+				: null;
+	}
+
 	// Defense-in-depth: never re-run on the ASYNC dispatch of a request that went async.
 	@Override
 	protected boolean shouldNotFilterAsyncDispatch() {
@@ -117,16 +139,9 @@ public class JsonpCallbackFilter extends OncePerRequestFilter {
 									@NotNull HttpServletResponse response,
 									@NotNull FilterChain filterChain) throws ServletException, IOException {
 
-		// Fast path (no buffering) for the overwhelming majority of requests.
-		if (!enabled || !"GET".equals(request.getMethod())) {
-			filterChain.doFilter(request, response);
-			return;
-		}
-
-		// Query string only, as 5.x read it: getParameter would parse a form or multipart body.
-		String rawCallback = HttpUtil.getQueryParameter(request, CALLBACK_PARAM);
-		// No JSONP requested, or a streaming endpoint (e.g. /sparql) that must not be buffered:
-		// pass straight through. isStreamingPath is only evaluated for the rare ?callback= request.
+		String rawCallback = jsonpCallback(request);
+		// Fast path (no buffering) for the overwhelming majority of requests, and for a streaming endpoint (e.g.
+		// /sparql) that must not be buffered.
 		if (rawCallback == null || isStreamingPath(request)) {
 			filterChain.doFilter(request, response);
 			return;
