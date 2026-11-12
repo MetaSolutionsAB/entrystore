@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2025 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,17 @@
 package org.entrystore.rest.springboot.model.auth;
 
 import lombok.Builder;
+import lombok.With;
 
 import java.time.LocalDateTime;
 
+/**
+ * A session as /auth/tokens reports it. {@code current} is set per response, for the session making the request; the
+ * stored instances leave it false.
+ */
 @Builder
 public record SessionInfo(String userName, LocalDateTime loginTime, LocalDateTime loginExpiration,
 						  LocalDateTime lastAccessTime, String lastUsedIpAddress, String lastUsedUserAgent,
-						  int loginTokenMaxAge) {
+						  int loginTokenMaxAge, @With boolean current) {
 
 }

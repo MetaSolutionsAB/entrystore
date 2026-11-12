@@ -205,6 +205,39 @@ class JsonpCallbackFilterTest {
 		assertTrue(response.getContentType().startsWith("application/json"));
 	}
 
+	@Test
+	void getWithCallback_isJsonpRequest() {
+		assertTrue(filter.isJsonpRequest(getRequestWithCallback("/90/entry/1", "foo")));
+	}
+
+	@Test
+	void getWithBlankCallback_isJsonpRequest() {
+		assertTrue(filter.isJsonpRequest(getRequestWithCallback("/90/entry/1", "")));
+	}
+
+	@Test
+	void getWithCallbackWhenDisabled_isNoJsonpRequest() {
+		var disabled = new JsonpCallbackFilter(false, new ErrorResponseWriter(JsonMapper.builder().build()));
+
+		assertFalse(disabled.isJsonpRequest(getRequestWithCallback("/90/entry/1", "foo")));
+	}
+
+	@Test
+	void postWithCallback_isNoJsonpRequest() {
+		var request = getRequestWithCallback("/90/entry/1", "foo");
+		request.setMethod("POST");
+
+		assertFalse(filter.isJsonpRequest(request));
+	}
+
+	@Test
+	void callbackInTheBodyOnly_isNoJsonpRequest() {
+		var request = new MockHttpServletRequest("GET", "/90/entry/1");
+		request.setParameter("callback", "foo");
+
+		assertFalse(filter.isJsonpRequest(request));
+	}
+
 	@ParameterizedTest
 	@MethodSource("invalidCallbacks")
 	void invalidCallback_returns400AndDoesNotInvokeChain(String invalidCallback) throws Exception {

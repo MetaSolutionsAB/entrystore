@@ -469,6 +469,45 @@ class EntryStoreClient {
 		return csrfHeaders(login.authCookie.toString(), login.csrf.toString())
 	}
 
+	/** Returns the value of an auth_token Set-Cookie line, as the browser sends it back. */
+	static String authTokenValue(String authCookieLine) {
+		assert authCookieLine.startsWith('auth_token='): 'not an auth_token Set-Cookie line: ' + authCookieLine
+		return extractCookieValue(authCookieLine, 'auth_token')
+	}
+
+	/** Returns the session id an auth_token Set-Cookie line carries: its value without the '.node' suffix. */
+	static String sessionIdOf(String authCookieLine) {
+		def value = authTokenValue(authCookieLine)
+		assert value.contains('.node'): 'auth_token cookie carries no .node suffix: ' + authCookieLine
+		return value.split(/\.node/)[0]
+	}
+
+	/** Returns the handle that GET /auth/tokens reports as current for the session of the given auth_token cookie. */
+	static String currentSessionHandle(String authCookie) {
+		def conn = getRequest('/auth/tokens', '', 'application/json', [Cookie: authCookie])
+		assert conn.getResponseCode() == HTTP_OK
+		def current = (BaseSpec.JSON_PARSER.parseText(conn.inputStream.text) as Map)
+				.findAll { it.value['current'] == true }
+		assert current.size() == 1: 'GET /auth/tokens must report exactly one current session: ' + current
+		return current.keySet().first()
+	}
+
+	/**
+	 * Fails if the body or a response header carries the session id (and so the cookie value) of any of the given
+	 * auth_token Set-Cookie lines. Only an auth_token Set-Cookie line, which issues or expires the session cookie, may
+	 * carry one.
+	 */
+	static void assertNoSessionIds(HttpURLConnection connection, String body, List<String> authCookieLines) {
+		def sessionIds = authCookieLines.collect { sessionIdOf(it) }
+		def headerValues = connection.getHeaderFields().findAll { it.key != null }.collectMany { name, values ->
+			name.equalsIgnoreCase('Set-Cookie') ? values.findAll { !it.startsWith('auth_token=') } : values
+		}
+		sessionIds.each { sessionId ->
+			assert !body?.contains(sessionId): 'response body carries a session id'
+			assert !headerValues.any { it?.contains(sessionId) }: 'a response header carries a session id'
+		}
+	}
+
 	/**
 	 * Converts Set-Cookie response-header lines into a Cookie request-header value, stripping the
 	 * cookie attributes (Path, HttpOnly, ...) each line carries.

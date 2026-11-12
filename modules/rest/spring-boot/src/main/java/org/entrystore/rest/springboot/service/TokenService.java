@@ -1,7 +1,22 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.service;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.springboot.security.ESUserSessionDetails;
@@ -9,10 +24,13 @@ import org.springframework.security.core.session.SessionInformation;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
-@Slf4j
+/**
+ * The authenticated user's registered password-login sessions, which clients identify by their session handle
+ * ({@link ESUserSessionDetails#getSessionHandle()}), never by the session id. SAML, CAS and OIDC sessions are not
+ * listed.
+ */
 @Service
 @RequiredArgsConstructor
 public class TokenService {
@@ -20,28 +38,37 @@ public class TokenService {
 	private final PrincipalManager principalManager;
 	private final AuthService authService;
 
-	public Map<String, SessionInfo> getTokens() {
+	/**
+	 * @param currentSessionId id of the session making the request, or null if it has none
+	 * @return the user's password-login sessions keyed by handle; a session whose login has not completed yet is left
+	 * out
+	 */
+	public Map<String, SessionInfo> getTokens(String currentSessionId) {
 		Map<String, SessionInfo> tokenInfo = new HashMap<>();
-
-		List<SessionInformation> sessionsList = authService.getAllUserSessions(principalManager.getAuthenticatedUserURI(), false);
-
-		for (SessionInformation session : sessionsList) {
-			if (session.getPrincipal() instanceof ESUserSessionDetails esUser && esUser.getEsUser() != null) {
-				tokenInfo.put(session.getSessionId(), esUser.getSessionInfo());
+		for (SessionInformation session : userSessions()) {
+			if (session.getPrincipal() instanceof ESUserSessionDetails esUser && esUser.getEsUser() != null
+					&& esUser.getSessionHandle() != null && esUser.getSessionInfo() != null) {
+				tokenInfo.put(esUser.getSessionHandle(),
+						esUser.getSessionInfo().withCurrent(session.getSessionId().equals(currentSessionId)));
 			}
 		}
-
 		return tokenInfo;
 	}
 
-	public void deleteToken(String token) {
-
-		List<SessionInformation> sessionsList = authService.getAllUserSessions(principalManager.getAuthenticatedUserURI(), false);
-
-		for (SessionInformation session : sessionsList) {
-			if (session.getSessionId().equals(token)) {
+	/**
+	 * Ends the user's own session with the given handle, which may be the current one. Anything else, such as another
+	 * user's handle, ends nothing.
+	 */
+	public void deleteToken(String handle) {
+		for (SessionInformation session : userSessions()) {
+			if (session.getPrincipal() instanceof ESUserSessionDetails esUser
+					&& handle.equals(esUser.getSessionHandle())) {
 				session.expireNow();
 			}
 		}
+	}
+
+	private Iterable<SessionInformation> userSessions() {
+		return authService.getAllUserSessions(principalManager.getAuthenticatedUserURI(), false);
 	}
 }

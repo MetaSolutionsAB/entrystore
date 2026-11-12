@@ -20,6 +20,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
@@ -33,26 +34,30 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * When the {@code ignoreAuth} query parameter is present, this filter forces anonymous access
- * for the current request by replacing the SecurityContext with an anonymous authentication token.
- * The session is not invalidated, so subsequent requests without {@code ?ignoreAuth} remain authenticated.
- * Only the query string is read, so a multipart body is not parsed before the access checks.
+ * When the {@code ignoreAuth} query parameter is present, or the request is a JSONP request
+ * ({@link JsonpCallbackFilter#isJsonpRequest}), this filter forces anonymous access for the current request by
+ * replacing the SecurityContext with an anonymous authentication token. The session is not invalidated, so subsequent
+ * requests without either parameter remain authenticated. Only the query string is read, so a multipart body is not
+ * parsed before the access checks.
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class IgnoreAuthFilter extends OncePerRequestFilter {
 
-	/** @return whether the request asks to be served as guest whatever its credentials */
-	public static boolean isRequested(HttpServletRequest request) {
-		return HttpUtil.getQueryParameter(request, "ignoreAuth") != null;
+	private final JsonpCallbackFilter jsonpCallbackFilter;
+
+	/** @return whether the request is to be served as guest whatever its credentials */
+	public boolean servesAsGuest(HttpServletRequest request) {
+		return HttpUtil.getQueryParameter(request, "ignoreAuth") != null || jsonpCallbackFilter.isJsonpRequest(request);
 	}
 
 	@Override
 	protected void doFilterInternal(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response, @NotNull FilterChain filterChain)
 			throws ServletException, IOException {
 
-		if (isRequested(request)) {
-			log.debug("Forcing anonymous access due to ignoreAuth request parameter");
+		if (servesAsGuest(request)) {
+			log.debug("Forcing anonymous access due to an ignoreAuth or JSONP callback request parameter");
 			SecurityContext originalContext = SecurityContextHolder.getContext();
 			SecurityContext anonymousContext = SecurityContextHolder.createEmptyContext();
 			anonymousContext.setAuthentication(

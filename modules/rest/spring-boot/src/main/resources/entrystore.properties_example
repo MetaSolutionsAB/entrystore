@@ -88,6 +88,8 @@ entrystore.data.folder=/srv/entrystore/files/
 ## When on, a GET with a ?callback= parameter has its JSON response body wrapped as
 ## callback(<json>) with Content-Type application/javascript. Legacy technique — CORS
 ## (see entrystore.cors above) is the preferred mechanism and JSONP can be disabled here.
+## A JSONP request is always served as guest, whatever session cookie or credentials it
+## carries, so it returns only what a guest may read. When off, ?callback= has no effect.
 # entrystore.jsonp=true
 
 ## SMTP settings, required for e.g. sign-up

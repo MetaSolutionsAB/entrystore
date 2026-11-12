@@ -74,8 +74,8 @@ class ZzzInvalidTokenGuestIT extends BaseSpec {
 		def firstToken = EntryStoreClient.findCookieValue(firstLogin, 'auth_token')
 		def firstCsrf = EntryStoreClient.findCookieValue(firstLogin, 'XSRF-TOKEN')
 		def secondToken = EntryStoreClient.findCookieValue(login(), 'auth_token')
-		def sessionId = secondToken.substring(0, secondToken.indexOf('.node'))
-		assert EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: sessionId]), '',
+		def secondHandle = EntryStoreClient.currentSessionHandle('auth_token=' + secondToken)
+		assert EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: secondHandle]), '',
 				'application/json', EntryStoreClient.csrfHeaders('auth_token=' + firstToken, firstCsrf))
 				.getResponseCode() == HTTP_NO_CONTENT
 
@@ -189,8 +189,8 @@ class ZzzInvalidTokenGuestIT extends BaseSpec {
 		def firstToken = EntryStoreClient.findCookieValue(firstLogin, 'auth_token')
 		def firstCsrf = EntryStoreClient.findCookieValue(firstLogin, 'XSRF-TOKEN')
 		def secondToken = EntryStoreClient.findCookieValue(login(), 'auth_token')
-		def sessionId = secondToken.substring(0, secondToken.indexOf('.node'))
-		assert EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: sessionId]), '',
+		def secondHandle = EntryStoreClient.currentSessionHandle('auth_token=' + secondToken)
+		assert EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: secondHandle]), '',
 				'application/json', EntryStoreClient.csrfHeaders('auth_token=' + firstToken, firstCsrf))
 				.getResponseCode() == HTTP_NO_CONTENT
 		return secondToken

@@ -99,8 +99,8 @@ class AuthTokenCookieIT extends BaseSpec {
 		given: 'a session of the user that another of its sessions ended'
 		def ending = EntryStoreClient.loginIsolated('user')
 		def ended = EntryStoreClient.loginIsolated('user')
-		def endedSessionId = ended.authCookie.split(';')[0].substring('auth_token='.length()).split(/\.node/)[0]
-		assert EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: endedSessionId]), '',
+		def endedHandle = EntryStoreClient.currentSessionHandle(ended.authCookie)
+		assert EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: endedHandle]), '',
 				'application/json', EntryStoreClient.csrfHeaders(ending.authCookie, ending.csrf))
 				.getResponseCode() == HTTP_NO_CONTENT
 
@@ -111,6 +111,36 @@ class AuthTokenCookieIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		JSON_PARSER.parseText(conn.inputStream.text)['user'] == 'guest'
+		assertExpiredOnStoreAndLegacyPath(conn)
+	}
+
+	def "GET /auth/user?callback=cb with an unknown auth_token should respond as guest and keep the cookie"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/auth/user?callback=cb', '', 'application/json',
+				[Cookie: 'auth_token=' + STALE_TOKEN])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		jsonpPayload(conn.inputStream.text)['user'] == 'guest'
+		EntryStoreClient.findSetCookies(conn, 'auth_token').isEmpty()
+	}
+
+	def "GET /auth/user?callback=cb with an ended session should respond as guest and expire the cookie"() {
+		given: 'a session of the user that another of its sessions ended'
+		def ending = EntryStoreClient.loginIsolated('user')
+		def ended = EntryStoreClient.loginIsolated('user')
+		def endedHandle = EntryStoreClient.currentSessionHandle(ended.authCookie)
+		assert EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: endedHandle]), '',
+				'application/json', EntryStoreClient.csrfHeaders(ending.authCookie, ending.csrf))
+				.getResponseCode() == HTTP_NO_CONTENT
+
+		when:
+		def conn = EntryStoreClient.getRequest('/auth/user?callback=cb', '', 'application/json',
+				[Cookie: ended.authCookie])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		jsonpPayload(conn.inputStream.text)['user'] == 'guest'
 		assertExpiredOnStoreAndLegacyPath(conn)
 	}
 
@@ -170,6 +200,12 @@ class AuthTokenCookieIT extends BaseSpec {
 	private static HttpURLConnection login(Map<String, String> headers) {
 		def body = 'auth_username=user&auth_password=' + EntryStoreClient.creds['user']
 		return EntryStoreClient.postRequest('/auth/cookie', body, '', 'application/x-www-form-urlencoded', headers)
+	}
+
+	/** @return the JSON wrapped in a {@code cb(...)} JSONP body */
+	private static Object jsonpPayload(String body) {
+		assert body.startsWith('cb(') && body.endsWith(')'): 'not a cb(...) JSONP body: ' + body
+		return JSON_PARSER.parseText(body.substring('cb('.length(), body.length() - 1))
 	}
 
 	private static void assertExpiredOnStoreAndLegacyPath(HttpURLConnection conn) {

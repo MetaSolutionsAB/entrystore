@@ -129,6 +129,7 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 					return;
 				}
 
+				updatedUser.setSessionHandle(esUserDetails.getSessionHandle());
 				updatedUser.setSessionInfo(sessionInfo(esUserDetails, session, request, now));
 
 				UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(updatedUser,
@@ -262,9 +263,9 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 	}
 
 	/**
-	 * Updates the session info that /auth/tokens reports on the registered session. The registered entry is kept, not
-	 * registered anew, because registering replaces it with an unexpired one and would undo a revocation (user
-	 * disabled, password changed, token deleted) made by a concurrent request.
+	 * Updates the session info that /auth/tokens reports on the registered session, whose principal keeps its session
+	 * handle. The registered entry is kept, not registered anew, because registering replaces it with an unexpired one
+	 * and would undo a revocation (user disabled, password changed, token deleted) made by a concurrent request.
 	 */
 	private void updateRegisteredSession(String sessionId, ESUserSessionDetails updatedUser) {
 		SessionInformation registered = sessionRegistry.getSessionInformation(sessionId);
