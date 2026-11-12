@@ -86,6 +86,27 @@ class ZzzSessionLifetimeRefreshOffIT extends BaseSpec {
 		afterEightSeconds.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
+	def "ignoreAuth and JSONP GETs after the fixed lifetime should be served as guest and get no Set-Cookie"() {
+		given:
+		def cookie = cookieOf(login('&auth_maxage=6'))
+		sleep(4000)
+		assert userInfo(cookie)['user'] == 'admin'
+
+		when: 'past the fixed lifetime, within the idle timeout'
+		sleep(4000)
+		def ignoreAuth = EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', null, [Cookie: cookie])
+		def jsonp = EntryStoreClient.getRequest('/auth/user?callback=cb', '', null, [Cookie: cookie])
+
+		then:
+		ignoreAuth.getResponseCode() == HTTP_OK
+		ignoreAuth.getHeaderFields().get('Set-Cookie') == null
+		jsonp.getResponseCode() == HTTP_OK
+		jsonp.getHeaderFields().get('Set-Cookie') == null
+
+		and: 'the next request without either parameter ends the login'
+		EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie]).getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
 	private static HttpURLConnection login(String extraParams) {
 		return EntryStoreClient.postRequest('/auth/cookie', 'auth_username=admin&auth_password=adminpass' + extraParams,
 			'', 'application/x-www-form-urlencoded')

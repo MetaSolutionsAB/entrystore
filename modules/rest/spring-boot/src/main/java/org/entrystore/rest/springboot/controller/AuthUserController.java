@@ -61,12 +61,15 @@ public class AuthUserController {
 		return userService.getUserInfo(acceptLanguage, session != null ? authTokenCookies.expiry(session) : null);
 	}
 
-	@Operation(summary = "Lists the password-login sessions of the currently logged-in user, keyed by session handle.")
+	@Operation(summary = "Lists the active password-login sessions of the currently logged-in user by session handle; "
+			+ "the session making the request is marked as current.")
 	@GetMapping(path = "/auth/tokens", produces = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<Map<String, SessionInfo>> tokensInfo(HttpServletRequest request) {
+		// Without creating a session: an HTTP Basic request has none, and then no listed session is current
+		HttpSession session = request.getSession(false);
 		return ResponseEntity.ok()
 				.header(HttpHeaders.CACHE_CONTROL, CacheControlFilter.CACHE_CONTROL_CREDENTIALS)
-				.body(tokenService.getTokens(currentSessionId(request)));
+				.body(tokenService.getTokens(session != null ? session.getId() : null));
 	}
 
 	@Operation(summary = "Ends the session of the currently logged-in user that has the given session handle.")
@@ -80,11 +83,5 @@ public class AuthUserController {
 		return ResponseEntity
 				.noContent()
 				.build();
-	}
-
-	/** @return the id of the request's session, or null if it has none */
-	private static String currentSessionId(HttpServletRequest request) {
-		HttpSession session = request.getSession(false);
-		return session != null ? session.getId() : null;
 	}
 }

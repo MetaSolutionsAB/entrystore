@@ -36,18 +36,23 @@ class TokenResourceIT extends BaseSpec {
 		.appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
 		.toFormatter()
 	static def password = 'newPass12345'
-	static final String DELETE_NOTHING_USER = 'userForTokenDeleteNothing@test.com'
+
+	// Each has only the sessions of the one test that names it, so that test can count them
+	private static final String USER_LISTING = 'userForTokenManagement@test.com'
+	private static final String USER_DELETING = 'userForTokenManagementDelete@test.com'
+	private static final String USER_DELETING_CURRENT = 'userForTokenManagementDeleteCurrent@test.com'
+	// Shared by the tests that do not count sessions
+	private static final String USER_SHARED = 'userForTokenManagementUpdate@test.com'
+
+	// entrystore.auth.session.reload-interval of the ITs, in milliseconds
+	private static final long RELOAD_INTERVAL_MILLIS = 10_000
 
 	def setupSpec() {
 		EntryStoreClient.snapshotCreds()
-		EntryStoreClient.creds.put('userForTokenManagement@test.com', password)
-		EntryStoreClient.creds.put('userForTokenManagementDelete@test.com', password)
-		EntryStoreClient.creds.put('userForTokenManagementDeleteCurrent@test.com', password)
-		EntryStoreClient.creds.put('userForTokenManagementUpdate@test.com', password)
-		EntryStoreClient.creds.put('userForTokenHandleReload@test.com', password)
-		EntryStoreClient.creds.put('userForTokenHandleRelogin@test.com', password)
-		EntryStoreClient.creds.put(DELETE_NOTHING_USER, password)
-		UserUtil.createUserWithPassword(DELETE_NOTHING_USER, password)
+		[USER_LISTING, USER_DELETING, USER_DELETING_CURRENT, USER_SHARED].each {
+			EntryStoreClient.creds.put(it, password)
+			UserUtil.createUserWithPassword(it, password)
+		}
 	}
 
 	def cleanupSpec() {
@@ -62,61 +67,84 @@ class TokenResourceIT extends BaseSpec {
 		tokensConnection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "GET /auth/tokens should list the user's logins by session handle and mark the current one"() {
-		given:
-		def username = 'userForTokenManagement@test.com'
-		UserUtil.createUserWithPassword(username, password)
-		def cookie1 = loginWithMaxAge(username, '100')
-		def cookie2 = loginWithMaxAge(username, '50')
+	def "GET /auth/tokens with HTTP Basic should mark no session current and set no cookie"() {
+		given: 'a session of the user, so that one is listed'
+		EntryStoreClient.loginIsolated(USER_SHARED)
 
 		when:
-		def connection1 = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: cookie1])
-		def body1 = connection1.inputStream.text
-		def connection2 = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: cookie2])
-		def body2 = connection2.inputStream.text
+		def conn = EntryStoreClient.getRequest('/auth/tokens', '', 'application/json',
+				[Authorization: EntryStoreClient.basicAuth(USER_SHARED, password)])
 
 		then:
-		connection1.getResponseCode() == HTTP_OK
-		def tokens1 = JSON_PARSER.parseText(body1) as Map
-		tokens1.size() == 2
-		tokens1.keySet().every { it ==~ /[A-Za-z0-9_-]{22}/ }
-		tokens1.findAll { it.value['current'] }.size() == 1
-		def handle1 = tokens1.find { it.value['current'] }.key
-		def handle2 = tokens1.find { !it.value['current'] }.key
-		tokens1[handle1]['userName'] == 'userfortokenmanagement@test.com'
-		tokens1[handle1]['lastAccessTime'] != null
-		tokens1[handle1]['loginExpiration'] != null
-		tokens1[handle1]['loginTime'] != null
-		tokens1[handle1]['lastUsedIpAddress'] != null
-		tokens1[handle1]['loginTokenMaxAge'] == 100
-		tokens1[handle1]['lastUsedUserAgent'] != null
-		tokens1[handle2]['userName'] == 'userfortokenmanagement@test.com'
-		tokens1[handle2]['loginTokenMaxAge'] == 50
-
-		and: 'the other login sees the same handles, with itself as current'
-		connection2.getResponseCode() == HTTP_OK
-		def tokens2 = JSON_PARSER.parseText(body2) as Map
-		tokens2.keySet() == tokens1.keySet()
-		tokens2[handle2]['current'] == true
-		tokens2[handle1]['current'] == false
-
-		and: 'neither response carries a session id'
-		EntryStoreClient.assertNoSessionIds(connection1, body1, [cookie1, cookie2])
-		EntryStoreClient.assertNoSessionIds(connection2, body2, [cookie1, cookie2])
+		conn.getResponseCode() == HTTP_OK
+		def tokens = JSON_PARSER.parseText(conn.inputStream.text) as Map
+		!tokens.isEmpty()
+		tokens.values().every { it['current'] == false }
+		EntryStoreClient.findSetCookies(conn, 'auth_token').isEmpty()
 	}
 
-	def "GET /auth/tokens should report the same handle with updated timestamps on the next request"() {
+	def "GET /auth/tokens should get a list of all currently active logins for of an authenticated user"() {
 		given:
-		def username = 'userForTokenManagementUpdate@test.com'
-		UserUtil.createUserWithPassword(username, password)
-		def login = EntryStoreClient.loginIsolated(username)
+		// raw login ritual kept: loginIsolated does not support auth_maxage
+		def bodyParams1 = createFormBody([auth_username: USER_LISTING, auth_password: password, auth_maxage: '100'])
+		def loginConnection1 = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
+		assert loginConnection1.getResponseCode() == HTTP_OK
+		def cookie1 = EntryStoreClient.findSetCookie(loginConnection1, 'auth_token')
+		def bodyParams2 = createFormBody([auth_username: USER_LISTING, auth_password: password, auth_maxage: '50'])
+		def loginConnection2 = EntryStoreClient.postRequest('/auth/cookie', bodyParams2, '', 'application/x-www-form-urlencoded')
+		assert loginConnection2.getResponseCode() == HTTP_OK
+		def cookie2 = EntryStoreClient.findSetCookie(loginConnection2, 'auth_token')
+
+		when:
+		def tokensConnection = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: cookie1])
+
+		then:
+		tokensConnection.getResponseCode() == HTTP_OK
+		def tokensRespJson = JSON_PARSER.parseText(tokensConnection.inputStream.text) as Map
+		tokensRespJson.keySet().size() == 2
+
+		and: 'the session making the request is the current one'
+		def current = tokensRespJson.values().findAll { it['current'] == true }
+		current.size() == 1
+		current[0]['userName'] == 'userfortokenmanagement@test.com'
+		current[0]['lastAccessTime'] != null
+		current[0]['loginExpiration'] != null
+		current[0]['loginTime'] != null
+		current[0]['lastUsedIpAddress'] != null
+		current[0]['loginTokenMaxAge'] == 100
+		current[0]['lastUsedUserAgent'] != null
+
+		and: 'the other one is not'
+		def other = tokensRespJson.values().findAll { it['current'] == false }
+		other.size() == 1
+		other[0]['userName'] == 'userfortokenmanagement@test.com'
+		other[0]['loginTokenMaxAge'] == 50
+
+		and: 'the keys are handles: 22 base64url characters, and neither session ids nor cookie values'
+		tokensRespJson.keySet().every { it ==~ /[A-Za-z0-9_-]{22}/ }
+		[cookie1, cookie2].every {
+			!tokensRespJson.containsKey(EntryStoreClient.sessionIdOf(it)) &&
+					!tokensRespJson.containsKey(EntryStoreClient.cookieValueOf(it))
+		}
+
+		and: 'the other session lists the same handles, with itself as the current one'
+		def tokensOfOther = JSON_PARSER.parseText(
+				EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: cookie2]).inputStream.text) as Map
+		tokensOfOther.keySet() == tokensRespJson.keySet()
+		tokensOfOther.find { it.value['current'] == true }.key ==
+				tokensRespJson.find { it.value['current'] == false }.key
+	}
+
+	def "GET /auth/tokens should get a list of all currently active logins of an authenticated user with updated timestamps"() {
+		given:
+		def login = EntryStoreClient.loginIsolated(USER_SHARED)
+		def token = EntryStoreClient.handleOf(login.authCookie)
 		def tokensConnection = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: login.authCookie])
 		assert tokensConnection.getResponseCode() == HTTP_OK
-		def tokensRespJson = JSON_PARSER.parseText(tokensConnection.inputStream.text) as Map
-		def handle = tokensRespJson.find { it.value['current'] }.key
-		def oldLastAccessTime = LocalDateTime.parse(tokensRespJson[handle]['lastAccessTime'].toString(), dtf)
-		def oldLoginExpiration = LocalDateTime.parse(tokensRespJson[handle]['loginExpiration'].toString(), dtf)
-		def oldLoginTime = tokensRespJson[handle]['loginTime']
+		def tokensRespJson = JSON_PARSER.parseText(tokensConnection.inputStream.text)
+		def oldLastAccessTime = LocalDateTime.parse(tokensRespJson[token]['lastAccessTime'].toString(), dtf)
+		def oldLoginExpiration = LocalDateTime.parse(tokensRespJson[token]['loginExpiration'].toString(), dtf)
+		def oldLoginTime = tokensRespJson[token]['loginTime']
 
 		when:
 		// the assertions below truncate to whole milliseconds (ChronoUnit.MILLIS.between(...) > 0),
@@ -126,42 +154,44 @@ class TokenResourceIT extends BaseSpec {
 
 		then:
 		tokensNewConnection.getResponseCode() == HTTP_OK
-		def tokensNewRespJson = JSON_PARSER.parseText(tokensNewConnection.inputStream.text) as Map
-		tokensNewRespJson.keySet() == [handle] as Set
-		tokensNewRespJson[handle]['current'] == true
-		def newLastAccessTime = LocalDateTime.parse(tokensNewRespJson[handle]['lastAccessTime'].toString(), dtf)
+		def tokensNewRespJson = JSON_PARSER.parseText(tokensNewConnection.inputStream.text)
+		def newLastAccessTime = LocalDateTime.parse(tokensNewRespJson[token]['lastAccessTime'].toString(), dtf)
 		ChronoUnit.MILLIS.between(oldLastAccessTime, newLastAccessTime) > 0
-		def newLoginExpiration = LocalDateTime.parse(tokensNewRespJson[handle]['loginExpiration'].toString(), dtf)
+		def newLoginExpiration = LocalDateTime.parse(tokensNewRespJson[token]['loginExpiration'].toString(), dtf)
 		ChronoUnit.MILLIS.between(oldLoginExpiration, newLoginExpiration) > 0
-		oldLoginTime == tokensNewRespJson[handle]['loginTime']
+		oldLoginTime == tokensNewRespJson[token]['loginTime']
 	}
 
-	def "GET /auth/tokens should report the same handle after the user's properties are reloaded"() {
-		given: 'the default entrystore.auth.session.reload-interval of 10 seconds'
-		def username = 'userForTokenHandleReload@test.com'
-		UserUtil.createUserWithPassword(username, password)
-		def login = EntryStoreClient.loginIsolated(username)
-		def handle = EntryStoreClient.currentSessionHandle(login.authCookie)
+	def "GET /auth/tokens should list a session under the same handle after its user was reloaded"() {
+		given:
+		def login = EntryStoreClient.loginIsolated(USER_SHARED)
+		def handleAtLogin = EntryStoreClient.handleOf(login.authCookie)
 
-		when: 'the next request reloads the user'
-		Thread.sleep(10_500)
-		def handleOfTheReloadingRequest = EntryStoreClient.currentSessionHandle(login.authCookie)
+		when: 'the next request of the session reloads its user'
+		Thread.sleep(RELOAD_INTERVAL_MILLIS + 200)
+		def handleAfterReload = EntryStoreClient.handleOf(login.authCookie)
 
 		then:
-		handleOfTheReloadingRequest == handle
-		EntryStoreClient.currentSessionHandle(login.authCookie) == handle
+		handleAfterReload == handleAtLogin
+	}
+
+	def "GET /auth/tokens should give every login its own handle"() {
+		when:
+		def handle1 = EntryStoreClient.handleOf(EntryStoreClient.loginIsolated(USER_SHARED).authCookie)
+		def handle2 = EntryStoreClient.handleOf(EntryStoreClient.loginIsolated(USER_SHARED).authCookie)
+
+		then:
+		handle1 != handle2
 	}
 
 	def "a login with a valid session cookie should get a new session id and a new handle"() {
 		given:
-		def username = 'userForTokenHandleRelogin@test.com'
-		UserUtil.createUserWithPassword(username, password)
-		def first = EntryStoreClient.loginIsolated(username)
-		def firstHandle = EntryStoreClient.currentSessionHandle(first.authCookie)
+		def first = EntryStoreClient.loginIsolated(USER_SHARED)
+		def firstHandle = EntryStoreClient.handleOf(first.authCookie)
 
 		when:
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie',
-				createFormBody([auth_username: username, auth_password: password]), '',
+				createFormBody([auth_username: USER_SHARED, auth_password: password]), '',
 				'application/x-www-form-urlencoded', [Cookie: first.authCookie])
 
 		then:
@@ -169,18 +199,42 @@ class TokenResourceIT extends BaseSpec {
 		def second = EntryStoreClient.findSetCookies(loginConnection, 'auth_token')
 				.find { EntryStoreClient.parseSetCookieAttributes(it)['max-age'] != '0' }
 		EntryStoreClient.sessionIdOf(second) != EntryStoreClient.sessionIdOf(first.authCookie)
+		def secondHandle = EntryStoreClient.handleOf(second)
+		secondHandle != firstHandle
 		def tokensConnection = EntryStoreClient.getRequest('/auth/tokens', '', 'application/json', [Cookie: second])
-		tokensConnection.getResponseCode() == HTTP_OK
-		def body = tokensConnection.inputStream.text
-		def tokens = JSON_PARSER.parseText(body) as Map
-		tokens.size() == 1
-		tokens.values().first()['current'] == true
-		tokens.keySet().first() != firstHandle
-		EntryStoreClient.assertNoSessionIds(tokensConnection, body, [first.authCookie, second])
+		def tokens = JSON_PARSER.parseText(EntryStoreClient.bodyOf(tokensConnection)) as Map
+		!tokens.containsKey(firstHandle)
+		EntryStoreClient.assertNoSessionIds(tokensConnection, '', [first.authCookie, second])
 
 		and: 'the session id before the login no longer authenticates'
 		EntryStoreClient.getRequest('/auth/tokens', '', 'application/json', [Cookie: first.authCookie])
 				.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "GET #path should not contain a session id or cookie value of the user"() {
+		given:
+		def login = EntryStoreClient.loginIsolated(USER_SHARED)
+		def otherLogin = EntryStoreClient.loginIsolated(USER_SHARED)
+		// a cookie value starts with its session id, so the session ids cover both
+		def sessionIds = [login, otherLogin].collect { EntryStoreClient.sessionIdOf(it.authCookie) }
+
+		when:
+		def conn = EntryStoreClient.getRequest(path, '', 'application/json', [Cookie: login.authCookie])
+
+		then:
+		def body = EntryStoreClient.bodyOf(conn)
+		def headers = conn.getHeaderFields().collect { it.key + ': ' + it.value.join(', ') }.join('\n')
+		sessionIds.every { !body.contains(it) && !headers.contains(it) }
+
+		where:
+		path << [
+			'/auth/tokens',
+			'/auth/tokens?callback=cb',
+			'/auth/user',
+			'/auth/user?callback=cb',
+			'/search?type=solr&query=title:*',
+			'/search?type=solr&query=title:*&callback=cb'
+		]
 	}
 
 	def "DELETE /auth/tokens should get unauthorized for a non-authenticated user"() {
@@ -191,15 +245,12 @@ class TokenResourceIT extends BaseSpec {
 		tokensConnection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "DELETE /auth/tokens should end the session with the given handle and keep the other one"() {
+	def "DELETE /auth/tokens should delete a specified token of the authenticated user"() {
 		given:
-		def username = 'userForTokenManagementDelete@test.com'
-		UserUtil.createUserWithPassword(username, password)
-		def login1 = EntryStoreClient.loginIsolated(username)
-		def handle1 = EntryStoreClient.currentSessionHandle(login1.authCookie)
-		def login2 = EntryStoreClient.loginIsolated(username)
-		def handle2 = EntryStoreClient.currentSessionHandle(login2.authCookie)
-		def body = JsonOutput.toJson([token: handle2])
+		def login1 = EntryStoreClient.loginIsolated(USER_DELETING)
+		def handle1 = EntryStoreClient.handleOf(login1.authCookie)
+		def login2 = EntryStoreClient.loginIsolated(USER_DELETING)
+		def body = JsonOutput.toJson([token: EntryStoreClient.handleOf(login2.authCookie)])
 
 		when:
 		def tokensDeleteConnection = EntryStoreClient.deleteRequest('/auth/tokens', body, '', 'application/json',
@@ -210,18 +261,16 @@ class TokenResourceIT extends BaseSpec {
 		EntryStoreClient.assertNoSessionIds(tokensDeleteConnection, '', [login1.authCookie, login2.authCookie])
 		def token1Connection = EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: login1.authCookie])
 		token1Connection.getResponseCode() == HTTP_OK
-		def tokensRespJson = JSON_PARSER.parseText(token1Connection.inputStream.text) as Map
-		tokensRespJson.keySet() == [handle1] as Set
-		EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: login2.authCookie])
-				.getResponseCode() == HTTP_UNAUTHORIZED
+		def tokensRespJson = JSON_PARSER.parseText(token1Connection.inputStream.text)
+		(tokensRespJson as Map).keySet().size() == 1
+		tokensRespJson[handle1] != null
+		EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: login2.authCookie]).getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "DELETE /auth/tokens with the handle of the current session should log the user out"() {
+	def "DELETE /auth/tokens should delete current login token of the authenticated user and log him out"() {
 		given:
-		def username = 'userForTokenManagementDeleteCurrent@test.com'
-		UserUtil.createUserWithPassword(username, password)
-		def login = EntryStoreClient.loginIsolated(username)
-		def body = JsonOutput.toJson([token: EntryStoreClient.currentSessionHandle(login.authCookie)])
+		def login = EntryStoreClient.loginIsolated(USER_DELETING_CURRENT)
+		def body = JsonOutput.toJson([token: EntryStoreClient.handleOf(login.authCookie)])
 		assert EntryStoreClient.getRequest('/auth/user', '', '', [Cookie: login.authCookie]).getResponseCode() == HTTP_OK
 
 		when:
@@ -233,11 +282,12 @@ class TokenResourceIT extends BaseSpec {
 		EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: login.authCookie]).getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "DELETE /auth/tokens with #kind should answer 204 and end no session"() {
-		given:
-		def login = EntryStoreClient.loginIsolated(DELETE_NOTHING_USER)
-		def otherUserLogin = EntryStoreClient.loginIsolated('user')
-		def body = JsonOutput.toJson([token: tokenOf(login.authCookie, otherUserLogin.authCookie)])
+	def "DELETE /auth/tokens with #description should end no session"() {
+		given: 'two sessions of the user and one of another user'
+		def login = EntryStoreClient.loginIsolated(USER_SHARED)
+		def otherLogin = EntryStoreClient.loginIsolated(USER_SHARED)
+		def strangerLogin = EntryStoreClient.loginIsolated('user')
+		def body = JsonOutput.toJson([token: token.call(otherLogin.authCookie, strangerLogin.authCookie)])
 
 		when:
 		def tokensDeleteConnection = EntryStoreClient.deleteRequest('/auth/tokens', body, '', 'application/json',
@@ -245,27 +295,15 @@ class TokenResourceIT extends BaseSpec {
 
 		then:
 		tokensDeleteConnection.getResponseCode() == HTTP_NO_CONTENT
-		EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: login.authCookie]).getResponseCode() == HTTP_OK
-		EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: otherUserLogin.authCookie])
-				.getResponseCode() == HTTP_OK
+		[login, otherLogin, strangerLogin].every {
+			EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: it.authCookie]).getResponseCode() == HTTP_OK
+		}
 
 		where:
-		kind                    | tokenOf
-		'its session id'        | { String own, String other -> EntryStoreClient.sessionIdOf(own) }
-		'its cookie value'      | { String own, String other -> EntryStoreClient.authTokenValue(own) }
-		'an unknown handle'     | { String own, String other -> 'AAAAAAAAAAAAAAAAAAAAAA' }
-		"another user's handle" | { String own, String other -> EntryStoreClient.currentSessionHandle(other) }
-	}
-
-	/**
-	 * Logs the user in with the given auth_maxage, which loginIsolated does not support, and returns its auth_token
-	 * Set-Cookie line.
-	 */
-	private static String loginWithMaxAge(String username, String maxAge) {
-		def body = createFormBody([auth_username: username, auth_password: password, auth_maxage: maxAge])
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', body, '',
-				'application/x-www-form-urlencoded')
-		assert loginConnection.getResponseCode() == HTTP_OK
-		return EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
+		description                            | token
+		"a session id of the user"             | { own, stranger -> EntryStoreClient.sessionIdOf(own) }
+		"a cookie value of the user"           | { own, stranger -> EntryStoreClient.cookieValueOf(own) }
+		"an unknown handle"                    | { own, stranger -> 'AAAAAAAAAAAAAAAAAAAAAA' }
+		"the handle of another user's session" | { own, stranger -> EntryStoreClient.handleOf(stranger) }
 	}
 }

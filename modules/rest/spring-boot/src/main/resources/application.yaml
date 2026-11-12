@@ -22,7 +22,7 @@ server:
     max-http-form-post-size: 32KB
   servlet:
     context-path: /store
-    # The session id travels only in the auth_token cookie, never in a URL (;jsessionid=)
+    # A session is taken from its cookie only, never from a ;jsessionid= path parameter of the URL
     session.tracking-modes: cookie
     session.cookie:
       name: auth_token

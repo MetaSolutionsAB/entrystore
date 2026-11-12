@@ -22,22 +22,16 @@ import org.entrystore.User;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import java.security.SecureRandom;
-import java.util.Base64;
-
 @Getter
 @Setter
 public class ESUserSessionDetails extends org.springframework.security.core.userdetails.User {
-
-	private static final SecureRandom RANDOM = new SecureRandom();
-	private static final int SESSION_HANDLE_BYTES = 16;
 
 	private final User esUser;
 	// volatile: ReloadUserPropertiesFilter updates it on the registered principal, which /auth/tokens reads concurrently
 	private volatile SessionInfo sessionInfo;
 	/**
-	 * Identifies the registered session to its user in /auth/tokens, in place of the session id. Set when the login
-	 * completes; null before that and on HTTP Basic requests, which register no session.
+	 * The {@link SessionHandle} of the session these details are registered for, set by a password login and null for
+	 * a SAML, CAS or OIDC session. The details that a reload replaces them with take it over.
 	 */
 	private volatile String sessionHandle;
 
@@ -47,15 +41,5 @@ public class ESUserSessionDetails extends org.springframework.security.core.user
 				userDt.isCredentialsNonExpired(), userDt.isAccountNonLocked(), userDt.getAuthorities());
 		this.esUser = esUser;
 		this.sessionInfo = sessionInfo;
-	}
-
-	/**
-	 * @return a new session handle: 128 random bits, base64url without padding (22 characters), unrelated to the
-	 * session id
-	 */
-	public static String newSessionHandle() {
-		byte[] bytes = new byte[SESSION_HANDLE_BYTES];
-		RANDOM.nextBytes(bytes);
-		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
 	}
 }

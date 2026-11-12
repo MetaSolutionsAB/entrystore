@@ -205,37 +205,17 @@ class JsonpCallbackFilterTest {
 		assertTrue(response.getContentType().startsWith("application/json"));
 	}
 
+	// IgnoreAuthFilter serves it as guest all the same
 	@Test
-	void getWithCallback_isJsonpRequest() {
-		assertTrue(filter.isJsonpRequest(getRequestWithCallback("/90/entry/1", "foo")));
-	}
-
-	@Test
-	void getWithBlankCallback_isJsonpRequest() {
-		assertTrue(filter.isJsonpRequest(getRequestWithCallback("/90/entry/1", "")));
-	}
-
-	@Test
-	void getWithCallbackWhenDisabled_isNoJsonpRequest() {
-		var disabled = new JsonpCallbackFilter(false, new ErrorResponseWriter(JsonMapper.builder().build()));
-
-		assertFalse(disabled.isJsonpRequest(getRequestWithCallback("/90/entry/1", "foo")));
-	}
-
-	@Test
-	void postWithCallback_isNoJsonpRequest() {
-		var request = getRequestWithCallback("/90/entry/1", "foo");
-		request.setMethod("POST");
-
-		assertFalse(filter.isJsonpRequest(request));
-	}
-
-	@Test
-	void callbackInTheBodyOnly_isNoJsonpRequest() {
+	void getWithMalformedCallback_isNotWrapped() throws Exception {
 		var request = new MockHttpServletRequest("GET", "/90/entry/1");
-		request.setParameter("callback", "foo");
+		request.setQueryString("callback=%zz");
+		var response = new MockHttpServletResponse();
 
-		assertFalse(filter.isJsonpRequest(request));
+		filter.doFilter(request, response, chainWriting(200, "application/json", "{\"a\":1}".getBytes(UTF_8)));
+
+		assertEquals("{\"a\":1}", response.getContentAsString());
+		assertTrue(response.getContentType().startsWith("application/json"));
 	}
 
 	@ParameterizedTest

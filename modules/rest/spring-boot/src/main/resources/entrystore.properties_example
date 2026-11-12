@@ -86,10 +86,12 @@ entrystore.data.folder=/srv/entrystore/files/
 
 ## JSONP support (default: true)
 ## When on, a GET with a ?callback= parameter has its JSON response body wrapped as
-## callback(<json>) with Content-Type application/javascript. Legacy technique — CORS
+## callback(<json>) with Content-Type application/javascript. Such a request is served as
+## guest, whatever session cookie or HTTP Basic credentials it carries, so it returns only what
+## a guest may read, and it neither uses, renews nor ends the session. That holds on every route,
+## also where the body is not wrapped: /sparql, and files, other RDF formats and /proxy responses
+## that are not JSON. A CAS, SAML or OIDC login completion still logs in. Legacy technique — CORS
 ## (see entrystore.cors above) is the preferred mechanism and JSONP can be disabled here.
-## A JSONP request is always served as guest, whatever session cookie or credentials it
-## carries, so it returns only what a guest may read. When off, ?callback= has no effect.
 # entrystore.jsonp=true
 
 ## SMTP settings, required for e.g. sign-up

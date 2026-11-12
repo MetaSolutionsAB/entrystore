@@ -20,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.entrystore.PrincipalManager;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.springboot.security.ESUserSessionDetails;
+import org.jetbrains.annotations.Nullable;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.stereotype.Service;
 
@@ -43,13 +44,17 @@ public class TokenService {
 	 * @return the user's password-login sessions keyed by handle; a session whose login has not completed yet is left
 	 * out
 	 */
-	public Map<String, SessionInfo> getTokens(String currentSessionId) {
+	public Map<String, SessionInfo> getTokens(@Nullable String currentSessionId) {
 		Map<String, SessionInfo> tokenInfo = new HashMap<>();
 		for (SessionInformation session : userSessions()) {
-			if (session.getPrincipal() instanceof ESUserSessionDetails esUser && esUser.getEsUser() != null
-					&& esUser.getSessionHandle() != null && esUser.getSessionInfo() != null) {
-				tokenInfo.put(esUser.getSessionHandle(),
-						esUser.getSessionInfo().withCurrent(session.getSessionId().equals(currentSessionId)));
+			if (session.getPrincipal() instanceof ESUserSessionDetails esUser && esUser.getEsUser() != null) {
+				String handle = esUser.getSessionHandle();
+				SessionInfo info = esUser.getSessionInfo();
+				if (handle != null && info != null) {
+					tokenInfo.put(handle, info.toBuilder()
+							.current(session.getSessionId().equals(currentSessionId))
+							.build());
+				}
 			}
 		}
 		return tokenInfo;

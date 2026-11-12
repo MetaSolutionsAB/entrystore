@@ -147,8 +147,7 @@ public class ResourceController {
 			@RequestParam(required = false) String textarea,
 			@RequestHeader(value = "Content-Type", required = false) String contentType,
 			@RequestHeader(value = HttpHeaders.CONTENT_DISPOSITION, required = false) String contentDisposition,
-			@Parameter(hidden = true) HttpServletRequest request,
-			HttpSession session
+			@Parameter(hidden = true) HttpServletRequest request
 	) {
 
 		String mediaType = normalizeMediaType(contentType);
@@ -160,11 +159,13 @@ public class ResourceController {
 		}
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		// Without creating one: a caller without a session must get neither a session nor an auth_token cookie
+		HttpSession session = request.getSession(false);
 		CompletionState result;
 		try {
 			// Not request.getInputStream() here: Jetty answers Expect: 100-continue as soon as it is called.
 			result = resourceService.setEntryResource(entry, request::getInputStream, request.getContentLengthLong(),
-					mediaType, mimeType, filename, session.getId());
+					mediaType, mimeType, filename, session != null ? session.getId() : null);
 		} catch (EntityTooLargeException e) {
 			HttpUtil.discardRejectedBody(request);
 			throw e;
