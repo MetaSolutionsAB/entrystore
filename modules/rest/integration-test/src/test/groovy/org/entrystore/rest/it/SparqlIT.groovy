@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.it
 
+import groovy.json.JsonOutput
 import org.awaitility.core.ConditionEvaluationLogger
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
@@ -26,6 +27,7 @@ import java.util.concurrent.TimeUnit
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNSUPPORTED_TYPE
 import static org.awaitility.Awaitility.await
@@ -41,6 +43,8 @@ class SparqlIT extends BaseSpec {
 	private static final String PRIVATE_TITLE = 'sparql-it-private-marker'
 	private static final String CTX2_PUBLIC_TITLE = 'sparql-it-ctx2-public-marker'
 
+	private static String publicEntryId
+
 	def setupSpec() {
 		getOrCreateContext([contextId: CONTEXT_ID])
 		getOrCreateContext([contextId: CONTEXT_ID_2])
@@ -52,7 +56,7 @@ class SparqlIT extends BaseSpec {
 		// is queryable the private entry has been considered (and rejected) at least once,
 		// regardless of whether the three entries shipped in one or several batches.
 		createSegregationTestEntry(CONTEXT_ID, PRIVATE_TITLE, null)
-		createSegregationTestEntry(CONTEXT_ID, PUBLIC_TITLE, guestUri)
+		publicEntryId = createSegregationTestEntry(CONTEXT_ID, PUBLIC_TITLE, guestUri)
 		createSegregationTestEntry(CONTEXT_ID_2, CTX2_PUBLIC_TITLE, guestUri)
 
 		// Wait until the public entries become queryable. PublicRepository.EntrySubmitter is signalled
@@ -67,7 +71,7 @@ class SparqlIT extends BaseSpec {
 			.until { sparqlContainsTitle(PUBLIC_TITLE) && sparqlContainsTitle(CTX2_PUBLIC_TITLE) }
 	}
 
-	private static void createSegregationTestEntry(String contextId, String title, String guestUriOrNull) {
+	private static String createSegregationTestEntry(String contextId, String title, String guestUriOrNull) {
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def newMetadataIri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/_newId'
 
@@ -77,7 +81,7 @@ class SparqlIT extends BaseSpec {
 			// Grant guest ReadMetadata so the entry is indexed with public:true in Solr
 			body.info = [(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUriOrNull]]]]
 		}
-		createEntry(contextId, params, body)
+		return createEntry(contextId, params, body)
 	}
 
 	private static boolean sparqlContainsTitle(String title) {
@@ -561,6 +565,161 @@ class SparqlIT extends BaseSpec {
 		// the same batch.
 		sparqlContainsTitle(PUBLIC_TITLE)
 		!sparqlContainsTitle(PRIVATE_TITLE)
+	}
+
+	def "GET /sparql returns a public statement once, not once per graph that stores it"() {
+		given:
+		def query = 'SELECT ?s WHERE { ?s <' + NameSpaceConst.DC_TERM_TITLE + '> "' + PUBLIC_TITLE + '" }'
+		def queryParams = [query: query, format: 'application/sparql-results+json']
+
+		when:
+		def conn = EntryStoreClient.getRequest('/sparql' + convertMapToQueryParams(queryParams), '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		(JSON_PARSER.parseText(conn.inputStream.text)['results']['bindings'] as List).size() == 1
+	}
+
+	def "GET /sparql returns each solution of a three-pattern join once"() {
+		given:
+		// Each pattern matches the entry's single title; without the rewrite each matched once per graph copy.
+		def title = '<' + NameSpaceConst.DC_TERM_TITLE + '>'
+		def query = 'SELECT ?s ?t WHERE { ?s ' + title + ' "' + PUBLIC_TITLE + '" . ?s ' + title + ' ?t . ?s ' +
+			title + ' ?t2 }'
+		def queryParams = [query: query, format: 'application/sparql-results+json']
+
+		when:
+		def conn = EntryStoreClient.getRequest('/sparql' + convertMapToQueryParams(queryParams), '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def bindings = JSON_PARSER.parseText(conn.inputStream.text)['results']['bindings'] as List
+		bindings.size() == 1
+		bindings[0]['t']['value'] == PUBLIC_TITLE
+	}
+
+	def "GET /sparql binds GRAPH ?g only to context graphs by default"() {
+		given:
+		def query = 'SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s <' + NameSpaceConst.DC_TERM_TITLE + '> "' +
+			PUBLIC_TITLE + '" } }'
+		def queryParams = [query: query, format: 'application/sparql-results+json']
+
+		when:
+		def conn = EntryStoreClient.getRequest('/sparql' + convertMapToQueryParams(queryParams), '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def bindings = JSON_PARSER.parseText(conn.inputStream.text)['results']['bindings'] as List
+		bindings.collect { it['g']['value'] } == [EntryStoreClient.baseUrl + '/' + CONTEXT_ID]
+	}
+
+	def "GET /sparql matches nothing in an entry's metadata graph by default"() {
+		given:
+		def metadataGraph = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/metadata/' + publicEntryId
+		def query = 'SELECT ?s ?p ?o WHERE { GRAPH <' + metadataGraph + '> { ?s ?p ?o } }'
+		def queryParams = [query: query, format: 'application/sparql-results+json']
+
+		when:
+		def conn = EntryStoreClient.getRequest('/sparql' + convertMapToQueryParams(queryParams), '')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		(JSON_PARSER.parseText(conn.inputStream.text)['results']['bindings'] as List).isEmpty()
+	}
+
+	def "GET /sparql keeps a statement after one of two entries of the context stating it is deleted"() {
+		given:
+		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
+		def sharedTitle = 'sparql-it-shared-statement'
+		def first = createEntryStatingSharedTitle('sparql-it-shared-first', sharedTitle, guestUri)
+		createEntryStatingSharedTitle('sparql-it-shared-second', sharedTitle, guestUri)
+		await().atMost(5, TimeUnit.SECONDS).pollInterval(200, TimeUnit.MILLISECONDS).until {
+			sparqlContainsTitle('sparql-it-shared-first') && sparqlContainsTitle('sparql-it-shared-second')
+		}
+
+		when:
+		def deleted = EntryStoreClient.deleteRequest('/' + CONTEXT_ID + '/entry/' + first)
+
+		then:
+		deleted.getResponseCode() == HTTP_NO_CONTENT
+		// The other statements of the deleted entry are gone once the removal reached the public repository.
+		await().atMost(5, TimeUnit.SECONDS).pollInterval(200, TimeUnit.MILLISECONDS).until {
+			!sparqlContainsTitle('sparql-it-shared-first')
+		}
+		sparqlContainsTitle(sharedTitle)
+	}
+
+	def "GET /sparql finds a public graph entry's resource statement in its context graph, not in its resource graph"() {
+		given:
+		def resourceTitle = 'sparql-it-graph-resource'
+		def entryId = createPublicGraphEntry(resourceTitle)
+		def resourceGraph = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/resource/' + entryId
+
+		when:
+		await().atMost(5, TimeUnit.SECONDS).pollInterval(200, TimeUnit.MILLISECONDS).until {
+			sparqlContainsTitle(resourceTitle)
+		}
+
+		then:
+		sparqlBindings('SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s <' + NameSpaceConst.DC_TERM_TITLE + '> "' +
+			resourceTitle + '" } }').collect { it['g']['value'] } == [EntryStoreClient.baseUrl + '/' + CONTEXT_ID]
+		sparqlBindings('SELECT ?s ?p ?o WHERE { GRAPH <' + resourceGraph + '> { ?s ?p ?o } }').isEmpty()
+	}
+
+	def "GET /sparql finds the statements of a public graph entry's replaced resource instead of the old ones"() {
+		given:
+		def entryId = createPublicGraphEntry('sparql-it-graph-before')
+		await().atMost(5, TimeUnit.SECONDS).pollInterval(200, TimeUnit.MILLISECONDS).until {
+			sparqlContainsTitle('sparql-it-graph-before')
+		}
+
+		when:
+		def put = EntryStoreClient.putRequest('/' + CONTEXT_ID + '/resource/' + entryId,
+			JsonOutput.toJson(graphResource('sparql-it-graph-after')), 'admin', 'application/rdf+json')
+
+		then:
+		put.getResponseCode() < 300
+		await().atMost(5, TimeUnit.SECONDS).pollInterval(200, TimeUnit.MILLISECONDS).until {
+			sparqlContainsTitle('sparql-it-graph-after')
+		}
+		!sparqlContainsTitle('sparql-it-graph-before')
+	}
+
+	/** A graph entry whose metadata and resource the guest can read, with {@code resourceTitle} in its resource. */
+	private static String createPublicGraphEntry(String resourceTitle) {
+		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/resource/_newId'
+		def newMetadataIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/metadata/_newId'
+		def body = createTitleMetadataBody(newResourceIri, resourceTitle + '-metadata')
+		body.resource = graphResource(resourceTitle)
+		body.info = [
+			(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]],
+			(newResourceIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]
+		]
+		return createEntry(CONTEXT_ID, [graphtype: 'graph'], body)
+	}
+
+	private static Map graphResource(String title) {
+		return ['https://example.org/sparql-it-graph-subject':
+			[(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: title]]]]
+	}
+
+	private static List sparqlBindings(String query) {
+		def conn = EntryStoreClient.getRequest(
+			'/sparql' + convertMapToQueryParams([query: query, format: 'application/sparql-results+json']), '')
+		assert conn.getResponseCode() == HTTP_OK
+		return JSON_PARSER.parseText(conn.inputStream.text)['results']['bindings'] as List
+	}
+
+	/** Its own title about its resource, and the shared title about a subject that both entries describe. */
+	private static String createEntryStatingSharedTitle(String ownTitle, String sharedTitle, String guestUri) {
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/resource/_newId'
+		def newMetadataIri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/metadata/_newId'
+		def body = createTitleMetadataBody(newResourceIri, ownTitle)
+		body.metadata['https://example.org/sparql-it-shared-subject'] =
+			[(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: sharedTitle]]]
+		body.info = [(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]]
+		return createEntry(CONTEXT_ID, [entrytype: 'link', resource: 'https://example.org/' + ownTitle], body)
 	}
 
 	@Unroll

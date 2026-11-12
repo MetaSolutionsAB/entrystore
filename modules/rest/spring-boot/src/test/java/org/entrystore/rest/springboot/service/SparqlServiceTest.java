@@ -56,12 +56,24 @@ import org.springframework.http.HttpStatus;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -83,9 +95,15 @@ class SparqlServiceTest {
 	private static final String SELECT_ALL = "SELECT * WHERE { ?s ?p ?o } LIMIT 1";
 	private static final String CONTEXT_ID = "ctx-1";
 	private static final String CONTEXT_URI = "http://example.org/ctx-1";
+	/** The graph of context 1 under the mocked repository URL, which /sparql reads as default graph. */
+	private static final String CONTEXT_GRAPH = "http://example.org/store/1";
 
 	private static final int MAX_EXECUTION_TIME = 10;
 	private static final long MAX_RESPONSE_BYTES = 64L * 1024L * 1024L;
+	private static final int MAX_CONCURRENT_QUERIES = 4;
+	private static final int MAX_WAIT_TIME = 1;
+	private static final Duration REJECT_QUICKLY = Duration.ofMillis(50);
+	private static final Duration WAIT_LONG = Duration.ofSeconds(10);
 	private static final String GENERIC_INTERNAL_ERROR = "Public SPARQL endpoint encountered an internal error";
 
 	@Mock
@@ -125,7 +143,8 @@ class SparqlServiceTest {
 				.thenReturn(java.net.URI.create("http://example.org/store/").toURL());
 		lenient().when(reservedNames.isReservedName(anyString())).thenReturn(false);
 
-		service = new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES);
+		service = new SparqlService(repositoryManager, contextService, reservedNames,
+				MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES, false, MAX_WAIT_TIME);
 	}
 
 	@AfterEach
@@ -265,7 +284,8 @@ class SparqlServiceTest {
 	@Test
 	void runQuery_appliesConfiguredMaxExecutionTimeAndDisablesInferred() {
 		int customExecutionTime = 42;
-		SparqlService customService = new SparqlService(repositoryManager, contextService, reservedNames, customExecutionTime, MAX_RESPONSE_BYTES);
+		SparqlService customService = new SparqlService(repositoryManager, contextService, reservedNames,
+				customExecutionTime, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES, false, MAX_WAIT_TIME);
 
 		RepositoryConnection mockConn = mock(RepositoryConnection.class);
 		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
@@ -327,13 +347,15 @@ class SparqlServiceTest {
 
 	@Test
 	void runQuery_resultExceedsMaxResponseBytes_throws413() {
-		SparqlService tinyCapService = new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME, 8L);
+		SparqlService tinyCapService = new SparqlService(repositoryManager, contextService, reservedNames,
+				MAX_EXECUTION_TIME, 8L, MAX_CONCURRENT_QUERIES, false, MAX_WAIT_TIME);
 
 		try (RepositoryConnection rc = backingRepository.getConnection()) {
 			ValueFactory vf = rc.getValueFactory();
 			rc.add(vf.createIRI("http://example.org/s"),
 					vf.createIRI("http://example.org/p"),
-					vf.createIRI("http://example.org/o"));
+					vf.createIRI("http://example.org/o"),
+					vf.createIRI(CONTEXT_GRAPH));
 		}
 
 		CustomResponseException ex = assertThrows(CustomResponseException.class,
@@ -409,25 +431,29 @@ class SparqlServiceTest {
 	@Test
 	void constructor_zeroExecutionTime_throws() {
 		assertThrows(IllegalStateException.class,
-				() -> new SparqlService(repositoryManager, contextService, reservedNames, 0, MAX_RESPONSE_BYTES));
+				() -> new SparqlService(repositoryManager, contextService, reservedNames,
+						0, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES, false, MAX_WAIT_TIME));
 	}
 
 	@Test
 	void constructor_negativeExecutionTime_throws() {
 		assertThrows(IllegalStateException.class,
-				() -> new SparqlService(repositoryManager, contextService, reservedNames, -1, MAX_RESPONSE_BYTES));
+				() -> new SparqlService(repositoryManager, contextService, reservedNames,
+						-1, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES, false, MAX_WAIT_TIME));
 	}
 
 	@Test
 	void constructor_zeroResponseBytes_throws() {
 		assertThrows(IllegalStateException.class,
-				() -> new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME, 0L));
+				() -> new SparqlService(repositoryManager, contextService, reservedNames,
+						MAX_EXECUTION_TIME, 0L, MAX_CONCURRENT_QUERIES, false, MAX_WAIT_TIME));
 	}
 
 	@Test
 	void constructor_negativeResponseBytes_throws() {
 		assertThrows(IllegalStateException.class,
-				() -> new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME, -1L));
+				() -> new SparqlService(repositoryManager, contextService, reservedNames,
+						MAX_EXECUTION_TIME, -1L, MAX_CONCURRENT_QUERIES, false, MAX_WAIT_TIME));
 	}
 
 	@Test
@@ -542,5 +568,243 @@ class SparqlServiceTest {
 				"Default-graph slot must carry the context URI");
 		assertEquals(java.util.Set.of(expected), dataset.getNamedGraphs(),
 				"Named-graph set must carry the context URI");
+	}
+
+	@Test
+	void constructor_zeroConcurrentQueries_throws() {
+		assertThrows(IllegalStateException.class,
+				() -> new SparqlService(repositoryManager, contextService, reservedNames,
+						MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, 0, false, MAX_WAIT_TIME));
+	}
+
+	@Test
+	void constructor_negativeConcurrentQueries_throws() {
+		assertThrows(IllegalStateException.class,
+				() -> new SparqlService(repositoryManager, contextService, reservedNames,
+						MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, -1, false, MAX_WAIT_TIME));
+	}
+
+	@Test
+	void constructor_negativeWaitTime_throws() {
+		assertThrows(IllegalStateException.class,
+				() -> new SparqlService(repositoryManager, contextService, reservedNames,
+						MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, MAX_CONCURRENT_QUERIES, false, -1));
+	}
+
+	@Test
+	void runQuery_noWaitTimeAndTheOnlySlotBusy_rejectsWith503() throws Exception {
+		addFixtureTriple();
+		SparqlService noWait = new SparqlService(repositoryManager, contextService, reservedNames,
+				MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES, 1, false, 0);
+
+		holdThePermitAndAssertRejection(noWait);
+	}
+
+	@Test
+	void runQuery_allPermitsHeldByStreamingQueries_rejectsWith503AndRetryAfter() throws Exception {
+		SparqlService limited = serviceWithConcurrencyLimit(2, REJECT_QUICKLY);
+		BlockingOutputStream blocked = new BlockingOutputStream(2);
+
+		try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+			try {
+				executor.submit(() -> selectAll(limited, blocked));
+				executor.submit(() -> selectAll(limited, blocked));
+				blocked.awaitWriters();
+
+				CustomResponseException ex = assertThrows(CustomResponseException.class,
+						() -> selectAll(limited, new ByteArrayOutputStream()));
+
+				assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getStatus());
+				assertEquals("5", ex.getHeaders().getFirst("Retry-After"));
+				assertEquals("Too many concurrent SPARQL queries; retry later", ex.getMessage());
+			} finally {
+				blocked.release();
+			}
+		}
+	}
+
+	@Test
+	void runQuery_permitFreedWhileWaiting_runsTheWaitingQuery() throws Exception {
+		SparqlService limited = serviceWithConcurrencyLimit(1, WAIT_LONG);
+		BlockingOutputStream holder = new BlockingOutputStream(1);
+		ByteArrayOutputStream waiterOut = new ByteArrayOutputStream();
+		AtomicReference<Throwable> waiterFailure = new AtomicReference<>();
+
+		try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+			Future<?> held;
+			Thread waiter;
+			try {
+				held = executor.submit(() -> selectAll(limited, holder));
+				holder.awaitWriters();
+				waiter = startWaiter(() -> selectAll(limited, waiterOut), waiterFailure);
+				awaitBlockedOnPermit(waiter);
+			} finally {
+				holder.release();
+			}
+			held.get(10, TimeUnit.SECONDS);
+			waiter.join(10_000);
+		}
+
+		assertNull(waiterFailure.get(), "The waiting query should run once the permit is free");
+		assertFixtureRow(waiterOut);
+	}
+
+	@Test
+	void runQuery_failedAndRejectedQueries_releaseTheirPermitExactlyOnce() throws Exception {
+		SparqlService limited = serviceWithConcurrencyLimit(1, REJECT_QUICKLY);
+		assertThrows(BadRequestException.class, () -> limited.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON,
+				"not sparql {{{", null, new ByteArrayOutputStream()));
+		holdThePermitAndAssertRejection(limited);
+
+		// One permit too many (released by the rejection) would let this query run beside the held one.
+		holdThePermitAndAssertRejection(limited);
+
+		// A permit lost by the failed or rejected query would make this one wait and be rejected.
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		selectAll(limited, out);
+		assertFixtureRow(out);
+	}
+
+	@Test
+	void runQuery_interruptedWhileWaitingForPermit_rejectsWith503AndKeepsInterruptFlag() throws Exception {
+		SparqlService limited = serviceWithConcurrencyLimit(1, WAIT_LONG);
+		BlockingOutputStream holder = new BlockingOutputStream(1);
+		AtomicReference<Throwable> waiterFailure = new AtomicReference<>();
+		AtomicBoolean interruptKept = new AtomicBoolean();
+
+		try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+			Future<?> held;
+			try {
+				held = executor.submit(() -> selectAll(limited, holder));
+				holder.awaitWriters();
+				Thread waiter = startWaiter(() -> {
+					try {
+						selectAll(limited, new ByteArrayOutputStream());
+					} finally {
+						interruptKept.set(Thread.currentThread().isInterrupted());
+					}
+				}, waiterFailure);
+				awaitBlockedOnPermit(waiter);
+				waiter.interrupt();
+				waiter.join(10_000);
+			} finally {
+				holder.release();
+			}
+			held.get(10, TimeUnit.SECONDS);
+		}
+
+		CustomResponseException ex = assertInstanceOf(CustomResponseException.class, waiterFailure.get());
+		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getStatus());
+		assertTrue(interruptKept.get(), "The interrupt must be preserved for the caller");
+		// A permit lost by the interrupted waiter would make this query wait 10 s and be rejected.
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		selectAll(limited, out);
+		assertFixtureRow(out);
+	}
+
+	private static void addFixtureTriple() {
+		try (RepositoryConnection rc = backingRepository.getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			rc.add(vf.createIRI("http://example.org/s"), vf.createIRI("http://example.org/p"), vf.createLiteral("o"),
+					vf.createIRI(CONTEXT_GRAPH));
+		}
+	}
+
+	private static void assertFixtureRow(ByteArrayOutputStream out) {
+		var bindings = new JsonMapper().readTree(out.toByteArray()).path("results").path("bindings");
+		assertEquals(1, bindings.size(), "Expected the fixture triple once, got: " + bindings);
+		assertEquals("http://example.org/s", bindings.get(0).path("s").path("value").asString());
+	}
+
+	private static void selectAll(SparqlService service, OutputStream out) {
+		service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, out);
+	}
+
+	private static Thread startWaiter(Runnable query, AtomicReference<Throwable> failure) {
+		return Thread.ofPlatform().start(() -> {
+			try {
+				query.run();
+			} catch (Throwable t) {
+				failure.set(t);
+			}
+		});
+	}
+
+	/** Before its permit, runQuery only blocks in the timed semaphore wait. */
+	private static void awaitBlockedOnPermit(Thread waiter) throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (waiter.getState() != Thread.State.TIMED_WAITING) {
+			assertTrue(System.nanoTime() < deadline, "The query never waited for a permit");
+			Thread.sleep(1);
+		}
+	}
+
+	private static void holdThePermitAndAssertRejection(SparqlService limited) throws Exception {
+		BlockingOutputStream holder = new BlockingOutputStream(1);
+		try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+			Future<?> held;
+			try {
+				held = executor.submit(() -> selectAll(limited, holder));
+				holder.awaitWriters();
+				CustomResponseException rejected = assertThrows(CustomResponseException.class,
+						() -> selectAll(limited, new ByteArrayOutputStream()));
+				assertEquals(HttpStatus.SERVICE_UNAVAILABLE, rejected.getStatus());
+			} finally {
+				holder.release();
+			}
+			held.get(10, TimeUnit.SECONDS);
+		}
+	}
+
+	private SparqlService serviceWithConcurrencyLimit(int maxConcurrentQueries, Duration permitWait) {
+		addFixtureTriple();
+		return new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME,
+				MAX_RESPONSE_BYTES, maxConcurrentQueries, false, permitWait);
+	}
+
+	/**
+	 * Holds every query that writes to it in its first write, which runs inside {@code evaluate}, until released.
+	 */
+	private static final class BlockingOutputStream extends OutputStream {
+
+		private final CountDownLatch writersExpected;
+		private final CountDownLatch released = new CountDownLatch(1);
+		private final Set<Thread> writers = ConcurrentHashMap.newKeySet();
+
+		BlockingOutputStream(int expectedWriters) {
+			this.writersExpected = new CountDownLatch(expectedWriters);
+		}
+
+		@Override
+		public void write(int b) throws IOException {
+			hold();
+		}
+
+		@Override
+		public void write(byte[] b, int off, int len) throws IOException {
+			hold();
+		}
+
+		private void hold() throws IOException {
+			if (writers.add(Thread.currentThread())) {
+				writersExpected.countDown();
+			}
+			try {
+				if (!released.await(30, TimeUnit.SECONDS)) {
+					throw new IOException("Test stream was never released");
+				}
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				throw new IOException(e);
+			}
+		}
+
+		void awaitWriters() throws InterruptedException {
+			assertTrue(writersExpected.await(10, TimeUnit.SECONDS), "Queries did not start writing in time");
+		}
+
+		void release() {
+			released.countDown();
+		}
 	}
 }

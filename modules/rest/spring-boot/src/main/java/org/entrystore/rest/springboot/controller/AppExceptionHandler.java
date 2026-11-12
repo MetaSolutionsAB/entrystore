@@ -306,7 +306,10 @@ public class AppExceptionHandler {
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();
-		return jsonResponse(responseBody);
+		return ResponseEntity.status(responseBody.status())
+				.headers(ex.getHeaders())
+				.contentType(MediaType.APPLICATION_JSON)
+				.body(responseBody);
 	}
 
 	/**

@@ -28,6 +28,7 @@ import org.eclipse.rdf4j.query.TupleQueryResultHandlerException;
 import org.eclipse.rdf4j.query.algebra.TupleExpr;
 import org.eclipse.rdf4j.query.algebra.helpers.AbstractQueryModelVisitor;
 import org.eclipse.rdf4j.query.impl.SimpleDataset;
+import org.eclipse.rdf4j.query.parser.ParsedTupleQuery;
 import org.eclipse.rdf4j.query.resultio.binary.BinaryQueryResultWriter;
 import org.eclipse.rdf4j.query.resultio.sparqljson.SPARQLResultsJSONWriter;
 import org.eclipse.rdf4j.query.resultio.sparqlxml.SPARQLResultsXMLWriter;
@@ -44,18 +45,24 @@ import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.util.SparqlResultFormat;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -68,18 +75,53 @@ public class SparqlService {
 	// preserved in the cause chain for server-side debugging.
 	private static final String INTERNAL_ERROR_MESSAGE = "Public SPARQL endpoint encountered an internal error";
 
+	private static final String RETRY_AFTER_SECONDS = "5";
+
 	private final RepositoryManagerImpl repositoryManager;
 	private final ContextService contextService;
 	private final ReservedNamesService reservedNames;
 	private final int maxExecutionTime;
 	private final long maxResponseBytes;
+	private final Semaphore queryPermits;
+	private final Duration permitWait;
+	private final boolean exposeEntryGraphs;
+	private final RejectedQueryWarning rejectedQueryWarning;
 
+	@Autowired
 	public SparqlService(
 			RepositoryManagerImpl repositoryManager,
 			ContextService contextService,
 			ReservedNamesService reservedNames,
 			@Value("${entrystore.repository.public.sparql.max-execution-time:10}") int maxExecutionTime,
-			@Value("${entrystore.repository.public.sparql.max-response-bytes:67108864}") long maxResponseBytes) {
+			@Value("${entrystore.repository.public.sparql.max-response-bytes:67108864}") long maxResponseBytes,
+			@Value("${entrystore.repository.public.sparql.max-concurrent-queries:4}") int maxConcurrentQueries,
+			@Value("${entrystore.repository.public.sparql.expose-entry-graphs:false}") boolean exposeEntryGraphs,
+			@Value("${entrystore.repository.public.sparql.max-wait-time:1}") int maxWaitTime) {
+		this(repositoryManager, contextService, reservedNames, maxExecutionTime, maxResponseBytes, maxConcurrentQueries,
+				exposeEntryGraphs, permitWait(maxWaitTime));
+	}
+
+	private static Duration permitWait(int maxWaitTime) {
+		if (maxWaitTime < 0) {
+			throw new IllegalStateException(
+					"entrystore.repository.public.sparql.max-wait-time must be >= 0, was " + maxWaitTime);
+		}
+		return Duration.ofSeconds(maxWaitTime);
+	}
+
+	/**
+	 * {@code permitWait} is how long a query waits for a running one to end before it is answered 503. Each waiting
+	 * request holds a thread of the async executor, so it should stay well below the async request timeout.
+	 */
+	SparqlService(
+			RepositoryManagerImpl repositoryManager,
+			ContextService contextService,
+			ReservedNamesService reservedNames,
+			int maxExecutionTime,
+			long maxResponseBytes,
+			int maxConcurrentQueries,
+			boolean exposeEntryGraphs,
+			Duration permitWait) {
 		// Reject misconfigured limits at construction so the app fails to start rather than silently
 		// disabling timeouts/caps on this anonymous endpoint (RDF4J treats setMaxExecutionTime(0) as unlimited).
 		if (maxExecutionTime <= 0) {
@@ -90,13 +132,24 @@ public class SparqlService {
 			throw new IllegalStateException(
 					"entrystore.repository.public.sparql.max-response-bytes must be > 0, was " + maxResponseBytes);
 		}
+		if (maxConcurrentQueries <= 0) {
+			throw new IllegalStateException(
+					"entrystore.repository.public.sparql.max-concurrent-queries must be > 0, was "
+							+ maxConcurrentQueries);
+		}
 		this.repositoryManager = repositoryManager;
 		this.contextService = contextService;
 		this.reservedNames = reservedNames;
 		this.maxExecutionTime = maxExecutionTime;
 		this.maxResponseBytes = maxResponseBytes;
-		log.debug("Public SPARQL max execution time: {} seconds; max response bytes: {}",
-				maxExecutionTime, maxResponseBytes);
+		this.queryPermits = new Semaphore(maxConcurrentQueries, true);
+		this.permitWait = permitWait;
+		this.exposeEntryGraphs = exposeEntryGraphs;
+		this.rejectedQueryWarning = new RejectedQueryWarning(Clock.systemUTC(), log::warn, maxConcurrentQueries,
+				permitWait);
+		log.debug("Public SPARQL max execution time: {} seconds; max response bytes: {}; max concurrent queries: {}; "
+				+ "max wait time: {} ms; entry graphs exposed: {}", maxExecutionTime, maxResponseBytes,
+				maxConcurrentQueries, permitWait.toMillis(), exposeEntryGraphs);
 	}
 
 	/**
@@ -125,7 +178,10 @@ public class SparqlService {
 	 * @param contextId   when non-null, both the default graph and the named-graph set are replaced with the
 	 *                    context's resource URI (or a synthesised URI for missing/reserved contexts), so the
 	 *                    dataset is exactly that one graph in both positions; when null the query runs against
-	 *                    the full public repository
+	 *                    the public repository as if it held only the context graphs; with
+	 *                    {@code expose-entry-graphs} the query also sees the entry graphs, and only its triple patterns
+	 *                    outside GRAPH, unless it declares FROM or FROM NAMED, read the context graphs only (see
+	 *                    {@link ContextGraphRewriter})
 	 * @param out         the stream that the serialised tuple result is written to; the caller owns its
 	 *                    lifecycle (the wrapping {@code SizeLimitedOutputStream} does not close it)
 	 * @throws NotImplementedException     when the public repository is disabled
@@ -137,15 +193,48 @@ public class SparqlService {
 	 * @throws BadRequestException         {@code "Malformed SPARQL query"} on parse failure;
 	 *                                      {@code "SPARQL SERVICE clauses are not permitted on the public endpoint"}
 	 *                                      when a federated SERVICE clause is present
-	 * @throws CustomResponseException     504 if the query times out; 413 if the result exceeds
-	 *                                      {@code maxResponseBytes}
+	 * @throws CustomResponseException     503 with Retry-After if {@code max-concurrent-queries} queries are
+	 *                                      already running and none ends within {@code max-wait-time}; 504 if the
+	 *                                      query times out; 413 if the result exceeds {@code maxResponseBytes}
 	 */
 	public void runQuery(SparqlResultFormat format, String queryString, String contextId, OutputStream out) {
 		PublicRepository publicRepository = repositoryManager.getPublicRepository();
 		if (publicRepository == null) {
 			throw new NotImplementedException("Public SPARQL endpoint is not enabled");
 		}
+		// Runs before the first byte is written, so a rejection is still a clean 503.
+		acquirePermit();
+		try {
+			evaluate(publicRepository, format, queryString, contextId, out);
+		} finally {
+			queryPermits.release();
+		}
+	}
 
+	/**
+	 * Bounds the heap that concurrent evaluations can take together: the per-query time and size caps do not
+	 * bound the memory of a query that materialises its solutions. The permit is held until the result is fully
+	 * written or the connection times out, so a query that outlives its HTTP request (async timeout) still counts,
+	 * and a client that stops reading keeps its slot until the container's idle timeout. The limit is shared by all
+	 * callers: a few long-running queries make the others wait or get 503 until they end or reach the execution
+	 * time limit; per-client limits belong in the reverse proxy.
+	 */
+	private void acquirePermit() {
+		boolean acquired;
+		try {
+			acquired = queryPermits.tryAcquire(permitWait.toNanos(), TimeUnit.NANOSECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			acquired = false;
+		}
+		if (!acquired) {
+			rejectedQueryWarning.record();
+			throw new QueryCapacityExceededException();
+		}
+	}
+
+	private void evaluate(PublicRepository publicRepository, SparqlResultFormat format, String queryString,
+			String contextId, OutputStream out) {
 		// Don't disclose context existence on the anonymous endpoint. Both missing and
 		// existing-but-private contexts must produce the same observable response (200 with
 		// empty bindings); returning 404 for missing contexts would let a client enumerate
@@ -156,7 +245,8 @@ public class SparqlService {
 
 		try (RepositoryConnection rc = acquireConnection(publicRepository)) {
 			TupleQuery query = rc.prepareTupleQuery(QueryLanguage.SPARQL, queryString);
-			rejectFederatedServices(extractTupleExpr(query));
+			ParsedTupleQuery parsedQuery = extractParsedQuery(query);
+			rejectFederatedServices(parsedQuery.getTupleExpr());
 			query.setMaxExecutionTime(maxExecutionTime);
 			query.setIncludeInferred(false);
 
@@ -167,6 +257,11 @@ public class SparqlService {
 				ds.addDefaultGraph(contextURI);
 				ds.addNamedGraph(contextURI);
 				query.setDataset(ds);
+			} else if (!exposeEntryGraphs) {
+				// Evaluation reads this algebra and dataset, so the restriction applies with the limits set above.
+				ContextGraphRewriter.hideEntryGraphs(parsedQuery, contextUriPrefix());
+			} else if (parsedQuery.getDataset() == null) {
+				ContextGraphRewriter.restrictDefaultGraph(parsedQuery.getTupleExpr(), contextUriPrefix());
 			}
 
 			TupleQueryResultHandler resultHandler = createWriter(format,
@@ -199,14 +294,14 @@ public class SparqlService {
 		}
 	}
 
-	private static TupleExpr extractTupleExpr(TupleQuery query) {
+	private static ParsedTupleQuery extractParsedQuery(TupleQuery query) {
 		// SailTupleQuery exposes the already-parsed algebra so the federated-service detector
 		// runs against exactly what the executor will run. A non-Sail backend (e.g. an HTTP-
 		// or SPARQL-endpoint repository) could produce a different algebra at prepare time,
 		// weakening the SERVICE-clause prohibition — fail closed so a future config change
 		// cannot silently undermine the SSRF defense.
 		if (query instanceof SailTupleQuery sailQuery) {
-			return sailQuery.getParsedQuery().getTupleExpr();
+			return sailQuery.getParsedQuery();
 		}
 		// Generic client message; log the actual class name so an operator can diagnose
 		// without source-diving.
@@ -233,11 +328,12 @@ public class SparqlService {
 		// Synthesise the URI a real context with this id would have ({baseUrl}/{contextId} per
 		// the project's URI conventions) so a missing or reserved context produces the same
 		// shape of named-graph filter as an existing one — just against a graph with no triples.
-		String base = repositoryManager.getRepositoryURL().toString();
-		if (!base.endsWith("/")) {
-			base += "/";
-		}
-		return base + contextId;
+		return contextUriPrefix() + contextId;
+	}
+
+	/** Core builds the URI of a context as this prefix followed by the context id, without adding a slash. */
+	private String contextUriPrefix() {
+		return repositoryManager.getRepositoryURL().toString();
 	}
 
 	private static void rejectFederatedServices(TupleExpr expr) {
@@ -310,6 +406,25 @@ public class SparqlService {
 		@Override
 		public void meet(org.eclipse.rdf4j.query.algebra.Service node) {
 			found = true;
+		}
+	}
+
+	/** Has no stack trace: it marks expected load, and AppExceptionHandler logs every one. */
+	private static final class QueryCapacityExceededException extends CustomResponseException {
+		QueryCapacityExceededException() {
+			super("Too many concurrent SPARQL queries; retry later", HttpStatus.SERVICE_UNAVAILABLE,
+					retryAfterHeaders());
+		}
+
+		private static HttpHeaders retryAfterHeaders() {
+			HttpHeaders headers = new HttpHeaders();
+			headers.set(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS);
+			return headers;
+		}
+
+		@Override
+		public synchronized Throwable fillInStackTrace() {
+			return this;
 		}
 	}
 
