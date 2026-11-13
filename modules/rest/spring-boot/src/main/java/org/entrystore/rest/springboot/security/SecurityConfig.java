@@ -369,13 +369,14 @@ public class SecurityConfig {
 					"SAML is enabled but SamlLoginFailureHandler bean is missing — check the " +
 							"entrystore.auth.saml.enabled binding."));
 
-			// Also processes SAML responses posted to the 5.x assertion consumer service (POST /auth/saml?idp=<id>).
+			// Also processes SAML responses posted to the 5.x assertion consumer service (POST /auth/saml[?idp=<id>]).
 			var acsMatcher = new SamlAcsRequestMatcher();
 			http.saml2Login(samlLogin -> samlLogin
 					.loginPage("/auth/saml")
 					.failureHandler(samlFailureHandler)
 					.authenticationRequestResolver(createCustomResolver())
-					.authenticationConverter(createAcsTokenConverter(acsMatcher))
+					.authenticationConverter(
+							new LegacyAcsTokenConverter(createAcsTokenConverter(acsMatcher), acsMatcher))
 					.successHandler(samlHandler)
 					// An anonymous class, not a lambda: the configurer applies a post-processor whose type
 					// argument it cannot resolve to every object it builds.
