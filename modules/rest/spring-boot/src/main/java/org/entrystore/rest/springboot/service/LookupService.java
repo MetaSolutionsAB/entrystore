@@ -31,6 +31,7 @@ import org.entrystore.SearchIndex;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.repository.util.URISplit;
 import org.entrystore.rest.springboot.model.api.LookupScope;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
@@ -40,6 +41,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.util.Optional;
 import java.util.Set;
 
 @Slf4j
@@ -50,6 +52,11 @@ public class LookupService {
 	private final RepositoryManagerImpl repositoryManager;
 	private final ContextService contextService;
 
+	/**
+	 * Answers with a public entry that holds the resource URI. If several do, the pick follows the rule of
+	 * {@link LookupEntrySelector}, applied in Solr: the Local entry that owns the URI, else the lowest entry URI.
+	 * Every candidate is public, so the rule's first step, entries the caller may read, holds for all of them.
+	 */
 	public Entry lookupGlobal(URI resourceURI) {
 		SearchIndex index = repositoryManager.getIndex();
 		if (index == null) {
@@ -60,8 +67,18 @@ public class LookupService {
 			throw new CustomResponseException("Lookup is not available: search index is not properly configured", HttpStatus.SERVICE_UNAVAILABLE);
 		}
 
-		String escapedURI = ClientUtils.escapeQueryChars(resourceURI.toString());
-		SolrQuery q = new SolrQuery("resource:" + escapedURI + " AND public:true");
+		String publicHolders = "resource:" + ClientUtils.escapeQueryChars(resourceURI.toString()) + " AND public:true";
+		SolrQuery lowestEntryURI = new SolrQuery(publicHolders).addSort("uri", SolrQuery.ORDER.asc);
+
+		return URISplit.entryURIOf(resourceURI, repositoryManager.getRepositoryURL())
+				.map(ownerEntryURI -> new SolrQuery(publicHolders + " AND entryType:" + EntryType.Local.name()
+						+ " AND uri:" + ClientUtils.escapeQueryChars(ownerEntryURI.toString())))
+				.flatMap(owner -> firstHit(solrIndex, owner, resourceURI))
+				.or(() -> firstHit(solrIndex, lowestEntryURI, resourceURI))
+				.orElseThrow(() -> notFound(resourceURI));
+	}
+
+	private Optional<Entry> firstHit(SolrSearchIndex solrIndex, SolrQuery q, URI resourceURI) {
 		q.setStart(0);
 		q.setRows(1);
 
@@ -85,7 +102,7 @@ public class LookupService {
 			throw new CustomResponseException("Search service encountered an error during lookup", HttpStatus.SERVICE_UNAVAILABLE);
 		}
 
-		return extractSingleEntry(qResult.getEntries(), resourceURI);
+		return qResult.getEntries().stream().findFirst();
 	}
 
 	/**
@@ -99,7 +116,7 @@ public class LookupService {
 	public Entry lookupInContext(String contextId, URI resourceURI) {
 		Context context = contextService.getContextOrThrow(contextId);
 		Set<Entry> entries = context.getByResourceURI(resourceURI);
-		Entry entry = extractSingleEntry(entries, resourceURI);
+		Entry entry = LookupEntrySelector.select(entries, resourceURI).orElseThrow(() -> notFound(resourceURI));
 		LookupEntrySelector.checkReadable(entry);
 		return entry;
 	}
@@ -133,9 +150,8 @@ public class LookupService {
 		return GraphUtil.serializeGraph(graph, mediaType);
 	}
 
-	private Entry extractSingleEntry(Set<Entry> entries, URI resourceURI) {
-		return LookupEntrySelector.select(entries, resourceURI)
-				.orElseThrow(() -> new EntityNotFoundException("No entry found for resource URI: " + resourceURI));
+	private static EntityNotFoundException notFound(URI resourceURI) {
+		return new EntityNotFoundException("No entry found for resource URI: " + resourceURI);
 	}
 
 	private void addMetadataGraph(Model target, Metadata metadata, String metadataKind, Entry entry) {

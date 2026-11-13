@@ -41,7 +41,9 @@ public class LookupController {
 
 	private final LookupService lookupService;
 
-	@Operation(summary = "Performs a global lookup by resource URI and returns metadata")
+	@Operation(summary = "Performs a global lookup by resource URI and returns metadata",
+			description = "Answers only with entries a guest may read. If several of them share the resource URI, one "
+					+ "is picked: the Local entry that owns the URI, then the lowest entry URI.")
 	@GetMapping(
 			path = "/lookup",
 			produces = {
