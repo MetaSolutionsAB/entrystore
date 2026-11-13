@@ -102,7 +102,16 @@ abstract class KeycloakBaseSpec extends BaseSpec {
 		def loginPageConn = EntryStoreClient.getRequest(samlRequestConn.getHeaderField('Location'), null, null,
 			[Cookie: cookieHeader])
 		assert loginPageConn.getResponseCode() == HTTP_OK
-		def loginConn = EntryStoreClient.postRequest(extractFormActionUrl(loginPageConn.inputStream.text),
+		return samlResponsePageAfterKeycloakLogin(loginPageConn.inputStream.text, cookieHeader, username, password)
+	}
+
+	/**
+	 * Submits the credentials to the given Keycloak login page, sending the cookies of its login session.
+	 * Returns the HTML of Keycloak's self-submitting SAMLResponse form.
+	 */
+	protected static String samlResponsePageAfterKeycloakLogin(String loginPageHtml, String cookieHeader,
+																String username, String password) {
+		def loginConn = EntryStoreClient.postRequest(extractFormActionUrl(loginPageHtml),
 			createFormBody([username: username, password: password]), null, 'application/x-www-form-urlencoded',
 			[Cookie: cookieHeader])
 		assert loginConn.getResponseCode() == HTTP_OK

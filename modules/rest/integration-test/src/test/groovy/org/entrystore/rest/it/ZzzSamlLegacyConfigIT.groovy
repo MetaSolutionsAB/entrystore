@@ -35,6 +35,8 @@ class ZzzSamlLegacyConfigIT extends KeycloakBaseSpec {
 	static def testUsername = 'testuserrr'
 	static def testUserPassword = 'passworded'
 	static def successLoginUrl = EntryStoreClient.origin + '/GREAT-SUCCESS/'
+	// Differs from the default success URL, so a step without RelayState tells success from failure by Location.
+	static def failureLoginUrl = EntryStoreClient.origin + '/signin'
 	static def legacyAcsUrl = EntryStoreClient.baseUrl + '/auth/saml'
 
 	@Shared
@@ -55,6 +57,7 @@ class ZzzSamlLegacyConfigIT extends KeycloakBaseSpec {
 			'--entrystore.auth.saml.idp.keycloak.metadata.url=' + getKeycloakSamlRealmUrl() + '/descriptor',
 			'--entrystore.auth.saml.idp.keycloak.redirect-method=post',
 			'--entrystore.auth.saml.assertion-consumer-service.url=' + legacyAcsUrl,
+			'--entrystore.auth.saml.redirect-failure.url=' + failureLoginUrl,
 			'--entrystore.csrf.enabled=true'
 		])
 	}
@@ -106,6 +109,42 @@ class ZzzSamlLegacyConfigIT extends KeycloakBaseSpec {
 		then: 'Service Provider should authenticate the user, redirecting to success URL'
 		spCallbackConn.getResponseCode() in [302, 303, 307]
 		spCallbackConn.getHeaderField('Location') == successLoginUrl
+		def spCookies = spCallbackConn.getHeaderFields()['Set-Cookie']
+		spCookies.any { it.contains('auth_token=') }
+
+		when: 'Query EntryStore using the new session cookie'
+		def currentlyLoggedInUserConn = EntryStoreClient.getRequest('/auth/user', null, null,
+			[Cookie: EntryStoreClient.toCookieHeader(spCookies)])
+
+		then: 'it names the SAML user'
+		currentlyLoggedInUserConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(currentlyLoggedInUserConn.inputStream.text)['user'] == testUsername
+	}
+
+	def '3. accept a SAMLResponse posted to the 5.x assertion consumer service URL without the idp parameter'() {
+		given: 'a SAMLResponse from an IdP-initiated login, posted to the configured ACS URL of the client'
+		// Like an IdP that ignores the AssertionConsumerServiceURL of the AuthnRequest.
+		def loginPageConn = EntryStoreClient.getRequest(getKeycloakSamlRealmUrl() + '/clients/entrystore-legacy',
+			null, null)
+		assert loginPageConn.getResponseCode() == HTTP_OK
+		def samlResponsePage = samlResponsePageAfterKeycloakLogin(loginPageConn.inputStream.text,
+			EntryStoreClient.toCookieHeader(loginPageConn.getHeaderFields()['Set-Cookie']),
+			testUsername, testUserPassword)
+		def samlResponse = hiddenInputValue(samlResponsePage, 'SAMLResponse')
+
+		expect: 'the response is addressed to the ACS URL without the idp parameter'
+		formActionUrl(samlResponsePage) == legacyAcsUrl
+		def responseXml = new String(Base64.decoder.decode(samlResponse), 'UTF-8')
+		responseXml.contains('Destination="' + legacyAcsUrl + '"')
+		responseXml.contains('Recipient="' + legacyAcsUrl + '"')
+
+		when: 'POST the SAMLResponse to the 5.x assertion consumer service URL without the idp parameter'
+		def spCallbackConn = EntryStoreClient.postRequest(legacyAcsUrl, createFormBody([SAMLResponse: samlResponse]),
+			null, 'application/x-www-form-urlencoded')
+
+		then: 'the user is authenticated and redirected to the default success URL, as there is no RelayState'
+		spCallbackConn.getResponseCode() in [302, 303, 307]
+		spCallbackConn.getHeaderField('Location') == EntryStoreClient.contextPath + '/auth/user'
 		def spCookies = spCallbackConn.getHeaderFields()['Set-Cookie']
 		spCookies.any { it.contains('auth_token=') }
 
