@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static org.awaitility.Awaitility.await
 
 class LookupIT extends BaseSpec {
@@ -209,6 +210,32 @@ class LookupIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		pickedTitle(conn) == 'Shared 1'
+	}
+
+	// --- Context-scoped lookup: the caller may read no entry with the resource URI ---
+
+	def "GET /{context-id}/lookup as guest should return 401 when no entry with the URI is readable"() {
+		given:
+		def queryParams = convertMapToQueryParams([uri: sharedResourceUrl])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/' + contextId + '/lookup' + queryParams, '', 'application/json')
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "GET /{context-id}/lookup as guest should return 401 for a scope that reads no metadata of the unreadable entry"() {
+		given:
+		def queryParams = convertMapToQueryParams([uri: sharedResourceUrl, scope: 'external'])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/' + contextId + '/lookup' + queryParams, '', 'application/json')
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		conn.getHeaderField('Last-Modified') == null
+		conn.getHeaderField('ETag') == null
 	}
 
 	// --- Context-scoped lookup: error cases ---

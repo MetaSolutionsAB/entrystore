@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.service;
 
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -42,6 +43,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Runs the selector against a real in-memory repository, so that ownership and access are the core's own. */
 class LookupEntrySelectorTest {
@@ -148,6 +150,39 @@ class LookupEntrySelectorTest {
 		Optional<Entry> picked = LookupEntrySelector.select(Set.of(reference), EXTERNAL);
 
 		assertThat(picked).contains(reference);
+	}
+
+	@Test
+	void readableReferenceWhoseReferencedEntryIsCorruptPassesTheCheckWithAnEmptyExternalGraph() {
+		Entry target = context.createResource("target", GraphType.None, null, null);
+		Entry reference = context.createReference("ref", EXTERNAL, target.getLocalMetadataURI(), null);
+		reference.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
+		corrupt(target);
+
+		boolean checked = asGuest(() -> LookupEntrySelector.checkReadable(reference));
+
+		assertThat(checked).isFalse();
+		assertThat(asGuest(() -> reference.getCachedExternalMetadata().getGraph())).isEmpty();
+	}
+
+	@Test
+	void unreadableReferenceWhoseReferencedEntryIsCorruptFailsTheCheck() {
+		Entry target = context.createResource("target", GraphType.None, null, null);
+		Entry reference = context.createReference("ref", EXTERNAL, target.getLocalMetadataURI(), null);
+		corrupt(target);
+
+		assertThatThrownBy(() -> asGuest(() -> LookupEntrySelector.checkReadable(reference)))
+				.isInstanceOf(AuthorizationException.class);
+	}
+
+	@Test
+	void referenceToAnEntryTheCallerMayNotReadFailsTheCheck() {
+		Entry target = context.createResource("target", GraphType.None, null, null);
+		Entry reference = context.createReference("ref", EXTERNAL, target.getLocalMetadataURI(), null);
+		reference.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
+
+		assertThatThrownBy(() -> asGuest(() -> LookupEntrySelector.checkReadable(reference)))
+				.isInstanceOf(AuthorizationException.class);
 	}
 
 	@Test

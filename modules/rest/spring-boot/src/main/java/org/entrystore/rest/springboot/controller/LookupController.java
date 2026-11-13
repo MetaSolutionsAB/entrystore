@@ -64,7 +64,8 @@ public class LookupController {
 
 	@Operation(summary = "Performs a context-scoped lookup by resource URI and returns metadata",
 			description = "If several entries of the context share the resource URI, one is picked: entries the "
-					+ "caller may read first, then the Local entry that owns the URI, then the lowest entry URI.")
+					+ "caller may read first, then the Local entry that owns the URI, then the lowest entry URI. "
+					+ "Answers 401 or 403 if the caller may not read the metadata of the picked entry.")
 	@GetMapping(
 			path = "/{context-id}/lookup",
 			produces = {

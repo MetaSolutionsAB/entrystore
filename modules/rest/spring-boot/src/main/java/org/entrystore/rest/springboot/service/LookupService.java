@@ -88,10 +88,19 @@ public class LookupService {
 		return extractSingleEntry(qResult.getEntries(), resourceURI);
 	}
 
+	/**
+	 * The access check is made here because {@link #getMetadataByScope} reads no metadata graph for some scopes,
+	 * e.g. {@code external} on a Link, and the response would still carry the entry's validators. A reference whose
+	 * referenced entry is corrupt is answered once the user may read the reference; its external graph is empty.
+	 *
+	 * @throws org.entrystore.AuthorizationException if the user may not read the metadata of the picked entry
+	 */
 	public Entry lookupInContext(String contextId, URI resourceURI) {
 		Context context = contextService.getContextOrThrow(contextId);
 		Set<Entry> entries = context.getByResourceURI(resourceURI);
-		return extractSingleEntry(entries, resourceURI);
+		Entry entry = extractSingleEntry(entries, resourceURI);
+		LookupEntrySelector.checkReadable(entry);
+		return entry;
 	}
 
 	public String getMetadataByScope(Entry entry, LookupScope scope, String mediaType) {

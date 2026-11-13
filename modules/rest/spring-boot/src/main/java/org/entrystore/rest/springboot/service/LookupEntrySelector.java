@@ -62,7 +62,7 @@ final class LookupEntrySelector {
 		URL repositoryURL = holders.iterator().next().getRepositoryManager().getRepositoryURL();
 		Optional<URI> ownerEntryURI = URISplit.entryURIOf(resourceURI, repositoryURL);
 
-		List<Entry> readable = holders.stream().filter(entry -> isReadable(entry, repositoryURL)).toList();
+		List<Entry> readable = holders.stream().filter(LookupEntrySelector::isReadable).toList();
 		Collection<Entry> candidates = readable.isEmpty() ? holders : readable;
 
 		Comparator<Entry> ownerFirst = Comparator.comparing(entry -> !isOwner(entry, ownerEntryURI));
@@ -70,11 +70,15 @@ final class LookupEntrySelector {
 	}
 
 	/**
-	 * Whether the current user may read all metadata of {@code entry}. The check loads the entry a reference takes
-	 * its metadata from; if that entry is corrupt, the reference is not readable, so that it does not fail the lookup
-	 * of the other holders. Any other failure is rethrown.
+	 * Checks that the current user may read all metadata of {@code entry}, as
+	 * {@link ContextManagerImpl#checkEntryMetadataReadable} does. That check loads the entry a reference takes its
+	 * metadata from; if that entry is corrupt, the check cannot be completed and the lookup must not fail on it.
+	 *
+	 * @return false if the referenced entry is corrupt; the user may then read the reference itself, which is checked
+	 * first, and its external metadata graph is empty
+	 * @throws AuthorizationException if the user lacks ReadMetadata on the entry or on the entry it references
 	 */
-	private static boolean isReadable(Entry entry, URL repositoryURL) {
+	static boolean checkReadable(Entry entry) {
 		URI referencedEntryURI = null;
 		try {
 			if ((entry.getEntryType() == EntryType.Reference || entry.getEntryType() == EntryType.LinkReference)
@@ -83,15 +87,23 @@ final class LookupEntrySelector {
 			}
 			ContextManagerImpl.checkEntryMetadataReadable(entry);
 			return true;
-		} catch (AuthorizationException e) {
-			return false;
 		} catch (RuntimeException e) {
+			URL repositoryURL = entry.getRepositoryManager().getRepositoryURL();
 			if (CorruptData.isCorruptDataOf(e, referencedEntryURI, repositoryURL)) {
-				log.warn("Ranking reference {} as not readable because its referenced entry {} is corrupt: {}",
-						entry.getEntryURI(), referencedEntryURI, CorruptData.describe(e));
+				log.warn("Cannot check access to entry {} that reference {} takes its metadata from, it is corrupt: {}",
+						referencedEntryURI, entry.getEntryURI(), CorruptData.describe(e));
 				return false;
 			}
 			throw e;
+		}
+	}
+
+	/** Whether the current user may read all metadata of {@code entry}; not if its referenced entry is corrupt. */
+	private static boolean isReadable(Entry entry) {
+		try {
+			return checkReadable(entry);
+		} catch (AuthorizationException e) {
+			return false;
 		}
 	}
 
