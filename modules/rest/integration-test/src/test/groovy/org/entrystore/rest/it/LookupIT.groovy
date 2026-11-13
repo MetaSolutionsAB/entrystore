@@ -31,18 +31,19 @@ class LookupIT extends BaseSpec {
 	def static contextId = '700'
 	def static resourceUrl = 'https://example.org/lookup-test-resource'
 	def static entryId
+	def static ownedResourceUrl = EntryStoreClient.baseUrl + '/' + contextId + '/resource/lookupZOwner'
+	def static sharedResourceUrl = 'https://example.org/lookup-shared'
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
 
-		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def newMetadataIri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/_newId'
 
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def body = createTitleMetadataBody(newResourceIri, 'Lookup Test Entry')
 		// Grant guest ReadMetadata so entry is indexed with public:true in Solr
-		body.info = [(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]]
+		body.info = guestReadAcl(newMetadataIri)
 		entryId = createEntry(contextId, params, body)
 		waitForSolrProcessing()
 		// Solr commits asynchronously (commitWithin=1000ms) — poll the *global* lookup until the entry
@@ -53,6 +54,34 @@ class LookupIT extends BaseSpec {
 			.pollInterval(100, TimeUnit.MILLISECONDS)
 			.atMost(10, TimeUnit.SECONDS)
 			.until { EntryStoreClient.getRequest(lookupPath, 'admin', 'application/json').getResponseCode() == HTTP_OK }
+
+		// A Local entry and a guest-readable Link that shares its resource URI; the Link has the lower entry URI
+		def ownerBody = createTitleMetadataBody(ownedResourceUrl, 'Owner')
+		getOrCreateEntry(contextId, [id: 'lookupZOwner'], ownerBody)
+		def linkBody = createTitleMetadataBody(ownedResourceUrl, 'Link')
+		linkBody.info = guestReadAcl(EntryStoreClient.baseUrl + '/' + contextId + '/metadata/lookupALink')
+		getOrCreateEntry(contextId, [id: 'lookupALink', entrytype: 'link', resource: ownedResourceUrl], linkBody)
+
+		// Four Links sharing an external URI, created highest id first so that creation order is not the pick
+		(4..1).each { n ->
+			getOrCreateEntry(contextId, [id: 'lookupShared' + n, entrytype: 'link', resource: sharedResourceUrl],
+				createTitleMetadataBody(sharedResourceUrl, 'Shared ' + n))
+		}
+	}
+
+	/** The entry info that grants guest ReadMetadata, which also makes the entry public in Solr. */
+	private static Map guestReadAcl(String metadataUri) {
+		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
+		return [(metadataUri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]]
+	}
+
+	/** The single dcterms:title in a lookup response, which tells which entry the lookup picked. */
+	private static String pickedTitle(HttpURLConnection conn) {
+		def responseJson = JSON_PARSER.parseText(conn.inputStream.text) as Map
+		assert responseJson.keySet().size() == 1
+		def titles = responseJson.values()[0][NameSpaceConst.DC_TERM_TITLE]
+		assert titles.size() == 1
+		return titles[0]['value']
 	}
 
 	// --- Context-scoped lookup: happy path ---
@@ -144,6 +173,44 @@ class LookupIT extends BaseSpec {
 		(responseJson as Map).keySet().size() == 0
 	}
 
+	// --- Context-scoped lookup: several entries share the resource URI ---
+
+	def "GET /{context-id}/lookup should return the Local entry that owns the URI rather than a Link to it"() {
+		given:
+		def queryParams = convertMapToQueryParams([uri: ownedResourceUrl])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/' + contextId + '/lookup' + queryParams, 'admin', 'application/json')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		pickedTitle(conn) == 'Owner'
+	}
+
+	def "GET /{context-id}/lookup should return the entry the caller may read rather than an unreadable owner"() {
+		given:
+		def queryParams = convertMapToQueryParams([uri: ownedResourceUrl])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/' + contextId + '/lookup' + queryParams, '', 'application/json')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		pickedTitle(conn) == 'Link'
+	}
+
+	def "GET /{context-id}/lookup should return the Link with the lowest entry URI among Links sharing an external URI"() {
+		given:
+		def queryParams = convertMapToQueryParams([uri: sharedResourceUrl])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/' + contextId + '/lookup' + queryParams, 'admin', 'application/json')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		pickedTitle(conn) == 'Shared 1'
+	}
+
 	// --- Context-scoped lookup: error cases ---
 
 	def "GET /{context-id}/lookup with non-existing URI should return 404"() {
@@ -199,13 +266,7 @@ class LookupIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(conn.inputStream.text)
-		(responseJson as Map).keySet().size() == 1
-		def resourceKey = (responseJson as Map).keySet()[0].toString()
-		responseJson[resourceKey][NameSpaceConst.DC_TERM_TITLE] != null
-		def dcTitles = responseJson[resourceKey][NameSpaceConst.DC_TERM_TITLE].collect()
-		dcTitles.size() == 1
-		dcTitles[0]['value'] == 'Lookup Test Entry'
+		pickedTitle(conn) == 'Lookup Test Entry'
 	}
 
 	def "GET /lookup as guest with valid public URI should return metadata"() {

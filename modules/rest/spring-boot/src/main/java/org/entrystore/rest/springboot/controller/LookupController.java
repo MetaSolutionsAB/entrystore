@@ -62,7 +62,9 @@ public class LookupController {
 		return buildResponse(entry, scope, mediaType);
 	}
 
-	@Operation(summary = "Performs a context-scoped lookup by resource URI and returns metadata")
+	@Operation(summary = "Performs a context-scoped lookup by resource URI and returns metadata",
+			description = "If several entries of the context share the resource URI, one is picked: entries the "
+					+ "caller may read first, then the Local entry that owns the URI, then the lowest entry URI.")
 	@GetMapping(
 			path = "/{context-id}/lookup",
 			produces = {

@@ -40,7 +40,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
-import java.util.Objects;
 import java.util.Set;
 
 @Slf4j
@@ -125,18 +124,8 @@ public class LookupService {
 	}
 
 	private Entry extractSingleEntry(Set<Entry> entries, URI resourceURI) {
-		if (entries == null || entries.isEmpty()) {
-			throw new EntityNotFoundException("No entry found for resource URI: " + resourceURI);
-		}
-		entries.removeIf(Objects::isNull);
-		if (entries.isEmpty()) {
-			log.warn("All entries resolved to null for resource URI: {}", resourceURI);
-			throw new EntityNotFoundException("No entry found for resource URI: " + resourceURI);
-		}
-		if (entries.size() > 1) {
-			log.warn("Multiple entries found for resource URI: {}", resourceURI);
-		}
-		return entries.iterator().next();
+		return LookupEntrySelector.select(entries, resourceURI)
+				.orElseThrow(() -> new EntityNotFoundException("No entry found for resource URI: " + resourceURI));
 	}
 
 	private void addMetadataGraph(Model target, Metadata metadata, String metadataKind, Entry entry) {
