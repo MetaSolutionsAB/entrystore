@@ -34,6 +34,8 @@ class LookupIT extends BaseSpec {
 	def static entryId
 	def static ownedResourceUrl = EntryStoreClient.baseUrl + '/' + contextId + '/resource/lookupZOwner'
 	def static sharedResourceUrl = 'https://example.org/lookup-shared'
+	def static publicOwnedResourceUrl = EntryStoreClient.baseUrl + '/' + contextId + '/resource/lookupZPublicOwner'
+	def static publicSharedResourceUrl = 'https://example.org/lookup-public-shared'
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
@@ -59,15 +61,36 @@ class LookupIT extends BaseSpec {
 		// A Local entry and a guest-readable Link that shares its resource URI; the Link has the lower entry URI
 		def ownerBody = createTitleMetadataBody(ownedResourceUrl, 'Owner')
 		getOrCreateEntry(contextId, [id: 'lookupZOwner'], ownerBody)
-		def linkBody = createTitleMetadataBody(ownedResourceUrl, 'Link')
-		linkBody.info = guestReadAcl(EntryStoreClient.baseUrl + '/' + contextId + '/metadata/lookupALink')
-		getOrCreateEntry(contextId, [id: 'lookupALink', entrytype: 'link', resource: ownedResourceUrl], linkBody)
+		createPublicEntry('lookupALink', [entrytype: 'link', resource: ownedResourceUrl], ownedResourceUrl, 'Link')
 
 		// Four Links sharing an external URI, created highest id first so that creation order is not the pick
 		(4..1).each { n ->
 			getOrCreateEntry(contextId, [id: 'lookupShared' + n, entrytype: 'link', resource: sharedResourceUrl],
 				createTitleMetadataBody(sharedResourceUrl, 'Shared ' + n))
 		}
+		awaitIndexed('uri:"' + entryUri('lookupZOwner') + '" AND public:false')
+
+		// The same two shapes with every entry guest-readable, as the global lookup answers only with public
+		// entries. Each is indexed before the next is created, the entry that must not be picked first.
+		createPublicEntry('lookupAPublicLink', [entrytype: 'link', resource: publicOwnedResourceUrl],
+			publicOwnedResourceUrl, 'Public Link')
+		createPublicEntry('lookupZPublicOwner', [:], publicOwnedResourceUrl, 'Public Owner')
+		(4..1).each { n ->
+			createPublicEntry('lookupPublicShared' + n, [entrytype: 'link', resource: publicSharedResourceUrl],
+				publicSharedResourceUrl, 'Public Shared ' + n)
+		}
+	}
+
+	private static String entryUri(String id) {
+		return EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + id
+	}
+
+	/** Creates a guest-readable entry and waits until Solr serves it as public. */
+	private void createPublicEntry(String id, Map params, String resourceUri, String title) {
+		def body = createTitleMetadataBody(resourceUri, title)
+		body.info = guestReadAcl(EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + id)
+		getOrCreateEntry(contextId, [id: id] + params, body)
+		awaitIndexed('uri:"' + entryUri(id) + '" AND public:true')
 	}
 
 	/** The entry info that grants guest ReadMetadata, which also makes the entry public in Solr. */
@@ -308,6 +331,44 @@ class LookupIT extends BaseSpec {
 		conn.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(conn.inputStream.text)
 		(responseJson as Map).keySet().size() == 1
+	}
+
+	// --- Global lookup: several entries share the resource URI ---
+
+	def "GET /lookup should return the public Local entry that owns the URI rather than a Link to it"() {
+		given:
+		def queryParams = convertMapToQueryParams([uri: publicOwnedResourceUrl])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/lookup' + queryParams, '', 'application/json')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		pickedTitle(conn) == 'Public Owner'
+	}
+
+	def "GET /lookup should return a public Link rather than the owner of the URI that is not public"() {
+		given:
+		def queryParams = convertMapToQueryParams([uri: ownedResourceUrl])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/lookup' + queryParams, 'admin', 'application/json')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		pickedTitle(conn) == 'Link'
+	}
+
+	def "GET /lookup should return the Link with the lowest entry URI among public Links sharing an external URI"() {
+		given:
+		def queryParams = convertMapToQueryParams([uri: publicSharedResourceUrl])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/lookup' + queryParams, '', 'application/json')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		pickedTitle(conn) == 'Public Shared 1'
 	}
 
 	// --- Global lookup: error cases ---

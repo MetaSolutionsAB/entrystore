@@ -45,6 +45,8 @@ import java.util.Optional;
  * <li>the Local entry that owns the URI, i.e. the entry of this repository the URI belongs to;</li>
  * <li>the lowest entry URI, compared as a string.</li>
  * </ol>
+ *
+ * <p>{@link LookupService#lookupGlobal} applies steps 2 and 3 as Solr queries; keep the two in step.
  */
 @Slf4j
 final class LookupEntrySelector {
