@@ -1046,9 +1046,17 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			item = loadEntry(split.get(), entryURI, uri);
 		}
 		if (item != null && withACL) {
-			((ContextImpl) item.getContext()).checkAccess(item, AccessProperty.ReadMetadata);
+			checkReadMetadata(item);
 		}
 		return item;
+	}
+
+	/** Skipped while the principal manager is not yet created. */
+	private void checkReadMetadata(Entry item) {
+		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
+		if (pm != null) {
+			pm.checkAuthenticatedUserAuthorized(item, AccessProperty.ReadMetadata);
+		}
 	}
 
 	private Entry loadEntry(URISplit split, URI entryURI, URI requestedURI) {
@@ -1190,7 +1198,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			return null;
 		}
 		if (found != null) {
-			((ContextImpl) found.getContext()).checkAccess(found, AccessProperty.ReadMetadata);
+			checkReadMetadata(found);
 		}
 		return found;
 	}

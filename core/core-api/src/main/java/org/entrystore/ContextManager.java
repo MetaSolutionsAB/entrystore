@@ -89,8 +89,8 @@ public interface ContextManager extends Context {
 	 * anyURI corresponds to a repository managed resource the returned entry 
 	 * will be {@link EntryType#Local} (guaranteed to be unique).
 	 * @throws RepositoryException if the entry cannot be loaded, e.g. the store fails or its data is corrupt.
-	 * @throws AuthorizationException if the current user may not read the entry's metadata, whether or not the
-	 * entry is cached.
+	 * @throws AuthorizationException if the current user lacks ReadMetadata on the entry, as
+	 * {@link PrincipalManager#checkAuthenticatedUserAuthorized} decides it, whether or not the entry is cached.
 	 */
 	Entry getEntry(URI repositoryURI);
 	
