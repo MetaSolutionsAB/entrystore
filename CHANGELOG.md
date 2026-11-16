@@ -8,6 +8,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1322](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1322) An error answered before the request body is read, such as 401, 403, 404 or 415, reaches clients behind Apache mod\_proxy again instead of 502: before the response completes, EntryStore reads up to 4 MB of the rest of the body, for at most 5 seconds. Jetty closed the connection while Apache was still sending the body. A larger or slower body still ends in a closed connection.
+
 [ENTRYSTORE-1319](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1319) SAML login with a 5.x multi-IdP configuration \(entrystore.auth.saml.idps.N\) works again with an IdP that posts its response to the 5.x assertion consumer service URL without the idp parameter and names that URL in Destination and Recipient. The ACS location of each such IdP carries ?idp=\<id\>, and Spring Security required both to equal it, so every SSO login ended on the failure URL; 5.x did not check Destination. **Behaviour note:** such a response is validated against the ACS location without the idp parameter; all other SAML response validation is unchanged.
 
 [ENTRYSTORE-1314](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1314) GET /auth/user no longer answers 500 for a malformed Accept-Language header: each language range is read on its own with its first q parameter, and ranges that are still invalid are left out of clientAcceptLanguage; 5.x also read the header leniently. **Behaviour note:** without the header, clientAcceptLanguage is \{\} instead of \{"accept-language":1.0\}, as in 5.x.
