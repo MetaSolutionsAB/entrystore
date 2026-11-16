@@ -65,8 +65,13 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 			throw e;
 		} catch (Exception e) {
 			String user = authentication != null ? authentication.getName() : "<unknown>";
-			log.error("Unexpected {} during {} login for user '{}': {}",
-					e.getClass().getSimpleName(), authTypeLabel(), HttpUtil.sanitizeForLog(user), e.getMessage(), e);
+			if (e instanceof IllegalStateException && request.getSession(false) == null) {
+				log.warn("A concurrent request ended the session of a {} login for user '{}' before it completed",
+						authTypeLabel(), HttpUtil.sanitizeForLog(user));
+			} else {
+				log.error("Unexpected {} during {} login for user '{}': {}", e.getClass().getSimpleName(),
+						authTypeLabel(), HttpUtil.sanitizeForLog(user), e.getMessage(), e);
+			}
 			// Undo the filter-persisted token before resolving the (subclass-supplied) failure URL: a
 			// throwing defaultFailureUrl() must not leave the rejected user authenticated behind the 500.
 			HttpUtil.clearAuthenticatedSession(request);

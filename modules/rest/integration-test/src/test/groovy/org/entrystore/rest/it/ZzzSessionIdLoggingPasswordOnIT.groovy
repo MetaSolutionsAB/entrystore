@@ -16,25 +16,30 @@
 
 package org.entrystore.rest.it
 
+import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.core.LoggerContext
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.springframework.web.servlet.DispatcherServlet
 
 import static java.net.HttpURLConnection.HTTP_OK
 
 /**
- * HTTP Basic with entrystore.auth.password=on, where Spring Security's own Basic converter is used; the shared app runs
- * with the whitelist, whose converter {@link SessionIdLoggingIT} covers. The ITs run org.springframework.security at
- * DEBUG.
+ * No log line carries a session id with entrystore.auth.password=on, where Spring Security's own Basic converter is
+ * used, and with request details logged and DispatcherServlet set to TRACE. The shared app runs with the whitelist,
+ * whose converter {@link SessionIdLoggingIT} covers. The ITs run org.springframework.security at DEBUG.
  */
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 class ZzzSessionIdLoggingPasswordOnIT extends BaseSpec {
 
 	static final String APPENDER_NAME = 'sessionIdLoggingPasswordOnIT'
 
+	static final String DISPATCHER_SERVLET = 'org.springframework.web.servlet.DispatcherServlet'
+
 	def setupSpec() {
 		stopPreexistingAppIfRunning()
-		startOwnedApp(['--entrystore.auth.password=on'])
+		startOwnedApp(['--entrystore.auth.password=on', '--spring.mvc.log-request-details=true',
+				'--logging.level.' + DISPATCHER_SERVLET + '=TRACE'])
 		createCommonUserAccounts()
 	}
 
@@ -66,6 +71,45 @@ class ZzzSessionIdLoggingPasswordOnIT extends BaseSpec {
 
 		and: 'the Basic authentication filter wrote its DEBUG events'
 		loggers.any { it.startsWith('org.springframework.security.web.authentication.www.') }
+
+		and: 'no event carries the session id'
+		loggersWritingTheSessionId.isEmpty()
+
+		cleanup:
+		loggerContext().getConfiguration().getRootLogger().removeAppender(APPENDER_NAME)
+		loggerContext().updateLoggers()
+		appender?.stop()
+	}
+
+	def "a request with a session cookie should log no session id while request details are logged"() {
+		given: 'every event captured at the root logger, and a session'
+		def appender = new ManagementLoggingIT.MemoryAppender(APPENDER_NAME)
+		appender.start()
+		loggerContext().getConfiguration().getRootLogger().addAppender(appender, null, null)
+		loggerContext().updateLoggers()
+		def login = EntryStoreClient.loginIsolated('user')
+
+		when: 'a request carries only the session cookie'
+		def conn = EntryStoreClient.getRequest('/auth/user', '', 'application/json',
+				[Cookie: 'auth_token=' + EntryStoreClient.cookieValueOf(login.authCookie)])
+
+		then: 'the request is served as the user, and DispatcherServlet logs request details'
+		conn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(conn.inputStream.text)['user'] == 'user'
+		appInstance.getBean(DispatcherServlet).isEnableLoggingRequestDetails()
+
+		// Only logger names and levels are compared, so that a failure report shows no captured message
+		def sessionId = EntryStoreClient.sessionIdOf(login.authCookie)
+		def dispatcherServletLevels = appender.events
+				.findAll { it.loggerName == DISPATCHER_SERVLET }
+				.collect { it.level } as Set
+		def loggersWritingTheSessionId = appender.events
+				.findAll { SessionIdLoggingIT.textOf(it).contains(sessionId) }
+				.collect { it.loggerName } as Set
+
+		and: 'DispatcherServlet wrote DEBUG events but no TRACE events'
+		dispatcherServletLevels.contains(Level.DEBUG)
+		!dispatcherServletLevels.contains(Level.TRACE)
 
 		and: 'no event carries the session id'
 		loggersWritingTheSessionId.isEmpty()

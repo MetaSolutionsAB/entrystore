@@ -19,8 +19,10 @@ package org.entrystore.rest.springboot.security;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import org.apache.logging.log4j.Level;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -44,7 +46,9 @@ import java.net.URI;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -223,6 +227,24 @@ class AbstractSsoLoginSuccessHandlerTest {
 		handler.onAuthenticationSuccess(request, response, token("newuser"));
 
 		verify(response).sendRedirect(FAILURE_URL);
+	}
+
+	@Test
+	void sessionEndedByAConcurrentRequestRedirectsToFailureWithoutLoggingTheException() throws Exception {
+		when(userService.loadUser("jane")).thenReturn(esUser);
+		givenUserIsEnabled();
+		doThrow(new IllegalStateException("session ended-session-id"))
+				.when(authTokenCookies).applySessionLifetime(request, null);
+
+		try (var appender = CapturingAppender.attachTo(AbstractSsoLoginSuccessHandler.class)) {
+			handler.onAuthenticationSuccess(request, response, token("jane"));
+
+			verify(response).sendRedirect(FAILURE_URL);
+			appender.assertCapturedSomething();
+			assertTrue(appender.allMessages().noneMatch(message -> message.contains("ended-session-id")),
+					appender.toString());
+			assertEquals(0, appender.thrownAt(Level.WARN).count() + appender.thrownAt(Level.ERROR).count());
+		}
 	}
 
 	@Test

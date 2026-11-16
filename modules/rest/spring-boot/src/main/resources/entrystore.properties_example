@@ -605,3 +605,10 @@ entrystore.solr.extract-fulltext=off
 
 ## Enable collection of metrics data (default: off)
 # entrystore.metrics=on|off
+
+## Log levels: logging.level.<category>=<level>, or POST /management/loggers while running. Once started, these
+## categories write nothing below the level they are listed with, whatever level is set, and /management/loggers
+## still accepts and reports a lower one; while Log4j replaces its configuration, the new one's levels apply until
+## the previous one has stopped. INFO: Jetty (org.eclipse.jetty, including the HTTP client of the Solr requests),
+## Spring's ForwardedHeaderFilter and Spring Security's session, session-authentication, logout and
+## security-context categories. ERROR: org.eclipse.jetty.session. DEBUG: Spring MVC's DispatcherServlet.

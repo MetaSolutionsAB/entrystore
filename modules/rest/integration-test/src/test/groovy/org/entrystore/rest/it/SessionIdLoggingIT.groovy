@@ -24,33 +24,50 @@ import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.core.LogEvent
 import org.apache.logging.log4j.core.LoggerContext
+import org.apache.logging.log4j.core.layout.PatternLayout
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter
 import org.springframework.security.web.authentication.WebAuthenticationDetails
 
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 /**
- * No log line carries a session id, also with the loggers of Spring Security, Jetty and EntryStore set to TRACE
- * through /management/loggers.
+ * No log line carries a session id, also with every logger set to TRACE through /management/loggers, except the IT's
+ * own HTTP client.
  */
 class SessionIdLoggingIT extends BaseSpec {
 
-	static final List<String> LOGGERS = ['org.springframework.security', 'org.eclipse.jetty', 'org.entrystore']
+	// ROOT first, so that it is restored first and a failing restore of another logger cannot leave it at TRACE
+	static final Map<String, String> LEVELS = [
+			'ROOT'                                       : 'TRACE',
+			// levels of their own in the IT configuration, which ROOT does not override
+			'org.springframework.security'               : 'TRACE',
+			'org.eclipse.jetty'                          : 'TRACE',
+			'org.entrystore'                             : 'TRACE',
+			// the IT's own HTTP client, which logs the headers it sends and receives
+			'sun.net.www.protocol.http.HttpURLConnection': 'INFO'
+	]
+
+	static final String FORWARDED_HEADER_FILTER = 'org.springframework.web.filter.ForwardedHeaderFilter'
 
 	static final String APPENDER_NAME = 'sessionIdLoggingIT'
+
+	// the message and the exception with its causes and suppressed exceptions, as an appender writes them
+	private static final PatternLayout TEXT_LAYOUT = PatternLayout.newBuilder().withPattern('%m%n%ex').build()
 
 	// entrystore.auth.session.reload-interval of the ITs, in milliseconds
 	private static final long RELOAD_INTERVAL_MILLIS = 10_000
 
 	def "a login, its renewal, reload, listing, ending and logout should log no session id at TRACE"() {
-		given: 'TRACE for the loggers, and every event captured at the root logger'
-		def previousLevels = LOGGERS.collectEntries { [(it): configuredLevel(it)] }
-		LOGGERS.each { setLevel(it, 'TRACE') }
+		given: 'TRACE for every logger but the IT client, and every event captured at the root logger'
+		def previousLevels = LEVELS.keySet().collectEntries { [(it): previousLevelOf(it)] }
+		LEVELS.each { name, level -> setLevel(name, level) }
 		def appender = new ManagementLoggingIT.MemoryAppender(APPENDER_NAME)
 		appender.start()
 		loggerContext().getConfiguration().getRootLogger().addAppender(appender, null, null)
@@ -107,9 +124,10 @@ class SessionIdLoggingIT extends BaseSpec {
 		loggersAtTrace.any { it.startsWith('org.springframework.security.') }
 		loggers.findAll { it.startsWith('org.springframework.security.core.session.') }.isEmpty()
 
-		and: 'Jetty wrote nothing below INFO, and its session handling nothing below ERROR'
+		and: 'nothing below INFO from Jetty, below ERROR from its session handling, below DEBUG from DispatcherServlet'
 		jettyLoggersBelowInfo.isEmpty()
 		jettySessionLoggersBelowError.isEmpty()
+		loggersBelow(appender.events, 'org.springframework.web.servlet.DispatcherServlet', Level.DEBUG).isEmpty()
 
 		and: 'no event carries a session id'
 		loggersWritingSessionIds.isEmpty()
@@ -119,6 +137,40 @@ class SessionIdLoggingIT extends BaseSpec {
 		loggerContext().updateLoggers()
 		appender?.stop()
 		previousLevels?.each { name, level -> setLevel(name as String, level as String) }
+	}
+
+	def "a request with an unparseable forwarded port should log no session id at DEBUG"() {
+		given: 'DEBUG for the forwarded-header filter, every event captured at the root logger, and a session'
+		def previousLevel = previousLevelOf(FORWARDED_HEADER_FILTER)
+		setLevel(FORWARDED_HEADER_FILTER, 'DEBUG')
+		def appender = new ManagementLoggingIT.MemoryAppender(APPENDER_NAME)
+		appender.start()
+		loggerContext().getConfiguration().getRootLogger().addAppender(appender, null, null)
+		loggerContext().updateLoggers()
+		def login = EntryStoreClient.loginIsolated('user')
+
+		when: 'a request with the session cookie carries a forwarded port that is not a number'
+		def conn = EntryStoreClient.getRequest('/auth/user', '', 'application/json',
+				[Cookie: cookieOf(login.authCookie), 'X-Forwarded-Port': 'not-a-port'])
+
+		then: 'the request is rejected'
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+
+		// Only logger names are compared, so that a failure report shows no captured message
+		def sessionId = EntryStoreClient.sessionIdOf(login.authCookie)
+		def loggersWritingTheSessionId = appender.events
+				.findAll { textOf(it).contains(sessionId) }
+				.collect { it.loggerName } as Set
+
+		and: 'the filter wrote nothing below INFO, and no event carries the session id'
+		loggersBelow(appender.events, FORWARDED_HEADER_FILTER, Level.INFO).isEmpty()
+		loggersWritingTheSessionId.isEmpty()
+
+		cleanup:
+		loggerContext().getConfiguration().getRootLogger().removeAppender(APPENDER_NAME)
+		loggerContext().updateLoggers()
+		appender?.stop()
+		setLevel(FORWARDED_HEADER_FILTER, previousLevel)
 	}
 
 	def "an anonymous authentication should record the client address but no session id"() {
@@ -149,8 +201,21 @@ class SessionIdLoggingIT extends BaseSpec {
 		return (LoggerContext) LogManager.getContext(false)
 	}
 
-	private static String configuredLevel(String logger) {
+	/**
+	 * @return the level to restore a logger to: ROOT's effective level, which is never null, or the configured level
+	 * of another logger, null if it inherits its level or does not exist yet
+	 */
+	private static String previousLevelOf(String logger) {
+		if (logger == 'ROOT') {
+			// only the listing names the root logger ROOT; GET /management/loggers/ROOT answers 404 with Log4j
+			def listing = EntryStoreClient.getRequest('/management/loggers')
+			assert listing.getResponseCode() == HTTP_OK
+			return JSON_PARSER.parseText(listing.inputStream.text)['loggers']['ROOT']['effectiveLevel']
+		}
 		def conn = EntryStoreClient.getRequest('/management/loggers/' + logger)
+		if (conn.getResponseCode() == HTTP_NOT_FOUND) {
+			return null
+		}
 		assert conn.getResponseCode() == HTTP_OK
 		return JSON_PARSER.parseText(conn.inputStream.text)['configuredLevel']
 	}
@@ -177,8 +242,8 @@ class SessionIdLoggingIT extends BaseSpec {
 				.collect { it.loggerName } as Set
 	}
 
-	/** @return the message of an event and that of its exception */
+	/** @return the message of an event and its exception with all causes and suppressed exceptions */
 	static String textOf(LogEvent event) {
-		return event.message.formattedMessage + (event.thrown != null ? ' ' + event.thrown : '')
+		return TEXT_LAYOUT.toSerializable(event)
 	}
 }

@@ -16,10 +16,12 @@
 
 package org.entrystore.rest.springboot.security;
 
+import org.apache.logging.log4j.Level;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.filter.ReloadUserPropertiesFilter;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
+import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -111,5 +114,26 @@ class FormLoginAuthenticationSuccessHandlerTest {
 		List<String> setCookies = response.getHeaders("Set-Cookie");
 		assertTrue(setCookies.stream().anyMatch(c -> c.startsWith("auth_token=;") && c.contains("Path=/store/")
 				&& c.contains("Max-Age=0")), setCookies.toString());
+	}
+
+	@Test
+	void sessionEndedByAConcurrentRequest_failsTheLoginWithoutLoggingTheException() throws Exception {
+		var session = (MockHttpSession) request.getSession();
+		doAnswer(invocation -> {
+			session.invalidate();
+			throw new IllegalStateException("session " + session.getId());
+		}).when(authTokenCookies).expiry(any());
+		var response = new MockHttpServletResponse();
+
+		try (var appender = CapturingAppender.attachTo(FormLoginAuthenticationSuccessHandler.class)) {
+			handler.onAuthenticationSuccess(request, response, authentication);
+
+			assertEquals(500, response.getStatus());
+			assertNull(SecurityContextHolder.getContext().getAuthentication());
+			appender.assertCapturedSomething();
+			assertTrue(appender.allMessages().noneMatch(message -> message.contains(session.getId())),
+					appender.toString());
+			assertEquals(0, appender.thrownAt(Level.WARN).count() + appender.thrownAt(Level.ERROR).count());
+		}
 	}
 }

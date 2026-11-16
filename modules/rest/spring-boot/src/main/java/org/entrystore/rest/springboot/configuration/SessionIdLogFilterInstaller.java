@@ -30,8 +30,10 @@ import java.beans.PropertyChangeListener;
 /**
  * Installs {@link SessionIdLogFilter} as a context-wide filter of the Log4j configuration, ahead of any other
  * context-wide filter, and again on every configuration that replaces it, as a reconfiguration drops the filters
- * added to the previous one. Created after Spring Boot has started Jetty without its connectors and before it adds
- * them, so the filter is in place before the first request; never lazy, as no other bean depends on it.
+ * added to the previous one. Log4j announces a new configuration only after applying it and stopping the previous
+ * one, so the new one runs without the filter until then. Created after Spring Boot has started Jetty without its
+ * connectors and before it adds them, so the filter is in place before the first request; never lazy, as no other
+ * bean depends on it.
  */
 @Component
 @Lazy(false)

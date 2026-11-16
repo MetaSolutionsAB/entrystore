@@ -43,8 +43,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Completes a form login: session lifetime, the session info and handle that /auth/tokens reports, and stale
- * cookies. A login whose session info cannot be recorded fails with 500 and leaves no session, since later requests
- * of the session rely on that info.
+ * cookies. A login whose session lifetime or info cannot be recorded, also because a concurrent request has ended its
+ * session, fails with 500 and leaves no session, since later requests of the session rely on that info.
  */
 @Slf4j
 @Component
@@ -63,12 +63,12 @@ public class FormLoginAuthenticationSuccessHandler extends SimpleUrlAuthenticati
 			loginAttemptService.recordSuccess(username.toLowerCase());
 		}
 
-		authTokenCookies.applySessionLifetime(request, parseRequestedMaxAge(request.getParameter("auth_maxage")));
-
+		Integer requestedMaxAge = parseRequestedMaxAge(request.getParameter("auth_maxage"));
 		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-		if (authentication != null && authentication.getPrincipal() instanceof ESUserSessionDetails esUserDetails) {
-			try {
+		try {
+			authTokenCookies.applySessionLifetime(request, requestedMaxAge);
+			if (authentication != null && authentication.getPrincipal() instanceof ESUserSessionDetails esUserDetails) {
 				Instant now = Instant.now();
 				SessionInfo.SessionInfoBuilder sessionInfo = SessionInfo.builder()
 						.userName(username != null ? username.toLowerCase() : null)
@@ -87,17 +87,21 @@ public class FormLoginAuthenticationSuccessHandler extends SimpleUrlAuthenticati
 
 				UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(esUserDetails, esUserDetails.getPassword(), esUserDetails.getAuthorities());
 				SecurityContextHolder.getContext().setAuthentication(newAuth);
-			} catch (RuntimeException e) {
-				log.error("Failed to record the session info of a login, ending the new session", e);
-				HttpUtil.clearAuthenticatedSession(request);
-				authTokenCookies.expireAfterFailedLogin(request, response);
-				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
-						.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
-						.path(request.getRequestURI())
-						.error("Login failed.")
-						.build());
-				return;
 			}
+		} catch (RuntimeException e) {
+			if (e instanceof IllegalStateException && request.getSession(false) == null) {
+				log.warn("A concurrent request ended the session of a login before it completed, ending the login");
+			} else {
+				log.error("Failed to record the session info of a login, ending the new session", e);
+			}
+			HttpUtil.clearAuthenticatedSession(request);
+			authTokenCookies.expireAfterFailedLogin(request, response);
+			errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
+					.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+					.path(request.getRequestURI())
+					.error("Login failed.")
+					.build());
+			return;
 		}
 
 		authTokenCookies.expireStale(request, response);

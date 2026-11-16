@@ -23,6 +23,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.accept.HeaderContentNegotiationStrategy;
+import org.springframework.web.servlet.DispatcherServlet;
+import org.springframework.web.servlet.FlashMapManager;
 import org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer;
 import org.springframework.web.servlet.config.annotation.ContentNegotiationConfigurer;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -57,6 +59,12 @@ public class MvcConfiguration implements WebMvcConfigurer {
 		registry.addInterceptor(multipartHandlerInterceptor);
 		registry.addInterceptor(ifUnmodifiedSinceInterceptor)
 				.addPathPatterns(IfUnmodifiedSinceInterceptor.PATH_PATTERNS);
+	}
+
+	/** Replaces Spring Boot's default, which backs off for a bean of this name. */
+	@Bean(DispatcherServlet.FLASH_MAP_MANAGER_BEAN_NAME)
+	public FlashMapManager flashMapManager() {
+		return new EndedSessionTolerantFlashMapManager();
 	}
 
 	@Override

@@ -17,8 +17,14 @@
 package org.entrystore.rest.it
 
 import dasniko.testcontainers.keycloak.KeycloakContainer
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpSession
 import org.apache.commons.text.StringEscapeUtils
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.springframework.security.authentication.AuthenticationDetailsSource
+import org.springframework.security.web.SecurityFilterChain
+import org.springframework.security.web.authentication.AbstractAuthenticationProcessingFilter
+import org.springframework.util.ReflectionUtils
 import org.testcontainers.containers.output.Slf4jLogConsumer
 import org.testcontainers.utility.MountableFile
 import spock.lang.Shared
@@ -134,6 +140,23 @@ abstract class KeycloakBaseSpec extends BaseSpec {
 	protected static long hoursUntilAuthTokenExpires(userJson) {
 		def expires = LocalDateTime.parse(userJson['authTokenExpires'] as String)
 		return ChronoUnit.HOURS.between(LocalDateTime.now(), expires)
+	}
+
+	/** The details source of the app's one login filter of the type, read by reflection as the filter has no getter. */
+	protected static AuthenticationDetailsSource<HttpServletRequest, ?> detailsSourceOf(
+		Class<? extends AbstractAuthenticationProcessingFilter> filterType) {
+		def filters = appInstance.getBean(SecurityFilterChain).filters.findAll { filterType.isInstance(it) }
+		assert filters.size() == 1
+		def field = ReflectionUtils.findField(AbstractAuthenticationProcessingFilter, 'authenticationDetailsSource')
+		assert field != null
+		ReflectionUtils.makeAccessible(field)
+		return ReflectionUtils.getField(field, filters[0]) as AuthenticationDetailsSource<HttpServletRequest, ?>
+	}
+
+	/** A request from 192.0.2.1 that carries a session. */
+	protected static HttpServletRequest requestWithASession() {
+		def session = [getId: { 'sso-session-id' }] as HttpSession
+		return [getRemoteAddr: { '192.0.2.1' }, getSession: { create -> session }] as HttpServletRequest
 	}
 
 }

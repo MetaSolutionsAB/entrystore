@@ -23,14 +23,23 @@ import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.filter.AbstractFilter;
 import org.apache.logging.log4j.message.Message;
 
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 
 /**
- * Keeps session ids out of the logs by holding the categories that handle sessions to a lowest level, whatever level
- * {@code logging.level.*} or {@code /management/loggers} sets: INFO for the session, session-authentication, logout
- * and security-context classes of Spring Security, for {@code SessionContextRepository} and for Jetty, ERROR for the
- * session handling of Jetty, and DEBUG for Spring MVC's {@code DispatcherServlet}. A category includes its
- * subcategories. {@link SessionIdLogFilterInstaller} installs it as a context-wide filter.
+ * Keeps session ids out of the logs by holding the categories that handle sessions or request headers to a lowest
+ * level, whatever level {@code logging.level.*} or {@code /management/loggers} sets: INFO for the session,
+ * session-authentication, logout and security-context classes of Spring Security, for
+ * {@code SessionContextRepository}, for Spring's {@code ForwardedHeaderFilter} and for Jetty, ERROR for the session
+ * handling of Jetty, and DEBUG for Spring MVC's {@code DispatcherServlet}. A category includes its subcategories. It
+ * also denies, at every level, an event that carries the exception Jetty throws for a session that has ended, as its
+ * exception, a cause, a suppressed exception or a parameter. While Log4j replaces its configuration, as on a reload
+ * through {@code monitorInterval}, the new configuration alone decides what is written until the previous one has
+ * stopped. {@link SessionIdLogFilterInstaller} installs it as a context-wide filter.
  *
  * <p>Log4j asks a context-wide filter before the level check of every logging call, through the overload that
  * matches the call, so each overload is implemented: those of {@link AbstractFilter} first copy the parameters into
@@ -47,10 +56,13 @@ final class SessionIdLogFilter extends AbstractFilter {
 			new Floor("org.springframework.security.web.authentication.logout", Level.INFO),
 			new Floor("org.springframework.security.web.context", Level.INFO),
 			new Floor("org.entrystore.rest.springboot.security.SessionContextRepository", Level.INFO),
+			new Floor("org.springframework.web.filter.ForwardedHeaderFilter", Level.INFO),
 			new Floor("org.eclipse.jetty", Level.INFO),
 			new Floor("org.eclipse.jetty.session", Level.ERROR),
 			new Floor("org.springframework.web.servlet.DispatcherServlet", Level.DEBUG)
 	);
+
+	private static final String SESSION_HANDLING_PACKAGE = "org.eclipse.jetty.session.";
 
 	private SessionIdLogFilter() {
 		super(Result.DENY, Result.NEUTRAL);
@@ -66,90 +78,147 @@ final class SessionIdLogFilter extends AbstractFilter {
 		return false;
 	}
 
-	private Result decide(String loggerName, Level level) {
-		return loggerName != null && isDenied(loggerName, level) ? onMatch : onMismatch;
+	/**
+	 * @return whether the throwable, a cause or a suppressed exception of it, at any depth, is the exception Jetty
+	 * throws when a session that has ended is read or written
+	 */
+	static boolean carriesEndedSessionException(Throwable throwable) {
+		Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+		Deque<Throwable> pending = new ArrayDeque<>();
+		pending.push(throwable);
+		while (!pending.isEmpty()) {
+			Throwable current = pending.pop();
+			if (!visited.add(current)) {
+				continue;
+			}
+			if (current instanceof IllegalStateException && isThrownBySessionHandling(current)) {
+				return true;
+			}
+			if (current.getCause() != null) {
+				pending.push(current.getCause());
+			}
+			for (Throwable suppressed : current.getSuppressed()) {
+				pending.push(suppressed);
+			}
+		}
+		return false;
+	}
+
+	private static boolean isThrownBySessionHandling(Throwable throwable) {
+		StackTraceElement[] stackTrace = throwable.getStackTrace();
+		return stackTrace.length > 0 && stackTrace[0].getClassName().startsWith(SESSION_HANDLING_PACKAGE);
+	}
+
+	private static boolean carries(Object value) {
+		return value instanceof Throwable throwable && carriesEndedSessionException(throwable);
+	}
+
+	private static boolean belowFloor(String loggerName, Level level) {
+		return loggerName != null && isDenied(loggerName, level);
+	}
+
+	private Result decide(boolean deny) {
+		return deny ? onMatch : onMismatch;
 	}
 
 	@Override
 	public Result filter(LogEvent event) {
-		return decide(event.getLoggerName(), event.getLevel());
+		return decide(belowFloor(event.getLoggerName(), event.getLevel()) || carries(event.getThrown()));
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, Message msg, Throwable t) {
-		return decide(logger.getName(), level);
+		return decide(belowFloor(logger.getName(), level) || carries(t) || msg != null && carries(msg.getThrowable()));
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, Object msg, Throwable t) {
-		return decide(logger.getName(), level);
+		return decide(belowFloor(logger.getName(), level) || carries(msg) || carries(t));
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, String msg) {
-		return decide(logger.getName(), level);
+		return decide(belowFloor(logger.getName(), level));
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, String msg, Object... params) {
-		return decide(logger.getName(), level);
+		if (belowFloor(logger.getName(), level)) {
+			return onMatch;
+		}
+		if (params != null) {
+			for (Object param : params) {
+				if (carries(param)) {
+					return onMatch;
+				}
+			}
+		}
+		return onMismatch;
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, String msg, Object p0) {
-		return decide(logger.getName(), level);
+		return decide(belowFloor(logger.getName(), level) || carries(p0));
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, String msg, Object p0, Object p1) {
-		return decide(logger.getName(), level);
+		return decide(belowFloor(logger.getName(), level) || carries(p0) || carries(p1));
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, String msg, Object p0, Object p1, Object p2) {
-		return decide(logger.getName(), level);
+		return decide(belowFloor(logger.getName(), level) || carries(p0) || carries(p1) || carries(p2));
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, String msg, Object p0, Object p1, Object p2,
 						 Object p3) {
-		return decide(logger.getName(), level);
+		return decide(belowFloor(logger.getName(), level) || carries(p0) || carries(p1) || carries(p2)
+				|| carries(p3));
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, String msg, Object p0, Object p1, Object p2,
 						 Object p3, Object p4) {
-		return decide(logger.getName(), level);
+		return decide(belowFloor(logger.getName(), level) || carries(p0) || carries(p1) || carries(p2)
+				|| carries(p3) || carries(p4));
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, String msg, Object p0, Object p1, Object p2,
 						 Object p3, Object p4, Object p5) {
-		return decide(logger.getName(), level);
+		return decide(belowFloor(logger.getName(), level) || carries(p0) || carries(p1) || carries(p2)
+				|| carries(p3) || carries(p4) || carries(p5));
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, String msg, Object p0, Object p1, Object p2,
 						 Object p3, Object p4, Object p5, Object p6) {
-		return decide(logger.getName(), level);
+		return decide(belowFloor(logger.getName(), level) || carries(p0) || carries(p1) || carries(p2)
+				|| carries(p3) || carries(p4) || carries(p5) || carries(p6));
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, String msg, Object p0, Object p1, Object p2,
 						 Object p3, Object p4, Object p5, Object p6, Object p7) {
-		return decide(logger.getName(), level);
+		return decide(belowFloor(logger.getName(), level) || carries(p0) || carries(p1) || carries(p2)
+				|| carries(p3) || carries(p4) || carries(p5) || carries(p6) || carries(p7));
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, String msg, Object p0, Object p1, Object p2,
 						 Object p3, Object p4, Object p5, Object p6, Object p7, Object p8) {
-		return decide(logger.getName(), level);
+		return decide(belowFloor(logger.getName(), level) || carries(p0) || carries(p1) || carries(p2)
+				|| carries(p3) || carries(p4) || carries(p5) || carries(p6) || carries(p7) || carries(p8));
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, String msg, Object p0, Object p1, Object p2,
 						 Object p3, Object p4, Object p5, Object p6, Object p7, Object p8, Object p9) {
-		return decide(logger.getName(), level);
+		return decide(belowFloor(logger.getName(), level) || carries(p0) || carries(p1) || carries(p2)
+				|| carries(p3) || carries(p4) || carries(p5) || carries(p6) || carries(p7) || carries(p8)
+				|| carries(p9));
 	}
 
 	/** The least severe level that a category and its subcategories may write. */
