@@ -47,7 +47,7 @@ import java.io.IOException;
  */
 @Slf4j
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
 @ConditionalOnBooleanConfig(value = "logging.http.enabled", matchIfMissing = true)
 public class RequestResponseLoggingFilter extends OncePerRequestFilter {
 

@@ -39,6 +39,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -225,26 +226,37 @@ public class HttpUtil {
 	/** How much of a rejected request body {@link #discardRejectedBody} reads at most. */
 	public static final long MAX_DRAIN_BYTES = 4L * 1024 * 1024;
 
+	/** How long {@link #discardRejectedBody} reads at most, so a client trickling its body cannot hold the thread. */
+	private static final long MAX_DRAIN_NANOS = TimeUnit.SECONDS.toNanos(5);
+
+	private static final String BODY_DISCARDED_ATTRIBUTE = HttpUtil.class.getName() + ".BODY_DISCARDED";
+
 	/**
-	 * Reads and discards up to {@link #MAX_DRAIN_BYTES} of a rejected request body, so that a client that reads the
-	 * response only once it has sent a moderately oversized body, like {@code HttpURLConnection} or a piped Node
-	 * stream, gets the error response instead of a connection reset. Skipped after {@code Expect: 100-continue},
-	 * whose client has not sent the body and would be asked for it.
+	 * Reads and discards up to {@link #MAX_DRAIN_BYTES} of a rejected request body, for at most 5 seconds and once
+	 * per request, so that a client that reads the response only once it has sent a moderately oversized body, like
+	 * {@code HttpURLConnection}, a piped Node stream or Apache mod_proxy, gets the error response instead of a
+	 * connection reset. Skipped after {@code Expect: 100-continue}, whose client has not sent the body and would be
+	 * asked for it.
 	 */
 	public static void discardRejectedBody(HttpServletRequest request) {
-		if ("100-continue".equalsIgnoreCase(request.getHeader(HttpHeaders.EXPECT))) {
+		if ("100-continue".equalsIgnoreCase(request.getHeader(HttpHeaders.EXPECT))
+				|| request.getAttribute(BODY_DISCARDED_ATTRIBUTE) != null) {
 			return;
 		}
+		request.setAttribute(BODY_DISCARDED_ATTRIBUTE, Boolean.TRUE);
 		try {
 			InputStream in = request.getInputStream();
 			byte[] buf = new byte[8192];
+			long deadline = System.nanoTime() + MAX_DRAIN_NANOS;
 			long drained = 0;
 			int read;
-			while (drained < MAX_DRAIN_BYTES && (read = in.read(buf)) != -1) {
+			while (drained < MAX_DRAIN_BYTES && System.nanoTime() < deadline && (read = in.read(buf)) != -1) {
 				drained += read;
 			}
 		} catch (IOException e) {
 			log.debug("Client went away while its rejected request body was discarded: {}", e.getMessage());
+		} catch (IllegalStateException e) {
+			// the handler read the body through getReader()
 		}
 	}
 

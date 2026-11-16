@@ -43,7 +43,7 @@ import java.io.IOException;
  * method and path only. A larger configured global limit is kept. A body over the limit gets Jetty's 400.
  */
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
 @ConditionalOnBooleanConfig("entrystore.auth.saml.enabled")
 public class SamlAcsFormSizeFilter extends OncePerRequestFilter {
 
