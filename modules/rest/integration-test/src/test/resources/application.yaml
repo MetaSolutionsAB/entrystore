@@ -5,6 +5,7 @@ server:
   forward-headers-strategy: framework
   servlet:
     context-path: /store
+    session.tracking-modes: cookie
     session.cookie:
       name: auth_token
       http-only: ${entrystore.auth.cookie.httponly:true}
