@@ -67,7 +67,7 @@ import java.util.List;
 @Slf4j
 @Component
 // After RequestResponseLoggingFilter, so the rejection is logged, and before every filter that reads parameters.
-@Order(Ordered.HIGHEST_PRECEDENCE + 1)
+@Order(Ordered.HIGHEST_PRECEDENCE + 2)
 public class MultipartRequestFilter extends OncePerRequestFilter {
 
 	/** The routes of the handlers marked {@code @AcceptsMultipart}; {@code MultipartHandlerInterceptor} checks the handler. */
