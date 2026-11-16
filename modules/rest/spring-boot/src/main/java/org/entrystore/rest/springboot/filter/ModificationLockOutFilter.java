@@ -38,7 +38,7 @@ import java.util.Set;
 @Slf4j
 @Component
 // Run before Spring Security so blocked writes don't pay BCrypt/session lookup cost during a backup.
-@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
 @RequiredArgsConstructor
 public class ModificationLockOutFilter extends OncePerRequestFilter {
 
