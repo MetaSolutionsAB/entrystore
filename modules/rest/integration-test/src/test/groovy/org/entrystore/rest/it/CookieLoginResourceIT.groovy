@@ -22,6 +22,9 @@ import org.apache.commons.lang3.RandomStringUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
 
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
@@ -38,6 +41,8 @@ import static java.nio.charset.StandardCharsets.UTF_8
 class CookieLoginResourceIT extends BaseSpec {
 
 	static def password = 'newPass12345'
+
+	static final String FORM_BODY_USER = 'userForLoginFormBody@test.com'
 
 	static GreenMail greenMail = new GreenMail(SMTP)
 
@@ -57,6 +62,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		EntryStoreClient.creds.put('userForLoginTemporaryLockout@test.com', password)
 		EntryStoreClient.creds.put('userForDisabledUntilOnEntry@test.com', password)
 		EntryStoreClient.creds.put('userForAdminRoleReload@test.com', password)
+		UserUtil.createUserWithPassword(FORM_BODY_USER, password)
 	}
 
 	def cleanup() {
@@ -162,6 +168,25 @@ class CookieLoginResourceIT extends BaseSpec {
 		EntryStoreClient.findSetCookie(loginConnection, 'auth_token') != null
 		loginConnection.getContentType().contains('text/html')
 		loginConnection.inputStream.text.contains('Login successful.')
+	}
+
+	def "POST /auth/cookie should log in the user from a form body sent as #contentType"() {
+		given: 'HttpURLConnection sends a form content type when none is set; java.net.http.HttpClient sends none'
+		def builder = HttpRequest.newBuilder(URI.create(EntryStoreClient.baseUrl + '/auth/cookie'))
+				.POST(HttpRequest.BodyPublishers.ofString(createFormBody([auth_username: FORM_BODY_USER, auth_password: password])))
+		if (contentType != 'no content type') {
+			builder.header('Content-Type', contentType)
+		}
+
+		when:
+		def response = HttpClient.newHttpClient().send(builder.build(), HttpResponse.BodyHandlers.discarding())
+
+		then:
+		response.statusCode() == HTTP_OK
+		response.headers().allValues('Set-Cookie').any { it.startsWith('auth_token=') }
+
+		where:
+		contentType << ['text/plain', 'application/octet-stream', 'no content type', 'application/x-www-form-urlencoded']
 	}
 
 	def "POST /auth/cookie should log in the user with cookie and then do 2 requests with the same cookie"() {
