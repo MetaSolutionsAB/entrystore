@@ -205,6 +205,19 @@ class JsonpCallbackFilterTest {
 		assertTrue(response.getContentType().startsWith("application/json"));
 	}
 
+	// IgnoreAuthFilter serves it as guest all the same
+	@Test
+	void getWithMalformedCallback_isNotWrapped() throws Exception {
+		var request = new MockHttpServletRequest("GET", "/90/entry/1");
+		request.setQueryString("callback=%zz");
+		var response = new MockHttpServletResponse();
+
+		filter.doFilter(request, response, chainWriting(200, "application/json", "{\"a\":1}".getBytes(UTF_8)));
+
+		assertEquals("{\"a\":1}", response.getContentAsString());
+		assertTrue(response.getContentType().startsWith("application/json"));
+	}
+
 	@ParameterizedTest
 	@MethodSource("invalidCallbacks")
 	void invalidCallback_returns400AndDoesNotInvokeChain(String invalidCallback) throws Exception {

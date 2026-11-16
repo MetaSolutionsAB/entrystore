@@ -19,6 +19,7 @@ package org.entrystore.rest.springboot.filter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.repository.config.Settings;
@@ -33,13 +34,21 @@ import org.jetbrains.annotations.NotNull;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Class checks the request size and parameters before the authentication via username and password process starts
@@ -50,6 +59,8 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 
 	private static final RequestMatcher LOGIN_REQUEST =
 			PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/auth/cookie");
+
+	private static final int MAX_LOGIN_BODY = 32768;
 
 	private final LoginAttemptService loginAttemptService;
 	private final ErrorResponseWriter errorResponseWriter;
@@ -99,19 +110,24 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 			return;
 		}
 
+		if (LOGIN_REQUEST.matches(request) && !isFormUrlEncoded(request)) {
+			// 5.x parsed the login body as a form whatever its content type; clients such as FME rely on that
+			byte[] body = request.getInputStream().readNBytes(MAX_LOGIN_BODY + 1);
+			if (body.length > MAX_LOGIN_BODY) {
+				writePayloadTooLarge(request, response);
+				return;
+			}
+			request = new FormBodyRequest(request, new String(body, StandardCharsets.UTF_8));
+		}
+
 		String username = request.getParameter("auth_username");
 		String password = request.getParameter("auth_password");
 
 		if (username != null || password != null) {
 			// means someone is trying to authenticate
 
-			if (request.getContentLength() > 0 && HttpUtil.isLargerThan(request, 32768)) {
-				log.warn("The size of the request is larger than 32KB, request blocked");
-				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
-						.status(HttpStatus.PAYLOAD_TOO_LARGE.value())
-						.path(request.getRequestURI())
-						.error("The size of the request is larger than 32KB")
-						.build());
+			if (request.getContentLength() > 0 && HttpUtil.isLargerThan(request, MAX_LOGIN_BODY)) {
+				writePayloadTooLarge(request, response);
 				return;
 			}
 
@@ -195,5 +211,72 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 		}
 
 		filterChain.doFilter(request, response);
+	}
+
+	private void writePayloadTooLarge(HttpServletRequest request, HttpServletResponse response) throws IOException {
+		log.warn("The size of the request is larger than 32KB, request blocked");
+		errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				.status(HttpStatus.PAYLOAD_TOO_LARGE.value())
+				.path(request.getRequestURI())
+				.error("The size of the request is larger than 32KB")
+				.build());
+	}
+
+	private static boolean isFormUrlEncoded(HttpServletRequest request) {
+		String contentType = request.getContentType();
+		return contentType != null
+				&& contentType.split(";", 2)[0].strip().equalsIgnoreCase(MediaType.APPLICATION_FORM_URLENCODED_VALUE);
+	}
+
+	/**
+	 * Serves the parameters of a body that the servlet container does not parse as a form, because of its content
+	 * type, after those of the query string. A pair with malformed percent-encoding is skipped.
+	 */
+	private static final class FormBodyRequest extends HttpServletRequestWrapper {
+
+		private final Map<String, String[]> parameters;
+
+		FormBodyRequest(HttpServletRequest request, String body) {
+			super(request);
+			Map<String, List<String>> values = new LinkedHashMap<>();
+			request.getParameterMap().forEach((name, v) -> values.put(name, new ArrayList<>(List.of(v))));
+			for (String pair : body.split("&")) {
+				if (pair.isEmpty()) {
+					continue;
+				}
+				int eq = pair.indexOf('=');
+				try {
+					String name = URLDecoder.decode(eq < 0 ? pair : pair.substring(0, eq), StandardCharsets.UTF_8);
+					String value = eq < 0 ? "" : URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8);
+					values.computeIfAbsent(name, k -> new ArrayList<>()).add(value);
+				} catch (IllegalArgumentException e) {
+					// skip the malformed pair
+				}
+			}
+			Map<String, String[]> parameters = new LinkedHashMap<>();
+			values.forEach((name, v) -> parameters.put(name, v.toArray(String[]::new)));
+			this.parameters = Collections.unmodifiableMap(parameters);
+		}
+
+		@Override
+		public String getParameter(String name) {
+			String[] values = parameters.get(name);
+			return values == null ? null : values[0];
+		}
+
+		@Override
+		public String[] getParameterValues(String name) {
+			return parameters.get(name);
+		}
+
+		@Override
+		public Map<String, String[]> getParameterMap() {
+			return parameters;
+		}
+
+		@Override
+		public Enumeration<String> getParameterNames() {
+			return Collections.enumeration(parameters.keySet());
+		}
 	}
 }
