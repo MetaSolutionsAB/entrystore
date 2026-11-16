@@ -43,6 +43,7 @@ import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static java.net.HttpURLConnection.HTTP_UNSUPPORTED_TYPE
+import static java.nio.charset.StandardCharsets.UTF_8
 
 class ResourceIT extends BaseSpec {
 
@@ -698,6 +699,32 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getHeaderFieldLong('Content-Length', -1) == fileSize
 		resourceConn.getHeaderField('Digest') == 'sha-256=' + sha256OfZeros(fileSize)
 		resourceConn.getInputStream().transferTo(OutputStream.nullOutputStream()) == fileSize
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} of a 3 MB body to a missing entry is answered 404 after the body is read"() {
+		given: 'a client that, like Apache mod_proxy, sends the whole body before it reads the response'
+		def url = new URL(EntryStoreClient.baseUrl + '/' + contextId + '/resource/noSuchEntryForDrain')
+		long size = 3L * 1024 * 1024
+		def socket = new Socket()
+		socket.setSendBufferSize(64 * 1024)
+		socket.setSoTimeout(30_000)
+		socket.connect(new InetSocketAddress(url.host, url.port))
+
+		when: 'the error is answered before the handler reads the body'
+		def statusLine = socket.withCloseable {
+			def out = socket.outputStream
+			out.write(("PUT ${url.path} HTTP/1.1\r\nHost: ${url.host}:${url.port}\r\n" +
+					"Content-Type: application/octet-stream\r\nContent-Length: ${size}\r\n\r\n").getBytes(UTF_8))
+			def chunk = new byte[64 * 1024]
+			for (long written = 0; written < size; written += chunk.length) {
+				out.write(chunk)
+			}
+			out.flush()
+			new BufferedReader(new InputStreamReader(socket.inputStream, UTF_8)).readLine()
+		}
+
+		then: 'the client gets the status, not a broken pipe'
+		statusLine.startsWith('HTTP/1.1 404')
 	}
 
 	def "PUT /{context-id}/resource/{entry-id} chunked raw upload without Content-Length is stored with its size and digest"() {
