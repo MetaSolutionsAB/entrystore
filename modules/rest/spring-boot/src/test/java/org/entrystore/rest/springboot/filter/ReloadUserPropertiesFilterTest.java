@@ -129,6 +129,31 @@ class ReloadUserPropertiesFilterTest {
 	}
 
 	@Test
+	void reload_keepsTheSessionHandle() throws Exception {
+		loggedIn().setSessionHandle("handle-of-the-login");
+		ESUserSessionDetails reloaded = sessionDetails();
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenReturn(reloaded);
+
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+		// the reloaded details replace those of the login in the security context
+		assertSame(reloaded, SecurityContextHolder.getContext().getAuthentication().getPrincipal());
+		assertEquals("handle-of-the-login", reloaded.getSessionHandle());
+	}
+
+	@Test
+	void unregisteredSession_isRegisteredWithItsSessionHandle() throws Exception {
+		loggedIn().setSessionHandle("handle-of-the-login");
+		sessionRegistry.removeSessionInformation(sessionId);
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenReturn(sessionDetails());
+
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+		var registeredUser = (ESUserSessionDetails) sessionRegistry.getSessionInformation(sessionId).getPrincipal();
+		assertEquals("handle-of-the-login", registeredUser.getSessionHandle());
+	}
+
+	@Test
 	void sessionEndedByAConcurrentRequest_isServedWithoutTheSession() throws Exception {
 		var session = new MockHttpSession();
 		session.invalidate();
@@ -358,6 +383,11 @@ class ReloadUserPropertiesFilterTest {
 	private ReloadUserPropertiesFilter filterWithReloadInterval(int seconds) {
 		return new ReloadUserPropertiesFilter(userDetailsService, sessionRegistry,
 				new ErrorResponseWriter(JsonMapper.builder().build()), authTokenCookies, seconds);
+	}
+
+	/** The details that {@link #logIn()} put into the security context and registered for the session. */
+	private static ESUserSessionDetails loggedIn() {
+		return (ESUserSessionDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
 	}
 
 	private static ESUserSessionDetails sessionDetails() {

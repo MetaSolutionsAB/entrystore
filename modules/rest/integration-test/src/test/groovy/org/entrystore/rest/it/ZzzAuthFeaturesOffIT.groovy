@@ -24,7 +24,6 @@ import org.springframework.http.HttpMethod
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
-import static java.nio.charset.StandardCharsets.UTF_8
 
 /**
  * Switched-off authentication features answer 404 on all their routes, as 5.x left them unrouted, and password
@@ -116,7 +115,7 @@ class ZzzAuthFeaturesOffIT extends BaseSpec {
 
 	def "a request with valid HTTP Basic credentials should be served as guest when password login is off"() {
 		when:
-		def conn = EntryStoreClient.getRequest('/auth/user', '', null, [Authorization: basic('admin', 'adminpass')])
+		def conn = EntryStoreClient.getRequest('/auth/user', '', null, [Authorization: EntryStoreClient.basicAuth('admin', 'adminpass')])
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -126,7 +125,7 @@ class ZzzAuthFeaturesOffIT extends BaseSpec {
 	def "a protected page should answer 401 without a Basic challenge when password login is off"() {
 		when:
 		def conn = EntryStoreClient.getRequest('/management/status/extended', '', null,
-			[Authorization: basic('admin', 'adminpass')])
+			[Authorization: EntryStoreClient.basicAuth('admin', 'adminpass')])
 
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
@@ -167,10 +166,6 @@ class ZzzAuthFeaturesOffIT extends BaseSpec {
 		then:
 		auth['signup'] == false
 		auth['passwordReset'] == false
-	}
-
-	static String basic(String username, String password) {
-		'Basic ' + Base64.getEncoder().encodeToString((username + ':' + password).getBytes(UTF_8))
 	}
 
 	static String signupJson() {

@@ -54,6 +54,32 @@ class IgnoreAuthIT extends BaseSpec {
 		jsonResp['id'] == '_guest'
 	}
 
+	def "GET /auth/user?ignoreAuth with invalid HTTP Basic credentials should return guest user"() {
+		given: 'credentials that name no user, so no account is locked'
+		def basic = EntryStoreClient.basicAuth('ignoreAuthUnknownUser', 'wrongPassword')
+
+		when:
+		def connection = EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', 'application/json',
+				[Authorization: basic])
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(connection.inputStream.text)['user'] == 'guest'
+	}
+
+	def "GET /auth/user?ignoreAuth with a session cookie should set no cookie"() {
+		given: 'a session cookie without the XSRF-TOKEN cookie, which a request without ignoreAuth would get'
+		def login = EntryStoreClient.loginIsolated('admin')
+
+		when:
+		def connection = EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', 'application/json',
+				[Cookie: login.authCookie])
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getHeaderFields().get('Set-Cookie') == null
+	}
+
 	def "Session should be preserved after using ignoreAuth"() {
 		given:
 		def cookie = EntryStoreClient.cookies['admin'].toString()
@@ -65,6 +91,7 @@ class IgnoreAuthIT extends BaseSpec {
 		ignoreAuthConn.getResponseCode() == HTTP_OK
 		def guestResp = JSON_PARSER.parseText(ignoreAuthConn.inputStream.text)
 		guestResp['user'] == 'guest'
+		ignoreAuthConn.getHeaderFields().get('Set-Cookie') == null
 
 		when: "subsequent request without ignoreAuth returns authenticated user"
 		def normalConn = EntryStoreClient.getRequest('/auth/user', '', 'application/json', [Cookie: cookie])
@@ -73,6 +100,25 @@ class IgnoreAuthIT extends BaseSpec {
 		normalConn.getResponseCode() == HTTP_OK
 		def authResp = JSON_PARSER.parseText(normalConn.inputStream.text)
 		authResp['user'] == 'admin'
+	}
+
+	def "PUT resource with ignoreAuth and a session cookie should set no cookie and keep the session"() {
+		given:
+		def login = EntryStoreClient.loginIsolated('admin')
+		def entryId = getOrCreateEntry(contextId, [id: 'ignoreAuthResourceEntryId', graphtype: 'string'],
+				[resource: 'Some text'])
+
+		when:
+		def conn = EntryStoreClient.putRequest('/' + contextId + '/resource/' + entryId + '?ignoreAuth', 'new text',
+				'', 'text/plain', EntryStoreClient.csrfHeaders(login.authCookie, login.csrf))
+
+		then: 'the request is served as guest'
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		conn.getHeaderFields().get('Set-Cookie') == null
+
+		and: 'the session still authenticates'
+		def userConn = EntryStoreClient.getRequest('/auth/user', '', 'application/json', [Cookie: login.authCookie])
+		JSON_PARSER.parseText(userConn.inputStream.text)['user'] == 'admin'
 	}
 
 	def "GET protected resource with ignoreAuth should return 401"() {
