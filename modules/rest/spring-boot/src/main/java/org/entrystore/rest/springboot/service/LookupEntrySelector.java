@@ -16,9 +16,13 @@
 
 package org.entrystore.rest.springboot.service;
 
+import lombok.extern.slf4j.Slf4j;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.impl.ContextManagerImpl;
+import org.entrystore.impl.LocalMetadataWrapper;
+import org.entrystore.repository.util.CorruptData;
 import org.entrystore.repository.util.URISplit;
 
 import java.net.URI;
@@ -35,11 +39,13 @@ import java.util.Optional;
  * response carries the metadata and validators of one entry. The pick must not depend on iteration order, which a
  * caller can influence by creating entries. The rule, in order:
  * <ol>
- * <li>entries whose metadata the current user may read, if there is any;</li>
+ * <li>entries whose metadata the current user may read, if there is any; a reference whose referenced entry is
+ * corrupt counts as not readable;</li>
  * <li>the Local entry that owns the URI, i.e. the entry of this repository the URI belongs to;</li>
  * <li>the lowest entry URI, compared as a string.</li>
  * </ol>
  */
+@Slf4j
 final class LookupEntrySelector {
 
 	private LookupEntrySelector() {
@@ -56,11 +62,37 @@ final class LookupEntrySelector {
 		URL repositoryURL = holders.iterator().next().getRepositoryManager().getRepositoryURL();
 		Optional<URI> ownerEntryURI = URISplit.entryURIOf(resourceURI, repositoryURL);
 
-		List<Entry> readable = holders.stream().filter(ContextManagerImpl::isEntryMetadataReadable).toList();
+		List<Entry> readable = holders.stream().filter(entry -> isReadable(entry, repositoryURL)).toList();
 		Collection<Entry> candidates = readable.isEmpty() ? holders : readable;
 
 		Comparator<Entry> ownerFirst = Comparator.comparing(entry -> !isOwner(entry, ownerEntryURI));
 		return candidates.stream().min(ownerFirst.thenComparing(entry -> entry.getEntryURI().toString()));
+	}
+
+	/**
+	 * Whether the current user may read all metadata of {@code entry}. The check loads the entry a reference takes
+	 * its metadata from; if that entry is corrupt, the reference is not readable, so that it does not fail the lookup
+	 * of the other holders. Any other failure is rethrown.
+	 */
+	private static boolean isReadable(Entry entry, URL repositoryURL) {
+		URI referencedEntryURI = null;
+		try {
+			if ((entry.getEntryType() == EntryType.Reference || entry.getEntryType() == EntryType.LinkReference)
+					&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper wrapper) {
+				referencedEntryURI = wrapper.getReferencedEntryURI();
+			}
+			ContextManagerImpl.checkEntryMetadataReadable(entry);
+			return true;
+		} catch (AuthorizationException e) {
+			return false;
+		} catch (RuntimeException e) {
+			if (CorruptData.isCorruptDataOf(e, referencedEntryURI, repositoryURL)) {
+				log.warn("Ranking reference {} as not readable because its referenced entry {} is corrupt: {}",
+						entry.getEntryURI(), referencedEntryURI, CorruptData.describe(e));
+				return false;
+			}
+			throw e;
+		}
 	}
 
 	/** Whether {@code entry} is the Local entry of this repository that the resource URI belongs to. */

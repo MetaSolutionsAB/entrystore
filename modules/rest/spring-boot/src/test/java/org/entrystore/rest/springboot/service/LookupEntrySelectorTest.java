@@ -21,8 +21,14 @@ import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.config.Config;
+import org.entrystore.impl.ContextImpl;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.junit.jupiter.api.AfterEach;
@@ -122,8 +128,40 @@ class LookupEntrySelectorTest {
 	}
 
 	@Test
+	void ownerIsPickedOverAReferenceWhoseReferencedEntryIsCorrupt() {
+		Entry owner = context.createResource("z-owner", GraphType.None, null, null);
+		Entry target = context.createResource("target", GraphType.None, null, null);
+		Entry reference = context.createReference("a-ref", owner.getResourceURI(), target.getLocalMetadataURI(), null);
+		corrupt(target);
+
+		Optional<Entry> picked = LookupEntrySelector.select(Set.of(owner, reference), owner.getResourceURI());
+
+		assertThat(picked).contains(owner);
+	}
+
+	@Test
+	void referenceWhoseReferencedEntryIsCorruptIsPickedWhenItIsTheOnlyHolder() {
+		Entry target = context.createResource("target", GraphType.None, null, null);
+		Entry reference = context.createReference("ref", EXTERNAL, target.getLocalMetadataURI(), null);
+		corrupt(target);
+
+		Optional<Entry> picked = LookupEntrySelector.select(Set.of(reference), EXTERNAL);
+
+		assertThat(picked).contains(reference);
+	}
+
+	@Test
 	void noHolderGivesEmpty() {
 		assertThat(LookupEntrySelector.select(Set.of(), EXTERNAL)).isEmpty();
+	}
+
+	/** Makes the entry unloadable: removes its resource statement from the store and evicts it from the cache. */
+	private void corrupt(Entry entry) {
+		IRI entryGraph = SimpleValueFactory.getInstance().createIRI(entry.getEntryURI().toString());
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.remove((Resource) null, RepositoryProperties.resource, null, entryGraph);
+		}
+		((ContextImpl) entry.getContext()).getSoftCache().remove(entry);
 	}
 
 	private <T> T asGuest(Supplier<T> action) {
