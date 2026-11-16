@@ -8,6 +8,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1321](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1321) PUT /\{context-id\}/resource/\{entry-id\} stores a raw upload whose Content-Type cannot be parsed, such as csv; charset=UTF-8, as 5.x did, instead of answering 415. **Behaviour note:** such a file is stored with the media type application/octet-stream unless the mimeType parameter names one; 5.x stored the type as sent.
+
 [ENTRYSTORE-1319](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1319) SAML login with a 5.x multi-IdP configuration \(entrystore.auth.saml.idps.N\) works again with an IdP that posts its response to the 5.x assertion consumer service URL without the idp parameter and names that URL in Destination and Recipient. The ACS location of each such IdP carries ?idp=\<id\>, and Spring Security required both to equal it, so every SSO login ended on the failure URL; 5.x did not check Destination. **Behaviour note:** such a response is validated against the ACS location without the idp parameter; all other SAML response validation is unchanged.
 
 [ENTRYSTORE-1314](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1314) GET /auth/user no longer answers 500 for a malformed Accept-Language header: each language range is read on its own with its first q parameter, and ranges that are still invalid are left out of clientAcceptLanguage; 5.x also read the header leniently. **Behaviour note:** without the header, clientAcceptLanguage is \{\} instead of \{"accept-language":1.0\}, as in 5.x.
