@@ -177,9 +177,8 @@ public class SyndicationService {
 	}
 
 	/**
-	 * Checks ReadMetadata itself, since {@code getEntry} checks it only for an entry that was already cached. Like
-	 * search, it also checks the entry a reference takes its metadata from, and skips the reference if that entry is
-	 * corrupt.
+	 * Checks ReadMetadata on the entry and, like search, on the entry a reference takes its metadata from; skips the
+	 * reference if that entry is corrupt.
 	 */
 	private @Nullable Entry readableEntry(URI uri) {
 		URI referencedEntryURI = null;

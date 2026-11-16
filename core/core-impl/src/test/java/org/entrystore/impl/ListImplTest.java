@@ -201,6 +201,45 @@ public class ListImplTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void moveEntryBetweenLists_ofAnEntryTheUserMayNotRead_isRefusedAsUnauthorized() {
+		URI mickey = pm.getPrincipalEntry("Mickey").getResourceURI();
+		pm.setAuthenticatedUserURI(mickey);
+		Context mouse = cm.getContext("mouse");
+		Entry sourceList = mouse.createResource(null, GraphType.List, null, null);
+		Entry targetList = mouse.createResource(null, GraphType.List, null, null);
+		Entry original = mouse.createLink(null, URI.create("https://slashdot.org/"), sourceList.getResourceURI());
+		original.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, mickey);
+		// Donald may write both lists, through friendsOfMickey, but the entry's own ACL leaves him out
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+
+		assertThrows(AuthorizationException.class, () -> ((List) targetList.getResource())
+			.moveEntryHere(original.getEntryURI(), sourceList.getEntryURI(), false));
+
+		assertEquals(java.util.List.of(), reload(mouse, targetList).getChildren());
+		assertEquals(java.util.List.of(original.getEntryURI()), reload(mouse, sourceList).getChildren());
+	}
+
+	@Test
+	public void moveEntryBetweenLists_fromAListTheUserMayNotRead_isRefusedAsUnauthorized() {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
+		Context mouse = cm.getContext("mouse");
+		Entry sourceList = mouse.createResource(null, GraphType.List, null, null);
+		Entry targetList = mouse.createResource(null, GraphType.List, null, null);
+		Entry link = mouse.createLink(null, URI.create("https://slashdot.org/"), sourceList.getResourceURI());
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		// set after the link is created, which would otherwise copy it; Donald may read the entry and write both
+		// lists, but the source list's own ACL does not let him read it
+		sourceList.addAllowedPrincipalsFor(AccessProperty.WriteResource, donald);
+		pm.setAuthenticatedUserURI(donald);
+
+		assertThrows(AuthorizationException.class, () -> ((List) targetList.getResource())
+			.moveEntryHere(link.getEntryURI(), sourceList.getEntryURI(), false));
+
+		assertEquals(java.util.List.of(), reload(mouse, targetList).getChildren());
+		assertEquals(java.util.List.of(link.getEntryURI()), reload(mouse, sourceList).getChildren());
+	}
+
+	@Test
 	public void moveEntryBetweenListsInDifferentContexts() throws IOException, QuotaException {
 		// Use the Donald user.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
@@ -424,8 +463,11 @@ public class ListImplTest extends AbstractCoreTest {
 		Entry sourceList = mouse.createResource(null, GraphType.List, null, null);
 		Entry original = fileIn(mouse, sourceList, "payload");
 		original.addAllowedPrincipalsFor(AccessProperty.ReadResource, mickey);
+		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
+		// so that the move gets past looking the entry up, to the copy of its data
+		original.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, donald);
 		// Donald may write the source list, through friendsOfMickey, but not read the file
-		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		pm.setAuthenticatedUserURI(donald);
 		Context duck = cm.getContext("duck");
 		Entry targetList = duck.createResource(null, GraphType.List, null, null);
 
@@ -563,8 +605,9 @@ public class ListImplTest extends AbstractCoreTest {
 		Entry sourceList = mouse.createResource(null, GraphType.List, null, null);
 		Entry original = mouse.createLink(null, URI.create("https://slashdot.org/"), sourceList.getResourceURI());
 		URI donald = pm.getPrincipalEntry("Donald").getResourceURI();
-		// without an ACL of its own, the entry grants Administer to anyone who may write to mouse, as Donald may
-		original.addAllowedPrincipalsFor(AccessProperty.WriteResource, donald);
+		// its own ACL lets Donald look the entry up; without one, the entry would grant Administer to anyone who may
+		// write to mouse, as Donald may
+		original.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, donald);
 		pm.setAuthenticatedUserURI(donald);
 		Context duck = cm.getContext("duck");
 		Entry targetList = duck.createResource(null, GraphType.List, null, null);

@@ -592,12 +592,108 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		assertEquals(Set.of(readable.getEntryURI()), entryURIs(found));
 	}
 
-	/**
-	 * A link guest may not read. ContextImpl.checkAccess grants as soon as the context entry grants ReadMetadata, as
-	 * duck and mouse do to guest, so the link needs a context that grants guest nothing.
-	 */
+	@Test
+	public void getEntry_deniesAnEntryWithoutACLInAContextWhoseResourceTheUserMayNotRead() {
+		// mouse grants guest ReadMetadata on its context entry, but not ReadResource, which is what decides here
+		Entry link = cm.getContext("mouse").createLink(null, URI.create("http://example.com/mouse"), null);
+		rm.setCheckForAuthorization(true);
+
+		assertThrows(AuthorizationException.class,
+				() -> asUser(pm.getGuestUser(), () -> cm.getEntry(link.getEntryURI())));
+	}
+
+	@Test
+	public void getEntry_returnsAnEntryWithoutACLToAReaderOfItsContext() {
+		Entry link = cm.getContext("mouse").createLink(null, URI.create("http://example.com/mouse"), null);
+		User donald = user("Donald");
+		rm.setCheckForAuthorization(true);
+
+		// Donald may read the resource of mouse through friendsOfMickey
+		Entry found = asUser(donald, () -> cm.getEntry(link.getEntryURI()));
+
+		assertEquals(link.getEntryURI(), found.getEntryURI());
+	}
+
+	@Test
+	public void getEntry_deniesAnEntryWhoseOwnACLLeavesTheUserOut() {
+		Entry link = linkInMouseReadableBy("Daisy", URI.create("http://example.com/daisy"));
+		User donald = user("Donald");
+		rm.setCheckForAuthorization(true);
+
+		assertThrows(AuthorizationException.class, () -> asUser(donald, () -> cm.getEntry(link.getEntryURI())));
+	}
+
+	@Test
+	public void getEntry_returnsAnEntryToAUserItsOwnACLNames() {
+		Entry link = linkInMouseReadableBy("Daisy", URI.create("http://example.com/daisy"));
+		User daisy = user("Daisy");
+		rm.setCheckForAuthorization(true);
+
+		Entry found = asUser(daisy, () -> cm.getEntry(link.getEntryURI()));
+
+		assertEquals(link.getEntryURI(), found.getEntryURI());
+	}
+
+	@Test
+	public void getEntry_returnsAnEntryWhoseOwnACLLeavesOutTheOwnerOfItsContext() {
+		Entry link = linkInMouseReadableBy("Daisy", URI.create("http://example.com/daisy"));
+		User mickey = user("Mickey");
+		rm.setCheckForAuthorization(true);
+
+		// Mickey owns mouse, which overrides the entry's own ACL
+		Entry found = asUser(mickey, () -> cm.getEntry(link.getEntryURI()));
+
+		assertEquals(link.getEntryURI(), found.getEntryURI());
+	}
+
+	@Test
+	public void getEntry_deniesGuestAUserEntry() {
+		URI donaldEntry = pm.getPrincipalEntry("Donald").getEntryURI();
+		rm.setCheckForAuthorization(true);
+
+		assertThrows(AuthorizationException.class, () -> asUser(pm.getGuestUser(), () -> cm.getEntry(donaldEntry)));
+	}
+
+	@Test
+	public void getEntry_returnsAUserEntryToAnotherUser() {
+		URI donaldEntry = pm.getPrincipalEntry("Donald").getEntryURI();
+		User mickey = user("Mickey");
+		rm.setCheckForAuthorization(true);
+
+		// a user entry grants ReadMetadata to the _users group
+		Entry found = asUser(mickey, () -> cm.getEntry(donaldEntry));
+
+		assertEquals(donaldEntry, found.getEntryURI());
+	}
+
+	@Test
+	public void getLinks_excludesLinksWhoseOwnACLLeavesTheUserOut() {
+		URI sharedResource = URI.create("http://slashdot.org/shared");
+		Entry readable = cm.getContext("mouse").createLink(null, sharedResource, null);
+		Entry unreadable = linkInMouseReadableBy("Daisy", sharedResource);
+		evictFromSoftCache(unreadable);
+		User donald = user("Donald");
+		rm.setCheckForAuthorization(true);
+
+		Set<Entry> links = asUser(donald, () -> cm.getLinks(sharedResource));
+
+		assertEquals(Set.of(readable.getEntryURI()), entryURIs(links));
+	}
+
+	/** A link in a context without an ACL, which only admins may read. */
 	private Entry linkInPrivateContext(URI resource) {
 		return newContext().createLink(null, resource, null);
+	}
+
+	/** A link in mouse whose own ACL grants ReadMetadata to the named user only. */
+	private Entry linkInMouseReadableBy(String userName, URI resource) {
+		Entry link = cm.getContext("mouse").createLink(null, resource, null);
+		link.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getPrincipalEntry(userName).getResourceURI());
+		return link;
+	}
+
+	private User user(String name) {
+		return (User) pm.getPrincipalEntry(name).getResource();
 	}
 
 	/** Compared by URI, since an evicted entry is loaded again as a new instance. */

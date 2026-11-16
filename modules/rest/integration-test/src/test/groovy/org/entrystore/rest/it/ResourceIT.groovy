@@ -2337,6 +2337,42 @@ class ResourceIT extends BaseSpec {
 		sourceResourceRespJson2 == []
 	}
 
+	def "POST /{context-id}/resource/{entry-id} should refuse to move an entry the user may not read"() {
+		given: 'a context whose entry lets the non-admin user read its metadata and write its resource'
+		def moveContextId = 'resMoveUnreadable'
+		getOrCreateContext([contextId: moveContextId])
+		def base = EntryStoreClient.baseUrl
+		def contextResourceUri = base + '/' + moveContextId
+		def userPrincipal = [[type: 'uri', value: EntryStoreClient.createdEsUsers['user']['resourceUri']]]
+		def contextAcl = [
+			(base + '/_contexts/metadata/' + moveContextId): [(NameSpaceConst.TERM_READ): userPrincipal],
+			(contextResourceUri)                           : [(NameSpaceConst.TERM_WRITE): userPrincipal]]
+		assert EntryStoreClient.putRequest('/_contexts/entry/' + moveContextId, JsonOutput.toJson(contextAcl))
+			.getResponseCode() == HTTP_NO_CONTENT
+		def givenEntryId = createEntry(moveContextId, [:])
+		def sourceListId = createEntry(moveContextId, [graphtype: 'list'], [resource: [givenEntryId]])
+		def targetListId = createEntry(moveContextId, [graphtype: 'list'], [resource: []])
+		// an ACL of the entry's own, which leaves the user out
+		def entryAcl = [(contextResourceUri + '/metadata/' + givenEntryId):
+							[(NameSpaceConst.TERM_READ): [[type: 'uri', value: base + '/_principals/resource/_admin']]]]
+		assert EntryStoreClient.putRequest('/' + moveContextId + '/entry/' + givenEntryId, JsonOutput.toJson(entryAcl))
+			.getResponseCode() == HTTP_NO_CONTENT
+		assert EntryStoreClient.getRequest('/' + moveContextId + '/metadata/' + givenEntryId, 'user')
+			.getResponseCode() == HTTP_FORBIDDEN
+		def sourceResourceUri = contextResourceUri + '/resource/' + sourceListId
+		def targetResourceUri = contextResourceUri + '/resource/' + targetListId
+		def postParams = [moveEntry: moveContextId + '/entry/' + givenEntryId, fromList: sourceResourceUri]
+
+		when:
+		def moveConn = EntryStoreClient.postRequest(targetResourceUri + convertMapToQueryParams(postParams), '', 'user')
+
+		then:
+		moveConn.getResponseCode() == HTTP_FORBIDDEN
+		JSON_PARSER.parseText(moveConn.errorStream.text)['error'] == 'Not authorized'
+		JSON_PARSER.parseText(EntryStoreClient.getRequest(sourceResourceUri).inputStream.text) == [givenEntryId]
+		JSON_PARSER.parseText(EntryStoreClient.getRequest(targetResourceUri).inputStream.text) == []
+	}
+
 	def "POST /{context-id}/resource/{entry-id}?import with ZIP containing RDF file should return 501 Not Implemented"() {
 		given:
 		def importContextId = 'rdf-import-ctx'
