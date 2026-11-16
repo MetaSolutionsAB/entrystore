@@ -137,9 +137,7 @@ public class ResourceController {
 			content = @Content(
 					mediaType = MediaType.ALL_VALUE,
 					schema = @Schema(type = "string", format = "binary")))
-	@PutMapping(
-			path = "/{context-id}/resource/{entry-id}",
-			consumes = "!multipart/form-data")
+	@PutMapping(path = "/{context-id}/resource/{entry-id}")
 	public ResponseEntity<Void> setResource(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,

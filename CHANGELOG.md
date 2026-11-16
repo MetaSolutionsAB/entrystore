@@ -8,6 +8,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1321](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1321) PUT /\{context-id\}/resource/\{entry-id\} stores a raw upload whose Content-Type cannot be parsed, such as csv; charset=UTF-8, as 5.x did, instead of answering 415. **Behaviour note:** such a file is stored with the media type application/octet-stream unless the mimeType parameter names one; 5.x stored the type as sent.
+
 [ENTRYSTORE-1320](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1320) POST /auth/cookie reads the credentials from a form body sent with a content type other than application/x-www-form-urlencoded, such as text/plain or application/octet-stream, or without one, as 5.x did; such logins, for example from FME or R httr, failed with 401. The body is capped at 32 KB and decoded as UTF-8; multipart is still answered 415.
 
 [ENTRYSTORE-1319](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1319) SAML login with a 5.x multi-IdP configuration \(entrystore.auth.saml.idps.N\) works again with an IdP that posts its response to the 5.x assertion consumer service URL without the idp parameter and names that URL in Destination and Recipient. The ACS location of each such IdP carries ?idp=\<id\>, and Spring Security required both to equal it, so every SSO login ended on the failure URL; 5.x did not check Destination. **Behaviour note:** such a response is validated against the ACS location without the idp parameter; all other SAML response validation is unchanged.
