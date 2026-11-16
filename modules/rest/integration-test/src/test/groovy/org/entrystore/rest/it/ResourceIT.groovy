@@ -863,6 +863,34 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getInputStream().readAllBytes() == FORM_ENCODED_BODY
 	}
 
+	def "PUT /{context-id}/resource/{entry-id} raw upload with the unparseable Content-Type csv stores the body, as in 5.x"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'csvTypeFileId'], [resource: [name: 'CSV type file entry']])
+		def body = 'a,b\n1,2\n'.getBytes(UTF_8)
+
+		when:
+		def conn = EntryStoreClient.sendRequestAsStream(HttpMethod.PUT, '/' + contextId + '/resource/' + entryId,
+				new ByteArrayInputStream(body), 'admin', 'csv', ['Content-Length': body.length.toString()])
+
+		then:
+		conn.getResponseCode() == HTTP_CREATED
+		EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId).getInputStream().readAllBytes() == body
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} raw upload with the unparseable Content-Type csv; charset=UTF-8 stores the body, as in 5.x"() {
+		given:
+		def entryId = getOrCreateEntry(contextId, [id: 'csvTypeCharsetFileId'], [resource: [name: 'CSV type with charset file entry']])
+		def body = 'a,b\n1,2\n'.getBytes(UTF_8)
+
+		when:
+		def conn = EntryStoreClient.sendRequestAsStream(HttpMethod.PUT, '/' + contextId + '/resource/' + entryId,
+				new ByteArrayInputStream(body), 'admin', 'csv; charset=UTF-8', ['Content-Length': body.length.toString()])
+
+		then:
+		conn.getResponseCode() == HTTP_CREATED
+		EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId).getInputStream().readAllBytes() == body
+	}
+
 	def "PUT /{context-id}/resource/{entry-id} form-urlencoded raw upload with Expect: 100-continue from a guest is answered 401 instead of 100 Continue"() {
 		given:
 		def entryId = getOrCreateEntry(contextId, [id: 'formEncodedFileId'], [resource: [name: 'Form-encoded file entry']])
