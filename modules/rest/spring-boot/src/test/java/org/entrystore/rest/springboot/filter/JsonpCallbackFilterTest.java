@@ -112,6 +112,20 @@ class JsonpCallbackFilterTest {
 	}
 
 	@Test
+	void callbackWithAValueThatCannotBeDecoded_passesJsonThrough() throws Exception {
+		// IgnoreAuthFilter serves this request as guest by the parameter name; there is no name to wrap with
+		var request = new MockHttpServletRequest("GET", "/90/entry/1");
+		request.setQueryString("callback=%zz");
+		var response = new MockHttpServletResponse();
+
+		filter.doFilter(request, response, chainWriting(200, "application/json", "{\"a\":1}".getBytes(UTF_8)));
+
+		assertEquals("{\"a\":1}", response.getContentAsString());
+		assertTrue(response.getContentType().startsWith("application/json"));
+		assertNull(response.getHeader("X-Content-Type-Options"));
+	}
+
+	@Test
 	void blankCallback_defaultsToCallbackName() throws Exception {
 		var request = getRequestWithCallback("/90/entry/1", "");
 		var response = new MockHttpServletResponse();

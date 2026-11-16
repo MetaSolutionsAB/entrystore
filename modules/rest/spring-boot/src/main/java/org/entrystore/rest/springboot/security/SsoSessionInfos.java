@@ -32,35 +32,36 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The session info that /auth/tokens reports for SAML, CAS and OIDC sessions, by session id. Their principals are
- * Spring's own and cannot carry it, as {@link ESUserSessionDetails} does for form logins. An entry lives as long as
- * its session, so this is session state, not a cache: it is not listed under /management/caches, where clearing it
- * would blank the info of live sessions.
+ * The handle and session info that /auth/tokens reports for SAML, CAS and OIDC sessions, by session id. Their
+ * principals are Spring's own and cannot carry them, as {@link ESUserSessionDetails} does for form logins. An entry
+ * lives as long as its session, so this is session state, not a cache: it is not listed under /management/caches,
+ * where clearing it would blank the info of live sessions.
  */
 @Component
 @RequiredArgsConstructor
 public class SsoSessionInfos {
 
 	private final AuthTokenCookies authTokenCookies;
-	private final Map<String, SessionInfo> bySessionId = new ConcurrentHashMap<>();
+	private final Map<String, RecordedSession> bySessionId = new ConcurrentHashMap<>();
 
 	/**
-	 * Records the info of the request's session with the fields a form login records. Call when an SSO login has
-	 * succeeded, after its session lifetime is set.
+	 * Records a new handle and the info of the request's session with the fields a form login records. Call when an
+	 * SSO login has succeeded, after its session lifetime is set.
 	 */
 	public void recordLogin(HttpServletRequest request, String username) {
 		HttpSession session = request.getSession();
 		LocalDateTime now = LocalDateTime.now();
-		bySessionId.put(session.getId(), asOfRequest(request, session, now)
-				.userName(username.toLowerCase())
-				.loginTime(now)
-				.build());
+		bySessionId.put(session.getId(), new RecordedSession(SessionHandle.generate(),
+				asOfRequest(request, session, now)
+						.userName(username.toLowerCase())
+						.loginTime(now)
+						.build()));
 	}
 
 	/**
-	 * Updates the info of the request's session as of this request. A session without recorded info gets none, so a
-	 * request can neither add an entry for a session that has no SSO login nor bring back the entry of a session
-	 * that has just ended.
+	 * Updates the info of the request's session as of this request and keeps its handle. A session without recorded
+	 * info gets none, so a request can neither add an entry for a session that has no SSO login nor bring back the
+	 * entry of a session that has just ended.
 	 */
 	public void refresh(HttpServletRequest request) {
 		HttpSession session = request.getSession(false);
@@ -69,16 +70,16 @@ public class SsoSessionInfos {
 		}
 		try {
 			SessionInfo.SessionInfoBuilder updated = asOfRequest(request, session, LocalDateTime.now());
-			bySessionId.computeIfPresent(session.getId(), (_, recorded) -> updated
-					.userName(recorded.userName())
-					.loginTime(recorded.loginTime())
-					.build());
+			bySessionId.computeIfPresent(session.getId(), (_, recorded) -> new RecordedSession(recorded.handle(),
+					updated.userName(recorded.info().userName())
+							.loginTime(recorded.info().loginTime())
+							.build()));
 		} catch (IllegalStateException endedByAConcurrentRequest) {
 			// the request is served without the session, and the session's end removes the entry
 		}
 	}
 
-	public @Nullable SessionInfo get(String sessionId) {
+	public @Nullable RecordedSession get(String sessionId) {
 		return bySessionId.get(sessionId);
 	}
 

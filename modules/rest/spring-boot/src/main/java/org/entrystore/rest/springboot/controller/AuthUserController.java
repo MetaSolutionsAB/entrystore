@@ -61,16 +61,18 @@ public class AuthUserController {
 		return userService.getUserInfo(acceptLanguage, session != null ? authTokenCookies.expiry(session) : null);
 	}
 
-	@Operation(summary = "Provides list of active tokens of a currently logged-in user.")
+	@Operation(summary = "Lists the active sessions of the currently logged-in user by session handle; "
+			+ "the session making the request is marked as current.")
 	@GetMapping(path = "/auth/tokens", produces = MediaType.APPLICATION_JSON_VALUE)
-	public ResponseEntity<Map<String, SessionInfo>> tokensInfo() {
-		// The keys are live session ids.
+	public ResponseEntity<Map<String, SessionInfo>> tokensInfo(HttpServletRequest request) {
+		// Without creating a session: an HTTP Basic request has none, and then no listed session is current
+		HttpSession session = request.getSession(false);
 		return ResponseEntity.ok()
 				.header(HttpHeaders.CACHE_CONTROL, CacheControlFilter.CACHE_CONTROL_CREDENTIALS)
-				.body(tokenService.getTokens());
+				.body(tokenService.getTokens(session != null ? session.getId() : null));
 	}
 
-	@Operation(summary = "Deletes the session of provided cookie token.")
+	@Operation(summary = "Ends the session of the currently logged-in user that has the given session handle.")
 	@DeleteMapping(path = "/auth/tokens", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<Void> deleteToken(
 			@Valid @RequestBody DeleteAuthTokenRequestBody body

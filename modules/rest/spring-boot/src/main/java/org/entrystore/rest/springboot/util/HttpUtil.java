@@ -24,6 +24,7 @@ import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.filter.CacheControlFilter;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
+import org.jetbrains.annotations.Nullable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -285,7 +286,14 @@ public class HttpUtil {
 	 * malformed value cannot hide its name, and the body is never read (see {@link #getQueryParameter}).
 	 */
 	public static boolean hasQueryParameter(HttpServletRequest request, String name) {
-		String query = request.getQueryString();
+		return hasQueryParameter(request.getQueryString(), name);
+	}
+
+	/**
+	 * Whether the raw query string {@code query}, which may be null, holds parameter {@code name}; see
+	 * {@link #hasQueryParameter(HttpServletRequest, String)}. For code that runs before the servlet request exists.
+	 */
+	public static boolean hasQueryParameter(@Nullable String query, String name) {
 		if (query == null) {
 			return false;
 		}

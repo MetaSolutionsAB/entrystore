@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.filter;
 
+import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpSession;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
@@ -137,6 +138,31 @@ class ReloadUserPropertiesFilterTest {
 	}
 
 	@Test
+	void reload_keepsTheSessionHandle() throws Exception {
+		loggedIn().setSessionHandle("handle-of-the-login");
+		ESUserSessionDetails reloaded = sessionDetails();
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenReturn(reloaded);
+
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+		// the reloaded details replace those of the login in the security context
+		assertSame(reloaded, SecurityContextHolder.getContext().getAuthentication().getPrincipal());
+		assertEquals("handle-of-the-login", reloaded.getSessionHandle());
+	}
+
+	@Test
+	void unregisteredSession_isRegisteredWithItsSessionHandle() throws Exception {
+		loggedIn().setSessionHandle("handle-of-the-login");
+		sessionRegistry.removeSessionInformation(sessionId);
+		when(userDetailsService.loadUserByUsername(USERNAME)).thenReturn(sessionDetails());
+
+		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+		var registeredUser = (ESUserSessionDetails) sessionRegistry.getSessionInformation(sessionId).getPrincipal();
+		assertEquals("handle-of-the-login", registeredUser.getSessionHandle());
+	}
+
+	@Test
 	void ssoSession_updatesItsSessionInfoAndKeepsTheLoginTime() throws Exception {
 		logInThroughSaml();
 		var login = new MockHttpServletRequest();
@@ -144,7 +170,7 @@ class ReloadUserPropertiesFilterTest {
 		login.addHeader("User-Agent", "Browser/1");
 		ssoSessionInfos.recordLogin(login, "alice");
 		String ssoSessionId = login.getSession().getId();
-		SessionInfo atLogin = ssoSessionInfos.get(ssoSessionId);
+		SessionInfo atLogin = ssoSessionInfos.get(ssoSessionId).info();
 		var later = new MockHttpServletRequest();
 		later.setSession(login.getSession());
 		later.setRemoteAddr("192.0.2.2");
@@ -153,7 +179,7 @@ class ReloadUserPropertiesFilterTest {
 
 		filter.doFilter(later, new MockHttpServletResponse(), chain);
 
-		SessionInfo updated = ssoSessionInfos.get(ssoSessionId);
+		SessionInfo updated = ssoSessionInfos.get(ssoSessionId).info();
 		assertEquals("192.0.2.2", updated.lastUsedIpAddress());
 		assertEquals("Browser/2", updated.lastUsedUserAgent());
 		assertEquals(atLogin.loginTime(), updated.loginTime());
@@ -161,6 +187,30 @@ class ReloadUserPropertiesFilterTest {
 		assertNotNull(chain.getRequest());
 		// SetUserURIAfterAuthenticationFilter loads the user of an SSO session
 		verify(userDetailsService, never()).loadUserByUsername(any());
+	}
+
+	@Test
+	void ssoSession_requestServedAsGuest_keepsItsSessionInfo() throws Exception {
+		logInThroughSaml();
+		var login = new MockHttpServletRequest();
+		login.setRemoteAddr("192.0.2.1");
+		login.addHeader("User-Agent", "Browser/1");
+		ssoSessionInfos.recordLogin(login, "alice");
+		String ssoSessionId = login.getSession().getId();
+		SessionInfo atLogin = ssoSessionInfos.get(ssoSessionId).info();
+		var later = new MockHttpServletRequest("GET", "/auth/user");
+		later.setQueryString("callback=cb");
+		later.setSession(login.getSession());
+		later.setRemoteAddr("192.0.2.2");
+		later.addHeader("User-Agent", "Browser/2");
+		var chain = new MockFilterChain(new HttpServlet() {
+		}, filter);
+
+		// through the real IgnoreAuthFilter, so that the filter sees the context it gets in the chain
+		new IgnoreAuthFilter(true).doFilter(later, new MockHttpServletResponse(), chain);
+
+		assertSame(atLogin, ssoSessionInfos.get(ssoSessionId).info());
+		assertNotNull(chain.getRequest());
 	}
 
 	@Test
@@ -431,6 +481,7 @@ class ReloadUserPropertiesFilterTest {
 				.withBean(ErrorResponseWriter.class, () -> new ErrorResponseWriter(JsonMapper.builder().build()))
 				.withBean(AuthTokenCookies.class, () -> authTokenCookies)
 				.withBean(SsoSessionInfos.class, () -> ssoSessionInfos)
+				.withBean(IgnoreAuthFilter.class, () -> new IgnoreAuthFilter(true))
 				.withUserConfiguration(ReloadUserPropertiesFilter.class)
 				.run(context -> {
 					reloadedAt(Instant.now().minusSeconds(secondsSinceTheLastReload));
@@ -441,13 +492,19 @@ class ReloadUserPropertiesFilterTest {
 
 	private ReloadUserPropertiesFilter filterWithReloadInterval(int seconds) {
 		return new ReloadUserPropertiesFilter(userDetailsService, sessionRegistry,
-				new ErrorResponseWriter(JsonMapper.builder().build()), authTokenCookies, ssoSessionInfos, seconds);
+				new ErrorResponseWriter(JsonMapper.builder().build()), authTokenCookies, ssoSessionInfos,
+				new IgnoreAuthFilter(true), seconds);
 	}
 
 	/** Replaces the form login of {@link #logIn()} with the Authentication of a SAML login. */
 	private static void logInThroughSaml() {
 		SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(
 				new DefaultSaml2AuthenticatedPrincipal("alice", Map.of()), null, "ROLE_USER"));
+	}
+
+	/** The details that {@link #logIn()} put into the security context and registered for the session. */
+	private static ESUserSessionDetails loggedIn() {
+		return (ESUserSessionDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
 	}
 
 	private static ESUserSessionDetails sessionDetails() {

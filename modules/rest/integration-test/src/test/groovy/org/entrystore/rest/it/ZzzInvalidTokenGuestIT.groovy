@@ -70,14 +70,7 @@ class ZzzInvalidTokenGuestIT extends BaseSpec {
 
 	def "GET /auth/user with an expired session should respond as guest and expire the cookie on /store and /store/"() {
 		given: 'two admin sessions, the first one expiring the second one (users other than admin exist only in the shared app)'
-		def firstLogin = login()
-		def firstToken = EntryStoreClient.findCookieValue(firstLogin, 'auth_token')
-		def firstCsrf = EntryStoreClient.findCookieValue(firstLogin, 'XSRF-TOKEN')
-		def secondToken = EntryStoreClient.findCookieValue(login(), 'auth_token')
-		def sessionId = secondToken.substring(0, secondToken.indexOf('.node'))
-		assert EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: sessionId]), '',
-				'application/json', EntryStoreClient.csrfHeaders('auth_token=' + firstToken, firstCsrf))
-				.getResponseCode() == HTTP_NO_CONTENT
+		def secondToken = expiredSessionToken()
 
 		when:
 		def conn = EntryStoreClient.getRequest('/auth/user', '', 'application/json', [Cookie: 'auth_token=' + secondToken])
@@ -189,8 +182,8 @@ class ZzzInvalidTokenGuestIT extends BaseSpec {
 		def firstToken = EntryStoreClient.findCookieValue(firstLogin, 'auth_token')
 		def firstCsrf = EntryStoreClient.findCookieValue(firstLogin, 'XSRF-TOKEN')
 		def secondToken = EntryStoreClient.findCookieValue(login(), 'auth_token')
-		def sessionId = secondToken.substring(0, secondToken.indexOf('.node'))
-		assert EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: sessionId]), '',
+		def secondHandle = EntryStoreClient.handleOf('auth_token=' + secondToken)
+		assert EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: secondHandle]), '',
 				'application/json', EntryStoreClient.csrfHeaders('auth_token=' + firstToken, firstCsrf))
 				.getResponseCode() == HTTP_NO_CONTENT
 		return secondToken

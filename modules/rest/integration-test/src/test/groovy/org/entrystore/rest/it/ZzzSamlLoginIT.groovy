@@ -386,13 +386,19 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		when: 'the user lists their sessions in one of them'
 		def tokensConn = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: currentCookie])
 
-		then: 'both are listed by session id'
+		then: 'both are listed by handle, not by session id or cookie value'
 		tokensConn.getResponseCode() == HTTP_OK
 		def tokens = JSON_PARSER.parseText(tokensConn.inputStream.text) as Map
-		def current = tokens[EntryStoreClient.sessionIdOf(currentCookie)]
-		def other = tokens[EntryStoreClient.sessionIdOf(otherCookie)]
+		def current = tokens[EntryStoreClient.handleOf(currentCookie)]
+		def other = tokens[EntryStoreClient.handleOf(otherCookie)]
 		current != null
 		other != null
+		!tokens.containsKey(EntryStoreClient.sessionIdOf(currentCookie))
+		!tokens.containsKey(EntryStoreClient.cookieValueOf(currentCookie))
+
+		and: 'only the session making the request is marked as current'
+		current['current'] == true
+		other['current'] == false
 
 		and: 'with the session info a form login reports'
 		current['userName'] == testUsername
@@ -413,11 +419,11 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		given: 'two sessions of the user'
 		def currentCookie = samlLogin()
 		def otherCookie = samlLogin()
-		def otherSessionId = EntryStoreClient.sessionIdOf(otherCookie)
+		def otherHandle = EntryStoreClient.handleOf(otherCookie)
 		assert EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: otherCookie]).getResponseCode() == HTTP_OK
 
 		when: 'the user deletes the other session in one of them'
-		def deleteConn = EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: otherSessionId]), '',
+		def deleteConn = EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: otherHandle]), '',
 			'application/json', [Cookie: currentCookie])
 
 		then:
@@ -430,8 +436,34 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		def tokensConn = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: currentCookie])
 		tokensConn.getResponseCode() == HTTP_OK
 		def tokens = JSON_PARSER.parseText(tokensConn.inputStream.text) as Map
-		tokens.containsKey(EntryStoreClient.sessionIdOf(currentCookie))
-		!tokens.containsKey(otherSessionId)
+		tokens.containsKey(EntryStoreClient.handleOf(currentCookie))
+		!tokens.containsKey(otherHandle)
+	}
+
+	def '14. A request served as guest leaves the session info of the SAML session unchanged'() {
+		given: 'two sessions of the user; the second one reads what /auth/tokens reports about the first'
+		def cookie = samlLogin()
+		def observerCookie = samlLogin()
+		def handle = EntryStoreClient.handleOf(cookie)
+		def tokensSeenByObserver = {
+			JSON_PARSER.parseText(EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: observerCookie])
+				.inputStream.text) as Map
+		}
+		def before = tokensSeenByObserver()[handle]
+
+		when: 'a JSONP request carries the cookie of the first session'
+		def conn = EntryStoreClient.getRequest('/auth/user?callback=cb', '', '*/*',
+			[Cookie: cookie, 'User-Agent': 'served-as-guest'])
+
+		then: 'it is served as guest'
+		conn.getResponseCode() == HTTP_OK
+		def body = conn.inputStream.text
+		JSON_PARSER.parseText(body.substring('cb('.length(), body.length() - 1))['user'] == 'guest'
+
+		and: 'the session info is as before'
+		def after = tokensSeenByObserver()[handle]
+		after['lastUsedUserAgent'] == before['lastUsedUserAgent']
+		after['lastAccessTime'] == before['lastAccessTime']
 	}
 
 	/** Logs the test user in through SAML with no cookies and returns the new session's Cookie header. */

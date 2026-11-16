@@ -469,15 +469,45 @@ class EntryStoreClient {
 		return csrfHeaders(login.authCookie.toString(), login.csrf.toString())
 	}
 
+	/** The body of a response, whatever its status. */
+	static String bodyOf(HttpURLConnection conn) {
+		return (conn.getResponseCode() < 400 ? conn.inputStream : conn.errorStream)?.text ?: ''
+	}
+
+	/** The value of an Authorization header that carries the credentials as HTTP Basic. */
+	static String basicAuth(String username, String password) {
+		return 'Basic ' + Base64.getEncoder().encodeToString((username + ':' + password).getBytes(UTF_8))
+	}
+
 	/**
-	 * Returns the session id, which /auth/tokens keys sessions by, of an auth_token cookie: its value up to but
-	 * excluding the '.node' suffix. Takes a Set-Cookie line or a Cookie header value that starts with the cookie.
+	 * Returns the handle that /auth/tokens lists the session of an auth_token cookie under: the key of the entry
+	 * marked as current. Takes a Set-Cookie line or a Cookie header value that starts with the cookie.
+	 */
+	static String handleOf(String authCookie) {
+		def conn = getRequest('/auth/tokens', '', null, [Cookie: authCookie])
+		assert conn.getResponseCode() == HTTP_OK
+		def tokens = BaseSpec.JSON_PARSER.parseText(conn.inputStream.text) as Map
+		def current = tokens.findAll { it.value['current'] == true }
+		assert current.size() == 1: 'exactly one listed session must be the current one: ' + tokens
+		return current.keySet().first()
+	}
+
+	/**
+	 * Returns the value of an auth_token cookie, which is the session id followed by a '.node' suffix. Takes a
+	 * Set-Cookie line or a Cookie header value that starts with the cookie.
+	 */
+	static String cookieValueOf(String authCookie) {
+		assert authCookie.startsWith('auth_token='): 'not an auth_token cookie: ' + authCookie
+		return authCookie.substring('auth_token='.length()).split(';')[0]
+	}
+
+	/**
+	 * Returns the session id of an auth_token cookie: its value up to but excluding the '.node' suffix. Takes a
+	 * Set-Cookie line or a Cookie header value that starts with the cookie.
 	 */
 	static String sessionIdOf(String authCookie) {
-		// Fail here instead of querying /auth/tokens with a bogus key. The '.node' check looks at the
-		// cookie value alone, as an attribute could carry it.
-		assert authCookie.startsWith('auth_token='): 'not an auth_token cookie: ' + authCookie
-		def value = authCookie.substring('auth_token='.length()).split(';')[0]
+		// The '.node' check looks at the cookie value alone, as an attribute could carry it.
+		def value = cookieValueOf(authCookie)
 		assert value.contains('.node'): 'auth_token cookie carries no .node suffix: ' + authCookie
 		return value.split(/\.node/)[0]
 	}

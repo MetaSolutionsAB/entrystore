@@ -333,13 +333,19 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		when: 'the user lists their sessions in one of them'
 		def tokensConn = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: currentCookie])
 
-		then: 'both are listed by session id'
+		then: 'both are listed by handle, not by session id or cookie value'
 		tokensConn.getResponseCode() == HTTP_OK
 		def tokens = JSON_PARSER.parseText(tokensConn.inputStream.text) as Map
-		def current = tokens[EntryStoreClient.sessionIdOf(currentCookie)]
-		def other = tokens[EntryStoreClient.sessionIdOf(otherCookie)]
+		def current = tokens[EntryStoreClient.handleOf(currentCookie)]
+		def other = tokens[EntryStoreClient.handleOf(otherCookie)]
 		current != null
 		other != null
+		!tokens.containsKey(EntryStoreClient.sessionIdOf(currentCookie))
+		!tokens.containsKey(EntryStoreClient.cookieValueOf(currentCookie))
+
+		and: 'only the session making the request is marked as current'
+		current['current'] == true
+		other['current'] == false
 
 		and: 'with the session info a form login reports'
 		current['userName'] == testUserEmail
@@ -360,11 +366,11 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		given: 'two sessions of the user'
 		def currentCookie = oidcLogin()
 		def otherCookie = oidcLogin()
-		def otherSessionId = EntryStoreClient.sessionIdOf(otherCookie)
+		def otherHandle = EntryStoreClient.handleOf(otherCookie)
 		assert EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: otherCookie]).getResponseCode() == HTTP_OK
 
 		when: 'the user deletes the other session in one of them'
-		def deleteConn = EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: otherSessionId]), '',
+		def deleteConn = EntryStoreClient.deleteRequest('/auth/tokens', JsonOutput.toJson([token: otherHandle]), '',
 			'application/json', [Cookie: currentCookie])
 
 		then:
@@ -377,8 +383,8 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		def tokensConn = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: currentCookie])
 		tokensConn.getResponseCode() == HTTP_OK
 		def tokens = JSON_PARSER.parseText(tokensConn.inputStream.text) as Map
-		tokens.containsKey(EntryStoreClient.sessionIdOf(currentCookie))
-		!tokens.containsKey(otherSessionId)
+		tokens.containsKey(EntryStoreClient.handleOf(currentCookie))
+		!tokens.containsKey(otherHandle)
 	}
 
 	/** Logs the test user in through OIDC with no cookies and returns the new session's Cookie header. */
