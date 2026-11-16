@@ -159,24 +159,23 @@ class LogoutIT extends BaseSpec {
 		responseJson['timestamp'] != null
 	}
 
-	def 'POST /auth/logout?ignoreAuth should answer 204 and leave the session logged in'() {
+	def 'POST /auth/logout?ignoreAuth should log the user out'() {
 		given: 'an isolated user session'
 		def userCookies = EntryStoreClient.isolatedCsrfHeaders('user')
 
-		when: 'the logout request asks to be served as guest'
+		when: 'the logout request also asks to be served as guest'
 		def connection = EntryStoreClient.postRequest('/auth/logout?ignoreAuth', '', '', 'application/json',
 				userCookies)
 
-		then: 'a guest has no session to end, and the session cookie is not expired'
+		then: 'it is a logout all the same, and the session cookie is expired on both paths'
 		connection.getResponseCode() == HTTP_NO_CONTENT
-		EntryStoreClient.findSetCookies(connection, 'auth_token').isEmpty()
+		EntryStoreClient.expiredCookies(connection, 'auth_token').keySet() == ['/store', '/store/'] as Set
 
 		when: 'session is queried with the same cookie'
 		def userConn = EntryStoreClient.getRequest('/auth/user', '', 'application/json', userCookies)
 
-		then: 'it is still logged in'
-		userConn.getResponseCode() == HTTP_OK
-		JSON_PARSER.parseText(userConn.inputStream.text)['user'] == 'user'
+		then: 'the session is ended'
+		userConn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	def 'GET /auth/logout must not log the user out (CSRF safety - logout is POST-only)'() {

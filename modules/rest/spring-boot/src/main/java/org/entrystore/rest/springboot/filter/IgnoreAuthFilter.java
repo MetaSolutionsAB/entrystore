@@ -35,15 +35,16 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * Forces anonymous access for a request that names the {@code ignoreAuth} query parameter or, while
- * {@code entrystore.jsonp} is on, is a GET that names {@code callback}, on any path and whether or not
- * {@link JsonpCallbackFilter} wraps the response, by replacing the SecurityContext with an anonymous authentication
- * token. The session is not invalidated, so subsequent requests without these parameters remain authenticated.
- * Only the query string is read, so a multipart body is not parsed before the access checks.
+ * Forces anonymous access for a request that has the {@code ignoreAuth} query parameter or, while
+ * {@code entrystore.jsonp} is on, asks for JSONP, whatever session cookie or HTTP Basic credentials it carries, by
+ * replacing the SecurityContext with an anonymous authentication token. The session is not invalidated, so subsequent
+ * requests without these parameters remain authenticated. Only the query string is read, so a multipart body is not
+ * parsed before the access checks.
  * <p>
- * {@code GuestRequestCredentialsHandler} decides by the same {@link #isRequested(String, String)} before the
- * session is resolved and hides the request's session cookie and credentials, so such a request does not touch
- * the session; this filter then sees a request without them and is the second line.
+ * {@link org.entrystore.rest.springboot.configuration.IgnoreAuthHandlerCustomizer} has already removed the session
+ * cookie and the {@code Authorization} header from such a request, except from {@code POST /auth/logout}, so that it
+ * does not touch the session either; this filter is the second line. A password, CAS, SAML or OIDC login still logs
+ * in with a new session, as those filters run before this one.
  */
 @Slf4j
 @Component
@@ -55,18 +56,21 @@ public class IgnoreAuthFilter extends OncePerRequestFilter {
 		this.jsonpEnabled = jsonpEnabled;
 	}
 
-	/** @return whether the request is served as guest; see {@link #isRequested(String, String)} */
+	/** @return whether the request is served as guest whatever session cookie or HTTP Basic credentials it carries */
 	public boolean isRequested(HttpServletRequest request) {
-		return isRequested(request.getMethod(), request.getQueryString());
+		return isRequested(request.getMethod(), request.getQueryString(), jsonpEnabled);
 	}
 
 	/**
-	 * @return whether a request with this method and raw query string is served as guest, whatever session cookie
-	 * or credentials it carries. The parameter names decide, so a value that cannot be decoded still counts.
+	 * Decides on the method and the raw query string alone, so that it can be answered before the servlet request
+	 * exists. A parameter counts whatever its value, also one that does not decode, so such a request is served as
+	 * guest too; every request {@link JsonpCallbackFilter} wraps is among them.
+	 *
+	 * @return whether a request is served as guest whatever its credentials
 	 */
-	public boolean isRequested(String method, @Nullable String queryString) {
-		return HttpUtil.hasQueryParameter(queryString, "ignoreAuth")
-				|| (jsonpEnabled && JsonpCallbackFilter.isCallbackRequested(method, queryString));
+	public static boolean isRequested(String method, @Nullable String rawQuery, boolean jsonpEnabled) {
+		return HttpUtil.hasQueryParameter(rawQuery, "ignoreAuth")
+				|| (jsonpEnabled && "GET".equals(method) && HttpUtil.hasQueryParameter(rawQuery, "callback"));
 	}
 
 	@Override

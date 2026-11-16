@@ -171,9 +171,9 @@ class TokenResourceIT extends BaseSpec {
 		def before = infoSeenByObserver()
 
 		when: 'a JSONP and an ignoreAuth request carry the cookie of the first session'
-		def guestHeaders = [Cookie: login.authCookie, 'User-Agent': 'served-as-guest']
-		def jsonpConn = EntryStoreClient.getRequest('/auth/user?callback=cb', '', '*/*', guestHeaders)
-		def ignoreAuthConn = EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', 'application/json', guestHeaders)
+		def headers = [Cookie: login.authCookie, 'User-Agent': 'TokenResourceIT-agent']
+		def jsonpConn = EntryStoreClient.getRequest('/auth/user?callback=cb', '', '*/*', headers)
+		def ignoreAuthConn = EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', 'application/json', headers)
 
 		then:
 		jsonpConn.getResponseCode() == HTTP_OK
@@ -184,6 +184,15 @@ class TokenResourceIT extends BaseSpec {
 		after['lastAccessTime'] == before['lastAccessTime']
 		after['lastUsedUserAgent'] == before['lastUsedUserAgent']
 		after['loginExpiration'] == before['loginExpiration']
+
+		when: 'a request that is not served as guest carries the same headers'
+		def userConn = EntryStoreClient.getRequest('/auth/user', '', 'application/json', headers)
+
+		then: 'the session info records it, so the comparison above would have seen a change'
+		userConn.getResponseCode() == HTTP_OK
+		def recorded = infoSeenByObserver()
+		recorded['lastUsedUserAgent'] == headers['User-Agent']
+		recorded['lastAccessTime'] != before['lastAccessTime']
 	}
 
 	def "GET /auth/tokens should give every login its own handle"() {
