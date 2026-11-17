@@ -121,27 +121,59 @@ class AuthTokenCookiesTest {
 	}
 
 	@Test
-	void expireStale_configuredDomain_expiresHostOnlyCookieOnIssuingPath() {
-		var cookies = authTokenCookies("strict", true, "example.org");
+	void expireStale_singleAuthToken_writesNothing() {
+		var cookies = authTokenCookies("/api/", "/store");
 		var response = new MockHttpServletResponse();
 
 		cookies.expireStale(requestWithAuthToken(), response);
 
+		assertEquals(List.of(), response.getHeaders("Set-Cookie"));
+	}
+
+	@Test
+	void expireStale_twoAuthTokens_leavesIssuingPathAndItsSlashVariant() {
+		var cookies = authTokenCookies("none", false, "");
+		var response = new MockHttpServletResponse();
+
+		cookies.expireStale(requestWithTwoAuthTokens(), response);
+
+		assertEquals(List.of(), response.getHeaders("Set-Cookie"));
+	}
+
+	@Test
+	void expireStale_twoAuthTokensAndConfiguredDomain_expiresHostOnlyCookies() {
+		var cookies = authTokenCookies("strict", true, "example.org");
+		var response = new MockHttpServletResponse();
+
+		cookies.expireStale(requestWithTwoAuthTokens(), response);
+
 		assertEquals(List.of(
-				"auth_token=; Path=/store; Domain=example.org; Max-Age=0; " + EPOCH + "; HttpOnly; SameSite=Strict",
 				"auth_token=; Path=/store; Max-Age=0; " + EPOCH + "; HttpOnly; SameSite=Strict",
 				"auth_token=; Path=/store/; Max-Age=0; " + EPOCH + "; HttpOnly; SameSite=Strict"),
 				response.getHeaders("Set-Cookie"));
 	}
 
 	@Test
-	void expireStale_leavesIssuingPath() {
-		var cookies = authTokenCookies("none", false, "");
+	void expireStale_twoAuthTokensAndProxyPrefix_expiresContextPathOnly() {
+		var cookies = authTokenCookies("/api/", "/store");
 		var response = new MockHttpServletResponse();
 
-		cookies.expireStale(requestWithAuthToken(), response);
+		cookies.expireStale(requestWithTwoAuthTokens(), response);
 
-		assertEquals(List.of("auth_token=; Path=/store; Max-Age=0; " + EPOCH + "; Secure; SameSite=None"),
+		assertEquals(List.of(
+				"auth_token=; Path=/store; Max-Age=0; " + EPOCH + "; HttpOnly; SameSite=Strict",
+				"auth_token=; Path=/store/; Max-Age=0; " + EPOCH + "; HttpOnly; SameSite=Strict"),
+				response.getHeaders("Set-Cookie"));
+	}
+
+	@Test
+	void expireStale_twoAuthTokensAndRootContext_expiresRootOnly() {
+		var cookies = authTokenCookies("/store/", "");
+		var response = new MockHttpServletResponse();
+
+		cookies.expireStale(requestWithTwoAuthTokens(), response);
+
+		assertEquals(List.of("auth_token=; Path=/; Max-Age=0; " + EPOCH + "; HttpOnly; SameSite=Strict"),
 				response.getHeaders("Set-Cookie"));
 	}
 
@@ -168,17 +200,19 @@ class AuthTokenCookiesTest {
 	}
 
 	@Test
-	void expireStaleThenExpireAll_expiresIssuingPathOnce() {
-		var cookies = authTokenCookies("none", false, "");
-		var request = requestWithAuthToken();
+	void expireStaleThenExpireAll_expiresEachPathOnce() {
+		var cookies = authTokenCookies("/api/", "/store");
+		var request = requestWithTwoAuthTokens();
 		var response = new MockHttpServletResponse();
 
 		cookies.expireStale(request, response);
 		cookies.expireAll(request, response);
 
 		assertEquals(List.of(
-				"auth_token=; Path=/store; Max-Age=0; " + EPOCH + "; Secure; SameSite=None",
-				"auth_token=; Path=/store/; Max-Age=0; " + EPOCH + "; Secure; SameSite=None"),
+				"auth_token=; Path=/store; Max-Age=0; " + EPOCH + "; HttpOnly; SameSite=Strict",
+				"auth_token=; Path=/store/; Max-Age=0; " + EPOCH + "; HttpOnly; SameSite=Strict",
+				"auth_token=; Path=/api; Max-Age=0; " + EPOCH + "; HttpOnly; SameSite=Strict",
+				"auth_token=; Path=/api/; Max-Age=0; " + EPOCH + "; HttpOnly; SameSite=Strict"),
 				response.getHeaders("Set-Cookie"));
 	}
 
@@ -268,18 +302,35 @@ class AuthTokenCookiesTest {
 		return authTokenCookies("strict", true, "", maxAge, refreshExpirationOnAccess);
 	}
 
+	/** A cookie issued on {@code issuingPath}, as behind a proxy that maps it to the servlet's {@code contextPath}. */
+	private static AuthTokenCookies authTokenCookies(String issuingPath, String contextPath) {
+		return authTokenCookies("strict", true, "", "86400", true, contextPath, issuingPath);
+	}
+
 	private static AuthTokenCookies authTokenCookies(String sameSite, boolean httpOnly, String domain, String maxAge,
 			boolean refreshExpirationOnAccess) {
+		return authTokenCookies(sameSite, httpOnly, domain, maxAge, refreshExpirationOnAccess, "/store", "auto");
+	}
+
+	private static AuthTokenCookies authTokenCookies(String sameSite, boolean httpOnly, String domain, String maxAge,
+			boolean refreshExpirationOnAccess, String contextPath, String configuredPath) {
 		var repositoryManager = mock(RepositoryManager.class);
 		when(repositoryManager.getRepositoryURL()).thenReturn(url("https://example.org/store/"));
 		var environment = new MockEnvironment().withProperty("server.servlet.session.cookie.same-site", sameSite);
 		return new AuthTokenCookies(repositoryManager, environment, "auth_token", domain, httpOnly, false,
-				"/store", "auto", maxAge, refreshExpirationOnAccess);
+				contextPath, configuredPath, maxAge, refreshExpirationOnAccess);
 	}
 
 	static MockHttpServletRequest requestWithAuthToken() {
 		var request = new MockHttpServletRequest();
 		request.setCookies(new Cookie("auth_token", "unknown"));
+		return request;
+	}
+
+	/** A browser holding a stale copy on another path, which it sends along with the current cookie. */
+	private static MockHttpServletRequest requestWithTwoAuthTokens() {
+		var request = new MockHttpServletRequest();
+		request.setCookies(new Cookie("auth_token", "current"), new Cookie("auth_token", "stale"));
 		return request;
 	}
 

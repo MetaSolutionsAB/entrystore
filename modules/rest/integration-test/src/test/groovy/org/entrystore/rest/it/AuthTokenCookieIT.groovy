@@ -193,19 +193,44 @@ class AuthTokenCookieIT extends BaseSpec {
 		issued*.path == ['/store/']
 	}
 
-	def "POST /auth/cookie with a stale auth_token should expire it on /store but not on the issuing path /store/"() {
+	def "POST /auth/cookie with a stale auth_token should only set the new cookie, as 5.x did"() {
 		when:
 		def conn = login([Cookie: 'auth_token=' + STALE_TOKEN])
 
 		then:
 		conn.getResponseCode() == HTTP_OK
-		EntryStoreClient.expiredCookies(conn, 'auth_token').keySet() == ['/store'] as Set
+		EntryStoreClient.expiredCookies(conn, 'auth_token').isEmpty()
 
 		and: 'the new session works'
-		def newToken = EntryStoreClient.findSetCookies(conn, 'auth_token').find { !it.contains('Max-Age=0') }
-		def user = EntryStoreClient.getRequest('/auth/user', '', 'application/json', [Cookie: newToken.split(';')[0]])
-		user.getResponseCode() == HTTP_OK
-		JSON_PARSER.parseText(user.inputStream.text)['user'] == 'user'
+		userOf(EntryStoreClient.findCookieValue(conn, 'auth_token')) == 'user'
+	}
+
+	def "POST /auth/cookie with a stale and a valid auth_token should not expire /store or /store/"() {
+		given: 'a browser holding a stale copy on /store and its login on /store/'
+		def validToken = EntryStoreClient.findCookieValue(login([:]), 'auth_token')
+
+		when:
+		def conn = login([Cookie: 'auth_token=' + validToken + '; auth_token=' + STALE_TOKEN])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		EntryStoreClient.expiredCookies(conn, 'auth_token').isEmpty()
+
+		and: 'the new session works, also sent along with the stale copy'
+		def newToken = EntryStoreClient.findCookieValue(conn, 'auth_token')
+		userOf(newToken) == 'user'
+		userOf(newToken + '; auth_token=' + STALE_TOKEN) == 'user'
+	}
+
+	def "logging in again with the previous cookie should keep a libcurl cookie jar logged in"() {
+		given: 'a jar that, like libcurl, keys cookies by path without the trailing slash, as FME and curl -b -c do'
+		def jar = new LibcurlCookieJar()
+
+		when: 'it logs in three times, each time sending the previous cookie, and makes a request after each login'
+		def users = (1..3).collect { loginThenRequestUser(jar) }
+
+		then: 'every request runs as the user, not every second one as guest'
+		users == ['user', 'user', 'user']
 	}
 
 	// Guard: passes before the fix, as Jetty selects the valid one of several session cookies.
@@ -225,6 +250,53 @@ class AuthTokenCookieIT extends BaseSpec {
 	private static HttpURLConnection login(Map<String, String> headers) {
 		def body = 'auth_username=user&auth_password=' + EntryStoreClient.creds['user']
 		return EntryStoreClient.postRequest('/auth/cookie', body, '', 'application/x-www-form-urlencoded', headers)
+	}
+
+	private static String loginThenRequestUser(LibcurlCookieJar jar) {
+		def conn = login(jar.requestHeaders())
+		assert conn.getResponseCode() == HTTP_OK
+		jar.store(conn)
+		def user = EntryStoreClient.getRequest('/auth/user', '', 'application/json', jar.requestHeaders())
+		assert user.getResponseCode() == HTTP_OK
+		jar.store(user)
+		return JSON_PARSER.parseText(user.inputStream.text)['user']
+	}
+
+	private static String userOf(String cookie) {
+		def conn = EntryStoreClient.getRequest('/auth/user', '', 'application/json', [Cookie: 'auth_token=' + cookie])
+		assert conn.getResponseCode() == HTTP_OK
+		return JSON_PARSER.parseText(conn.inputStream.text)['user']
+	}
+
+	/**
+	 * Applies Set-Cookie lines in response order and keys each cookie by name and path without the trailing slash,
+	 * as libcurl's cookie engine does, so an expiry on /store removes a cookie set on /store/. All cookies are
+	 * host-only on one host.
+	 */
+	private static class LibcurlCookieJar {
+
+		private final Map<String, String> cookies = [:]
+
+		void store(HttpURLConnection conn) {
+			for (int i = 1; conn.getHeaderFieldKey(i) != null; i++) {
+				if (conn.getHeaderFieldKey(i).equalsIgnoreCase('Set-Cookie')) {
+					def line = conn.getHeaderField(i)
+					def nameValue = line.split(';')[0].split('=', 2)
+					def attributes = EntryStoreClient.parseSetCookieAttributes(line)
+					def path = attributes['path'] ?: '/'
+					def key = nameValue[0] + ' ' + (path.length() > 1 ? path.replaceFirst('/$', '') : path)
+					if (attributes['max-age'] == '0') {
+						cookies.remove(key)
+					} else {
+						cookies[key] = nameValue[0] + '=' + nameValue[1]
+					}
+				}
+			}
+		}
+
+		Map<String, String> requestHeaders() {
+			return cookies.isEmpty() ? [:] : [Cookie: cookies.values().join('; ')]
+		}
 	}
 
 	/** @return the JSON wrapped in a {@code cb(...)} JSONP body */
