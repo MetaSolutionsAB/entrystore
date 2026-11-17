@@ -173,3 +173,5 @@ docker run -p 8080:8080 \
   -v entrystore-data:/srv/entrystore/data \
   metasolutions/entrystore:$(cat VERSION.txt)
 ```
+
+The entrypoint starts the JVM with `-XX:-UseBASE64Intrinsics` to mitigate CVE-2026-114938. It is passed on the command line, which takes precedence over `JAVA_TOOL_OPTIONS`.
