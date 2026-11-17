@@ -28,6 +28,7 @@ import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
+import org.entrystore.rest.springboot.util.SessionIdExceptions;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -89,10 +90,10 @@ public class FormLoginAuthenticationSuccessHandler extends SimpleUrlAuthenticati
 				SecurityContextHolder.getContext().setAuthentication(newAuth);
 			}
 		} catch (RuntimeException e) {
-			if (e instanceof IllegalStateException && request.getSession(false) == null) {
-				log.warn("A concurrent request ended the session of a login before it completed, ending the login");
+			if (SessionIdExceptions.foundIn(e)) {
+				log.warn("The session of a login ended or changed before the login completed, ending the login");
 			} else {
-				log.error("Failed to record the session info of a login, ending the new session", e);
+				log.error("Failed to record the session lifetime or info of a login, ending the new session", e);
 			}
 			HttpUtil.clearAuthenticatedSession(request);
 			authTokenCookies.expireAfterFailedLogin(request, response);

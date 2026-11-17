@@ -27,6 +27,7 @@ import org.entrystore.User;
 import org.entrystore.rest.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
+import org.entrystore.rest.springboot.util.SessionIdExceptions;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
@@ -65,8 +66,8 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 			throw e;
 		} catch (Exception e) {
 			String user = authentication != null ? authentication.getName() : "<unknown>";
-			if (e instanceof IllegalStateException && request.getSession(false) == null) {
-				log.warn("A concurrent request ended the session of a {} login for user '{}' before it completed",
+			if (SessionIdExceptions.foundIn(e)) {
+				log.warn("The session of a {} login for user '{}' ended or changed before the login completed",
 						authTypeLabel(), HttpUtil.sanitizeForLog(user));
 			} else {
 				log.error("Unexpected {} during {} login for user '{}': {}", e.getClass().getSimpleName(),

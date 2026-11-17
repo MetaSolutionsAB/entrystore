@@ -19,12 +19,15 @@ package org.entrystore.rest.springboot.controller;
 import org.entrystore.rest.springboot.security.AuthTokenCookies;
 import org.entrystore.rest.springboot.service.TokenService;
 import org.entrystore.rest.springboot.service.UserService;
+import org.entrystore.rest.springboot.util.JettySessionExceptions;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 
 import java.time.Instant;
 
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -52,11 +55,24 @@ class AuthUserControllerTest {
 	@Test
 	void sessionThatAConcurrentRequestHasEnded_isAnsweredWithoutAnExpiry() {
 		var request = new MockHttpServletRequest("GET", "/auth/user");
-		when(authTokenCookies.expiry(any())).thenThrow(new IllegalStateException("ended"));
+		when(authTokenCookies.expiry(any()))
+				.thenAnswer(JettySessionExceptions.throwing(JettySessionExceptions.readOfInvalidatedSession()));
 		request.setSession(new MockHttpSession());
 
 		controller.userInfo("en", request);
 
 		verify(userService).getUserInfo("en", null);
+	}
+
+	@Test
+	void otherFailureOfReadingTheExpiry_propagates() {
+		var request = new MockHttpServletRequest("GET", "/auth/user");
+		var failure = new IllegalStateException("other");
+		when(authTokenCookies.expiry(any())).thenThrow(failure);
+		request.setSession(new MockHttpSession());
+
+		var thrown = assertThrows(IllegalStateException.class, () -> controller.userInfo("en", request));
+
+		assertSame(failure, thrown);
 	}
 }

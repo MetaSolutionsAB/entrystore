@@ -24,6 +24,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
+import org.entrystore.rest.springboot.util.JettySessionExceptions;
 import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,12 +44,13 @@ import org.springframework.security.web.RedirectStrategy;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 
 import java.net.URI;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -230,20 +232,34 @@ class AbstractSsoLoginSuccessHandlerTest {
 	}
 
 	@Test
-	void sessionEndedByAConcurrentRequestRedirectsToFailureWithoutLoggingTheException() throws Exception {
+	void sessionEndedByAConcurrentRequestRedirectsToFailureWithAWarningWithoutTheException() throws Exception {
 		when(userService.loadUser("jane")).thenReturn(esUser);
 		givenUserIsEnabled();
-		doThrow(new IllegalStateException("session ended-session-id"))
+		doAnswer(JettySessionExceptions.throwing(JettySessionExceptions.writeOfInvalidatedSession()))
 				.when(authTokenCookies).applySessionLifetime(request, null);
 
 		try (var appender = CapturingAppender.attachTo(AbstractSsoLoginSuccessHandler.class)) {
 			handler.onAuthenticationSuccess(request, response, token("jane"));
 
 			verify(response).sendRedirect(FAILURE_URL);
-			appender.assertCapturedSomething();
-			assertTrue(appender.allMessages().noneMatch(message -> message.contains("ended-session-id")),
+			assertEquals(1, appender.countAt(Level.WARN), appender.toString());
+			assertEquals(0, appender.countAt(Level.ERROR), appender.toString());
+			assertTrue(appender.allMessages().noneMatch(message -> message.contains(JettySessionExceptions.SESSION_ID)),
 					appender.toString());
-			assertEquals(0, appender.thrownAt(Level.WARN).count() + appender.thrownAt(Level.ERROR).count());
+			assertEquals(0, appender.thrownAt(Level.WARN).count());
+		}
+	}
+
+	@Test
+	void otherIllegalStateWithoutASessionIsLoggedAsAnErrorWithItsException() throws Exception {
+		var failure = new IllegalStateException("Principal name 'collidinguser' already in use");
+		when(userService.loadUser("collidinguser")).thenReturn(null);
+		when(userService.createUser("collidinguser")).thenThrow(failure);
+
+		try (var appender = CapturingAppender.attachTo(AbstractSsoLoginSuccessHandler.class)) {
+			handler.onAuthenticationSuccess(request, response, token("collidinguser"));
+
+			assertEquals(List.of(failure), appender.thrownAt(Level.ERROR).toList(), appender.toString());
 		}
 	}
 

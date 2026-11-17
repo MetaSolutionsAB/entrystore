@@ -18,6 +18,7 @@ package org.entrystore.rest.springboot.configuration;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.entrystore.rest.springboot.util.SessionIdExceptions;
 import org.jspecify.annotations.Nullable;
 import org.springframework.web.servlet.FlashMap;
 import org.springframework.web.servlet.support.SessionFlashMapManager;
@@ -27,6 +28,7 @@ import java.util.List;
 /**
  * Keeps flash maps in the session, as Spring MVC's default does, and treats a session that a concurrent request has
  * just ended as one without flash maps, as for a request without a session. Spring MVC reads them on every request.
+ * Any exception that {@link SessionIdExceptions} does not recognise propagates.
  */
 class EndedSessionTolerantFlashMapManager extends SessionFlashMapManager {
 
@@ -35,6 +37,7 @@ class EndedSessionTolerantFlashMapManager extends SessionFlashMapManager {
 		try {
 			return super.retrieveFlashMaps(request);
 		} catch (IllegalStateException e) {
+			rethrowUnlessSessionEnded(e);
 			return null;
 		}
 	}
@@ -45,7 +48,7 @@ class EndedSessionTolerantFlashMapManager extends SessionFlashMapManager {
 		try {
 			super.updateFlashMaps(flashMaps, request, response);
 		} catch (IllegalStateException e) {
-			// the session has ended, and the flash maps with it
+			rethrowUnlessSessionEnded(e);
 		}
 	}
 
@@ -54,7 +57,14 @@ class EndedSessionTolerantFlashMapManager extends SessionFlashMapManager {
 		try {
 			return super.getFlashMapsMutex(request);
 		} catch (IllegalStateException e) {
+			rethrowUnlessSessionEnded(e);
 			return null;
+		}
+	}
+
+	private static void rethrowUnlessSessionEnded(IllegalStateException e) {
+		if (!SessionIdExceptions.foundIn(e)) {
+			throw e;
 		}
 	}
 }

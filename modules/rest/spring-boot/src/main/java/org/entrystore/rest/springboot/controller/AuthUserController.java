@@ -29,6 +29,7 @@ import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.springboot.security.AuthTokenCookies;
 import org.entrystore.rest.springboot.service.TokenService;
 import org.entrystore.rest.springboot.service.UserService;
+import org.entrystore.rest.springboot.util.SessionIdExceptions;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -67,6 +68,9 @@ public class AuthUserController {
 		try {
 			return authTokenCookies.expiry(session);
 		} catch (IllegalStateException e) {
+			if (!SessionIdExceptions.foundIn(e)) {
+				throw e;
+			}
 			return null;
 		}
 	}

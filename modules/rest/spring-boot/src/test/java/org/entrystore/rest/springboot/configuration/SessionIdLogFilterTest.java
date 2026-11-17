@@ -18,16 +18,21 @@ package org.entrystore.rest.springboot.configuration;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.Filter;
+import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.Configuration;
 import org.apache.logging.log4j.core.config.ConfigurationSource;
 import org.apache.logging.log4j.core.config.DefaultConfiguration;
+import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.apache.logging.log4j.core.config.xml.XmlConfiguration;
+import org.apache.logging.log4j.core.filter.CompositeFilter;
+import org.apache.logging.log4j.core.filter.Filterable;
 import org.apache.logging.log4j.core.filter.ThresholdFilter;
 import org.apache.logging.log4j.core.impl.Log4jLogEvent;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.message.SimpleMessage;
+import org.entrystore.rest.springboot.util.JettySessionExceptions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Named;
@@ -42,6 +47,7 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -57,6 +63,10 @@ class SessionIdLogFilterTest {
 	private static final String FILTER_CHAIN_LOGGER = "org.springframework.security.web.FilterChainProxy";
 
 	private static final String HANDLER_LOGGER = "org.entrystore.rest.springboot.controller.AppExceptionHandler";
+
+	private static final String ACCEPTING_LOGGER = "org.entrystore.test.accepting";
+
+	private static final String MANAGED_SESSION = "org.eclipse.jetty.session.ManagedSession";
 
 	private LoggerContext loggerContext;
 
@@ -177,13 +187,22 @@ class SessionIdLogFilterTest {
 
 		assertTrue(loggerContext.getLogger(FILTER_CHAIN_LOGGER).isEnabled(Level.DEBUG));
 		assertFalse(loggerContext.getLogger(REGISTRY_LOGGER).isEnabled(Level.DEBUG));
+		assertHoldsTheFilterOnceAndFirst(loggerContext.getConfiguration()
+				.getLoggerConfig("org.springframework.security.core.session"));
 	}
 
 	@Test
-	void secondInstaller_leavesTheFilterInstalledOnce() {
+	void secondInstaller_leavesTheFilterOnceAndFirstOnTheConfigurationTheRootAndANamedLogger() {
+		var configuration = configurationAtWarnWithAnAcceptingFilter();
+		configuration.getRootLogger().addFilter(accepting());
+		configuration.addLogger(ACCEPTING_LOGGER, loggerConfigWithAnAcceptingFilter());
+		loggerContext.setConfiguration(configuration);
+
 		new SessionIdLogFilterInstaller(loggerContext);
 
-		assertSame(SessionIdLogFilter.INSTANCE, loggerContext.getConfiguration().getFilter());
+		assertHoldsTheFilterOnceAndFirst(configuration);
+		assertHoldsTheFilterOnceAndFirst(configuration.getRootLogger());
+		assertHoldsTheFilterOnceAndFirst(configuration.getLoggerConfig(ACCEPTING_LOGGER));
 	}
 
 	@Test
@@ -208,12 +227,27 @@ class SessionIdLogFilterTest {
 		assertEquals(Filter.Result.DENY, call.apply(loggerContext.getLogger(HANDLER_LOGGER), Level.ERROR));
 	}
 
-	@Test
-	void illegalStateExceptionThrownElsewhere_isLeftToTheFloors() {
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("exceptionsWithoutTheSessionId")
+	void eventCarryingAnExceptionWithoutTheSessionId_isLeftToTheFloors(IllegalStateException exception) {
 		var result = SessionIdLogFilter.INSTANCE.filter(loggerContext.getLogger(HANDLER_LOGGER), Level.ERROR, null,
-				new SimpleMessage("m"), new IllegalStateException("other"));
+				new SimpleMessage("m"), exception);
 
 		assertEquals(Filter.Result.NEUTRAL, result);
+	}
+
+	@Test
+	void namedLoggerWithAnAcceptingFilterOfItsOwn_filtersOutAnEventCarryingTheExceptionOfAnEndedSession() {
+		var loggerConfig = installedOnALoggerConfigWithAnAcceptingFilter();
+
+		assertTrue(loggerConfig.isFiltered(eventOf(ACCEPTING_LOGGER, ended())));
+	}
+
+	@Test
+	void namedLoggerWithAnAcceptingFilterOfItsOwn_passesAnEventCarryingAnotherException() {
+		var loggerConfig = installedOnALoggerConfigWithAnAcceptingFilter();
+
+		assertFalse(loggerConfig.isFiltered(eventOf(ACCEPTING_LOGGER, new IllegalStateException("other"))));
 	}
 
 	@Test
@@ -273,6 +307,12 @@ class SessionIdLogFilterTest {
 						withSuppressed(ended()))),
 				call("as the exception of a log event", (l, v) -> filter.filter(Log4jLogEvent.newBuilder()
 						.setLoggerName(l.getName()).setLevel(v).setThrown(ended()).build())),
+				call("as the exception of the message of a log event", (l, v) -> filter.filter(Log4jLogEvent
+						.newBuilder().setLoggerName(l.getName()).setLevel(v)
+						.setMessage(new ParameterizedMessage("m", new Object[0], ended())).build())),
+				call("as a parameter of the message of a log event", (l, v) -> filter.filter(Log4jLogEvent
+						.newBuilder().setLoggerName(l.getName()).setLevel(v)
+						.setMessage(new ParameterizedMessage("m {}", endedParameter())).build())),
 				call("as parameter 1 of 1", (l, v) -> filter.filter(l, v, null, "m", endedParameter())),
 				call("as parameter 2 of 2", (l, v) -> filter.filter(l, v, null, "m", "1", endedParameter())),
 				call("as parameter 3 of 3", (l, v) -> filter.filter(l, v, null, "m", "1", "2", endedParameter())),
@@ -295,16 +335,24 @@ class SessionIdLogFilterTest {
 		);
 	}
 
+	static Stream<Named<IllegalStateException>> exceptionsWithoutTheSessionId() {
+		return Stream.of(
+				Named.of("thrown elsewhere", new IllegalStateException("other")),
+				Named.of("session invalid", JettySessionExceptions.thrownIn(MANAGED_SESSION, "Session invalid")),
+				Named.of("unable to change the session id",
+						JettySessionExceptions.thrownIn(MANAGED_SESSION, "Unable to change session id")),
+				Named.of("message of a session exception from another class", JettySessionExceptions.thrownIn(
+						"org.eclipse.jetty.session.SessionData", "Invalid for read: id=other not resident"))
+		);
+	}
+
 	private static Named<FilterCall> call(String overload, FilterCall call) {
 		return Named.of(overload, call);
 	}
 
-	/** @return the exception Jetty throws when a session that has ended is read, with the frame it comes from */
+	/** @return the exception Jetty throws when a session that has ended is read */
 	private static IllegalStateException ended() {
-		var exception = new IllegalStateException("ended");
-		exception.setStackTrace(new StackTraceElement[] {
-				new StackTraceElement("org.eclipse.jetty.session.ManagedSession", "getAttribute", null, -1)});
-		return exception;
+		return JettySessionExceptions.readOfInvalidatedSession();
 	}
 
 	/** @return {@link #ended()} typed as a parameter, so that a call picks the overload with parameters */
@@ -328,7 +376,45 @@ class SessionIdLogFilterTest {
 	/** @return a configuration at WARN with a context-wide filter of its own that accepts every event */
 	private static Configuration configurationAtWarnWithAnAcceptingFilter() {
 		var configuration = configurationAt(Level.WARN);
-		configuration.addFilter(ThresholdFilter.createFilter(Level.TRACE, Filter.Result.ACCEPT, Filter.Result.NEUTRAL));
+		configuration.addFilter(accepting());
 		return configuration;
+	}
+
+	/** @return the named logger configuration with an accepting filter, after the filter has been installed */
+	private LoggerConfig installedOnALoggerConfigWithAnAcceptingFilter() {
+		var configuration = configurationAt(Level.TRACE);
+		configuration.addLogger(ACCEPTING_LOGGER, loggerConfigWithAnAcceptingFilter());
+		loggerContext.setConfiguration(configuration);
+		return configuration.getLoggerConfig(ACCEPTING_LOGGER);
+	}
+
+	private static LoggerConfig loggerConfigWithAnAcceptingFilter() {
+		var loggerConfig = new LoggerConfig(ACCEPTING_LOGGER, Level.TRACE, false);
+		loggerConfig.addFilter(accepting());
+		return loggerConfig;
+	}
+
+	/** @return a filter that accepts every event, so that it decides an event unless a filter before it does */
+	private static Filter accepting() {
+		return ThresholdFilter.createFilter(Level.TRACE, Filter.Result.ACCEPT, Filter.Result.NEUTRAL);
+	}
+
+	private static LogEvent eventOf(String loggerName, Throwable thrown) {
+		return Log4jLogEvent.newBuilder().setLoggerName(loggerName).setLevel(Level.ERROR)
+				.setMessage(new SimpleMessage("m")).setThrown(thrown).build();
+	}
+
+	private static void assertHoldsTheFilterOnceAndFirst(Filterable target) {
+		var filters = filtersOf(target.getFilter());
+		assertSame(SessionIdLogFilter.INSTANCE, filters.getFirst(), filters::toString);
+		assertEquals(1, filters.stream().filter(SessionIdLogFilter.INSTANCE::equals).count(), filters::toString);
+	}
+
+	/** @return the filters in the order Log4j asks them, with those of nested composite filters in place */
+	private static List<Filter> filtersOf(Filter filter) {
+		if (filter instanceof CompositeFilter composite) {
+			return composite.getFilters().stream().flatMap(nested -> filtersOf(nested).stream()).toList();
+		}
+		return filter == null ? List.of() : List.of(filter);
 	}
 }

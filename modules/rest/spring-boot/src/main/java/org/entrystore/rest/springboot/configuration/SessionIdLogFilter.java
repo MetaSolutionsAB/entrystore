@@ -22,28 +22,29 @@ import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.filter.AbstractFilter;
 import org.apache.logging.log4j.message.Message;
+import org.entrystore.rest.springboot.util.SessionIdExceptions;
 
-import java.util.ArrayDeque;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Keeps session ids out of the logs by holding the categories that handle sessions or request headers to a lowest
  * level, whatever level {@code logging.level.*} or {@code /management/loggers} sets: INFO for the session,
  * session-authentication, logout and security-context classes of Spring Security, for
  * {@code SessionContextRepository}, for Spring's {@code ForwardedHeaderFilter} and for Jetty, ERROR for the session
- * handling of Jetty, and DEBUG for Spring MVC's {@code DispatcherServlet}. A category includes its subcategories. It
- * also denies, at every level, an event that carries the exception Jetty throws for a session that has ended, as its
- * exception, a cause, a suppressed exception or a parameter. While Log4j replaces its configuration, as on a reload
- * through {@code monitorInterval}, the new configuration alone decides what is written until the previous one has
- * stopped. {@link SessionIdLogFilterInstaller} installs it as a context-wide filter.
+ * handling of Jetty, and DEBUG for Spring MVC's {@code DispatcherServlet}. A category includes its subcategories.
+ * While Log4j replaces its configuration, as on a reload through {@code monitorInterval}, the new configuration alone
+ * decides what is written until the previous one has stopped.
  *
- * <p>Log4j asks a context-wide filter before the level check of every logging call, through the overload that
- * matches the call, so each overload is implemented: those of {@link AbstractFilter} first copy the parameters into
- * an array.
+ * <p>It also denies, at every level, an event that carries an exception {@link SessionIdExceptions} recognises, as
+ * its exception, a cause or suppressed exception of it, the message, a parameter or the message's exception. It
+ * drops the whole event, as a Log4j filter cannot change one. It cannot see an exception written into the message
+ * text; the request-level handlers answer a request that fails with such an exception before a framework logs it.
+ *
+ * <p>{@link SessionIdLogFilterInstaller} installs it as a context-wide filter and on every logger configuration. Log4j
+ * asks a context-wide filter before the level check of every logging call, through the overload that matches the
+ * call, so each overload is implemented: those of {@link AbstractFilter} first copy the parameters into an array.
+ * Some logging APIs, such as commons-logging, do not pass the exception to that check, so the logger configurations
+ * decide again on the complete event.
  */
 final class SessionIdLogFilter extends AbstractFilter {
 
@@ -62,8 +63,6 @@ final class SessionIdLogFilter extends AbstractFilter {
 			new Floor("org.springframework.web.servlet.DispatcherServlet", Level.DEBUG)
 	);
 
-	private static final String SESSION_HANDLING_PACKAGE = "org.eclipse.jetty.session.";
-
 	private SessionIdLogFilter() {
 		super(Result.DENY, Result.NEUTRAL);
 	}
@@ -78,39 +77,26 @@ final class SessionIdLogFilter extends AbstractFilter {
 		return false;
 	}
 
-	/**
-	 * @return whether the throwable, a cause or a suppressed exception of it, at any depth, is the exception Jetty
-	 * throws when a session that has ended is read or written
-	 */
-	static boolean carriesEndedSessionException(Throwable throwable) {
-		Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
-		Deque<Throwable> pending = new ArrayDeque<>();
-		pending.push(throwable);
-		while (!pending.isEmpty()) {
-			Throwable current = pending.pop();
-			if (!visited.add(current)) {
-				continue;
-			}
-			if (current instanceof IllegalStateException && isThrownBySessionHandling(current)) {
-				return true;
-			}
-			if (current.getCause() != null) {
-				pending.push(current.getCause());
-			}
-			for (Throwable suppressed : current.getSuppressed()) {
-				pending.push(suppressed);
+	private static boolean carries(Object value) {
+		return value instanceof Throwable throwable && SessionIdExceptions.foundIn(throwable);
+	}
+
+	private static boolean messageCarries(Message message) {
+		if (message == null) {
+			return false;
+		}
+		if (carries(message.getThrowable())) {
+			return true;
+		}
+		Object[] parameters = message.getParameters();
+		if (parameters != null) {
+			for (Object parameter : parameters) {
+				if (carries(parameter)) {
+					return true;
+				}
 			}
 		}
 		return false;
-	}
-
-	private static boolean isThrownBySessionHandling(Throwable throwable) {
-		StackTraceElement[] stackTrace = throwable.getStackTrace();
-		return stackTrace.length > 0 && stackTrace[0].getClassName().startsWith(SESSION_HANDLING_PACKAGE);
-	}
-
-	private static boolean carries(Object value) {
-		return value instanceof Throwable throwable && carriesEndedSessionException(throwable);
 	}
 
 	private static boolean belowFloor(String loggerName, Level level) {
@@ -123,12 +109,13 @@ final class SessionIdLogFilter extends AbstractFilter {
 
 	@Override
 	public Result filter(LogEvent event) {
-		return decide(belowFloor(event.getLoggerName(), event.getLevel()) || carries(event.getThrown()));
+		return decide(belowFloor(event.getLoggerName(), event.getLevel()) || carries(event.getThrown())
+				|| messageCarries(event.getMessage()));
 	}
 
 	@Override
 	public Result filter(Logger logger, Level level, Marker marker, Message msg, Throwable t) {
-		return decide(belowFloor(logger.getName(), level) || carries(t) || msg != null && carries(msg.getThrowable()));
+		return decide(belowFloor(logger.getName(), level) || carries(t) || messageCarries(msg));
 	}
 
 	@Override

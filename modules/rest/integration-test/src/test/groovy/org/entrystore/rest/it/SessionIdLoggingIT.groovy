@@ -30,6 +30,8 @@ import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter
 import org.springframework.security.web.authentication.WebAuthenticationDetails
+import org.springframework.web.servlet.DispatcherServlet
+import org.springframework.web.servlet.FlashMapManager
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
@@ -43,15 +45,16 @@ import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
  */
 class SessionIdLoggingIT extends BaseSpec {
 
-	// ROOT first, so that it is restored first and a failing restore of another logger cannot leave it at TRACE
+	// Set in this order and restored in reverse: the IT client is held at INFO before ROOT reaches TRACE and until ROOT
+	// is back, and ROOT is restored first, so that a failing restore of another logger cannot leave it at TRACE
 	static final Map<String, String> LEVELS = [
-			'ROOT'                                       : 'TRACE',
+			// the IT's own HTTP client, which logs the headers it sends and receives
+			'sun.net.www.protocol.http.HttpURLConnection': 'INFO',
 			// levels of their own in the IT configuration, which ROOT does not override
 			'org.springframework.security'               : 'TRACE',
 			'org.eclipse.jetty'                          : 'TRACE',
 			'org.entrystore'                             : 'TRACE',
-			// the IT's own HTTP client, which logs the headers it sends and receives
-			'sun.net.www.protocol.http.HttpURLConnection': 'INFO'
+			'ROOT'                                       : 'TRACE'
 	]
 
 	static final String FORWARDED_HEADER_FILTER = 'org.springframework.web.filter.ForwardedHeaderFilter'
@@ -136,7 +139,7 @@ class SessionIdLoggingIT extends BaseSpec {
 		loggerContext().getConfiguration().getRootLogger().removeAppender(APPENDER_NAME)
 		loggerContext().updateLoggers()
 		appender?.stop()
-		previousLevels?.each { name, level -> setLevel(name as String, level as String) }
+		previousLevels?.reversed()?.each { name, level -> setLevel(name as String, level as String) }
 	}
 
 	def "a request with an unparseable forwarded port should log no session id at DEBUG"() {
@@ -195,6 +198,12 @@ class SessionIdLoggingIT extends BaseSpec {
 
 		cleanup:
 		SecurityContextHolder.clearContext()
+	}
+
+	def "the flash map manager should be the one that tolerates a session ended by a concurrent request"() {
+		expect: 'compared by name, as the class is package-private'
+		appInstance.getBean(DispatcherServlet.FLASH_MAP_MANAGER_BEAN_NAME, FlashMapManager).getClass().name ==
+				'org.entrystore.rest.springboot.configuration.EndedSessionTolerantFlashMapManager'
 	}
 
 	private static LoggerContext loggerContext() {

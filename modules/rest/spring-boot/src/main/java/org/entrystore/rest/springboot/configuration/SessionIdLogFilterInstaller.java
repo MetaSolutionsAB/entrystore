@@ -20,6 +20,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.Filter;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.core.filter.Filterable;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -28,11 +29,13 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 
 /**
- * Installs {@link SessionIdLogFilter} as a context-wide filter of the Log4j configuration, ahead of any other
- * context-wide filter, and again on every configuration that replaces it, as a reconfiguration drops the filters
- * added to the previous one. Log4j announces a new configuration only after applying it and stopping the previous
- * one, so the new one runs without the filter until then. Created after Spring Boot has started Jetty without its
- * connectors and before it adds them, so the filter is in place before the first request; never lazy, as no other
+ * Installs {@link SessionIdLogFilter} on the Log4j configuration, as a context-wide filter and on the root and every
+ * named logger configuration, each time ahead of the filters already there, and again on every configuration that
+ * replaces it, as a reconfiguration drops the filters added to the previous one. A logger configuration added later
+ * without appenders of its own, as {@code /management/loggers} adds one, passes its events on to an ancestor that holds
+ * the filter, at the latest the root. Log4j announces a new configuration only after applying it and stopping the
+ * previous one, so the new one runs without the filter until then. Created after Spring Boot has started Jetty without
+ * its connectors and before it adds them, so the filter is in place before the first request; never lazy, as no other
  * bean depends on it.
  */
 @Component
@@ -68,14 +71,19 @@ class SessionIdLogFilterInstaller implements PropertyChangeListener, DisposableB
 	private static void install(Configuration configuration) {
 		// a configuration stops its filters when it is replaced
 		SessionIdLogFilter.INSTANCE.start();
-		// removed first so that a configuration holds it once
-		configuration.removeFilter(SessionIdLogFilter.INSTANCE);
-		Filter others = configuration.getFilter();
-		configuration.addFilter(SessionIdLogFilter.INSTANCE);
+		placeFirst(configuration);
+		placeFirst(configuration.getRootLogger());
+		configuration.getLoggers().values().forEach(SessionIdLogFilterInstaller::placeFirst);
+	}
+
+	/** Places the filter once, ahead of the target's own filters, as the first filter that accepts an event wins. */
+	private static void placeFirst(Filterable target) {
+		target.removeFilter(SessionIdLogFilter.INSTANCE);
+		Filter others = target.getFilter();
+		target.addFilter(SessionIdLogFilter.INSTANCE);
 		if (others != null) {
-			// moved behind it, as the first context-wide filter that accepts an event decides it
-			configuration.removeFilter(others);
-			configuration.addFilter(others);
+			target.removeFilter(others);
+			target.addFilter(others);
 		}
 	}
 }
