@@ -38,6 +38,8 @@ if [ -z "$ENTRYSTORE_CONFIG_URI" ] && [ ! -f "$CONFIG_FILE" ]; then
   echo "EntryStore will start with default settings, which may not be suitable for production." >&2
 fi
 
-exec java -jar entrystore.jar \
+# Disables the Base64 intrinsic, which overflows the heap on AVX-512 CPUs (CVE-2026-114938); on the command line so
+# that JAVA_TOOL_OPTIONS cannot drop it. Remove once the base image carries a fixed JDK.
+exec java -XX:-UseBASE64Intrinsics -jar entrystore.jar \
   "--spring.config.import=optional:file://${CONFIG_FILE}[encoding=utf-8]" \
   "$@"
