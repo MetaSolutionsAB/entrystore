@@ -151,17 +151,21 @@ class SolrReadAccessFilterTest {
 	}
 
 	@Test
-	void withoutPrincipalsOnlyTheCallersOwnEntryIsReadableAndNoLocalReference() {
+	void withoutPrincipalsOnlyTheCallersOwnEntryIsReadableAndNoLocalOrUnmarkedReference() {
 		SolrQuery query = new SolrQuery("*:*");
 
 		filterFor().applyTo(query);
 
-		assertArrayEquals(new String[]{"{!bool must=$esacl.self must_not=$esacl.localReference}"},
+		assertArrayEquals(new String[]{
+				"{!bool must=$esacl.self must_not=$esacl.localReference must_not=$esacl.unmarkedReference}"},
 				query.getFilterQueries());
-		assertEquals(Set.of("esacl.self", "esacl.user", "esacl.localReference"), dereferencedParameters(query));
+		assertEquals(Set.of("esacl.self", "esacl.user", "esacl.localReference", "esacl.unmarkedReference"),
+				dereferencedParameters(query));
 		assertEquals("{!term f=resource v=$esacl.user}", query.get("esacl.self"));
 		// a reference's document holds its target's metadata, which the caller's own-entry rule does not cover
 		assertEquals("referencedEntry:*", query.get("esacl.localReference"));
+		// indexed before referencedEntry existed, so whether it holds a target's metadata is unknown
+		assertEquals("+entryType:(Reference LinkReference) -acl.explicit:*", query.get("esacl.unmarkedReference"));
 		assertEquals(USER.toString(), query.get("esacl.user"));
 		assertNull(query.get("esacl.principals"));
 	}

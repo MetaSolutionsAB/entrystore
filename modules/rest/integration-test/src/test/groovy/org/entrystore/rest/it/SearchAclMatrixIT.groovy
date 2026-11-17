@@ -76,8 +76,15 @@ class SearchAclMatrixIT extends BaseSpec {
 	static Map<String, Map> users = [:]
 	static String deletedTargetReferenceUri
 	static String privateContextReferenceUri
+	/** A reference in REF_CONTEXT to external metadata, as indexed by this version. */
+	static String externalReferenceUri
 	/** Entry URIs whose Solr documents are rewritten as indexed before acl.explicit existed. */
 	static Map<String, String> unmarkedUris = [:]
+	/** Reference URIs whose Solr documents are rewritten as indexed before acl.explicit existed. */
+	static List<String> unmarkedReferenceUris = []
+	/** Per reference entry type, the marker value of its private target, which its indexed metadata holds. */
+	static final Map<String, String> UNMARKED_REFERENCE_MARKERS = [Reference    : 'aclmatrixunmarkedreference',
+																   LinkReference: 'aclmatrixunmarkedlinkreference']
 
 	def setupSpec() {
 		EntryStoreClient.snapshotCreds()
@@ -141,6 +148,10 @@ class SearchAclMatrixIT extends BaseSpec {
 			metadata: markerMetadata(newResourceIri, 'aclmatrixpublictarget'), info: guestRead])
 		def privateContextReferenceId = createReference(PRIVATE_CONTEXT, publicTargetId)
 		privateContextReferenceUri = BASE + '/' + PRIVATE_CONTEXT + '/entry/' + privateContextReferenceId
+		def externalReferenceId = createEntry(REF_CONTEXT, [entrytype: 'reference',
+			resource: 'https://example.org/search-acl-matrix/external',
+			'cached-external-metadata': 'https://example.org/search-acl-matrix/external-metadata'])
+		externalReferenceUri = BASE + '/' + REF_CONTEXT + '/entry/' + externalReferenceId
 		def deletedTargetQuery = 'uri:"' + BASE + '/' + CONTEXT + '/entry/' + deletedTargetId + '"'
 		awaitAdminSearchCount(deletedTargetQuery, 1)
 		def deleteConn = EntryStoreClient.deleteRequest('/' + CONTEXT + '/entry/' + deletedTargetId)
@@ -158,6 +169,7 @@ class SearchAclMatrixIT extends BaseSpec {
 			}
 		awaitAdminSearchCount(MARKER_FIELD + ':' + MARKER, SHAPES.size())
 		awaitAdminSearchCount('uri:"' + privateContextReferenceUri + '"', 1)
+		awaitAdminSearchCount('+uri:"' + externalReferenceUri + '" +acl.explicit:* -referencedEntry:*', 1)
 
 		// what a Link in _contexts, which may claim graph type Context, and a renamed Local entry there would index;
 		// naming guest as owner, they must not stand in for CONTEXT's entry (the guest row of the marker search)
@@ -202,8 +214,10 @@ class SearchAclMatrixIT extends BaseSpec {
 	}
 
 	/**
-	 * Two entries of the guest-readable REF_CONTEXT whose Solr documents are rewritten as indexed before acl.explicit
-	 * existed: one without an ACL of its own, one whose own ACL grants only the admin.
+	 * Entries of the guest-readable REF_CONTEXT whose Solr documents are rewritten as indexed before acl.explicit
+	 * existed: a Local entry without an ACL of its own, one whose own ACL grants only the admin, and a Reference and a
+	 * LinkReference to the local metadata of an entry of PRIVATE_CONTEXT, without referencedEntry. The Reference has
+	 * no acl field, so only its context's ACL could admit it; the LinkReference's own ACL grants guest.
 	 */
 	private void addUnmarkedDocuments() {
 		def inheritedId = createEntry(REF_CONTEXT, [graphtype: 'string'], [resource: 'unmarked inherited',
@@ -214,18 +228,40 @@ class SearchAclMatrixIT extends BaseSpec {
 						   [(NameSpaceConst.TERM_READ): [uriValue(ADMIN)]]]])
 		unmarkedUris['inherited'] = BASE + '/' + REF_CONTEXT + '/entry/' + inheritedId
 		unmarkedUris['ownAcl'] = BASE + '/' + REF_CONTEXT + '/entry/' + ownAclId
-		unmarkedUris.values().each { awaitAdminSearchCount('uri:"' + it + '"', 1) }
+		def references = [unmarkedReference('Reference', [:]),
+						  unmarkedReference('LinkReference', ['acl.metadata.r': [GUEST]])]
+		unmarkedReferenceUris = references*.uri
 
-		writeSolrDocuments([
-			unmarkedDocument(inheritedId, 'aclmatrixunmarkedinherited', [:]),
-			unmarkedDocument(ownAclId, 'aclmatrixunmarkedownacl', ['acl.metadata.r': [ADMIN]])])
-		unmarkedUris.values().each { awaitAdminSearchCount('uri:"' + it + '" -acl.explicit:*', 1) }
+		def documents = [unmarkedDocument(inheritedId, 'aclmatrixunmarkedinherited', [:]),
+						 unmarkedDocument(ownAclId, 'aclmatrixunmarkedownacl', ['acl.metadata.r': [ADMIN]]),
+						 *references]
+		def query = '+(' + documents.collect { 'uri:"' + it.uri + '"' }.join(' OR ') + ')'
+		awaitAdminSearchCount(query, documents.size())
+		writeSolrDocuments(documents)
+		awaitAdminSearchCount(query + ' -acl.explicit:*', documents.size())
 	}
 
-	private static Map<String, Object> unmarkedDocument(String entryId, String markerValue, Map aclFields) {
+	/** A REF_CONTEXT entry's document as indexed before acl.explicit existed; fields add to a Local entry's. */
+	private static Map<String, Object> unmarkedDocument(String entryId, String markerValue, Map fields) {
 		return [uri      : BASE + '/' + REF_CONTEXT + '/entry/' + entryId,
 				resource : BASE + '/' + REF_CONTEXT + '/resource/' + entryId, context: BASE + '/' + REF_CONTEXT,
-				entryType: 'Local', graphType: 'String', (MARKER_FIELD): [markerValue]] + aclFields
+				entryType: 'Local', graphType: 'String', (MARKER_FIELD): [markerValue]] + fields
+	}
+
+	/**
+	 * Creates a reference of the given entry type in REF_CONTEXT to the local metadata of a new entry of
+	 * PRIVATE_CONTEXT holding the type's marker; returns the reference's document as indexed before acl.explicit and
+	 * referencedEntry existed, with the given acl fields.
+	 */
+	private static Map<String, Object> unmarkedReference(String entryType, Map aclFields) {
+		def markerValue = UNMARKED_REFERENCE_MARKERS[entryType]
+		def targetId = createEntry(PRIVATE_CONTEXT, [graphtype: 'string'], [resource: 'unmarked target',
+			metadata: markerMetadata(BASE + '/' + PRIVATE_CONTEXT + '/resource/_newId', markerValue)])
+		def resource = 'https://example.org/search-acl-matrix/unmarked/' + targetId
+		def referenceId = createEntry(REF_CONTEXT, [entrytype: entryType.toLowerCase(), resource: resource,
+			'cached-external-metadata': BASE + '/' + PRIVATE_CONTEXT + '/metadata/' + targetId])
+		return unmarkedDocument(referenceId, markerValue,
+			[entryType: entryType, resource: resource, graphType: 'None'] + aclFields)
 	}
 
 	private static Map uriValue(String uri) {
@@ -374,6 +410,59 @@ class SearchAclMatrixIT extends BaseSpec {
 		'inherited' | true
 		// any acl field means an ACL of its own, which replaces the context's and grants guest nothing
 		'ownAcl'    | false
+	}
+
+	def "GET /search?type=solr as #callerName should find a reference indexed before acl.explicit existed only as an admin"() {
+		given:
+		def mismatchesBefore = getSolrStatus()['readFilterMismatches']
+		def expectedUris = found ? unmarkedReferenceUris as Set : [] as Set
+
+		when:
+		// a reindex that restored acl.explicit fails the admin rows instead of leaving the test unexercised
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams([type: 'solr',
+			query: '+(' + unmarkedReferenceUris.collect { 'uri:"' + it + '"' }.join(' OR ') + ') -acl.explicit:*',
+			limit: '10', facetFields: 'uri,' + MARKER_FIELD]), caller)
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		respJson['results'] == expectedUris.size()
+		childUrisOf(respJson) == expectedUris
+		bucketsOf(respJson, 'uri') == expectedUris.collectEntries { [(it): 1] }
+		// the documents hold their private targets' metadata
+		bucketsOf(respJson, MARKER_FIELD) ==
+			(found ? UNMARKED_REFERENCE_MARKERS.values().collectEntries { [(it): 1] } : [:])
+		getSolrStatus()['readFilterMismatches'] == mismatchesBefore
+
+		where:
+		caller             | found
+		''                 | false
+		PLAIN              | false
+		MEMBER             | false
+		OWNER              | false
+		'userInAdminGroup' | true
+		'admin'            | true
+		callerName = caller ?: 'guest'
+	}
+
+	def "GET /search?type=solr as #callerName should find a reference to external metadata in a context it may read"() {
+		given:
+		def mismatchesBefore = getSolrStatus()['readFilterMismatches']
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(
+			[type: 'solr', query: 'uri:"' + externalReferenceUri + '"', limit: '10', facetFields: 'uri']), caller)
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		respJson['results'] == 1
+		bucketsOf(respJson, 'uri') == [(externalReferenceUri): 1]
+		getSolrStatus()['readFilterMismatches'] == mismatchesBefore
+
+		where:
+		caller << ['', PLAIN]
+		callerName = caller ?: 'guest'
 	}
 
 	def "GET /search?type=solr as #callerName should find a local reference whose target was deleted only as an admin"() {

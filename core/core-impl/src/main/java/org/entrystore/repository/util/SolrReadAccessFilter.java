@@ -45,7 +45,9 @@ import java.util.Optional;
  * The document of a reference with a local target ({@value SolrSearchIndex#FIELD_REFERENCED_ENTRY}) holds the
  * target's metadata, so it passes only if both the target's document and the reference itself are readable, as
  * {@link org.entrystore.impl.ContextManagerImpl#checkEntryMetadataReadable} requires. A reference whose target has
- * no document is not admitted, although that check admits it.
+ * no document is not admitted, although that check admits it. A Reference or LinkReference document without
+ * {@value SolrSearchIndex#FIELD_ACL_EXPLICIT} was indexed before {@value SolrSearchIndex#FIELD_REFERENCED_ENTRY}
+ * existed, so it is not admitted until it is reindexed, whether or not it has a local target.
  *
  * <p>A context entry's document has {@code context} {@code {base}/_contexts} and its context's URI as
  * {@code resource}, which every document of that context has as {@code context}, so rules 1 and 3 are joins. Only Local
@@ -65,9 +67,14 @@ record SolrReadAccessFilter(URI user, List<String> principals, String contextsRe
 
 	private static final String LOCAL_REFERENCE = SolrSearchIndex.FIELD_REFERENCED_ENTRY + ":*";
 
-	private static final String FILTER = "{!bool should=$esacl.direct should=$esacl.viaReference}";
+	private static final String UNMARKED_REFERENCE =
+			"+entryType:(Reference LinkReference) -" + SolrSearchIndex.FIELD_ACL_EXPLICIT + ":*";
 
-	private static final String SELF_ONLY = "{!bool must=$esacl.self must_not=$esacl.localReference}";
+	private static final String FILTER =
+			"{!bool should=$esacl.direct should=$esacl.viaReference must_not=$esacl.unmarkedReference}";
+
+	private static final String SELF_ONLY =
+			"{!bool must=$esacl.self must_not=$esacl.localReference must_not=$esacl.unmarkedReference}";
 
 	private static final Map<String, String> PARAMS = params();
 
@@ -102,12 +109,13 @@ record SolrReadAccessFilter(URI user, List<String> principals, String contextsRe
 	 */
 	void applyTo(SolrQuery query) {
 		query.set("esacl.user", user.toString());
+		query.set("esacl.self", SELF);
+		query.set("esacl.localReference", LOCAL_REFERENCE);
+		query.set("esacl.unmarkedReference", UNMARKED_REFERENCE);
 		if (principals.isEmpty()) {
-			// an unresolvable user: no ACL grants it anything (as in PrincipalManagerImpl.hasAccess), and a local
-			// reference's document holds its target's metadata, which the self rule does not cover
+			// an unresolvable user: no ACL grants it anything (as in PrincipalManagerImpl.hasAccess), and a local or
+			// unmarked reference's document may hold its target's metadata, which the self rule does not cover
 			query.addFilterQuery(SELF_ONLY);
-			query.set("esacl.self", SELF);
-			query.set("esacl.localReference", LOCAL_REFERENCE);
 		} else {
 			query.addFilterQuery(FILTER);
 			PARAMS.forEach(query::set);
@@ -141,7 +149,6 @@ record SolrReadAccessFilter(URI user, List<String> principals, String contextsRe
 		// the documents some local reference points to: the same for every caller, so cached once per searcher
 		params.put("esacl.referenced", "{!join from=" + SolrSearchIndex.FIELD_REFERENCED_ENTRY
 				+ " to=uri score=none v=$esacl.localReference}");
-		params.put("esacl.localReference", LOCAL_REFERENCE);
 		params.put("esacl.readable",
 				"{!bool should=$esacl.contextOwner should=$esacl.ownAcl should=$esacl.inherited should=$esacl.self}");
 		params.put("esacl.contextOwner", "{!join from=resource to=context score=none v=$esacl.ownedContexts}");
@@ -160,7 +167,6 @@ record SolrReadAccessFilter(URI user, List<String> principals, String contextsRe
 		params.put("esacl.contextEntry", "{!bool filter=$esacl.inContexts filter=$esacl.contextKind}");
 		params.put("esacl.inContexts", "{!term f=context v=$esacl.contexts}");
 		params.put("esacl.contextKind", "+entryType:Local +graphType:(Context SystemContext)");
-		params.put("esacl.self", SELF);
 		params.put("esacl.admin", principalsIn("acl.admin"));
 		params.put("esacl.metadataRead", principalsIn("acl.metadata.r"));
 		params.put("esacl.metadataWrite", principalsIn("acl.metadata.rw"));

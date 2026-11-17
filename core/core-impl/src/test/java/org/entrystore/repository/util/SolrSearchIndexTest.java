@@ -1969,7 +1969,8 @@ public class SolrSearchIndexTest {
 
 	private static final URI SEARCHING_USER = URI.create("http://localhost:8181/_principals/resource/7");
 	private static final URI GUEST = URI.create("http://localhost:8181/_principals/resource/_guest");
-	private static final String READ_FILTER = "{!bool should=$esacl.direct should=$esacl.viaReference}";
+	private static final String READ_FILTER =
+			"{!bool should=$esacl.direct should=$esacl.viaReference must_not=$esacl.unmarkedReference}";
 
 	/**
 	 * Makes the thread's caller a user with authorization checks on, whose searches the read-access filter restricts
