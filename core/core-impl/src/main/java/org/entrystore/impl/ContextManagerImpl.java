@@ -17,6 +17,7 @@
 package org.entrystore.impl;
 
 import org.apache.commons.io.FileUtils;
+import org.eclipse.rdf4j.common.transaction.IsolationLevels;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Statement;
@@ -33,6 +34,7 @@ import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.RepositoryResult;
+import org.eclipse.rdf4j.repository.sail.SailRepository;
 import org.eclipse.rdf4j.rio.RDFHandler;
 import org.eclipse.rdf4j.rio.RDFHandlerException;
 import org.eclipse.rdf4j.rio.RDFParseException;
@@ -199,89 +201,118 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		String contextMetadataURI = contextEntry.getLocalMetadataURI().toString();
 		String contextRelationURI = contextEntry.getRelationURI().toString();
 
-		synchronized (this.entry.repository) {
-			RepositoryConnection rc = null;
-			BufferedOutputStream out = null;
-
-			try {
-				try {
-					out = new BufferedOutputStream(Files.newOutputStream(destFile.toPath()));
-				} catch (IOException e) {
-					log.error(e.getMessage());
-					throw new RepositoryException(e);
-				}
-
-				rc = entry.getRepository().getConnection();
-
-				RepositoryResult<org.eclipse.rdf4j.model.Resource> availableNGs = rc.getContextIDs();
-				List<org.eclipse.rdf4j.model.Resource> filteredNGs = new ArrayList<>();
-				while (availableNGs.hasNext()) {
-					org.eclipse.rdf4j.model.Resource ng = availableNGs.next();
-					String ngURI = ng.stringValue();
-					if (metadataOnly) {
-						if (ngURI.startsWith(contextResourceURI) &&	(ngURI.contains("/metadata/") || ngURI.contains("/cached-external-metadata/"))) {
-							filteredNGs.add(ng);
-						}
-					} else {
-						if (ngURI.startsWith(contextResourceURI) ||
-								ngURI.equals(contextEntryURI) ||
-								ngURI.equals(contextMetadataURI) ||
-								ngURI.equals(contextRelationURI)) {
-							filteredNGs.add(ng);
-						}
-					}
-				}
-				availableNGs.close();
-
-				RDFHandler rdfWriter = null;
-				try {
-					Constructor<? extends RDFWriter> constructor = writer.getConstructor(OutputStream.class);
-					rdfWriter = constructor.newInstance(out);
-				} catch (Exception e) {
-					log.error(e.getMessage());
-				}
-
-				if (rdfWriter == null) {
-					log.error("Unable to create an RDF writer, format not supported");
-					return;
-				}
-
-				rdfWriter.startRDF();
-				Map<String, String> namespaces = NS.getMap();
-				for (String nsName : namespaces.keySet()) {
-					rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
-				}
-
-				RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, filteredNGs.toArray(new org.eclipse.rdf4j.model.Resource[filteredNGs.size()]));
-				while (rr.hasNext()) {
-					Statement s = rr.next();
-					IRI p = s.getPredicate();
-					rdfWriter.handleStatement(s);
-					if (!metadataOnly) {
-						if (p.equals(RepositoryProperties.Creator) ||
-								p.equals(RepositoryProperties.Contributor) ||
-								p.equals(RepositoryProperties.Read) ||
-								p.equals(RepositoryProperties.Write) ||
-								p.equals(RepositoryProperties.DeletedBy)) {
-							users.add(URI.create(s.getObject().stringValue()));
-						}
-					}
-				}
-				rr.close();
-				rdfWriter.endRDF();
-			} catch (RepositoryException e) {
-				log.error("Error when exporting context", e);
-				throw e;
-			} catch (RDFHandlerException e) {
-				log.error(e.getMessage(), e);
-				throw new RepositoryException(e);
-			} finally {
-				rc.close();
-				try {
-					out.flush();
-					out.close();
-				} catch (IOException ignored) {}
+		// Sail stores read a consistent SNAPSHOT_READ view without the monitor, so writers are not stalled behind a
+		// long export; other store types (http, sparql) do not guarantee that isolation and keep the monitor.
+		if (entry.getRepository() instanceof SailRepository) {
+			writeContextExport(destFile, users, metadataOnly, writer, contextResourceURI, contextEntryURI, contextMetadataURI,
+					contextRelationURI, true);
+		} else {
+			synchronized (this.entry.repository) {
+				writeContextExport(destFile, users, metadataOnly, writer, contextResourceURI, contextEntryURI,
+						contextMetadataURI, contextRelationURI, false);
 			}
+		}
+	}
+
+	private void writeContextExport(File destFile, Set<URI> users, boolean metadataOnly, Class<? extends RDFWriter> writer,
+			String contextResourceURI, String contextEntryURI, String contextMetadataURI, String contextRelationURI,
+			boolean snapshot) throws RepositoryException {
+		RepositoryConnection rc = null;
+		BufferedOutputStream out = null;
+
+		try {
+			try {
+				out = new BufferedOutputStream(Files.newOutputStream(destFile.toPath()));
+			} catch (IOException e) {
+				log.error(e.getMessage());
+				throw new RepositoryException(e);
+			}
+
+			rc = entry.getRepository().getConnection();
+			if (snapshot) {
+				rc.begin(IsolationLevels.SNAPSHOT_READ);
+			}
+
+			RepositoryResult<org.eclipse.rdf4j.model.Resource> availableNGs = rc.getContextIDs();
+			List<org.eclipse.rdf4j.model.Resource> filteredNGs = new ArrayList<>();
+			while (availableNGs.hasNext()) {
+				org.eclipse.rdf4j.model.Resource ng = availableNGs.next();
+				String ngURI = ng.stringValue();
+				if (metadataOnly) {
+					if (ngURI.startsWith(contextResourceURI) &&	(ngURI.contains("/metadata/") || ngURI.contains("/cached-external-metadata/"))) {
+						filteredNGs.add(ng);
+					}
+				} else {
+					if (ngURI.startsWith(contextResourceURI) ||
+							ngURI.equals(contextEntryURI) ||
+							ngURI.equals(contextMetadataURI) ||
+							ngURI.equals(contextRelationURI)) {
+						filteredNGs.add(ng);
+					}
+				}
+			}
+			availableNGs.close();
+
+			RDFHandler rdfWriter = null;
+			try {
+				Constructor<? extends RDFWriter> constructor = writer.getConstructor(OutputStream.class);
+				rdfWriter = constructor.newInstance(out);
+			} catch (Exception e) {
+				log.error(e.getMessage());
+			}
+
+			if (rdfWriter == null) {
+				log.error("Unable to create an RDF writer, format not supported");
+				return;
+			}
+
+			rdfWriter.startRDF();
+			Map<String, String> namespaces = NS.getMap();
+			for (String nsName : namespaces.keySet()) {
+				rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
+			}
+
+			RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, filteredNGs.toArray(new org.eclipse.rdf4j.model.Resource[filteredNGs.size()]));
+			while (rr.hasNext()) {
+				Statement s = rr.next();
+				IRI p = s.getPredicate();
+				rdfWriter.handleStatement(s);
+				if (!metadataOnly) {
+					if (p.equals(RepositoryProperties.Creator) ||
+							p.equals(RepositoryProperties.Contributor) ||
+							p.equals(RepositoryProperties.Read) ||
+							p.equals(RepositoryProperties.Write) ||
+							p.equals(RepositoryProperties.DeletedBy)) {
+						users.add(URI.create(s.getObject().stringValue()));
+					}
+				}
+			}
+			rr.close();
+			rdfWriter.endRDF();
+			if (snapshot) {
+				rc.commit();
+			}
+		} catch (RepositoryException e) {
+			log.error("Error when exporting context", e);
+			throw e;
+		} catch (RDFHandlerException e) {
+			log.error(e.getMessage(), e);
+			throw new RepositoryException(e);
+		} finally {
+			if (rc != null) {
+				try {
+					if (rc.isActive()) {
+						rc.rollback();
+					}
+				} catch (RepositoryException rollbackEx) {
+					log.error("Failed to end export read transaction", rollbackEx);
+				}
+				rc.close();
+			}
+			try {
+				out.flush();
+				out.close();
+			} catch (IOException ignored) {}
 		}
 	}
 

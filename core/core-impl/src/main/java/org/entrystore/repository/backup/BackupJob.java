@@ -36,7 +36,11 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -184,10 +188,10 @@ public class BackupJob implements Job, InterruptableJob {
 			try {
 				// temporarily make the current user to admin
 				rm.getPrincipalManager().setAuthenticatedUserURI(rm.getPrincipalManager().getAdminUser().getURI());
-				// we just allow the GET requests during the backup
-				rm.setModificationLockOut(true);
+				// The write lockout is managed inside runBackup, around the export and the data-folder copy.
 				runBackup(context);
 			} finally {
+				// Safety net in case runBackup failed between engaging and releasing the lockout.
 				rm.setModificationLockOut(false);
 				// sets the current user back to the actually logged-in user
 				rm.getPrincipalManager().setAuthenticatedUserURI(realURI);
@@ -287,32 +291,44 @@ public class BackupJob implements Job, InterruptableJob {
 				String extension = "." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
 				File backupDirectory = newBackupDirectory;
 				List<Exception> failures = new ArrayList<>();
-				attempt(failures, () -> exportRepository(rm, rm.getRepository(), "main repository",
-						new File(backupDirectory, "repository" + extension), gzip, format));
-				if (rm.getProvenanceRepository() != null) {
-					attempt(failures, () -> exportRepository(rm, rm.getProvenanceRepository(), "provenance repository",
-							new File(backupDirectory, "repository_prov" + extension), gzip, format));
-				} else {
-					log.info("Provenance repository is not configured and is therefore not be included in the backup");
-				}
-
-				// Files/binary data
-				if (includeFiles) {
-					String dataPath = rm.getConfiguration().getString(Settings.DATA_FOLDER);
-					if (dataPath == null) {
-						log.error("Unknown data path, please check the following setting: {}", Settings.DATA_FOLDER);
+				// Writes are locked out (503) for the whole backup, so the RDF export and the data-folder copy are a
+				// consistent pair: no entry can gain or lose its file between the two.
+				rm.setModificationLockOut(true);
+				try {
+					attempt(failures, () -> exportRepository(rm, rm.getRepository(), "main repository",
+							new File(backupDirectory, "repository" + extension), gzip, format));
+					if (rm.getProvenanceRepository() != null) {
+						attempt(failures, () -> exportRepository(rm, rm.getProvenanceRepository(),
+								"provenance repository", new File(backupDirectory, "repository_prov" + extension),
+								gzip, format));
 					} else {
-						long beforeFileExport = System.currentTimeMillis();
-						File dataPathFile = new File(dataPath);
-						log.info("Copying data folder from {} to {}", dataPathFile, backupDirectory);
-						attempt(failures, () -> {
-							FileOperations.copyPath(dataPathFile.toPath(), backupDirectory.toPath(),
-									DataImpl::isStagingFile);
-							log.info("Copying data folder took {} ms", System.currentTimeMillis() - beforeFileExport);
-						});
+						log.info("Provenance repository is not configured and is therefore not be included in the backup");
 					}
-				} else {
-					log.warn("Files not included in backup due to configuration");
+
+					// Files/binary data
+					if (includeFiles) {
+						String dataPath = rm.getConfiguration().getString(Settings.DATA_FOLDER);
+						if (dataPath == null) {
+							log.error("Unknown data path, please check the following setting: {}", Settings.DATA_FOLDER);
+						} else {
+							long beforeFileExport = System.currentTimeMillis();
+							File dataPathFile = new File(dataPath);
+							log.info("Copying data folder from {} to {}", dataPathFile, backupDirectory);
+							attempt(failures, () -> {
+								FileOperations.copyPath(dataPathFile.toPath(), backupDirectory.toPath(),
+										DataImpl::isStagingFile);
+								log.info("Copying data folder took {} ms",
+										System.currentTimeMillis() - beforeFileExport);
+								// A request admitted just before the lockout may still be writing a file, so
+								// re-check size and mtime against the copy.
+								verifyCopiedFiles(dataPathFile.toPath(), backupDirectory.toPath());
+							});
+						}
+					} else {
+						log.warn("Files not included in backup due to configuration");
+					}
+				} finally {
+					rm.setModificationLockOut(false);
 				}
 
 				if (!failures.isEmpty()) {
@@ -338,6 +354,44 @@ public class BackupJob implements Job, InterruptableJob {
 
 		log.info("Backup job done with execution, took {} ms in total", System.currentTimeMillis() - beforeTotal);
 		return succeeded;
+	}
+
+	/**
+	 * A file overwritten while the copy streams it is copied torn without any exception; the write lockout makes
+	 * that unlikely but cannot exclude it (see the call site). Re-checking size and mtime against the copy surfaces
+	 * exactly those files and fails the copy step. Files created after the copy pass (no copy exists) are benign
+	 * extras; files deleted mid-walk were already surfaced by the copy pass.
+	 *
+	 * @throws IOException if a copy may be torn, or the check itself fails
+	 */
+	private static void verifyCopiedFiles(Path src, Path dst) throws IOException {
+		List<Path> tornCopies = new ArrayList<>();
+		try {
+			Files.walkFileTree(src, new SimpleFileVisitor<>() {
+				@Override
+				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+					Path copy = dst.resolve(src.relativize(file));
+					if (Files.exists(copy)
+							&& (Files.size(file) != Files.size(copy)
+									|| !Files.getLastModifiedTime(file).equals(Files.getLastModifiedTime(copy)))) {
+						log.warn("File was modified while the backup copied it (copy may be torn): {}", file);
+						tornCopies.add(file);
+					}
+					return FileVisitResult.CONTINUE;
+				}
+
+				@Override
+				public FileVisitResult visitFileFailed(Path file, IOException exc) {
+					return FileVisitResult.CONTINUE;
+				}
+			});
+		} catch (IOException e) {
+			throw new IOException("Backup copy verification failed", e);
+		}
+		if (!tornCopies.isEmpty()) {
+			throw new IOException(tornCopies.size() + " file(s) were modified while the backup copied them "
+					+ "(copies may be torn), first: " + tornCopies.getFirst());
+		}
 	}
 
 	synchronized public static void runBackupMaintenance(JobExecutionContext jobContext) {
