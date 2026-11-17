@@ -8,6 +8,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1330](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1330) The Docker image starts the JVM with -XX:-UseBASE64Intrinsics, which mitigates CVE-2026-114938 in the JDK's Base64 decoder on x86 CPUs with AVX-512 until the base image carries a fixed JDK; decoding results are unchanged. **Deployment note:** an instance that runs the jar outside the Docker image should add -XX:-UseBASE64Intrinsics to its java command line or JAVA\_TOOL\_OPTIONS until it runs on a JDK with the fix.
+
 [ENTRYSTORE-1328](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1328) A login that sends the cookie of a previous login only sets the new auth\_token cookie, as 5.x did. It also expired the cookie on the base-URL path without its trailing slash \(e.g. /store next to /store/\), which libcurl-based clients such as FME, curl with a cookie jar, R httr or PHP curl applied to the new cookie, so a client that logs in before each request ran every second request as guest. A login now expires stale copies only if it carries more than one auth\_token cookie, and never on that path.
 
 [ENTRYSTORE-1322](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1322) An error answered before the request body is read, such as 401, 403, 404 or 415, reaches clients behind Apache mod\_proxy again instead of 502: before the response completes, EntryStore reads up to 4 MB of the rest of the body, for at most 5 seconds. Jetty closed the connection while Apache was still sending the body. A larger or slower body still ends in a closed connection.
