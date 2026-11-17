@@ -90,8 +90,9 @@ public class LookupService {
 
 	/**
 	 * The access check is made here because {@link #getMetadataByScope} reads no metadata graph for some scopes,
-	 * e.g. {@code external} on a Link, and the response would still carry the entry's validators. A reference whose
-	 * referenced entry is corrupt is answered once the user may read the reference; its external graph is empty.
+	 * e.g. {@code external} on a Link, and the response would still carry the entry's validators. If the picked entry
+	 * is a reference whose referenced entry is corrupt, it is answered once the user may read the reference; its
+	 * external graph is empty.
 	 *
 	 * @throws org.entrystore.AuthorizationException if the user may not read the metadata of the picked entry
 	 */

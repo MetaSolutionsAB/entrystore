@@ -153,6 +153,20 @@ class LookupEntrySelectorTest {
 	}
 
 	@Test
+	void unreadableOwnerIsPickedOverAReadableReferenceWhoseReferencedEntryIsCorrupt() {
+		Entry owner = context.createResource("z-owner", GraphType.None, null, null);
+		Entry target = context.createResource("target", GraphType.None, null, null);
+		Entry reference = context.createReference("a-ref", owner.getResourceURI(), target.getLocalMetadataURI(), null);
+		reference.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
+		corrupt(target);
+
+		Optional<Entry> picked = asGuest(
+				() -> LookupEntrySelector.select(Set.of(owner, reference), owner.getResourceURI()));
+
+		assertThat(picked).contains(owner);
+	}
+
+	@Test
 	void readableReferenceWhoseReferencedEntryIsCorruptPassesTheCheckWithAnEmptyExternalGraph() {
 		Entry target = context.createResource("target", GraphType.None, null, null);
 		Entry reference = context.createReference("ref", EXTERNAL, target.getLocalMetadataURI(), null);
