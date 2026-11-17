@@ -8,6 +8,8 @@
 
 ### Bug
 
+[ENTRYSTORE-1328](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1328) A login that sends the cookie of a previous login only sets the new auth\_token cookie, as 5.x did. It also expired the cookie on the base-URL path without its trailing slash \(e.g. /store next to /store/\), which libcurl-based clients such as FME, curl with a cookie jar, R httr or PHP curl applied to the new cookie, so a client that logs in before each request ran every second request as guest. A login now expires stale copies only if it carries more than one auth\_token cookie, and never on that path.
+
 [ENTRYSTORE-1322](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1322) An error answered before the request body is read, such as 401, 403, 404 or 415, reaches clients behind Apache mod\_proxy again instead of 502: before the response completes, EntryStore reads up to 4 MB of the rest of the body, for at most 5 seconds. Jetty closed the connection while Apache was still sending the body. A larger or slower body still ends in a closed connection.
 
 [ENTRYSTORE-1321](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1321) PUT /\{context-id\}/resource/\{entry-id\} stores a raw upload whose Content-Type cannot be parsed, such as csv; charset=UTF-8, as 5.x did, instead of answering 415. **Behaviour note:** such a file is stored with the media type application/octet-stream unless the mimeType parameter names one; 5.x stored the type as sent.

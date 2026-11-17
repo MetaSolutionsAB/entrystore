@@ -41,6 +41,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -57,7 +58,8 @@ import java.util.Set;
  * hold one on the base-URL path (5.x) and one on the servlet context path (earlier 6.0 builds), each host-only (5.x)
  * or on the configured domain. The client often cannot remove them (HttpOnly, cross-site), so each is expired with
  * the SameSite, Secure and HttpOnly the container uses ({@code server.servlet.session.cookie.*}); without
- * SameSite=None a browser drops a cross-site expiry.
+ * SameSite=None a browser drops a cross-site expiry. A login leaves the issuing path's trailing-slash variant alone
+ * (see {@link #expireStale}).
  */
 @Component
 public class AuthTokenCookies implements LogoutHandler {
@@ -104,8 +106,10 @@ public class AuthTokenCookies implements LogoutHandler {
 		this.allTargets = expiryPaths(issuingPath, contextPath).stream()
 				.flatMap(path -> domains.stream().map(d -> new Target(d, path)))
 				.toList();
-		var issued = new Target(issuingDomain, issuingPath);
-		this.staleTargets = allTargets.stream().filter(target -> !target.equals(issued)).toList();
+		this.staleTargets = allTargets.stream()
+				.filter(target -> !(Objects.equals(target.domain(), issuingDomain)
+						&& withoutTrailingSlash(target.path()).equals(withoutTrailingSlash(issuingPath))))
+				.toList();
 		this.maxAgeSeconds = parseMaxAgeSeconds(maxAge);
 		this.refreshExpirationOnAccess = refreshExpirationOnAccess;
 	}
@@ -160,11 +164,17 @@ public class AuthTokenCookies implements LogoutHandler {
 	}
 
 	/**
-	 * Expires the cookie everywhere except where the container issues it, if the request carries it. Used on login,
-	 * where the container sets the new session cookie on the issuing path in the same response.
+	 * Expires stale copies of the cookie if the request carries more than one, so only a client holding a stale copy
+	 * gets an expiry; 5.x sent none on login. Used on login, where the container sets the new session cookie on the
+	 * issuing path in the same response, so neither that path nor its trailing-slash variant on the issuing domain is
+	 * expired: libcurl keys a cookie by domain and path without the trailing slash and would apply that expiry to the
+	 * new cookie.
 	 */
 	public void expireStale(HttpServletRequest request, HttpServletResponse response) {
-		expire(request, response, staleTargets);
+		var cookies = request.getCookies();
+		if (cookies != null && Arrays.stream(cookies).filter(c -> cookieName.equals(c.getName())).count() > 1) {
+			expire(request, response, staleTargets);
+		}
 	}
 
 	/**
@@ -245,10 +255,14 @@ public class AuthTokenCookies implements LogoutHandler {
 	static List<String> expiryPaths(String issuingPath, String contextPath) {
 		var paths = new LinkedHashSet<String>();
 		for (String path : List.of(issuingPath, contextPath.isBlank() ? "/" : contextPath)) {
-			String withoutSlash = path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
+			String withoutSlash = withoutTrailingSlash(path);
 			paths.add(withoutSlash.isEmpty() ? "/" : withoutSlash);
 			paths.add(withoutSlash + "/");
 		}
 		return List.copyOf(paths);
+	}
+
+	private static String withoutTrailingSlash(String path) {
+		return path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
 	}
 }
