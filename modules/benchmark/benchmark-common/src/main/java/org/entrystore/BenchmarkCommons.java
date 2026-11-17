@@ -202,6 +202,7 @@ public class BenchmarkCommons {
 			System.setProperty("log.acl", arguments.isWithAcl() ? "on" : "off");
 
 			arguments.setIndexes(commandLine.getOptionValue(indexesOption));
+			System.setProperty("log.indexes", arguments.getIndexes() != null ? arguments.getIndexes() : INDEXES);
 
 			if (commandLine.hasOption("R")) {
 				if (MEMORY.equals(storeType)) {
