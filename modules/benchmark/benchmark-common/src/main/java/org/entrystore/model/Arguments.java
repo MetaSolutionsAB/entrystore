@@ -50,6 +50,7 @@ public class Arguments {
 	int seededPrincipals = 0;
 	int writers = 1;
 	boolean reindex = false;
+	boolean maintenance = false;
 	File storePath;
 	File solrPath;
 	File dataPath;
