@@ -24,12 +24,14 @@ import java.util.concurrent.TimeUnit
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static org.awaitility.Awaitility.await
 
 class LookupIT extends BaseSpec {
 
 	def static contextId = '700'
 	def static resourceUrl = 'https://example.org/lookup-test-resource'
+	def static privateResourceUrl = 'https://example.org/lookup-test-private-resource'
 	def static entryId
 
 	def setupSpec() {
@@ -44,6 +46,8 @@ class LookupIT extends BaseSpec {
 		// Grant guest ReadMetadata so entry is indexed with public:true in Solr
 		body.info = [(newMetadataIri): [(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]]]
 		entryId = createEntry(contextId, params, body)
+		createEntry(contextId, [entrytype: 'link', resource: privateResourceUrl],
+				createTitleMetadataBody(newResourceIri, 'Private Lookup Test Entry'))
 		waitForSolrProcessing()
 		// Solr commits asynchronously (commitWithin=1000ms) — poll the *global* lookup until the entry
 		// is visible: only the global endpoint is Solr-backed (context-scoped lookup resolves directly
@@ -145,6 +149,28 @@ class LookupIT extends BaseSpec {
 	}
 
 	// --- Context-scoped lookup: error cases ---
+
+	def "GET /{context-id}/lookup as guest should return 401 when the entry is not readable"() {
+		given:
+		def queryParams = convertMapToQueryParams([uri: privateResourceUrl])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/' + contextId + '/lookup' + queryParams, '', 'application/json')
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "GET /{context-id}/lookup as guest should return 401 for a scope that reads no metadata of the unreadable entry"() {
+		given:
+		def queryParams = convertMapToQueryParams([uri: privateResourceUrl, scope: 'external'])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/' + contextId + '/lookup' + queryParams, '', 'application/json')
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
 
 	def "GET /{context-id}/lookup with non-existing URI should return 404"() {
 		given:

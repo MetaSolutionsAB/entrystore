@@ -27,6 +27,7 @@ import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.Metadata;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.SearchIndex;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.QueryResult;
@@ -89,10 +90,18 @@ public class LookupService {
 		return extractSingleEntry(qResult.getEntries(), resourceURI);
 	}
 
+	/**
+	 * The access check is made here because {@link #getMetadataByScope} reads no metadata graph for some scopes,
+	 * e.g. {@code external} on a Link.
+	 *
+	 * @throws org.entrystore.AuthorizationException if the user may not read the metadata of the entry
+	 */
 	public Entry lookupInContext(String contextId, URI resourceURI) {
 		Context context = contextService.getContextOrThrow(contextId);
 		Set<Entry> entries = context.getByResourceURI(resourceURI);
-		return extractSingleEntry(entries, resourceURI);
+		Entry entry = extractSingleEntry(entries, resourceURI);
+		repositoryManager.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
+		return entry;
 	}
 
 	public String getMetadataByScope(Entry entry, LookupScope scope, String mediaType) {

@@ -62,7 +62,8 @@ public class LookupController {
 		return buildResponse(entry, scope, mediaType);
 	}
 
-	@Operation(summary = "Performs a context-scoped lookup by resource URI and returns metadata")
+	@Operation(summary = "Performs a context-scoped lookup by resource URI and returns metadata",
+			description = "Answers 401 or 403 if the caller may not read the metadata of the entry.")
 	@GetMapping(
 			path = "/{context-id}/lookup",
 			produces = {
