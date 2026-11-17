@@ -18,6 +18,8 @@ package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.springframework.security.cas.web.CasAuthenticationFilter
+import org.springframework.security.web.authentication.WebAuthenticationDetails
 import spock.lang.Shared
 import spock.lang.Stepwise
 
@@ -292,6 +294,19 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 
 		then: 'the session has ended, as 5.x removed a disabled user\'s tokens'
 		userConn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def '9. A CAS login should record the client address but no session id'() {
+		given: 'the details source of the CAS login'
+		def source = detailsSourceOf(CasAuthenticationFilter)
+
+		when: 'it records the details of a request that carries a session'
+		def details = source.buildDetails(requestWithASession())
+
+		then:
+		details instanceof WebAuthenticationDetails
+		details.remoteAddress == '192.0.2.1'
+		details.sessionId == null
 	}
 
 	/** Plays the browser and Keycloak side of a CAS login and returns the EntryStore callback URL with the ticket. */

@@ -17,6 +17,8 @@
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.springframework.security.oauth2.client.web.OAuth2LoginAuthenticationFilter
+import org.springframework.security.web.authentication.WebAuthenticationDetails
 import spock.lang.Shared
 import spock.lang.Stepwise
 
@@ -277,5 +279,18 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		// Only the guest identity is acceptable on a 200 — accepting any non-admin user would let a
 		// leak under a derived identity (e.g. the email claim admin@test.com) ship green.
 		responseCode == HTTP_UNAUTHORIZED || (responseCode == HTTP_OK && responseUser == 'guest')
+	}
+
+	def '7. An OIDC login should record the client address but no session id'() {
+		given: 'the details source of the OIDC login'
+		def source = detailsSourceOf(OAuth2LoginAuthenticationFilter)
+
+		when: 'it records the details of a request that carries a session'
+		def details = source.buildDetails(requestWithASession())
+
+		then:
+		details instanceof WebAuthenticationDetails
+		details.remoteAddress == '192.0.2.1'
+		details.sessionId == null
 	}
 }

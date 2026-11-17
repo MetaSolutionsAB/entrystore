@@ -29,6 +29,7 @@ import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.springboot.security.AuthTokenCookies;
 import org.entrystore.rest.springboot.service.TokenService;
 import org.entrystore.rest.springboot.service.UserService;
+import org.entrystore.rest.springboot.util.SessionIdExceptions;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -38,6 +39,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
 import java.util.Map;
 
 @Slf4j
@@ -58,7 +60,19 @@ public class AuthUserController {
 		// Read the existing session without creating one: a guest must not get a session (and thus no
 		// auth_token cookie / Cache-Control). The expiry is only reported for authenticated, non-guest users.
 		HttpSession session = request.getSession(false);
-		return userService.getUserInfo(acceptLanguage, session != null ? authTokenCookies.expiry(session) : null);
+		return userService.getUserInfo(acceptLanguage, session != null ? expiryOf(session) : null);
+	}
+
+	/** @return when the session's login ends, or null if a concurrent request has just ended the session */
+	private Instant expiryOf(HttpSession session) {
+		try {
+			return authTokenCookies.expiry(session);
+		} catch (IllegalStateException e) {
+			if (!SessionIdExceptions.foundIn(e)) {
+				throw e;
+			}
+			return null;
+		}
 	}
 
 	@Operation(summary = "Lists the active password-login sessions of the currently logged-in user by session handle; "

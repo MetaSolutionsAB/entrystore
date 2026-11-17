@@ -35,7 +35,9 @@ import java.util.List;
 @Slf4j
 class WhitelistBasicAuthenticationConverter implements AuthenticationConverter {
 
-	private final BasicAuthenticationConverter delegate = new BasicAuthenticationConverter();
+	// replaces the filter's own converter, so the details source set on the filter does not reach this one
+	private final BasicAuthenticationConverter delegate =
+			new BasicAuthenticationConverter(ClientAddressDetailsSource.INSTANCE);
 	private final List<String> whitelist;
 
 	WhitelistBasicAuthenticationConverter(List<String> whitelist) {

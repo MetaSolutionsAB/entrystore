@@ -16,11 +16,14 @@
 
 package org.entrystore.rest.springboot.security;
 
+import org.apache.logging.log4j.Level;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.filter.ReloadUserPropertiesFilter;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
+import org.entrystore.rest.springboot.util.CapturingAppender;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
+import org.entrystore.rest.springboot.util.JettySessionExceptions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -111,5 +115,56 @@ class FormLoginAuthenticationSuccessHandlerTest {
 		List<String> setCookies = response.getHeaders("Set-Cookie");
 		assertTrue(setCookies.stream().anyMatch(c -> c.startsWith("auth_token=;") && c.contains("Path=/store/")
 				&& c.contains("Max-Age=0")), setCookies.toString());
+	}
+
+	@Test
+	void sessionLifetimeThatCannotBeApplied_failsTheLoginAndEndsTheSession() throws Exception {
+		doThrow(new IllegalStateException("broken")).when(authTokenCookies).applySessionLifetime(any(), any());
+		var session = (MockHttpSession) request.getSession();
+		var response = new MockHttpServletResponse();
+
+		handler.onAuthenticationSuccess(request, response, authentication);
+
+		assertEquals(500, response.getStatus());
+		assertNull(SecurityContextHolder.getContext().getAuthentication());
+		assertTrue(session.isInvalid());
+		List<String> setCookies = response.getHeaders("Set-Cookie");
+		assertTrue(setCookies.stream().anyMatch(c -> c.startsWith("auth_token=;") && c.contains("Path=/store/")
+				&& c.contains("Max-Age=0")), setCookies.toString());
+	}
+
+	@Test
+	void sessionEndedByAConcurrentRequest_failsTheLoginWithAWarningWithoutTheException() throws Exception {
+		doAnswer(JettySessionExceptions.throwing(JettySessionExceptions.readOfInvalidatedSession()))
+				.when(authTokenCookies).expiry(any());
+		var response = new MockHttpServletResponse();
+
+		try (var appender = CapturingAppender.attachTo(FormLoginAuthenticationSuccessHandler.class)) {
+			handler.onAuthenticationSuccess(request, response, authentication);
+
+			assertEquals(500, response.getStatus());
+			assertNull(SecurityContextHolder.getContext().getAuthentication());
+			assertEquals(1, appender.countAt(Level.WARN), appender.toString());
+			assertEquals(0, appender.countAt(Level.ERROR), appender.toString());
+			assertTrue(appender.allMessages().noneMatch(message -> message.contains(JettySessionExceptions.SESSION_ID)),
+					appender.toString());
+			assertEquals(0, appender.thrownAt(Level.WARN).count());
+		}
+	}
+
+	@Test
+	void otherFailureAfterTheSessionHasEnded_isLoggedAsAnErrorWithItsException() throws Exception {
+		var failure = new IllegalStateException("broken");
+		var session = (MockHttpSession) request.getSession();
+		doAnswer(invocation -> {
+			session.invalidate();
+			throw failure;
+		}).when(authTokenCookies).expiry(any());
+
+		try (var appender = CapturingAppender.attachTo(FormLoginAuthenticationSuccessHandler.class)) {
+			handler.onAuthenticationSuccess(request, new MockHttpServletResponse(), authentication);
+
+			assertEquals(List.of(failure), appender.thrownAt(Level.ERROR).toList(), appender.toString());
+		}
 	}
 }

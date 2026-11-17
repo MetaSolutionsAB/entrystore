@@ -19,6 +19,7 @@ package org.entrystore.rest.springboot.security;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.web.authentication.WebAuthenticationDetails;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -39,6 +40,18 @@ class WhitelistBasicAuthenticationConverterTest {
 
 		assertEquals("admin", token.getName());
 		assertEquals("s3cret", token.getCredentials());
+	}
+
+	@Test
+	void whitelistedUsername_isPassedOnWithTheClientAddressButNoSessionId() {
+		var request = basicRequest("admin", "s3cret");
+		request.setRemoteAddr("192.0.2.1");
+		request.getSession();
+
+		var details = (WebAuthenticationDetails) converter.convert(request).getDetails();
+
+		assertEquals("192.0.2.1", details.getRemoteAddress());
+		assertNull(details.getSessionId());
 	}
 
 	@Test

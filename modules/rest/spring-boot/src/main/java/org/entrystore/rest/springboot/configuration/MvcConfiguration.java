@@ -17,12 +17,16 @@
 package org.entrystore.rest.springboot.configuration;
 
 import lombok.RequiredArgsConstructor;
+import org.entrystore.rest.springboot.filter.EndedSessionResponder;
 import org.entrystore.rest.springboot.filter.IfUnmodifiedSinceInterceptor;
 import org.entrystore.rest.springboot.filter.MultipartHandlerInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.accept.HeaderContentNegotiationStrategy;
+import org.springframework.web.servlet.DispatcherServlet;
+import org.springframework.web.servlet.FlashMapManager;
+import org.springframework.web.servlet.HandlerExceptionResolver;
 import org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer;
 import org.springframework.web.servlet.config.annotation.ContentNegotiationConfigurer;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -41,6 +45,8 @@ public class MvcConfiguration implements WebMvcConfigurer {
 
 	private final MultipartHandlerInterceptor multipartHandlerInterceptor;
 
+	private final EndedSessionResponder endedSessionResponder;
+
 	/**
 	 * Negotiates on the Accept header, and on entry URIs also on the {@code format} parameter. Other handlers
 	 * that honour {@code format} read it themselves: setting strategies disables the configurer's parameter
@@ -57,6 +63,18 @@ public class MvcConfiguration implements WebMvcConfigurer {
 		registry.addInterceptor(multipartHandlerInterceptor);
 		registry.addInterceptor(ifUnmodifiedSinceInterceptor)
 				.addPathPatterns(IfUnmodifiedSinceInterceptor.PATH_PATTERNS);
+	}
+
+	/** Goes first, so that the exception reaches neither {@code AppExceptionHandler} nor Spring's resolver logging. */
+	@Override
+	public void extendHandlerExceptionResolvers(List<HandlerExceptionResolver> resolvers) {
+		resolvers.addFirst(endedSessionResponder.exceptionResolver());
+	}
+
+	/** Replaces Spring Boot's default, which backs off for a bean of this name. */
+	@Bean(DispatcherServlet.FLASH_MAP_MANAGER_BEAN_NAME)
+	public FlashMapManager flashMapManager() {
+		return new EndedSessionTolerantFlashMapManager();
 	}
 
 	@Override
