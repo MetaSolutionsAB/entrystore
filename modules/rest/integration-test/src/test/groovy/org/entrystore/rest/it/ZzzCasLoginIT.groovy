@@ -18,6 +18,8 @@ package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.springframework.security.cas.web.CasAuthenticationFilter
+import org.springframework.security.web.authentication.WebAuthenticationDetails
 import spock.lang.Shared
 import spock.lang.Stepwise
 
@@ -409,6 +411,19 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		def tokens = JSON_PARSER.parseText(tokensConn.inputStream.text) as Map
 		tokens.containsKey(EntryStoreClient.handleOf(currentCookie))
 		!tokens.containsKey(otherHandle)
+	}
+
+	def '14. A CAS login should record the client address but no session id'() {
+		given: 'the details source of the CAS login'
+		def source = detailsSourceOf(CasAuthenticationFilter)
+
+		when: 'it records the details of a request that carries a session'
+		def details = source.buildDetails(requestWithASession())
+
+		then:
+		details instanceof WebAuthenticationDetails
+		details.remoteAddress == '192.0.2.1'
+		details.sessionId == null
 	}
 
 	/** Logs the test user in through CAS with no cookies and returns the new session's Cookie header. */

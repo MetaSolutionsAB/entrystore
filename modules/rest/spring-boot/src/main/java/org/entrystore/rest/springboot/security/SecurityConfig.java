@@ -291,6 +291,15 @@ public class SecurityConfig {
 								response.setStatus(HttpStatus.NO_CONTENT.value())
 						)
 						.permitAll())
+				// An anonymous class, not a lambda: see the SAML branch below.
+				.anonymous(anonymous -> anonymous
+						.withObjectPostProcessor(new ObjectPostProcessor<AnonymousAuthenticationFilter>() {
+							@Override
+							public <O extends AnonymousAuthenticationFilter> O postProcess(O filter) {
+								filter.setAuthenticationDetailsSource(ClientAddressDetailsSource.INSTANCE);
+								return filter;
+							}
+						}))
 				.addFilterAfter(setUserURIAfterAuthenticationFilter, AnonymousAuthenticationFilter.class)
 				.addFilterBefore(ignoreAuthFilter, SetUserURIAfterAuthenticationFilter.class)
 				.addFilterAfter(reloadUserPropertiesFilter, SetUserURIAfterAuthenticationFilter.class)
@@ -315,6 +324,7 @@ public class SecurityConfig {
 					.formLogin(login -> login
 							.loginPage("/auth/login")
 							.loginProcessingUrl("/auth/cookie")
+							.authenticationDetailsSource(ClientAddressDetailsSource.INSTANCE)
 							.successHandler(formLoginAuthenticationSuccessHandler)
 							.failureHandler(formLoginAuthenticationFailureHandler)
 							.usernameParameter("auth_username")
@@ -329,6 +339,7 @@ public class SecurityConfig {
 					httpBasicConfig.cache().ttl(), httpBasicConfig.cache().maxSize());
 			http.httpBasic(basic -> {
 				basic.authenticationEntryPoint(entryPoint);
+				basic.authenticationDetailsSource(ClientAddressDetailsSource.INSTANCE);
 				if (passwordLoginMode == PasswordLoginMode.WHITELIST) {
 					var whitelist = IndexedListSettings.read(environment, Settings.AUTH_PASSWORD_WHITELIST);
 					// An anonymous class, not a lambda: see the SAML branch below.
@@ -376,6 +387,7 @@ public class SecurityConfig {
 			var acsMatcher = new SamlAcsRequestMatcher();
 			http.saml2Login(samlLogin -> samlLogin
 					.loginPage("/auth/saml")
+					.authenticationDetailsSource(ClientAddressDetailsSource.INSTANCE)
 					.failureHandler(samlFailureHandler)
 					.authenticationRequestResolver(createCustomResolver())
 					.authenticationConverter(
@@ -403,6 +415,7 @@ public class SecurityConfig {
 			log.info("CAS Auth Enabled");
 
 			var casFilter = new CasAuthenticationFilter();
+			casFilter.setAuthenticationDetailsSource(ClientAddressDetailsSource.INSTANCE);
 			// CSRF is disabled globally and getParameter() reads form bodies, so pinning to GET
 			// prevents a cross-site POST from submitting a stolen ticket.
 			RequestMatcher ticketRequired = request -> request.getParameter("ticket") != null;
@@ -466,6 +479,7 @@ public class SecurityConfig {
 
 			http.oauth2Login(oidcLogin -> oidcLogin
 					.loginPage("/auth/oidc")
+					.authenticationDetailsSource(ClientAddressDetailsSource.INSTANCE)
 					.authorizationEndpoint(authorization -> authorization
 							.authorizationRequestResolver(new OidcAuthorizationRequestResolver(
 									registrations, oidcAuthService, oidcAuthStateCache))
