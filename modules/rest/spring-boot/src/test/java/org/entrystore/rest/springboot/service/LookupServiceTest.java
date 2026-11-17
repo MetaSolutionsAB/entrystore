@@ -20,6 +20,7 @@ import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -40,6 +41,7 @@ import java.net.URI;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Runs the context lookup against a real in-memory repository, where a referenced entry can be made corrupt. */
 class LookupServiceTest {
@@ -88,6 +90,18 @@ class LookupServiceTest {
 
 		assertThat(answered).isEqualTo(reference);
 		assertThat(external).isBlank();
+	}
+
+	@Test
+	void referenceIsCheckedBeforeItsReferencedEntry() {
+		Entry group = pm.createResource(null, GraphType.Group, null, null);
+		Entry reference = context.createReference("ref", EXTERNAL, group.getLocalMetadataURI(), null);
+		reference.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getAdminUser().getURI());
+		corrupt(group);
+		String contextId = context.getEntry().getId();
+
+		assertThatThrownBy(() -> asGuest(() -> service.lookupInContext(contextId, EXTERNAL)))
+				.isNotInstanceOf(AuthorizationException.class);
 	}
 
 	/** Makes the entry unloadable: removes its resource statement from the store and evicts it from the cache. */

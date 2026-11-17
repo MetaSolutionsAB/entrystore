@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.impl.ContextManagerImpl;
 import org.entrystore.impl.LocalMetadataWrapper;
 import org.entrystore.repository.util.CorruptData;
@@ -73,12 +74,16 @@ final class LookupEntrySelector {
 	 * Checks that the current user may read all metadata of {@code entry}, as
 	 * {@link ContextManagerImpl#checkEntryMetadataReadable} does. That check loads the entry a reference takes its
 	 * metadata from; if that entry is corrupt, the check cannot be completed and the lookup must not fail on it.
+	 * The entry itself is checked before that and on its own, so a failure of that check is never taken for a
+	 * corrupt referenced entry.
 	 *
-	 * @return false if the referenced entry is corrupt; the user may then read the reference itself, which is checked
-	 * first, and its external metadata graph is empty
+	 * @return false if the referenced entry is corrupt; the user may then read the reference itself, and its external
+	 * metadata graph is empty
 	 * @throws AuthorizationException if the user lacks ReadMetadata on the entry or on the entry it references
 	 */
 	static boolean checkReadable(Entry entry) {
+		entry.getRepositoryManager().getPrincipalManager()
+				.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
 		URI referencedEntryURI = null;
 		try {
 			if ((entry.getEntryType() == EntryType.Reference || entry.getEntryType() == EntryType.LinkReference)

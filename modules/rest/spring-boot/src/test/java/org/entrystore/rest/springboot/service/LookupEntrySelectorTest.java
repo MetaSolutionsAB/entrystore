@@ -200,6 +200,17 @@ class LookupEntrySelectorTest {
 	}
 
 	@Test
+	void referenceIsCheckedBeforeItsReferencedEntry() {
+		Entry group = pm.createResource(null, GraphType.Group, null, null);
+		Entry reference = context.createReference("ref", EXTERNAL, group.getLocalMetadataURI(), null);
+		reference.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getAdminUser().getURI());
+		corrupt(group);
+
+		assertThatThrownBy(() -> asGuest(() -> LookupEntrySelector.checkReadable(reference)))
+				.isNotInstanceOf(AuthorizationException.class);
+	}
+
+	@Test
 	void noHolderGivesEmpty() {
 		assertThat(LookupEntrySelector.select(Set.of(), EXTERNAL)).isEmpty();
 	}
