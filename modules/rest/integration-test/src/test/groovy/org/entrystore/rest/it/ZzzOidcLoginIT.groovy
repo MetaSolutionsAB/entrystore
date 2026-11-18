@@ -18,6 +18,8 @@ package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.springframework.security.oauth2.client.web.OAuth2LoginAuthenticationFilter
+import org.springframework.security.web.authentication.WebAuthenticationDetails
 import spock.lang.Shared
 import spock.lang.Stepwise
 
@@ -385,6 +387,19 @@ class ZzzOidcLoginIT extends KeycloakBaseSpec {
 		def tokens = JSON_PARSER.parseText(tokensConn.inputStream.text) as Map
 		tokens.containsKey(EntryStoreClient.handleOf(currentCookie))
 		!tokens.containsKey(otherHandle)
+	}
+
+	def '13. An OIDC login should record the client address but no session id'() {
+		given: 'the details source of the OIDC login'
+		def source = detailsSourceOf(OAuth2LoginAuthenticationFilter)
+
+		when: 'it records the details of a request that carries a session'
+		def details = source.buildDetails(requestWithASession())
+
+		then:
+		details instanceof WebAuthenticationDetails
+		details.remoteAddress == '192.0.2.1'
+		details.sessionId == null
 	}
 
 	/** Logs the test user in through OIDC with no cookies and returns the new session's Cookie header. */

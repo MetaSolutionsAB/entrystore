@@ -16,20 +16,30 @@
 
 package org.entrystore.rest.springboot.configuration;
 
+import org.entrystore.rest.springboot.filter.EndedSessionResponder;
 import org.entrystore.rest.springboot.filter.IfUnmodifiedSinceInterceptor;
 import org.entrystore.rest.springboot.filter.MultipartHandlerInterceptor;
+import org.entrystore.rest.springboot.util.ErrorResponseWriter;
+import org.entrystore.rest.springboot.util.JettySessionExceptions;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.web.servlet.HandlerExceptionResolver;
 import org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer;
+import tools.jackson.databind.json.JsonMapper;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -40,6 +50,7 @@ class MvcConfigurationTest {
 			.withBean(MvcAsyncConfiguration.class, () -> new MvcAsyncConfiguration(8, 32, 16, 15000L))
 			.withBean(IfUnmodifiedSinceInterceptor.class, () -> mock(IfUnmodifiedSinceInterceptor.class))
 			.withBean(MultipartHandlerInterceptor.class)
+			.withBean(EndedSessionResponder.class, MvcConfigurationTest::endedSessionResponder)
 			.withUserConfiguration(MvcConfiguration.class);
 
 	@Test
@@ -62,9 +73,7 @@ class MvcConfigurationTest {
 		// Guards the load-bearing half of the fix: dispatch must use the bounded mvc-async- executor
 		// (not the default unbounded SimpleAsyncTaskExecutor) and the configured timeout. The bean
 		// tests above only prove the executor is built, not that configureAsyncSupport actually uses it.
-		MvcConfiguration mvcConfiguration =
-				new MvcConfiguration(new MvcAsyncConfiguration(8, 32, 16, 15000L), mock(IfUnmodifiedSinceInterceptor.class),
-						new MultipartHandlerInterceptor());
+		MvcConfiguration mvcConfiguration = mvcConfiguration();
 		AsyncSupportConfigurer configurer = mock(AsyncSupportConfigurer.class);
 
 		mvcConfiguration.configureAsyncSupport(configurer);
@@ -85,5 +94,29 @@ class MvcConfigurationTest {
 		// run() has closed the context, invoking the bean's destroy(); a terminated pool means the
 		// non-daemon mvc-async-* worker threads are gone, not merely that shutdown was signalled.
 		assertTrue(executorRef.get().getThreadPoolExecutor().isTerminated());
+	}
+
+	@Test
+	void endedSessionResolver_goesAheadOfTheResolversOfSpringMvc() throws Exception {
+		var resolverOfSpringMvc = mock(HandlerExceptionResolver.class);
+		var resolvers = new ArrayList<>(List.of(resolverOfSpringMvc));
+		var response = new MockHttpServletResponse();
+
+		mvcConfiguration().extendHandlerExceptionResolvers(resolvers);
+		var modelAndView = resolvers.getFirst().resolveException(new MockHttpServletRequest(), response, null,
+				JettySessionExceptions.readOfInvalidatedSession());
+
+		assertEquals(List.of(resolverOfSpringMvc), resolvers.subList(1, resolvers.size()));
+		assertNotNull(modelAndView);
+		assertEquals(500, response.getStatus());
+	}
+
+	private static MvcConfiguration mvcConfiguration() {
+		return new MvcConfiguration(new MvcAsyncConfiguration(8, 32, 16, 15000L),
+				mock(IfUnmodifiedSinceInterceptor.class), new MultipartHandlerInterceptor(), endedSessionResponder());
+	}
+
+	private static EndedSessionResponder endedSessionResponder() {
+		return new EndedSessionResponder(new ErrorResponseWriter(JsonMapper.builder().build()));
 	}
 }

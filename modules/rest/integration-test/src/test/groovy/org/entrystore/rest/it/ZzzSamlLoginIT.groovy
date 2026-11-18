@@ -19,6 +19,8 @@ package org.entrystore.rest.it
 import groovy.json.JsonOutput
 import org.apache.commons.text.StringEscapeUtils
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.springframework.security.saml2.provider.service.web.authentication.Saml2WebSsoAuthenticationFilter
+import org.springframework.security.web.authentication.WebAuthenticationDetails
 import spock.lang.Shared
 import spock.lang.Stepwise
 
@@ -464,6 +466,19 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		def after = tokensSeenByObserver()[handle]
 		after['lastUsedUserAgent'] == before['lastUsedUserAgent']
 		after['lastAccessTime'] == before['lastAccessTime']
+	}
+
+	def '15. A SAML login should record the client address but no session id'() {
+		given: 'the details source of the SAML login'
+		def source = detailsSourceOf(Saml2WebSsoAuthenticationFilter)
+
+		when: 'it records the details of a request that carries a session'
+		def details = source.buildDetails(requestWithASession())
+
+		then:
+		details instanceof WebAuthenticationDetails
+		details.remoteAddress == '192.0.2.1'
+		details.sessionId == null
 	}
 
 	/** Logs the test user in through SAML with no cookies and returns the new session's Cookie header. */
