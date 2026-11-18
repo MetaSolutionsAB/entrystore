@@ -1,6 +1,6 @@
 # ENTRYSTORE CHANGELOG
 
-## Version 6.1
+## Version 6.1.0 (2026-11-18)
 
 ### New Feature
 
