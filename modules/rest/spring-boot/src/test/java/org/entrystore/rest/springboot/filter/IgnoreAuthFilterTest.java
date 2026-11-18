@@ -77,6 +77,14 @@ class IgnoreAuthFilterTest {
 	}
 
 	@Test
+	void isRequested_callbackOnlyOutsideTheQueryString_isNot() {
+		var request = new MockHttpServletRequest("GET", "/auth/user");
+		request.setParameter("callback", "cb");
+
+		assertFalse(new IgnoreAuthFilter(true).isRequested(request));
+	}
+
+	@Test
 	void jsonpRequest_runsTheChainAsGuestAndRestoresTheLogin() throws Exception {
 		SecurityContextHolder.getContext().setAuthentication(loggedIn);
 		var request = new MockHttpServletRequest("GET", "/auth/user");

@@ -513,6 +513,22 @@ class EntryStoreClient {
 	}
 
 	/**
+	 * Fails if the body or a response header carries the session id (and so the cookie value) of any of the given
+	 * auth_token Set-Cookie lines. Only an auth_token Set-Cookie line, which issues or expires the session cookie, may
+	 * carry one.
+	 */
+	static void assertNoSessionIds(HttpURLConnection connection, String body, List<String> authCookieLines) {
+		def sessionIds = authCookieLines.collect { sessionIdOf(it) }
+		def headerValues = connection.getHeaderFields().findAll { it.key != null }.collectMany { name, values ->
+			name.equalsIgnoreCase('Set-Cookie') ? values.findAll { !it.startsWith('auth_token=') } : values
+		}
+		sessionIds.each { sessionId ->
+			assert !body?.contains(sessionId): 'response body carries a session id'
+			assert !headerValues.any { it?.contains(sessionId) }: 'a response header carries a session id'
+		}
+	}
+
+	/**
 	 * Converts Set-Cookie response-header lines into a Cookie request-header value, stripping the
 	 * cookie attributes (Path, HttpOnly, ...) each line carries.
 	 */
