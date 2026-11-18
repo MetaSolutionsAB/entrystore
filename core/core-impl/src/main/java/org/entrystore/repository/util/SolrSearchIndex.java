@@ -89,6 +89,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 
@@ -159,6 +160,13 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private final Thread delayedContextIndexer;
 
+	/**
+	 * Documents waiting for submission, by entry URI. Its monitor also guards {@link #inFlightAdds} and
+	 * {@link #builds}. The lock order is the repository monitor, the repository listeners' monitor, this queue's
+	 * monitor, then {@link #deleteQueue}'s. Entry writes post their documents while holding the first two, so nothing
+	 * that may take the repository monitor, such as building a document or loading an entry, runs while this
+	 * queue's or the delete queue's monitor is held.
+	 */
 	private final Cache<URI, SolrInputDocument> postQueue = Caffeine.newBuilder().build();
 
 	private final int maxReindexQueueSize;
@@ -172,6 +180,9 @@ public class SolrSearchIndex implements SearchIndex {
 	 * is always in the queue, in flight, or settled.
 	 */
 	private final Set<URI> inFlightAdds = new HashSet<>();
+
+	/** Documents being built outside the submission queue's monitor; guarded by that monitor. */
+	private final DocumentBuilds builds = new DocumentBuilds();
 
 	/** How long a purge after a reindex waits without Solr answering any document; a field so tests can shorten it. */
 	long purgeStallNanos = MAX_PURGE_WAIT_NANOS;
@@ -680,15 +691,17 @@ public class SolrSearchIndex implements SearchIndex {
 
 	/**
 	 * Also drops the queued documents of the context's entries, which the submitter would otherwise send after
-	 * the delete-by-query, and settles those being sent, so a failed batch does not queue them again; a batch
-	 * already being sent can still land after it.
+	 * the delete-by-query, settles those being sent, so a failed batch does not queue them again, and supersedes
+	 * those being built, so they are not queued afterwards; a batch already being sent can still land after it.
 	 */
 	@Override
 	public boolean removeContext(URI contextURI) {
 		String entryURIPrefix = contextURI + "/";
+		Predicate<URI> inContext = entryURI -> entryURI.toString().startsWith(entryURIPrefix);
 		synchronized (postQueue) {
-			postQueue.asMap().keySet().removeIf(entryURI -> entryURI.toString().startsWith(entryURIPrefix));
-			inFlightAdds.removeIf(entryURI -> entryURI.toString().startsWith(entryURIPrefix));
+			postQueue.asMap().keySet().removeIf(inContext);
+			inFlightAdds.removeIf(inContext);
+			builds.supersede(inContext);
 		}
 		return clearSolrIndex(solrServer, null, contextURI);
 	}
@@ -915,12 +928,13 @@ public class SolrSearchIndex implements SearchIndex {
 	 * documents the reindex posted is in the submission queue or in an add batch that Solr has not answered yet:
 	 * the submitter drains the queue in no particular order, and a failed batch is put back into the queue. A
 	 * document the reindex posted whose entry is deleted meanwhile counts as sent, since its deletion is queued
-	 * and the purge may remove the old document too; one that is replaced by a newer document of the same entry
-	 * is awaited as that document. Documents Solr rejects are discarded and count as sent; the purge then warns that
-	 * entries of the context may be missing from search. The wait is given up when Solr has answered no document at
-	 * all for MAX_PURGE_WAIT_NANOS, so a large backlog ahead of the context is awaited but a stalled submitter is
-	 * not, and after MAX_PURGE_TOTAL_WAIT_NANOS in all. On shutdown, a waiting purge checks once more after the
-	 * submitter has stopped and ends if documents are still unsent. Nothing is purged if
+	 * and the purge may remove the old document too; one that is replaced by, or not queued because of, a newer
+	 * document of the same entry is awaited as that document. Documents Solr rejects are discarded and count as
+	 * sent; the purge then warns that entries of the context may be missing from search. The wait is given up when
+	 * Solr has answered no document at all for MAX_PURGE_WAIT_NANOS, so a large backlog ahead of the context is
+	 * awaited but a stalled submitter is not, and after MAX_PURGE_TOTAL_WAIT_NANOS in all. On shutdown, a waiting
+	 * purge checks once more after the submitter has stopped and ends if documents are still unsent. Nothing is
+	 * purged if
 	 * <ul>
 	 *     <li>the context's URI index is incomplete, because the purge would remove the documents of the entries
 	 *     missing from its listing (ENTRYSTORE-1095),</li>
@@ -1050,7 +1064,7 @@ public class SolrSearchIndex implements SearchIndex {
 	private boolean hasPendingAdds() {
 		synchronized (postQueue) {
 			postQueue.cleanUp();
-			return postQueue.estimatedSize() > 0 || !inFlightAdds.isEmpty();
+			return postQueue.estimatedSize() > 0 || !inFlightAdds.isEmpty() || !builds.isEmpty();
 		}
 	}
 
@@ -1095,7 +1109,7 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Blocks until both queues are empty and no batch is in flight. Returns false only on thread
+	 * Blocks until both queues are empty and no document is being built or in flight. Returns false only on thread
 	 * interruption (typically JVM shutdown). Trade-off: a sustained Solr outage with a poison-pill
 	 * batch re-queued by the {@code SolrServerException | IOException} retry path will block this
 	 * call indefinitely; for EntryStore's single-instance ops model the operator's recourse is to
@@ -1203,7 +1217,8 @@ public class SolrSearchIndex implements SearchIndex {
 	 * keep their previous documents and prevent that purge.
 	 *
 	 * @param outcome            whether all entries of the context were processed
-	 * @param queuedEntryURIs    the entries whose documents were posted
+	 * @param queuedEntryURIs    the entries whose documents were posted, or superseded by a newer document or
+	 *                           deletion of the entry
 	 * @param loadedEntries      entries that were loaded, whether they were then posted, skipped as deleted or
 	 *                           could not be indexed
 	 * @param corruptEntries     entries whose loading failed because of their data, see
@@ -1306,21 +1321,13 @@ public class SolrSearchIndex implements SearchIndex {
 				continue;
 			}
 			loadedEntries++;
-			synchronized (postQueue) {
-				try {
-					// Checked while holding the monitor that the removal of a deleted entry's document takes, so
-					// that a concurrent deletion is either seen here or removes the document queued here
-					if (entry.isDeleted() || entry.getContext().isDeleted()) {
-						log.debug("Not adding deleted entry to post queue: {}", entryURI);
-						continue;
-					}
-					log.info("Adding entry to Solr post queue: {}", entryURI);
-					queueDocument(entryURI, constructSolrInputDocument(entry, extractFulltext));
+			try {
+				if (buildAndQueueDocument(entryURI, entry)) {
 					queuedEntryURIs.add(entryURI);
-				} catch (Exception | StackOverflowError e) {
-					unindexableEntries++;
-					logEntryFailure("Not indexing entry", entryURI, e, tracedFailureCauses);
 				}
+			} catch (Exception | StackOverflowError e) {
+				unindexableEntries++;
+				logEntryFailure("Not indexing entry", entryURI, e, tracedFailureCauses);
 			}
 		}
 		ContextPostResult posted = new ContextPostResult(ContextPostOutcome.COMPLETED, queuedEntryURIs,
@@ -1362,17 +1369,19 @@ public class SolrSearchIndex implements SearchIndex {
 
 	/**
 	 * Removes the document of an entry that failed to load because of its data, unless a document of the entry is
-	 * queued: then the entry loaded after it failed to load here, e.g. because its data was repaired in between,
-	 * and the queued document must not be dropped. A queued document from before the data became corrupt is kept
-	 * as well, which is harmless because a search skips hits whose entries are corrupt.
+	 * queued, being built or being sent: then the entry loaded elsewhere, e.g. because its data was repaired in
+	 * between, and that document must not be dropped. A document from before the data became corrupt is kept as
+	 * well, which is harmless because a search skips hits whose entries are corrupt.
 	 */
 	private void removeCorruptEntryDocument(URI entryURI) {
 		synchronized (postQueue) {
-			if (postQueue.getIfPresent(entryURI) != null) {
-				log.info("Not removing the document of corrupt entry {} because a document of it is queued", entryURI);
+			if (postQueue.getIfPresent(entryURI) != null || builds.isBuilding(entryURI)
+					|| inFlightAdds.contains(entryURI)) {
+				log.info("Not removing the document of corrupt entry {} because a document of it is queued, being"
+						+ " built or being sent", entryURI);
 				return;
 			}
-			removeEntryDocument(entryURI);
+			queueDeletion(entryURI);
 		}
 	}
 
@@ -1447,6 +1456,9 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
+	/**
+	 * Builds the Solr document of an entry. The caller must hold neither queue's monitor, see {@link #postQueue}.
+	 */
 	public SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext) {
 		Model mdGraph = entry.getMetadataGraph();
 		Model entryGraph = entry.getGraph();
@@ -1835,20 +1847,10 @@ public class SolrSearchIndex implements SearchIndex {
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			URI entryURI = entry.getEntryURI();
-			synchronized (postQueue) {
-				if (postQueue.getIfPresent(entryURI) != null) {
-					log.debug("Entry {} already exists in post queue, attempting replacement", entryURI);
-				}
-				if (!entry.isDeleted() && !entry.getContext().isDeleted()) {
-					log.info("Adding document to Solr post queue: {}", entryURI);
-					try {
-						queueDocument(entryURI, constructSolrInputDocument(entry, extractFulltext));
-					} catch (Exception e) {
-						log.error("Not indexing {}", entryURI, e);
-					}
-				} else {
-					log.debug("Not adding deleted entry to post queue: {}", entryURI);
-				}
+			try {
+				buildAndQueueDocument(entryURI, entry);
+			} catch (Exception e) {
+				log.error("Not indexing {}", entryURI, e);
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
@@ -1856,7 +1858,9 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public void removeEntry(Entry entry) {
-		removeEntryDocument(entry.getEntryURI());
+		synchronized (postQueue) {
+			queueDeletion(entry.getEntryURI());
+		}
 
 		// if entry is a context, also remove all entries inside
 		if (GraphType.Context.equals(entry.getGraphType())) {
@@ -1867,12 +1871,62 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Queues the document of an entry for submission and drops a pending deletion of the entry, so that the
-	 * deletion cannot remove the newer document: the submitter does not necessarily send all queued deletions
-	 * before the queued documents. The caller must hold the submission queue's monitor, see
-	 * {@link #removeEntryDocument(URI)}.
+	 * Builds the document of an entry and queues it, unless the entry was deleted or a newer document or a deletion
+	 * of the entry was queued while it was being built, see {@link DocumentBuilds}. The document is built holding
+	 * neither queue's monitor, see {@link #postQueue}. Deletion is checked again while holding the submission
+	 * queue's monitor, which the removal of a deleted entry's document takes, so that a concurrent deletion is
+	 * either seen here or removes the document queued here.
+	 *
+	 * @param entryURI the URI the document is queued by
+	 * @return false if the entry or its context is deleted; true if the document was queued, or was not because a
+	 * newer document or a deletion of the entry was queued while it was being built
 	 */
-	private void queueDocument(URI entryURI, SolrInputDocument document) {
+	private boolean buildAndQueueDocument(URI entryURI, Entry entry) {
+		if (isDeletedOrInDeletedContext(entry)) {
+			log.debug("Not adding deleted entry to post queue: {}", entryURI);
+			return false;
+		}
+		long ticket;
+		synchronized (postQueue) {
+			ticket = builds.begin(entryURI);
+		}
+		SolrInputDocument document;
+		try {
+			document = constructSolrInputDocument(entry, extractFulltext);
+		} catch (Throwable t) {
+			synchronized (postQueue) {
+				builds.end(entryURI, ticket);
+			}
+			throw t;
+		}
+		synchronized (postQueue) {
+			boolean superseded = builds.end(entryURI, ticket);
+			if (isDeletedOrInDeletedContext(entry)) {
+				log.debug("Not adding deleted entry to post queue: {}", entryURI);
+				return false;
+			}
+			if (superseded) {
+				log.debug("Not adding superseded document to post queue: {}", entryURI);
+			} else {
+				log.info("Adding document to Solr post queue: {}", entryURI);
+				queueDocument(entryURI, ticket, document);
+			}
+			return true;
+		}
+	}
+
+	private static boolean isDeletedOrInDeletedContext(Entry entry) {
+		return entry.isDeleted() || entry.getContext().isDeleted();
+	}
+
+	/**
+	 * Queues the document that the build with the given ticket built, see {@link DocumentBuilds}, and drops a
+	 * pending deletion of the entry, so that the deletion cannot remove the newer document: the submitter does not
+	 * necessarily send all queued deletions before the queued documents. The caller must hold the submission
+	 * queue's monitor, see {@link #queueDeletion(URI)}.
+	 */
+	private void queueDocument(URI entryURI, long ticket, SolrInputDocument document) {
+		builds.queued(entryURI, ticket);
 		synchronized (deleteQueue) {
 			deleteQueue.remove(entryURI);
 		}
@@ -1880,18 +1934,86 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Removes the document of an entry from the index and drops a document of the entry that is still waiting in
-	 * the submission queue, so that it is not added again after the deletion. Both happen while holding the
-	 * submission queue's monitor, as does {@link #queueDocument(URI, SolrInputDocument)}, so that of a deletion
-	 * and a concurrently queued document of the same entry the later one wins.
+	 * Queues the removal of an entry's document from the index, drops a document of the entry that is still waiting
+	 * in the submission queue, so that it is not added again after the deletion, and supersedes the documents of
+	 * the entry being built, which started before the deletion. The caller must hold the submission queue's monitor,
+	 * as {@link #queueDocument(URI, long, SolrInputDocument)} requires, so that of a deletion and a concurrently
+	 * queued document of the same entry the later one wins.
 	 */
-	private void removeEntryDocument(URI entryURI) {
-		synchronized (postQueue) {
-			postQueue.invalidate(entryURI);
-			synchronized (deleteQueue) {
-				log.info("Adding entry to Solr delete queue: {}", entryURI);
-				deleteQueue.add(entryURI);
+	private void queueDeletion(URI entryURI) {
+		builds.supersede(entryURI::equals);
+		postQueue.invalidate(entryURI);
+		synchronized (deleteQueue) {
+			log.info("Adding entry to Solr delete queue: {}", entryURI);
+			deleteQueue.add(entryURI);
+		}
+	}
+
+	/**
+	 * Orders the documents of an entry that are built concurrently, outside the submission queue's monitor. A build
+	 * takes a ticket before it reads the entry, and its document is queued only if no document of a later build and
+	 * no deletion of the entry was queued first. Every change to an entry is followed by an event that starts a
+	 * build, so the build that started last read the latest state, and an older document never replaces a newer
+	 * one. An entry is tracked only while a build of it is in progress.
+	 */
+	private static final class DocumentBuilds {
+
+		private final Map<URI, InProgress> inProgress = new HashMap<>();
+
+		private long lastTicket;
+
+		/**
+		 * The builds of an entry in progress, and the ticket of the newest document or deletion queued for the entry
+		 * since the first of them began.
+		 */
+		private static final class InProgress {
+			private int builds;
+			private long newestQueuedTicket;
+		}
+
+		/** Starts a build of the entry, before it reads the entry, and returns the build's ticket. */
+		long begin(URI entryURI) {
+			inProgress.computeIfAbsent(entryURI, uri -> new InProgress()).builds++;
+			return ++lastTicket;
+		}
+
+		/**
+		 * Ends a build of the entry, whether it succeeded or not.
+		 *
+		 * @return whether a newer document or a deletion of the entry was queued since the build began
+		 */
+		boolean end(URI entryURI, long ticket) {
+			InProgress building = inProgress.get(entryURI);
+			if (--building.builds == 0) {
+				inProgress.remove(entryURI);
 			}
+			return building.newestQueuedTicket > ticket;
+		}
+
+		/** Records that the document of a build that was not superseded was queued. */
+		void queued(URI entryURI, long ticket) {
+			InProgress building = inProgress.get(entryURI);
+			if (building != null) {
+				building.newestQueuedTicket = ticket;
+			}
+		}
+
+		/** Supersedes the builds in progress of the entries the predicate matches, as a deletion queued now does. */
+		void supersede(Predicate<URI> entryURIs) {
+			long ticket = ++lastTicket;
+			inProgress.forEach((entryURI, building) -> {
+				if (entryURIs.test(entryURI)) {
+					building.newestQueuedTicket = ticket;
+				}
+			});
+		}
+
+		boolean isBuilding(URI entryURI) {
+			return inProgress.containsKey(entryURI);
+		}
+
+		boolean isEmpty() {
+			return inProgress.isEmpty();
 		}
 	}
 
