@@ -67,6 +67,22 @@ class TokenResourceIT extends BaseSpec {
 		tokensConnection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
+	def "GET /auth/tokens with HTTP Basic should mark no session current and set no cookie"() {
+		given: 'a session of the user, so that one is listed'
+		EntryStoreClient.loginIsolated(USER_SHARED)
+
+		when:
+		def conn = EntryStoreClient.getRequest('/auth/tokens', '', 'application/json',
+				[Authorization: EntryStoreClient.basicAuth(USER_SHARED, password)])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def tokens = JSON_PARSER.parseText(conn.inputStream.text) as Map
+		!tokens.isEmpty()
+		tokens.values().every { it['current'] == false }
+		EntryStoreClient.findSetCookies(conn, 'auth_token').isEmpty()
+	}
+
 	def "GET /auth/tokens should get a list of all currently active logins for of an authenticated user"() {
 		given:
 		// raw login ritual kept: loginIsolated does not support auth_maxage
@@ -204,6 +220,33 @@ class TokenResourceIT extends BaseSpec {
 		handle1 != handle2
 	}
 
+	def "a login with a valid session cookie should get a new session id and a new handle"() {
+		given:
+		def first = EntryStoreClient.loginIsolated(USER_SHARED)
+		def firstHandle = EntryStoreClient.handleOf(first.authCookie)
+
+		when:
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie',
+				createFormBody([auth_username: USER_SHARED, auth_password: password]), '',
+				'application/x-www-form-urlencoded', [Cookie: first.authCookie])
+
+		then:
+		loginConnection.getResponseCode() == HTTP_OK
+		def second = EntryStoreClient.findSetCookies(loginConnection, 'auth_token')
+				.find { EntryStoreClient.parseSetCookieAttributes(it)['max-age'] != '0' }
+		EntryStoreClient.sessionIdOf(second) != EntryStoreClient.sessionIdOf(first.authCookie)
+		def secondHandle = EntryStoreClient.handleOf(second)
+		secondHandle != firstHandle
+		def tokensConnection = EntryStoreClient.getRequest('/auth/tokens', '', 'application/json', [Cookie: second])
+		def tokensBody = EntryStoreClient.bodyOf(tokensConnection)
+		!(JSON_PARSER.parseText(tokensBody) as Map).containsKey(firstHandle)
+		EntryStoreClient.assertNoSessionIds(tokensConnection, tokensBody, [first.authCookie, second])
+
+		and: 'the session id before the login no longer authenticates'
+		EntryStoreClient.getRequest('/auth/tokens', '', 'application/json', [Cookie: first.authCookie])
+				.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
 	def "GET #path should not contain a session id or cookie value of the user"() {
 		given:
 		def login = EntryStoreClient.loginIsolated(USER_SHARED)
@@ -251,6 +294,7 @@ class TokenResourceIT extends BaseSpec {
 
 		then:
 		tokensDeleteConnection.getResponseCode() == HTTP_NO_CONTENT
+		EntryStoreClient.assertNoSessionIds(tokensDeleteConnection, '', [login1.authCookie, login2.authCookie])
 		def token1Connection = EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: login1.authCookie])
 		token1Connection.getResponseCode() == HTTP_OK
 		def tokensRespJson = JSON_PARSER.parseText(token1Connection.inputStream.text)

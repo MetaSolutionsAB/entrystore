@@ -54,6 +54,19 @@ class IgnoreAuthIT extends BaseSpec {
 		jsonResp['id'] == '_guest'
 	}
 
+	def "GET /auth/user?ignoreAuth with invalid HTTP Basic credentials should return guest user"() {
+		given: 'credentials that name no user, so no account is locked'
+		def basic = EntryStoreClient.basicAuth('ignoreAuthUnknownUser', 'wrongPassword')
+
+		when:
+		def connection = EntryStoreClient.getRequest('/auth/user?ignoreAuth', '', 'application/json',
+				[Authorization: basic])
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(connection.inputStream.text)['user'] == 'guest'
+	}
+
 	def "GET /auth/user?ignoreAuth with a session cookie should set no cookie"() {
 		given: 'a session cookie without the XSRF-TOKEN cookie, which a request without ignoreAuth would get'
 		def login = EntryStoreClient.loginIsolated('admin')
