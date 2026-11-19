@@ -98,7 +98,7 @@ not as a "what EntryStore could do if it batched."
 ## How to reproduce
 
 ```powershell
-$jar = "modules\benchmark\benchmark-entrystore\target\entrystore-benchmark-entrystore-6.0-SNAPSHOT.jar"
+$jar = "modules\benchmark\benchmark-entrystore\target\entrystore-benchmark-entrystore-6.2-SNAPSHOT.jar"
 
 # Multi-transaction (current behaviour, default):
 java -Xmx2g -jar $jar -s native -u 10000 -m 500 -p "$env:TEMP\entrystore-bench\multi-native"
@@ -109,6 +109,5 @@ java -Xmx2g -jar $jar -s native -u 10000 -t true -p "$env:TEMP\entrystore-bench\
 java -Xmx2g -jar $jar -s memory -u 10000 -t true -p "$env:TEMP\entrystore-bench\single-memory"
 ```
 
-Note: the existing CLI inverts `-t`. `-t` absent or `-t false` runs
-`MultipleTransactions`; `-t true` runs `SingleTransaction`. Convention
-preserved from `benchmark-rdf4j`.
+Note: `-t` absent or `-t false` runs `MultipleTransactions`; `-t true` runs
+`SingleTransaction`, as in `benchmark-rdf4j`.

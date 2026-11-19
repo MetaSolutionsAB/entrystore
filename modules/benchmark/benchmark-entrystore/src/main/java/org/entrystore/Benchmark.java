@@ -102,7 +102,8 @@ public class Benchmark {
 		try (RepositoryConnection connection = repositoryManager.getRepository().getConnection();
 			 RepositoryResult<Statement> result = connection.getStatements(null, null, null)) {
 			for (Statement statement : result) {
-				String value = statement.getObject().stringValue();
+				// reads each value, as the benchmark-rdf4j reader does
+				statement.getObject().stringValue();
 				if (sizeToGenerate < 11) {
 					System.out.printf("Database contains: %s\n", statement);
 				}
@@ -143,6 +144,8 @@ public class Benchmark {
 						readAllFromDatabase(context, arguments.getSizeToGenerate());
 					}
 				} else {
+					LogUtils.log.info("A single transaction writes to the repository directly: "
+							+ "-m, -i and -a have no effect on it.");
 					SingleTransaction.runBenchmark(repositoryManager, persons);
 					readAllFromRepository(repositoryManager, arguments.getSizeToGenerate());
 				}

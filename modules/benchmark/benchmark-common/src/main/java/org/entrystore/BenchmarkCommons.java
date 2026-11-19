@@ -72,7 +72,8 @@ public class BenchmarkCommons {
 		Option sizeOfUniverseOption = createOption("u", "universe", "UNIVERSE", "Size of universe/objects to process: @int.", true);
 		Option complexityOption = createOption("c", "complexity", "COMPLEXITY", "Complexity of universe/objects to process: 'complex' | 'simple'.", false);
 		Option moduloOption = createOption("m", "modulo", "MODULO", "Record intermediate requests with modulo: @int.", false);
-		Option isWithTransactionsOption = createOption("t", "transaction", "TRANSACTION", "Run with multiple transactions: @boolean.", false);
+		Option isWithTransactionsOption = createOption("t", "transaction", "TRANSACTION",
+				"Write everything in a single transaction instead of one per write: @boolean. Default: false.", false);
 		Option isWithInterContextsOption = createOption("i", "intercontexts", "INTERCONTEXTS", "Run with interim contexts: @boolean.", false);
 		Option isWithAclOption = createOption("a", "acl", "ACL", "Run with ACL: @boolean.", false);
 		Option storePathOption = createOption("p", "path", "PATH", "Store path: @string.", false);
@@ -211,6 +212,14 @@ public class BenchmarkCommons {
 			}
 			arguments.setWithContextImport(commandLine.hasOption("I"));
 			arguments.setWithTreeRemoval(commandLine.hasOption("T"));
+
+			if (!arguments.isWithTransactions() && (arguments.isWithContextRemoval() || arguments.isWithContextImport())) {
+				// only the multi-transaction run creates the context that -R removes and -I replaces
+				System.err.println("Removing or importing the context is measured with multiple transactions only, "
+						+ "not with -t true.");
+				printHelp(options);
+				System.exit(1);
+			}
 
 			// welcome message
 			LogUtils.logWelcome(storeType, arguments.isWithTransactions(), arguments.getSizeToGenerate());

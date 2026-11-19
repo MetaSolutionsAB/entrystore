@@ -136,7 +136,7 @@ alone — matching the observed ~46 ms average.
 ## How to reproduce
 
 ```powershell
-$jar = "modules\benchmark\benchmark-entrystore\target\entrystore-benchmark-entrystore-6.0-SNAPSHOT.jar"
+$jar = "modules\benchmark\benchmark-entrystore\target\entrystore-benchmark-entrystore-6.2-SNAPSHOT.jar"
 $storeDir = "$env:TEMP\entrystore-bench\store-$([guid]::NewGuid())"
 New-Item -ItemType Directory -Path $storeDir | Out-Null
 
