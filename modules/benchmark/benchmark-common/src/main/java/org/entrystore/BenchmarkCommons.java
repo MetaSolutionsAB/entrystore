@@ -95,6 +95,7 @@ public class BenchmarkCommons {
 				.desc("Afterwards, time a recursive delete of a folder tree holding as many entries as the universe "
 						+ "while another context is written to.")
 				.build();
+		Option batchedOption = createOption("B", "batched", "BATCHED", "Run all EntryStore inserts inside one RepositoryManagerImpl.inBatch(...) call, committed every entrystore.repository.batch.max-operations operations: @boolean.", false);
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -110,6 +111,7 @@ public class BenchmarkCommons {
 		options.addOption(contextRemovalOption);
 		options.addOption(contextImportOption);
 		options.addOption(treeRemovalOption);
+		options.addOption(batchedOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -212,6 +214,9 @@ public class BenchmarkCommons {
 			}
 			arguments.setWithContextImport(commandLine.hasOption("I"));
 			arguments.setWithTreeRemoval(commandLine.hasOption("T"));
+			boolean isBatched = commandLine.hasOption("B") && "true".equals(commandLine.getOptionValue(batchedOption));
+			arguments.setBatched(isBatched);
+			System.setProperty("log.batched", arguments.isBatched() ? "on" : "off");
 
 			if (!arguments.isWithTransactions() && (arguments.isWithContextRemoval() || arguments.isWithContextImport())) {
 				// only the multi-transaction run creates the context that -R removes and -I replaces

@@ -132,6 +132,39 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	@Getter
 	private final SoftCache softCache;
 
+	/**
+	 * Active batch transaction for the current thread, or {@code null} when not inside a batch.
+	 * When set, {@link ContextImpl#createNewMinimalItem} and {@link MetadataImpl#setGraph}
+	 * reuse this connection instead of opening their own and skip the begin/commit cycle so
+	 * the batch decides when to commit.
+	 */
+	private final ThreadLocal<RepositoryConnection> activeBatchConnection = new ThreadLocal<>();
+
+	/**
+	 * Actions registered by operations running inside the current thread's batch, to be run once
+	 * the batch transaction has committed. Exists because a batch defers the commit that those
+	 * operations would otherwise have performed themselves, and some of their bookkeeping — the
+	 * {@code ContextImpl} URI indexes above all — must not become visible before the store change
+	 * lands, or a rolled-back batch would leave an index naming entries that never existed.
+	 */
+	private final ThreadLocal<List<Runnable>> afterBatchCommitActions = new ThreadLocal<>();
+
+	/** Actions that undo in-memory state of the work since the batch last committed; see {@link #runAfterBatchRollback}. */
+	private final ThreadLocal<List<Runnable>> afterBatchRollbackActions = new ThreadLocal<>();
+
+	/** Batch-aware operations since the current batch last committed; see {@link #getActiveBatchConnection()}. */
+	private final ThreadLocal<int[]> batchOperations = new ThreadLocal<>();
+
+	/** Entries created since the current thread's batch last committed; see {@link #fireRepositoryEvent}. */
+	private final ThreadLocal<Set<URI>> batchCreatedEntries = new ThreadLocal<>();
+
+	/** The first failure of a batch-aware operation in the current thread's batch; see {@link #markBatchRollbackOnly}. */
+	private final ThreadLocal<Exception> batchFailure = new ThreadLocal<>();
+
+	private static final int BATCH_MAX_OPERATIONS_DEFAULT = 10_000;
+
+	private int batchMaxOperations = BATCH_MAX_OPERATIONS_DEFAULT;
+
 	@Getter
 	private final Config configuration;
 
@@ -335,6 +368,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 		registerGroupCacheInvalidationListener();
 
+		batchMaxOperations = Math.max(1, configuration.getInt(Settings.REPOSITORY_BATCH_MAX_OPERATIONS, BATCH_MAX_OPERATIONS_DEFAULT));
 		trackDeletedEntries = configuration.getBoolean(Settings.REPOSITORY_TRACK_DELETED, false);
 		log.info("Tracking of deleted entries is {}", trackDeletedEntries ? "activated" : "deactivated");
 		boolean cleanupDeleted = configuration.getBoolean(Settings.REPOSITORY_TRACK_DELETED_CLEANUP, false);
@@ -570,13 +604,257 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	/**
+	 * Connection of the active batch transaction for the current thread, or {@code null}
+	 * when no batch is in progress. Internal hook used by {@link ContextImpl} and
+	 * {@link MetadataImpl} to reuse the batch connection instead of opening their own.
+	 * <p>
+	 * Every batch-aware operation calls this before it writes, so it is also where the batch is
+	 * bounded: after {@link Settings#REPOSITORY_BATCH_MAX_OPERATIONS} operations the transaction so
+	 * far is committed, its post-commit work runs, and a new transaction begins on the same connection.
+	 *
+	 * @throws org.entrystore.repository.RepositoryException if an earlier operation made the batch rollback-only,
+	 *                                                       or if the checkpoint fails
+	 */
+	RepositoryConnection getActiveBatchConnection() {
+		RepositoryConnection rc = activeBatchConnection.get();
+		if (rc == null) {
+			return null;
+		}
+		failIfBatchIsRollbackOnly();
+		if (++batchOperations.get()[0] > batchMaxOperations) {
+			checkpoint(rc);
+		}
+		return rc;
+	}
+
+	/**
+	 * Commits the batch so far and begins its next transaction. A failure of either is reported as a checkpoint
+	 * failure, not as a failure of the operation that happened to reach the checkpoint, and makes the batch
+	 * rollback-only, as work that catches it must not go on to commit.
+	 */
+	private void checkpoint(RepositoryConnection rc) {
+		try {
+			rc.commit();
+		} catch (RepositoryException e) {
+			throw checkpointFailure(
+					"Batch checkpoint commit failed; the operations since the previous checkpoint were not stored", e);
+		}
+		afterBatchRollbackActions.get().clear();
+		runPostCommitActions();
+		try {
+			rc.begin();
+		} catch (RepositoryException e) {
+			throw checkpointFailure("Batch checkpoint was stored, but the batch cannot continue", e);
+		}
+		batchOperations.get()[0] = 1;
+	}
+
+	private org.entrystore.repository.RepositoryException checkpointFailure(String message, RepositoryException cause) {
+		var failure = new org.entrystore.repository.RepositoryException(message, cause);
+		markBatchRollbackOnly(failure);
+		return failure;
+	}
+
+	/**
+	 * Called by a batch-aware operation that failed after it may have written to the batch connection. Its partial
+	 * writes cannot be undone on their own, so the batch must not commit them: every later batch-aware operation
+	 * fails, and {@link #inBatch} rolls back and throws even if the work caught the failure. Does nothing outside a
+	 * batch.
+	 */
+	void markBatchRollbackOnly(Exception cause) {
+		if (activeBatchConnection.get() != null && batchFailure.get() == null) {
+			batchFailure.set(cause);
+		}
+	}
+
+	private void failIfBatchIsRollbackOnly() {
+		Exception failure = batchFailure.get();
+		if (failure != null) {
+			throw new org.entrystore.repository.RepositoryException(
+					"The batch is rolled back because an operation in it failed", failure);
+		}
+	}
+
+	/** Package-private so a test can reach the checkpoint without thousands of operations. */
+	void setBatchMaxOperations(int batchMaxOperations) {
+		this.batchMaxOperations = Math.max(1, batchMaxOperations);
+	}
+
+	/**
+	 * Runs and clears the work held back until the batch's commit. Each action is isolated: they run after the store
+	 * holds the change, so a failing one must neither skip the rest nor report the committed batch as failed.
+	 */
+	private void runPostCommitActions() {
+		batchCreatedEntries.get().clear();
+		List<Runnable> actions = afterBatchCommitActions.get();
+		// Not a for-each: an action, e.g. a listener, may itself register work that must run too.
+		for (int i = 0; i < actions.size(); i++) {
+			try {
+				actions.get(i).run();
+			} catch (RuntimeException e) {
+				log.error("Work deferred to the commit of a batch failed; the batch itself is committed", e);
+			}
+		}
+		actions.clear();
+	}
+
+	/** Each action is isolated, so a failing one neither skips the rest nor replaces the failure of the batch. */
+	private static void runRollbackActions(List<Runnable> actions) {
+		for (Runnable action : actions) {
+			try {
+				action.run();
+			} catch (RuntimeException e) {
+				log.error("Work to undo in-memory state of a rolled-back batch failed", e);
+			}
+		}
+	}
+
+	/**
+	 * Registers {@code action} to run after the current thread's batch transaction commits, for
+	 * bookkeeping that an operation would have done right after its own commit had it not been
+	 * folded into a batch. Actions run in registration order, inside the batch's
+	 * {@code synchronized (repository)} block, and only when the commit succeeded — a rolled-back
+	 * batch drops them, which is the point.
+	 *
+	 * @throws IllegalStateException if no batch is active on this thread; the caller is then
+	 *                               responsible for the action itself and must not lose it.
+	 */
+	void runAfterBatchCommit(Runnable action) {
+		List<Runnable> actions = afterBatchCommitActions.get();
+		if (actions == null) {
+			throw new IllegalStateException("No batch is active on this thread");
+		}
+		actions.add(action);
+	}
+
+	/**
+	 * Registers {@code action} to run if the current thread's batch rolls back the transaction it is in, for in-memory
+	 * state that an operation has to publish before the commit, such as the {@code SoftCache} entry that lets the
+	 * batch read what it created. Actions are dropped once that transaction commits, at a checkpoint or at the end.
+	 *
+	 * @throws IllegalStateException if no batch is active on this thread
+	 */
+	void runAfterBatchRollback(Runnable action) {
+		List<Runnable> actions = afterBatchRollbackActions.get();
+		if (actions == null) {
+			throw new IllegalStateException("No batch is active on this thread");
+		}
+		actions.add(action);
+	}
+
+	/**
+	 * Runs {@code work} in one repository transaction at a time. Only entry creation
+	 * ({@link ContextImpl#createNewMinimalItem}) and metadata writes ({@link MetadataImpl#setGraph})
+	 * join it: they use the batch's connection and leave their commit to the next checkpoint or the
+	 * end of the batch. Every other write, e.g. to an ACL, a list or group, an entry name, or the
+	 * list membership and copied ACL of an entry created into a list, commits at once on its own
+	 * connection. Such a write does not see the batch's uncommitted entries in the store and is not
+	 * rolled back with them, so a caller must not make one about an entry the same batch created
+	 * unless it accepts triples that name a missing entry after a rollback.
+	 * <p>
+	 * Trade-offs: a rollback discards the changes the two joining operations made since the last
+	 * checkpoint, and removes the
+	 * entries created in it from the {@code SoftCache}; a reference the caller kept to such an
+	 * entry is not invalidated. Repository events of the writes that
+	 * join the batch, and every event about an entry the batch created, are held back like work
+	 * registered via {@link #runAfterBatchCommit}: they reach listeners once the commit lands, in the
+	 * order they were raised, and are dropped on rollback. Any other event is about a write that has
+	 * committed on its own connection and is dispatched at once.
+	 * <p>
+	 * The transaction is bounded, not the call: after {@link Settings#REPOSITORY_BATCH_MAX_OPERATIONS}
+	 * batch-aware operations (default 10 000) it commits and begins again, so a rollback discards
+	 * only the work since the last such checkpoint, and an entry id handed out before it stays used.
+	 * The repository monitor is held for the whole call regardless, so a caller with a large
+	 * workload should run several batches rather than one.
+	 *
+	 * @throws RuntimeException any throwable from {@code work}; the work since the last checkpoint
+	 *                          is rolled back and the throwable is rethrown unchanged.
+	 * @throws org.entrystore.repository.RepositoryException if a batch-aware operation failed and {@code work}
+	 *                          caught the failure; the work since the last checkpoint is rolled back, as the
+	 *                          operation's partial writes must not be committed.
+	 */
+	public void inBatch(Runnable work) {
+		if (activeBatchConnection.get() != null) {
+			// Already inside a batch on this thread — run inline.
+			work.run();
+			return;
+		}
+		synchronized (repository) {
+			RepositoryConnection rc = repository.getConnection();
+			boolean committed = false;
+			try {
+				rc.begin();
+				activeBatchConnection.set(rc);
+				afterBatchCommitActions.set(new ArrayList<>());
+				afterBatchRollbackActions.set(new ArrayList<>());
+				batchCreatedEntries.set(new HashSet<>());
+				batchOperations.set(new int[1]);
+				work.run();
+				failIfBatchIsRollbackOnly();
+				rc.commit();
+				committed = true;
+				// Only now may the deferred bookkeeping become visible; see runAfterBatchCommit.
+				// Lock order is repository → indexLock, matching every other path into the indexes.
+				runPostCommitActions();
+			} finally {
+				List<Runnable> rollbackActions = committed ? null : afterBatchRollbackActions.get();
+				activeBatchConnection.remove();
+				afterBatchCommitActions.remove();
+				afterBatchRollbackActions.remove();
+				batchCreatedEntries.remove();
+				batchOperations.remove();
+				batchFailure.remove();
+				try {
+					if (!committed && rc.isActive()) {
+						rc.rollback();
+					}
+				} catch (RepositoryException rollbackEx) {
+					log.error("Batch rollback failed", rollbackEx);
+				} finally {
+					try {
+						rc.close();
+					} catch (RepositoryException closeEx) {
+						log.error("Batch connection close failed", closeEx);
+					}
+				}
+				if (rollbackActions != null) {
+					runRollbackActions(rollbackActions);
+				}
+			}
+		}
+	}
+
+	/**
 	 * Dispatches {@code eventObject} synchronously to every listener registered for its event and for
 	 * {@link RepositoryEvent#All}. Dispatch is failure-isolated against a listener's RuntimeException: it is logged
 	 * and the remaining listeners still run, so callers never see one. An Error is not isolated — it propagates and
 	 * abandons the rest of the dispatch, which can leave the authorization cache invalidator unreached and its
-	 * cached group sets stale, since listener order is unspecified.
+	 * cached group sets stale, since listener order is unspecified. Inside {@link #inBatch} an event about
+	 * an entry the batch created waits for the commit, as a listener would otherwise read, and index, an entry
+	 * that a rollback removes. Every other event there is dispatched at once: its write has committed on its own
+	 * connection, and the authorization cache and the Solr ACL fields must follow it even if the batch fails.
 	 */
 	public void fireRepositoryEvent(RepositoryEventObject eventObject) {
+		Set<URI> createdInBatch = batchCreatedEntries.get();
+		if (createdInBatch != null && eventObject.getSource() instanceof Entry entry
+				&& createdInBatch.contains(entry.getEntryURI())) {
+			fireRepositoryEventAfterBatchCommit(eventObject);
+			return;
+		}
+		dispatchRepositoryEvent(eventObject);
+	}
+
+	/** For the event of a write made on the batch connection: dispatched once the batch commits it, dropped on rollback. */
+	void fireRepositoryEventAfterBatchCommit(RepositoryEventObject eventObject) {
+		runAfterBatchCommit(() -> dispatchRepositoryEvent(eventObject));
+	}
+
+	/** Called by the operation that creates {@code entry} on the batch connection, before it raises an event about it. */
+	void createdInBatch(Entry entry) {
+		batchCreatedEntries.get().add(entry.getEntryURI());
+	}
+
+	private void dispatchRepositoryEvent(RepositoryEventObject eventObject) {
 		// because of concurrency problems the events are fired synchronously,
 		// not sure whether this event has a negative impact on performance.
 		synchronized (repositoryListeners) {
