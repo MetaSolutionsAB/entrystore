@@ -149,6 +149,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 */
 	private final ThreadLocal<List<Runnable>> afterBatchCommitActions = new ThreadLocal<>();
 
+	/** Actions that undo in-memory state of the work since the batch last committed; see {@link #runAfterBatchRollback}. */
+	private final ThreadLocal<List<Runnable>> afterBatchRollbackActions = new ThreadLocal<>();
+
 	/** Batch-aware operations since the current batch last committed; see {@link #getActiveBatchConnection()}. */
 	private final ThreadLocal<int[]> batchOperations = new ThreadLocal<>();
 
@@ -633,6 +636,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			throw checkpointFailure(
 					"Batch checkpoint commit failed; the operations since the previous checkpoint were not stored", e);
 		}
+		afterBatchRollbackActions.get().clear();
 		runPostCommitActions();
 		try {
 			rc.begin();
@@ -690,6 +694,17 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		actions.clear();
 	}
 
+	/** Each action is isolated, so a failing one neither skips the rest nor replaces the failure of the batch. */
+	private static void runRollbackActions(List<Runnable> actions) {
+		for (Runnable action : actions) {
+			try {
+				action.run();
+			} catch (RuntimeException e) {
+				log.error("Work to undo in-memory state of a rolled-back batch failed", e);
+			}
+		}
+	}
+
 	/**
 	 * Registers {@code action} to run after the current thread's batch transaction commits, for
 	 * bookkeeping that an operation would have done right after its own commit had it not been
@@ -709,14 +724,29 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	/**
+	 * Registers {@code action} to run if the current thread's batch rolls back the transaction it is in, for in-memory
+	 * state that an operation has to publish before the commit, such as the {@code SoftCache} entry that lets the
+	 * batch read what it created. Actions are dropped once that transaction commits, at a checkpoint or at the end.
+	 *
+	 * @throws IllegalStateException if no batch is active on this thread
+	 */
+	void runAfterBatchRollback(Runnable action) {
+		List<Runnable> actions = afterBatchRollbackActions.get();
+		if (actions == null) {
+			throw new IllegalStateException("No batch is active on this thread");
+		}
+		actions.add(action);
+	}
+
+	/**
 	 * Runs {@code work} inside a single repository transaction. All entry- and
 	 * metadata-mutation operations that normally open their own connection and commit
 	 * individually will reuse this transaction's connection and defer their commit to
 	 * the end of the batch.
 	 * <p>
-	 * Trade-offs: a rollback discards every change made inside the batch, but does not
-	 * undo {@code SoftCache} updates that already happened — callers should treat the
-	 * cache as potentially stale after a failed batch. Repository events raised inside the batch are
+	 * Trade-offs: a rollback discards every change made inside the batch, and removes the
+	 * entries created in it from the {@code SoftCache}; a reference the caller kept to such an
+	 * entry is not invalidated. Repository events raised inside the batch are
 	 * held back like work registered via {@link #runAfterBatchCommit}: they reach listeners once the
 	 * commit lands, in the order they were raised, and are dropped entirely on rollback.
 	 * <p>
@@ -745,6 +775,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				rc.begin();
 				activeBatchConnection.set(rc);
 				afterBatchCommitActions.set(new ArrayList<>());
+				afterBatchRollbackActions.set(new ArrayList<>());
 				batchOperations.set(new int[1]);
 				work.run();
 				failIfBatchIsRollbackOnly();
@@ -754,8 +785,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				// Lock order is repository → indexLock, matching every other path into the indexes.
 				runPostCommitActions();
 			} finally {
+				List<Runnable> rollbackActions = committed ? null : afterBatchRollbackActions.get();
 				activeBatchConnection.remove();
 				afterBatchCommitActions.remove();
+				afterBatchRollbackActions.remove();
 				batchOperations.remove();
 				batchFailure.remove();
 				try {
@@ -770,6 +803,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					} catch (RepositoryException closeEx) {
 						log.error("Batch connection close failed", closeEx);
 					}
+				}
+				if (rollbackActions != null) {
+					runRollbackActions(rollbackActions);
 				}
 			}
 		}
