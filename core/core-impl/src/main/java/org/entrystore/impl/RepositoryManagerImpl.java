@@ -155,6 +155,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	/** Batch-aware operations since the current batch last committed; see {@link #getActiveBatchConnection()}. */
 	private final ThreadLocal<int[]> batchOperations = new ThreadLocal<>();
 
+	/** Entries created since the current thread's batch last committed; see {@link #fireRepositoryEvent}. */
+	private final ThreadLocal<Set<URI>> batchCreatedEntries = new ThreadLocal<>();
+
 	/** The first failure of a batch-aware operation in the current thread's batch; see {@link #markBatchRollbackOnly}. */
 	private final ThreadLocal<Exception> batchFailure = new ThreadLocal<>();
 
@@ -682,6 +685,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * holds the change, so a failing one must neither skip the rest nor report the committed batch as failed.
 	 */
 	private void runPostCommitActions() {
+		batchCreatedEntries.get().clear();
 		List<Runnable> actions = afterBatchCommitActions.get();
 		// Not a for-each: an action, e.g. a listener, may itself register work that must run too.
 		for (int i = 0; i < actions.size(); i++) {
@@ -746,9 +750,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * <p>
 	 * Trade-offs: a rollback discards every change made inside the batch, and removes the
 	 * entries created in it from the {@code SoftCache}; a reference the caller kept to such an
-	 * entry is not invalidated. Repository events raised inside the batch are
-	 * held back like work registered via {@link #runAfterBatchCommit}: they reach listeners once the
-	 * commit lands, in the order they were raised, and are dropped entirely on rollback.
+	 * entry is not invalidated. Repository events of the writes that
+	 * join the batch, and every event about an entry the batch created, are held back like work
+	 * registered via {@link #runAfterBatchCommit}: they reach listeners once the commit lands, in the
+	 * order they were raised, and are dropped on rollback. Any other event is about a write that has
+	 * committed on its own connection and is dispatched at once.
 	 * <p>
 	 * The transaction is bounded, not the call: after {@link Settings#REPOSITORY_BATCH_MAX_OPERATIONS}
 	 * batch-aware operations (default 10 000) it commits and begins again, so a rollback discards
@@ -776,6 +782,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				activeBatchConnection.set(rc);
 				afterBatchCommitActions.set(new ArrayList<>());
 				afterBatchRollbackActions.set(new ArrayList<>());
+				batchCreatedEntries.set(new HashSet<>());
 				batchOperations.set(new int[1]);
 				work.run();
 				failIfBatchIsRollbackOnly();
@@ -789,6 +796,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				activeBatchConnection.remove();
 				afterBatchCommitActions.remove();
 				afterBatchRollbackActions.remove();
+				batchCreatedEntries.remove();
 				batchOperations.remove();
 				batchFailure.remove();
 				try {
@@ -816,17 +824,29 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * {@link RepositoryEvent#All}. Dispatch is failure-isolated against a listener's RuntimeException: it is logged
 	 * and the remaining listeners still run, so callers never see one. An Error is not isolated — it propagates and
 	 * abandons the rest of the dispatch, which can leave the authorization cache invalidator unreached and its
-	 * cached group sets stale, since listener order is unspecified. Inside {@link #inBatch} the dispatch is
-	 * deferred until the batch commits.
+	 * cached group sets stale, since listener order is unspecified. Inside {@link #inBatch} an event about
+	 * an entry the batch created waits for the commit, as a listener would otherwise read, and index, an entry
+	 * that a rollback removes. Every other event there is dispatched at once: its write has committed on its own
+	 * connection, and the authorization cache and the Solr ACL fields must follow it even if the batch fails.
 	 */
 	public void fireRepositoryEvent(RepositoryEventObject eventObject) {
-		if (activeBatchConnection.get() != null) {
-			// Inside a batch the change is only staged: a listener reading the store now would see the pre-batch
-			// state, and a rollback would leave it acting on a change that never happened.
-			runAfterBatchCommit(() -> dispatchRepositoryEvent(eventObject));
+		Set<URI> createdInBatch = batchCreatedEntries.get();
+		if (createdInBatch != null && eventObject.getSource() instanceof Entry entry
+				&& createdInBatch.contains(entry.getEntryURI())) {
+			fireRepositoryEventAfterBatchCommit(eventObject);
 			return;
 		}
 		dispatchRepositoryEvent(eventObject);
+	}
+
+	/** For the event of a write made on the batch connection: dispatched once the batch commits it, dropped on rollback. */
+	void fireRepositoryEventAfterBatchCommit(RepositoryEventObject eventObject) {
+		runAfterBatchCommit(() -> dispatchRepositoryEvent(eventObject));
+	}
+
+	/** Called by the operation that creates {@code entry} on the batch connection, before it raises an event about it. */
+	void createdInBatch(Entry entry) {
+		batchCreatedEntries.get().add(entry.getEntryURI());
 	}
 
 	private void dispatchRepositoryEvent(RepositoryEventObject eventObject) {

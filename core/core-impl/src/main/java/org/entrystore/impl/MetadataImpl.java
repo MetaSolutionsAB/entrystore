@@ -154,10 +154,12 @@ public class MetadataImpl implements Metadata {
 			if (manageTx) {
 				rc.commit();
 			}
-			if (cached) {
-				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ExternalMetadataUpdated, graph));
+			RepositoryEventObject event = new RepositoryEventObject(entry,
+					cached ? RepositoryEvent.ExternalMetadataUpdated : RepositoryEvent.MetadataUpdated, graph);
+			if (manageTx) {
+				entry.repositoryManager.fireRepositoryEvent(event);
 			} else {
-				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.MetadataUpdated, graph));
+				entry.repositoryManager.fireRepositoryEventAfterBatchCommit(event);
 			}
 		} catch (AuthorizationException ae) {
 			if (manageTx) {

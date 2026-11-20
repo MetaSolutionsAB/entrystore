@@ -960,6 +960,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 				// Cached now, so that the batch can read the entry, and evicted if the batch rolls it back
 				EntryImpl created = newEntry;
 				entry.repositoryManager.runAfterBatchRollback(() -> softCache.remove(created));
+				entry.repositoryManager.createdInBatch(created);
 			}
 			softCache.put(newEntry);
 			entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(newEntry, RepositoryEvent.EntryCreated));
