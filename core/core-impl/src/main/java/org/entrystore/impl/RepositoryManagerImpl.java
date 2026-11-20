@@ -683,12 +683,12 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 		synchronized (repository) {
 			RepositoryConnection rc = repository.getConnection();
-			rc.begin();
-			activeBatchConnection.set(rc);
-			afterBatchCommitActions.set(new ArrayList<>());
-			batchOperations.set(new int[1]);
 			boolean committed = false;
 			try {
+				rc.begin();
+				activeBatchConnection.set(rc);
+				afterBatchCommitActions.set(new ArrayList<>());
+				batchOperations.set(new int[1]);
 				work.run();
 				rc.commit();
 				committed = true;
