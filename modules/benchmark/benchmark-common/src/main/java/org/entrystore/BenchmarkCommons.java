@@ -95,7 +95,7 @@ public class BenchmarkCommons {
 				.desc("Afterwards, time a recursive delete of a folder tree holding as many entries as the universe "
 						+ "while another context is written to.")
 				.build();
-		Option batchedOption = createOption("B", "batched", "BATCHED", "Run EntryStore inserts inside RepositoryManager.inBatch(...) — one commit per person: @boolean.", false);
+		Option batchedOption = createOption("B", "batched", "BATCHED", "Run all EntryStore inserts inside one RepositoryManagerImpl.inBatch(...) call, committed every entrystore.repository.batch.max-operations operations: @boolean.", false);
 
 		Options options = new Options();
 		options.addOption(storTypeOption);

@@ -15,7 +15,9 @@ setGraph` chain into one.
 
 - `RepositoryManagerImpl.inBatch(Runnable work)` — opens one
   `RepositoryConnection`, calls `begin()`, runs the work, and commits at
-  the end (or rolls back on throw). A `ThreadLocal<RepositoryConnection>`
+  the end (or rolls back on throw). It also commits and begins again every
+  `entrystore.repository.batch.max-operations` batch-aware operations
+  (default 10 000). A `ThreadLocal<RepositoryConnection>`
   publishes the connection so nested EntryStore operations can reuse it.
   Reentrant on the same thread.
 - `RepositoryManagerImpl.getActiveBatchConnection()` — package-private
@@ -39,7 +41,13 @@ setGraph` chain into one.
 
 ## Results (10 000 simple persons, `-Xmx2g`, Java 25, Windows 11 / NTFS)
 
-Back-to-back runs on the same machine state, fresh store directory each run:
+Back-to-back runs on the same machine state, fresh store directory each run.
+
+**Measured before the checkpoint existed:** the batched runs held the whole
+run in one transaction and committed once. With the default
+`entrystore.repository.batch.max-operations` the same command now commits
+four times (40 000 operations / 10 000). The numbers were **not**
+re-measured, and the analysis below describes the single-transaction runs.
 
 | Store | Mode | Insert time | Read | vs. its unbatched baseline |
 |---|---|---:|---:|---|
@@ -51,7 +59,8 @@ Back-to-back runs on the same machine state, fresh store directory each run:
 ### Native: 6× speedup ✓
 
 This is the headline win and lands close to recommendation #1's
-prediction. The 10 000 × 4 = 40 000 individual commits collapse into one,
+prediction. The 10 000 × 4 = 40 000 individual commits collapse into one
+in the measured run (four with the default checkpoint),
 so every per-commit cost (`SailRepositoryConnection.begin/commit`, the
 internal SAIL transaction bookkeeping, the OS write pressure for the
 NativeStore index files) is paid once. Even with `forceSync=false`
@@ -79,7 +88,9 @@ snapshot isolation:
 - Across 10 000 persons in one batch, ~30 triples per person ≈ 300 000
   uncommitted statements by the end. The per-read scan cost is roughly
   linear in that count, making the total batch cost roughly
-  *O(N²)* in person count.
+  *O(N²)* in person count. With the default checkpoint a transaction
+  holds at most about 75 000 uncommitted statements (2 500 persons); its
+  effect on the 277 s is not measured.
 - NativeStore doesn't have this problem because its B-tree indexes are
   consulted regardless of transaction state; per-read cost stays
   *O(log N)* whether or not there are uncommitted writes.
@@ -100,11 +111,11 @@ production sizing on native, use ~10 000 person batches when feasible.
    to callers should note that on `MemoryStore` (typical in tests),
    large batches are slower, not faster. Tests should not assume the
    same constants as production native runs.
-2. **Tunable batch size.** A future iteration of
-   `MultipleTransactionsBatched` could accept a batch-size N and call
-   `inBatch` every N persons — a sweet spot probably exists around
-   100–1000 persons per batch where MemoryStore's per-read scan cost
-   stays bounded and NativeStore still amortises commit overhead well.
+2. **Measure the batch size.** `entrystore.repository.batch.max-operations`
+   now bounds the transaction. What remains is a sweep of it on both
+   stores — a sweet spot probably exists around 100–1000 persons per
+   commit where MemoryStore's per-read scan cost stays bounded and
+   NativeStore still amortises commit overhead well.
 3. **Expose `inBatch` on the `RepositoryManager` interface**, not just
    the impl, so application code (REST controllers doing bulk imports)
    can take advantage without casting.
@@ -123,7 +134,7 @@ $jar = "modules\benchmark\benchmark-entrystore\target\entrystore-benchmark-entry
 java -Xmx2g -jar $jar -s native -u 10000 -m 2000 `
     -p "$env:TEMP\entrystore-bench\native-unbatched"
 
-# Native batched (whole loop in one inBatch — 6× faster)
+# Native batched (whole loop in one inBatch call, 4 commits; 6× faster when measured with one)
 java -Xmx2g -jar $jar -s native -u 10000 -m 2000 -B true `
     -p "$env:TEMP\entrystore-bench\native-batched"
 
@@ -138,10 +149,11 @@ java -Xmx2g -jar $jar -s memory -u 10000 -m 2000 -B true `
 
 ## Caveats
 
-- `inBatch` rollback discards every change made inside the batch but
-  does **not** undo `SoftCache.put` calls or repository events that
-  fired during the work runnable. Treat the cache as potentially stale
-  after a failed batch and refresh caller-visible state if needed.
+- Only `createNewMinimalItem` and `setGraph` join the batch. An `inBatch`
+  rollback discards what they wrote since the last checkpoint, evicts the
+  entries created since then from `SoftCache`, and drops their events.
+  Every other write (ACL, list or group membership, entry name) commits at
+  once on its own connection and is **not** rolled back.
 - The synchronized block in `inBatch` (`synchronized(repository)`) is
   held for the entire batch duration. For multi-threaded callers,
   that serialises all other writes against the same repository. Choose
