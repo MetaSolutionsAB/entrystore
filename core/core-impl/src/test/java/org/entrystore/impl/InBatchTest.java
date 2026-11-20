@@ -25,6 +25,10 @@ import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Context;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.Group;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.User;
 import org.entrystore.exception.InvalidExternalMetadataURIException;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
@@ -260,6 +264,99 @@ public class InBatchTest extends AbstractCoreTest {
 		});
 
 		assertSame(created.getFirst(), readInsideTheBatch.getFirst());
+	}
+
+	@Test
+	public void anAclChangeInABatchThatFailsStillReachesListeners() {
+		Entry existing = duck.createLink(null, URI.create("http://example.com/existing"), null);
+		List<RepositoryEventObject> updates = new ArrayList<>();
+		RepositoryListener recording = recording(updates);
+		rm.registerListener(recording, RepositoryEvent.EntryUpdated);
+		try {
+			assertThrows(IllegalStateException.class, () -> rm.inBatch(() -> {
+				// committed on its own connection, so the rollback below does not undo it
+				existing.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
+				throw new IllegalStateException("boom");
+			}));
+		} finally {
+			rm.unregisterListener(recording, RepositoryEvent.EntryUpdated);
+		}
+
+		assertTrue(existing.getAllowedPrincipalsFor(AccessProperty.ReadMetadata).contains(pm.getGuestUser().getURI()));
+		assertTrue(updates.stream().anyMatch(event -> event.getSource() == existing),
+				"the Solr ACL fields follow this event, and the ACL change is stored");
+	}
+
+	@Test
+	public void aMembershipRevokedInABatchThatFailsIsRevokedOnTheNextDecision() {
+		Entry target = cm.getContext("mouse").createResource(null, GraphType.None, null, null);
+		User user = (User) pm.createResource(null, GraphType.User, null, null).getResource();
+		Group group = (Group) pm.createResource(null, GraphType.Group, null, null).getResource();
+		target.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, group.getURI());
+		group.addMember(user);
+		assertTrue(isAuthorized(user, target, AccessProperty.ReadMetadata), "this decision caches the group set");
+
+		assertThrows(IllegalStateException.class, () -> rm.inBatch(() -> {
+			group.removeMember(user);
+			throw new IllegalStateException("boom");
+		}));
+
+		assertFalse(isAuthorized(user, target, AccessProperty.ReadMetadata),
+				"the removal is stored, so a cached group set must not keep granting access");
+	}
+
+	@Test
+	public void noEventAboutAnEntryCreatedInABatchReachesListenersBeforeTheCommit() {
+		Entry list = duck.createResource(null, GraphType.List, null, null);
+		List<RepositoryEventObject> events = new ArrayList<>();
+		RepositoryListener recording = recording(events);
+		rm.registerListener(recording, RepositoryEvent.All);
+		List<Entry> entries = new ArrayList<>();
+		AtomicInteger aboutTheNewEntryInsideTheBatch = new AtomicInteger(-1);
+		try {
+			rm.inBatch(() -> {
+				// adding it to the list commits on its own connection and raises events about the new entry
+				entries.add(duck.createLink(null, URI.create("http://example.com/a"), list.getResourceURI()));
+				aboutTheNewEntryInsideTheBatch.set(eventsAbout(entries.getFirst(), events));
+			});
+		} finally {
+			rm.unregisterListener(recording, RepositoryEvent.All);
+		}
+
+		assertEquals(0, aboutTheNewEntryInsideTheBatch.get(), "a listener would index an entry a rollback removes");
+		assertTrue(eventsAbout(entries.getFirst(), events) > 0);
+	}
+
+	@Test
+	public void noEventAboutAnEntryCreatedInARolledBackBatchReachesListeners() {
+		Entry list = duck.createResource(null, GraphType.List, null, null);
+		List<RepositoryEventObject> events = new ArrayList<>();
+		RepositoryListener recording = recording(events);
+		rm.registerListener(recording, RepositoryEvent.All);
+		List<Entry> entries = new ArrayList<>();
+		try {
+			assertThrows(IllegalStateException.class, () -> rm.inBatch(() -> {
+				entries.add(duck.createLink(null, URI.create("http://example.com/a"), list.getResourceURI()));
+				throw new IllegalStateException("boom");
+			}));
+		} finally {
+			rm.unregisterListener(recording, RepositoryEvent.All);
+		}
+
+		assertEquals(0, eventsAbout(entries.getFirst(), events));
+	}
+
+	private static RepositoryListener recording(List<RepositoryEventObject> events) {
+		return new RepositoryListener() {
+			@Override
+			public void repositoryUpdated(RepositoryEventObject eventObject) {
+				events.add(eventObject);
+			}
+		};
+	}
+
+	private static int eventsAbout(Entry entry, List<RepositoryEventObject> events) {
+		return (int) events.stream().filter(event -> event.getSource() == entry).count();
 	}
 
 	private Model titleOf(Entry entry, String title) {
