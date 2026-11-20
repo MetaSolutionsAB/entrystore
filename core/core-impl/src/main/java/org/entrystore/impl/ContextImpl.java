@@ -869,7 +869,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 * Creates the entry on {@code rc}. With {@code manageTx} the caller's connection is this
 	 * method's to begin and commit; without it the connection belongs to a batch that commits
 	 * later, so this method neither begins, commits nor rolls back, and hands its index ops to
-	 * the batch instead of applying them.
+	 * the batch instead of applying them. A failure after the first write then makes the batch
+	 * rollback-only, as the partial entry cannot be rolled back alone.
 	 */
 	private EntryImpl doCreateNewMinimalItem(RepositoryConnection rc, boolean manageTx, URI resourceURI, URI metadataURI, EntryType lType, GraphType bType, ResourceType rType, String entryId) {
 		ValueFactory vf = entry.repository.getValueFactory();
@@ -980,6 +981,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 				if (newEntry != null) {
 					newEntry.refreshFromRepository(rc);
 				}
+			} else {
+				entry.repositoryManager.markBatchRollbackOnly(e);
 			}
 			throw new org.entrystore.repository.RepositoryException(newEntry != null
 					? "Unable to create entry " + newEntry.getEntryURI()

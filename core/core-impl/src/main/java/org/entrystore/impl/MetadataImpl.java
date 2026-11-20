@@ -162,6 +162,8 @@ public class MetadataImpl implements Metadata {
 		} catch (AuthorizationException ae) {
 			if (manageTx) {
 				rc.rollback();
+			} else {
+				entry.repositoryManager.markBatchRollbackOnly(ae);
 			}
 			this.resourceUri = oldResourceUri;
 			log.warn(ae.getMessage());
@@ -169,6 +171,8 @@ public class MetadataImpl implements Metadata {
 		} catch (Exception e) {
 			if (manageTx) {
 				rc.rollback();
+			} else {
+				entry.repositoryManager.markBatchRollbackOnly(e);
 			}
 			this.resourceUri = oldResourceUri;
 			throw new org.entrystore.repository.RepositoryException(

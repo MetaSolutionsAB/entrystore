@@ -152,6 +152,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	/** Batch-aware operations since the current batch last committed; see {@link #getActiveBatchConnection()}. */
 	private final ThreadLocal<int[]> batchOperations = new ThreadLocal<>();
 
+	/** The first failure of a batch-aware operation in the current thread's batch; see {@link #markBatchRollbackOnly}. */
+	private final ThreadLocal<Exception> batchFailure = new ThreadLocal<>();
+
 	private static final int BATCH_MAX_OPERATIONS_DEFAULT = 10_000;
 
 	private int batchMaxOperations = BATCH_MAX_OPERATIONS_DEFAULT;
@@ -602,16 +605,42 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * Every batch-aware operation calls this before it writes, so it is also where the batch is
 	 * bounded: after {@link Settings#REPOSITORY_BATCH_MAX_OPERATIONS} operations the transaction so
 	 * far is committed, its post-commit work runs, and a new transaction begins on the same connection.
+	 *
+	 * @throws org.entrystore.repository.RepositoryException if an earlier operation made the batch rollback-only
 	 */
 	RepositoryConnection getActiveBatchConnection() {
 		RepositoryConnection rc = activeBatchConnection.get();
-		if (rc != null && ++batchOperations.get()[0] > batchMaxOperations) {
+		if (rc == null) {
+			return null;
+		}
+		failIfBatchIsRollbackOnly();
+		if (++batchOperations.get()[0] > batchMaxOperations) {
 			rc.commit();
 			runPostCommitActions();
 			rc.begin();
 			batchOperations.get()[0] = 1;
 		}
 		return rc;
+	}
+
+	/**
+	 * Called by a batch-aware operation that failed after it may have written to the batch connection. Its partial
+	 * writes cannot be undone on their own, so the batch must not commit them: every later batch-aware operation
+	 * fails, and {@link #inBatch} rolls back and throws even if the work caught the failure. Does nothing outside a
+	 * batch.
+	 */
+	void markBatchRollbackOnly(Exception cause) {
+		if (activeBatchConnection.get() != null && batchFailure.get() == null) {
+			batchFailure.set(cause);
+		}
+	}
+
+	private void failIfBatchIsRollbackOnly() {
+		Exception failure = batchFailure.get();
+		if (failure != null) {
+			throw new org.entrystore.repository.RepositoryException(
+					"The batch is rolled back because an operation in it failed", failure);
+		}
 	}
 
 	/** Package-private so a test can reach the checkpoint without thousands of operations. */
@@ -674,6 +703,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 *
 	 * @throws RuntimeException any throwable from {@code work}; the batch is rolled back
 	 *                          and the throwable is rethrown unchanged.
+	 * @throws org.entrystore.repository.RepositoryException if a batch-aware operation failed and {@code work}
+	 *                          caught the failure; the batch is rolled back, as the operation's partial writes
+	 *                          must not be committed.
 	 */
 	public void inBatch(Runnable work) {
 		if (activeBatchConnection.get() != null) {
@@ -690,6 +722,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				afterBatchCommitActions.set(new ArrayList<>());
 				batchOperations.set(new int[1]);
 				work.run();
+				failIfBatchIsRollbackOnly();
 				rc.commit();
 				committed = true;
 				// Only now may the deferred bookkeeping become visible; see runAfterBatchCommit.
@@ -699,6 +732,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				activeBatchConnection.remove();
 				afterBatchCommitActions.remove();
 				batchOperations.remove();
+				batchFailure.remove();
 				try {
 					if (!committed && rc.isActive()) {
 						rc.rollback();
