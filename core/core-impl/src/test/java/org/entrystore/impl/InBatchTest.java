@@ -41,6 +41,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -216,6 +218,48 @@ public class InBatchTest extends AbstractCoreTest {
 		});
 
 		assertTrue(isStored(entries.getFirst()), "nothing was written for the rejected entry, so the batch commits");
+	}
+
+	@Test
+	public void anEntryOfARolledBackBatchIsNotServedFromTheCache() {
+		List<Entry> entries = new ArrayList<>();
+
+		assertThrows(IllegalStateException.class, () -> rm.inBatch(() -> {
+			entries.add(duck.createLink(null, URI.create("http://example.com/a"), null));
+			throw new IllegalStateException("boom");
+		}));
+
+		assertNull(duck.getByEntryURI(entries.getFirst().getEntryURI()));
+	}
+
+	@Test
+	public void anEntryCommittedAtACheckpointStaysCachedWhenTheRestIsRolledBack() {
+		rm.setBatchMaxOperations(2);
+		List<Entry> entries = new ArrayList<>();
+
+		assertThrows(IllegalStateException.class, () -> rm.inBatch(() -> {
+			entries.add(duck.createLink(null, URI.create("http://example.com/a"), null));
+			entries.add(duck.createLink(null, URI.create("http://example.com/b"), null));
+			entries.add(duck.createLink(null, URI.create("http://example.com/c"), null));
+			throw new IllegalStateException("boom");
+		}));
+
+		assertSame(entries.get(0), duck.getByEntryURI(entries.get(0).getEntryURI()));
+		assertSame(entries.get(1), duck.getByEntryURI(entries.get(1).getEntryURI()));
+		assertNull(duck.getByEntryURI(entries.get(2).getEntryURI()));
+	}
+
+	@Test
+	public void anEntryCreatedInABatchIsReadableInsideIt() {
+		List<Entry> created = new ArrayList<>();
+		List<Entry> readInsideTheBatch = new ArrayList<>();
+
+		rm.inBatch(() -> {
+			created.add(duck.createLink(null, URI.create("http://example.com/a"), null));
+			readInsideTheBatch.add(duck.getByEntryURI(created.getFirst().getEntryURI()));
+		});
+
+		assertSame(created.getFirst(), readInsideTheBatch.getFirst());
 	}
 
 	private Model titleOf(Entry entry, String title) {
