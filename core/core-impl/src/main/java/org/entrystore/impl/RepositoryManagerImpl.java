@@ -606,7 +606,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * bounded: after {@link Settings#REPOSITORY_BATCH_MAX_OPERATIONS} operations the transaction so
 	 * far is committed, its post-commit work runs, and a new transaction begins on the same connection.
 	 *
-	 * @throws org.entrystore.repository.RepositoryException if an earlier operation made the batch rollback-only
+	 * @throws org.entrystore.repository.RepositoryException if an earlier operation made the batch rollback-only,
+	 *                                                       or if the checkpoint fails
 	 */
 	RepositoryConnection getActiveBatchConnection() {
 		RepositoryConnection rc = activeBatchConnection.get();
@@ -615,12 +616,36 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 		failIfBatchIsRollbackOnly();
 		if (++batchOperations.get()[0] > batchMaxOperations) {
-			rc.commit();
-			runPostCommitActions();
-			rc.begin();
-			batchOperations.get()[0] = 1;
+			checkpoint(rc);
 		}
 		return rc;
+	}
+
+	/**
+	 * Commits the batch so far and begins its next transaction. A failure of either is reported as a checkpoint
+	 * failure, not as a failure of the operation that happened to reach the checkpoint, and makes the batch
+	 * rollback-only, as work that catches it must not go on to commit.
+	 */
+	private void checkpoint(RepositoryConnection rc) {
+		try {
+			rc.commit();
+		} catch (RepositoryException e) {
+			throw checkpointFailure(
+					"Batch checkpoint commit failed; the operations since the previous checkpoint were not stored", e);
+		}
+		runPostCommitActions();
+		try {
+			rc.begin();
+		} catch (RepositoryException e) {
+			throw checkpointFailure("Batch checkpoint was stored, but the batch cannot continue", e);
+		}
+		batchOperations.get()[0] = 1;
+	}
+
+	private org.entrystore.repository.RepositoryException checkpointFailure(String message, RepositoryException cause) {
+		var failure = new org.entrystore.repository.RepositoryException(message, cause);
+		markBatchRollbackOnly(failure);
+		return failure;
 	}
 
 	/**
