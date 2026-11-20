@@ -136,7 +136,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * Active batch transaction for the current thread, or {@code null} when not inside a batch.
 	 * When set, {@link ContextImpl#createNewMinimalItem} and {@link MetadataImpl#setGraph}
 	 * reuse this connection instead of opening their own and skip the begin/commit cycle so
-	 * the caller-supplied batch commits once.
+	 * the batch decides when to commit.
 	 */
 	private final ThreadLocal<RepositoryConnection> activeBatchConnection = new ThreadLocal<>();
 
@@ -743,12 +743,17 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	/**
-	 * Runs {@code work} inside a single repository transaction. All entry- and
-	 * metadata-mutation operations that normally open their own connection and commit
-	 * individually will reuse this transaction's connection and defer their commit to
-	 * the end of the batch.
+	 * Runs {@code work} in one repository transaction at a time. Only entry creation
+	 * ({@link ContextImpl#createNewMinimalItem}) and metadata writes ({@link MetadataImpl#setGraph})
+	 * join it: they use the batch's connection and leave their commit to the next checkpoint or the
+	 * end of the batch. Every other write, e.g. to an ACL, a list or group, an entry name, or the
+	 * list membership and copied ACL of an entry created into a list, commits at once on its own
+	 * connection. Such a write does not see the batch's uncommitted entries in the store and is not
+	 * rolled back with them, so a caller must not make one about an entry the same batch created
+	 * unless it accepts triples that name a missing entry after a rollback.
 	 * <p>
-	 * Trade-offs: a rollback discards every change made inside the batch, and removes the
+	 * Trade-offs: a rollback discards the changes the two joining operations made since the last
+	 * checkpoint, and removes the
 	 * entries created in it from the {@code SoftCache}; a reference the caller kept to such an
 	 * entry is not invalidated. Repository events of the writes that
 	 * join the batch, and every event about an entry the batch created, are held back like work
@@ -762,11 +767,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * The repository monitor is held for the whole call regardless, so a caller with a large
 	 * workload should run several batches rather than one.
 	 *
-	 * @throws RuntimeException any throwable from {@code work}; the batch is rolled back
-	 *                          and the throwable is rethrown unchanged.
+	 * @throws RuntimeException any throwable from {@code work}; the work since the last checkpoint
+	 *                          is rolled back and the throwable is rethrown unchanged.
 	 * @throws org.entrystore.repository.RepositoryException if a batch-aware operation failed and {@code work}
-	 *                          caught the failure; the batch is rolled back, as the operation's partial writes
-	 *                          must not be committed.
+	 *                          caught the failure; the work since the last checkpoint is rolled back, as the
+	 *                          operation's partial writes must not be committed.
 	 */
 	public void inBatch(Runnable work) {
 		if (activeBatchConnection.get() != null) {

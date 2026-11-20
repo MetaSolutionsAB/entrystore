@@ -27,9 +27,13 @@ import java.util.List;
 /**
  * Apples-to-apples comparison with {@link MultipleTransactions}: same EntryStore-API
  * code path (Context.createResource, Metadata.setGraph, inverse-relation writes,
- * SoftCache updates, ACL setup, ...) but each person's mapping runs inside one
- * {@link RepositoryManagerImpl#inBatch(Runnable)} so the four commits per person
- * (createResource × 2 + setGraph × 2) collapse into one.
+ * SoftCache updates, ACL setup, ...) but the whole insert loop runs inside one
+ * {@link RepositoryManagerImpl#inBatch(Runnable)} call, so the four commits per person
+ * (createResource × 2 + setGraph × 2) become one commit per
+ * {@code entrystore.repository.batch.max-operations} operations: every 2 500 persons by default.
+ * <p>
+ * Only those two operations join the batch. With multiple contexts, a context's alias and ACL
+ * commit at once on their own connections and outlive a batch that fails.
  * <p>
  * Used to measure the headroom recommendation #1 captures versus the unbatched
  * baseline in {@link MultipleTransactions}.
