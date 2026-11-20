@@ -160,8 +160,7 @@ public class InBatchTest extends AbstractCoreTest {
 			}
 		}));
 
-		assertTrue(existing.getLocalMetadata().getGraph().contains(null, DCTERMS.TITLE, rm.getValueFactory().createLiteral("kept")),
-				"the cleared graph must not be committed");
+		assertTrue(hasTitle(existing, "kept"), "the cleared graph must not be committed");
 		assertFalse(isStored(entries.getFirst()));
 		assertEquals(createdBefore, created.get());
 	}
@@ -206,8 +205,7 @@ public class InBatchTest extends AbstractCoreTest {
 		assertEquals(0, operationsAfterTheFailure.get(), "an operation in a rollback-only batch must fail");
 		assertTrue(isStored(entries.get(0)));
 		assertTrue(isStored(entries.get(1)));
-		assertTrue(existing.getLocalMetadata().getGraph().contains(null, DCTERMS.TITLE, rm.getValueFactory().createLiteral("kept")),
-				"the cleared graph must not be committed");
+		assertTrue(hasTitle(existing, "kept"), "the cleared graph must not be committed");
 	}
 
 	@Test
@@ -344,6 +342,98 @@ public class InBatchTest extends AbstractCoreTest {
 		}
 
 		assertEquals(0, eventsAbout(entries.getFirst(), events));
+	}
+
+	@Test
+	public void theIndexDoesNotListAnEntryOfARolledBackBatch() {
+		// Published first, so an index op applied too early changes a live index instead of a buffer
+		duck.getEntries();
+		List<Entry> entries = new ArrayList<>();
+
+		assertThrows(IllegalStateException.class, () -> rm.inBatch(() -> {
+			entries.add(duck.createLink(null, URI.create("http://example.com/a"), null));
+			throw new IllegalStateException("boom");
+		}));
+
+		assertFalse(duck.getEntries().contains(entries.getFirst().getEntryURI()));
+	}
+
+	@Test
+	public void theIndexListsAnEntryCreatedInABatchOnlyAfterTheCommit() {
+		duck.getEntries();
+		List<Entry> entries = new ArrayList<>();
+		List<Boolean> listedInsideTheBatch = new ArrayList<>();
+
+		rm.inBatch(() -> {
+			entries.add(duck.createLink(null, URI.create("http://example.com/a"), null));
+			listedInsideTheBatch.add(duck.getEntries().contains(entries.getFirst().getEntryURI()));
+		});
+
+		assertFalse(listedInsideTheBatch.getFirst());
+		assertTrue(duck.getEntries().contains(entries.getFirst().getEntryURI()));
+	}
+
+	@Test
+	public void aMetadataWriteInsideABatchLandsWithTheCommit() {
+		Entry existing = duck.createLink(null, URI.create("http://example.com/existing"), null);
+		List<RepositoryEventObject> updates = new ArrayList<>();
+		RepositoryListener recording = recording(updates);
+		rm.registerListener(recording, RepositoryEvent.MetadataUpdated);
+		AtomicInteger updatesInsideTheBatch = new AtomicInteger(-1);
+		try {
+			rm.inBatch(() -> {
+				existing.getLocalMetadata().setGraph(titleOf(existing, "new"));
+				updatesInsideTheBatch.set(updates.size());
+			});
+		} finally {
+			rm.unregisterListener(recording, RepositoryEvent.MetadataUpdated);
+		}
+
+		assertEquals(0, updatesInsideTheBatch.get(), "a listener must not see a change the batch has only staged");
+		assertEquals(1, updates.size());
+		assertTrue(hasTitle(existing, "new"));
+	}
+
+	@Test
+	public void aMetadataWriteOfARolledBackBatchIsDiscarded() {
+		Entry existing = duck.createLink(null, URI.create("http://example.com/existing"), null);
+		List<RepositoryEventObject> updates = new ArrayList<>();
+		RepositoryListener recording = recording(updates);
+		rm.registerListener(recording, RepositoryEvent.MetadataUpdated);
+		try {
+			assertThrows(IllegalStateException.class, () -> rm.inBatch(() -> {
+				existing.getLocalMetadata().setGraph(titleOf(existing, "new"));
+				throw new IllegalStateException("boom");
+			}));
+		} finally {
+			rm.unregisterListener(recording, RepositoryEvent.MetadataUpdated);
+		}
+
+		assertFalse(hasTitle(existing, "new"));
+		assertEquals(0, updates.size());
+	}
+
+	@Test
+	public void aFailingPostCommitActionNeitherFailsTheBatchNorSkipsTheRest() {
+		List<Entry> entries = new ArrayList<>();
+		AtomicInteger laterActions = new AtomicInteger();
+
+		rm.inBatch(() -> {
+			entries.add(duck.createLink(null, URI.create("http://example.com/a"), null));
+			rm.runAfterBatchCommit(() -> {
+				throw new IllegalStateException("post-commit failure");
+			});
+			rm.runAfterBatchCommit(laterActions::incrementAndGet);
+		});
+
+		assertTrue(isStored(entries.getFirst()));
+		assertEquals(1, laterActions.get());
+		assertEquals(1, created.get());
+	}
+
+	private boolean hasTitle(Entry entry, String title) {
+		return entry.getLocalMetadata().getGraph()
+				.contains(null, DCTERMS.TITLE, rm.getValueFactory().createLiteral(title));
 	}
 
 	private static RepositoryListener recording(List<RepositoryEventObject> events) {
