@@ -19,6 +19,7 @@ package org.entrystore.transforms.rowstore;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -72,6 +73,27 @@ class RowStoreClientTest {
 	private volatile boolean stallBeforeHeaders;
 
 	private volatile boolean stallBody;
+
+	/**
+	 * The JDK HttpClient starts the request timer before it connects, and the first request of a JVM also pays
+	 * for class loading. A request timeout that runs out before the connection is up is reported as a connect
+	 * failure, so the first request is sent here, where no test depends on its timing.
+	 */
+	@BeforeAll
+	static void warmUpHttpClient() throws IOException {
+		HttpServer warmUpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+		warmUpServer.createContext("/", exchange -> {
+			exchange.sendResponseHeaders(204, -1);
+			exchange.close();
+		});
+		warmUpServer.start();
+		try {
+			URI uri = URI.create("http://localhost:" + warmUpServer.getAddress().getPort() + "/");
+			assertEquals(204, new RowStoreClient().send("GET", uri, null, null).status());
+		} finally {
+			warmUpServer.stop(0);
+		}
+	}
 
 	@BeforeEach
 	void startServer() throws IOException {
@@ -236,7 +258,7 @@ class RowStoreClientTest {
 		responseStatus = 202;
 		stallBeforeHeaders = true;
 
-		RowStoreClient.Response response = new RowStoreClient(Duration.ofMillis(200)).send("POST",
+		RowStoreClient.Response response = new RowStoreClient(Duration.ofSeconds(2)).send("POST",
 				baseUri.resolve("/datasets"), BodyPublishers.ofString("a,b"), "text/csv");
 
 		assertEquals(RowStoreClient.Response.TIMEOUT, response.status());
@@ -250,7 +272,7 @@ class RowStoreClientTest {
 		stallBody = true;
 
 		RowStoreClient.Response response = assertTimeoutPreemptively(Duration.ofSeconds(5),
-				() -> new RowStoreClient(Duration.ofMillis(500)).send("PUT", baseUri.resolve("/datasets/abc"),
+				() -> new RowStoreClient(Duration.ofSeconds(2)).send("PUT", baseUri.resolve("/datasets/abc"),
 						BodyPublishers.ofString("a,b"), "text/csv"));
 
 		assertEquals(200, response.status());
