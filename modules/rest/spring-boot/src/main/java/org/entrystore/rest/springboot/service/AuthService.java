@@ -340,8 +340,7 @@ public class AuthService {
 
 	private String applyPasswordReset(SignupInfo ci, String title) {
 		PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
-			Entry userEntry = principalManager.getPrincipalEntry(ci.getEmail());
-			User u = userEntry != null ? (User) userEntry.getResource() : null;
+			User u = findAccount(ci.getEmail());
 			if (u == null) {
 				throw failWithRedirectOr(ci.getUrlFailure(),
 						() -> new PwResetEntityNotFoundHtmlException(USER_NOT_FOUND_MESSAGE, title));
@@ -406,8 +405,7 @@ public class AuthService {
 		verifyRecaptcha(request, requestBody.rcResponseV2(), ci.getEmail(), title);
 
 		boolean shouldSend = PrincipalManagerUtil.runAsAdmin(principalManager, () -> {
-			Entry userEntry = principalManager.getPrincipalEntry(ci.getEmail());
-			User u = userEntry != null ? (User) userEntry.getResource() : null;
+			User u = findAccount(ci.getEmail());
 
 			// Nonexistent and disabled users receive the same success response as a real send so the
 			// endpoint does not leak which usernames exist or are active; the actual outcome is only logged.

@@ -48,6 +48,13 @@ class PasswordResetResourceIT extends BaseSpec {
 		])
 	}
 
+	/** POST /_principals/groups rejects a name with an at sign, so the group is named through its name resource. */
+	private static void nameGroup(String groupEntryId, String name) {
+		def namePath = '/_principals/entry/' + groupEntryId + '/name'
+		assert EntryStoreClient.putRequest(namePath, JsonOutput.toJson([name: name])).getResponseCode() == HTTP_NO_CONTENT
+		assert JSON_PARSER.parseText(EntryStoreClient.getRequest(namePath).inputStream.text)['name'] == name
+	}
+
 	def setupSpec() {
 		greenMail.start()
 	}
@@ -149,6 +156,22 @@ class PasswordResetResourceIT extends BaseSpec {
 		resetPasswordConn.getResponseCode() == HTTP_OK
 		resetPasswordConn.getContentType().contains('text/html')
 		resetPasswordConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
+		!greenMail.waitForIncomingEmail(500, 1)
+	}
+
+	def "POST /auth/pwreset should answer as for an unknown user and send no email when the address is a group's name"() {
+		given:
+		def groupName = 'groupnamedlikeanaddress@test.com'
+		nameGroup(createContext([:]), groupName)
+		def requestBody = createPwResetBody(groupName)
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_OK
+		resetPasswordConn.getContentType().contains('text/html')
+		resetPasswordConn.inputStream.text.contains('A confirmation message was sent to ' + groupName + ', if the user exists.')
 		!greenMail.waitForIncomingEmail(500, 1)
 	}
 
@@ -436,6 +459,27 @@ class PasswordResetResourceIT extends BaseSpec {
 
 		assert EntryStoreClient.deleteRequest('/_principals/entry/' + entryId).getResponseCode() == HTTP_NO_CONTENT
 		assert EntryStoreClient.getRequest('/_principals/entry/' + entryId).getResponseCode() == HTTP_NOT_FOUND
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token)
+
+		then:
+		confirmConn.getResponseCode() == HTTP_NOT_FOUND
+		confirmConn.getContentType().contains('text/html')
+		confirmConn.errorStream.text.contains('User with provided email address does not exist.')
+	}
+
+	def "GET /auth/pwreset should not confirm a password reset when the address has become a group's name"() {
+		given:
+		def username = 'userresetbecamegroup@test.com'
+		def user = UserUtil.createUser(username)
+		def entryId = user['entryId'].toString()
+		assert EntryStoreClient.postRequest('/auth/pwreset', createPwResetBody(username)).getResponseCode() == HTTP_OK
+		assert greenMail.waitForIncomingEmail(5000, 1)
+		def token = extractConfirmationToken(greenMail)
+
+		assert EntryStoreClient.deleteRequest('/_principals/entry/' + entryId).getResponseCode() == HTTP_NO_CONTENT
+		nameGroup(createContext([:]), username)
 
 		when:
 		def confirmConn = EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token)

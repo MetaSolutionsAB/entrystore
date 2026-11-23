@@ -27,6 +27,7 @@ import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
+import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryManagerImpl;
@@ -41,6 +42,7 @@ import org.entrystore.rest.springboot.model.auth.SignupInfo;
 import org.entrystore.rest.springboot.model.exception.BadRequestHtmlException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.ExpectationFailedHtmlException;
+import org.entrystore.rest.springboot.model.exception.PwResetEntityNotFoundHtmlException;
 import org.entrystore.rest.springboot.security.ESUserSessionDetails;
 import org.entrystore.rest.springboot.service.auth.ConfirmationLinkBuilder;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
@@ -105,6 +107,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
@@ -466,6 +469,7 @@ class AuthServiceTest {
 		AuthService service = confirmedResetService(principalManager, sessions, mock(EmailSender.class), tokens);
 		Entry account = mock(Entry.class);
 		User user = userAt(USER_URI);
+		when(account.getGraphType()).thenReturn(GraphType.User);
 		when(account.getResource()).thenReturn(user);
 		when(user.setSaltedHashedSecret("salted-hash")).thenReturn(true);
 		when(principalManager.getPrincipalEntry(ADA)).thenReturn(account);
@@ -482,6 +486,43 @@ class AuthServiceTest {
 
 		assertEquals("Password reset was successful.", message);
 		assertEquals(Set.of("form", "saml"), expiredSessionIds(sessions));
+	}
+
+	@Test
+	void confirmPasswordLegacy_principalNameOfAGroup_answersUserNotFound() {
+		SignupTokenCache tokens = new SignupTokenCache(Ticker.systemTicker());
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		Entry group = groupEntry();
+		when(principalManager.getPrincipalEntry(ADA)).thenReturn(group);
+		EmailSender emailSender = mock(EmailSender.class);
+		AuthService service = confirmedResetService(principalManager, new SessionRegistryImpl(), emailSender, tokens);
+		SignupInfo reset = new SignupInfo();
+		reset.setEmail(ADA);
+		reset.setSaltedHashedPassword("salted-hash");
+		reset.setExpirationDate(new Date(System.currentTimeMillis() + Duration.ofDays(1).toMillis()));
+		tokens.putToken("reset-token", reset);
+
+		PwResetEntityNotFoundHtmlException thrown = assertThrows(PwResetEntityNotFoundHtmlException.class,
+				() -> service.confirmPasswordLegacy("reset-token", "Password reset"));
+
+		assertEquals("User with provided email address does not exist.", thrown.getMessage());
+		verifyNoInteractions(emailSender);
+	}
+
+	@Test
+	void pwReset_principalNameOfAGroup_answersAsForAnUnknownUserAndSendsNothing() throws Exception {
+		PrincipalManager principalManager = principalManagerWithAdmin();
+		Entry group = groupEntry();
+		when(principalManager.getPrincipalEntry(ADA)).thenReturn(group);
+		EmailSender emailSender = mock(EmailSender.class);
+		AuthService service = passwordResetService(principalManager, emailSender,
+				new SignupTokenCache(Ticker.systemTicker()));
+
+		String message = service.pwReset(new MockHttpServletRequest(),
+				new PwResetRequestBody(ADA, null, null, null, null), "Password reset");
+
+		assertEquals("A confirmation message was sent to " + ADA + ", if the user exists.", message);
+		verifyNoInteractions(emailSender);
 	}
 
 	@Test
@@ -846,9 +887,24 @@ class AuthServiceTest {
 	 * dispatch runs on the calling thread and the rate limit is off.
 	 */
 	private AuthService passwordResetService(EmailSender emailSender, SignupTokenCache tokens) throws Exception {
-		return new AuthService(null, null, null, null, null, tokens, null, emailValidator, emailSender, null, null,
+		return passwordResetService(null, emailSender, tokens);
+	}
+
+	/** As above, with the principal manager pwReset looks the account up in; reCAPTCHA is off. */
+	private AuthService passwordResetService(PrincipalManager principalManager, EmailSender emailSender,
+											 SignupTokenCache tokens) throws Exception {
+		return new AuthService(null, principalManager, null, null, new RecaptchaSettings(false, null, null), tokens,
+				null, emailValidator, emailSender, null, null,
 				new PasswordResetRateLimiter(0, Duration.ofHours(1), Ticker.systemTicker()),
 				confirmationLinks(), meterRegistry, new MockEnvironment(), Runnable::run, executor);
+	}
+
+	/** A group's entry as the principal manager returns it; its resource is no User. */
+	private static Entry groupEntry() {
+		Entry group = mock(Entry.class);
+		when(group.getGraphType()).thenReturn(GraphType.Group);
+		lenient().when(group.getResource()).thenReturn(mock(Group.class));
+		return group;
 	}
 
 	private static ConfirmationLinkBuilder confirmationLinks() throws Exception {
