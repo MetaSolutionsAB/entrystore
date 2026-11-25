@@ -29,28 +29,19 @@ import org.json.JSONArray;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
-import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipException;
-import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -64,9 +55,6 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ListResourceServiceTest {
 
-	@TempDir
-	Path isolatedTmpDir;
-
 	@Mock
 	private RepositoryManagerImpl repositoryManager;
 
@@ -78,10 +66,6 @@ class ListResourceServiceTest {
 	@BeforeEach
 	void setUp() {
 		service = new ListResourceService(repositoryManager);
-		// Point importTmpDir at the JUnit-managed isolated directory so the
-		// temp-file cleanup assertions are scoped to this test and cannot be
-		// polluted by other processes or orphan files in the shared system temp.
-		service.setImportTmpDir(isolatedTmpDir.toFile());
 	}
 
 	@Test
@@ -137,55 +121,17 @@ class ListResourceServiceTest {
 	}
 
 	@Test
-	void importFromZip_zipWithoutRdfEntries_throwsNotImplementedAndDeletesTempFile() throws IOException {
+	void importFromZip_list_throwsNotImplemented() {
 		when(entry.getGraphType()).thenReturn(GraphType.List);
-		byte[] zipBytes = buildZip("readme.txt", "hello");
 
-		// No .rdf entries to import, so extractRdfEntries returns and importFromZip throws
-		// NotImplementedException afterwards; the temp file must still be cleaned up.
-		assertThrows(NotImplementedException.class,
-				() -> service.importFromZip(entry, zipBytes));
-
-		assertIsolatedTmpDirIsEmpty("not-implemented path, no rdf entries");
+		assertThrows(NotImplementedException.class, () -> service.importFromZip(entry));
 	}
 
 	@Test
-	void importFromZip_nonListGraphType_throwsBadRequest() throws IOException {
+	void importFromZip_nonListGraphType_throwsBadRequest() {
 		when(entry.getGraphType()).thenReturn(GraphType.None);
-		byte[] zipBytes = buildZip("data.rdf", "<rdf:RDF/>");
 
-		// The else branch rejects non-List entries before any ZIP is read.
-		assertThrows(BadRequestException.class,
-				() -> service.importFromZip(entry, zipBytes));
-
-		assertIsolatedTmpDirIsEmpty("non-List graphType rejected before extractRdfEntries");
-	}
-
-	@Test
-	void importFromZip_zipWithRdfEntry_deletesTempFileEvenOnException() throws IOException {
-		when(entry.getGraphType()).thenReturn(GraphType.List);
-		byte[] zipBytes = buildZip("data.rdf", "<rdf:RDF/>");
-
-		// importRDFResource is currently stubbed and throws NotImplementedException;
-		// the finally block in extractRdfEntries must still clean up.
-		assertThrows(NotImplementedException.class,
-				() -> service.importFromZip(entry, zipBytes));
-
-		assertIsolatedTmpDirIsEmpty("exception path from importRDFResource stub");
-	}
-
-	@Test
-	void importFromZip_malformedZipPayload_deletesTempFileAndThrows() throws IOException {
-		when(entry.getGraphType()).thenReturn(GraphType.List);
-		byte[] notAZip = "this is not a zip file".getBytes(StandardCharsets.UTF_8);
-
-		// new ZipFile(tmpFile) throws ZipException (an IOException) for a non-ZIP
-		// payload; extractRdfEntries wraps it as InternalServerErrorException.
-		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
-				() -> service.importFromZip(entry, notAZip));
-		assertInstanceOf(ZipException.class, ex.getCause());
-
-		assertIsolatedTmpDirIsEmpty("exception path from ZipFile constructor");
+		assertThrows(BadRequestException.class, () -> service.importFromZip(entry));
 	}
 
 	@Test
@@ -335,22 +281,5 @@ class ListResourceServiceTest {
 			values.add(array.getString(i));
 		}
 		return values;
-	}
-
-	private void assertIsolatedTmpDirIsEmpty(String pathDescription) throws IOException {
-		try (Stream<Path> entries = Files.list(isolatedTmpDir)) {
-			assertEquals(0, entries.count(),
-					"isolated tmpdir must be empty after importFromZip (" + pathDescription + ")");
-		}
-	}
-
-	private static byte[] buildZip(String entryName, String body) throws IOException {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		try (ZipOutputStream zos = new ZipOutputStream(baos)) {
-			zos.putNextEntry(new ZipEntry(entryName));
-			zos.write(body.getBytes(StandardCharsets.UTF_8));
-			zos.closeEntry();
-		}
-		return baos.toByteArray();
 	}
 }

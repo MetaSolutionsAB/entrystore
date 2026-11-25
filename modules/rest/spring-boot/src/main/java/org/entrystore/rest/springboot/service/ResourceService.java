@@ -328,10 +328,11 @@ public class ResourceService {
 	}
 
 	/**
-	 * See {@link ListResourceService#importFromZip}.
+	 * Checks write access, then answers as {@link ListResourceService#importFromZip} does.
 	 */
-	public void importEntryResource(Entry entry, byte[] requestBody) {
-		listResourceService.importFromZip(entry, requestBody);
+	public void importEntryResource(Entry entry) {
+		principalManager.checkAuthenticatedUserAuthorized(entry, PrincipalManager.AccessProperty.WriteResource);
+		listResourceService.importFromZip(entry);
 	}
 
 	/**
