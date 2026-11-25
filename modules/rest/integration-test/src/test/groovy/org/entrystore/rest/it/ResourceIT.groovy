@@ -24,8 +24,6 @@ import org.springframework.http.HttpMethod
 
 import java.nio.file.Files
 import java.security.MessageDigest
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.delete
@@ -2401,35 +2399,50 @@ class ResourceIT extends BaseSpec {
 		JSON_PARSER.parseText(EntryStoreClient.getRequest(targetResourceUri).inputStream.text) == []
 	}
 
-	def "POST /{context-id}/resource/{entry-id}?import with ZIP containing RDF file should return 501 Not Implemented"() {
+	def "POST /{context-id}/resource/{entry-id} with application/zip as admin should return 501 Not Implemented for a body that is not a ZIP"() {
 		given:
-		def importContextId = 'rdf-import-ctx'
-		getOrCreateContext([contextId: importContextId])
-		def listEntryId = getOrCreateEntry(importContextId, [id: 'rdf-import-list', graphtype: 'list'])
-
-		// create a ZIP file containing a .rdf file
-		def baos = new ByteArrayOutputStream()
-		def zos = new ZipOutputStream(baos)
-		zos.putNextEntry(new ZipEntry('test-data.rdf'))
-		zos.write('<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"></rdf:RDF>'.bytes)
-		zos.closeEntry()
-		zos.close()
-		def zipBytes = baos.toByteArray()
+		def zipContextId = 'res-zip-import-ctx'
+		getOrCreateContext([contextId: zipContextId])
+		def listEntryId = getOrCreateEntry(zipContextId, [id: 'res-zip-import-list', graphtype: 'list'])
 
 		when:
-		def conn = EntryStoreClient.sendRequestAsStream(
-				HttpMethod.POST,
-				'/' + importContextId + '/resource/' + listEntryId + '?import=true',
-				new ByteArrayInputStream(zipBytes),
-				'admin',
-				'application/zip')
+		def conn = EntryStoreClient.postRequest('/' + zipContextId + '/resource/' + listEntryId,
+				'this is not a zip file', 'admin', 'application/zip')
 
 		then:
+		// 501 rather than an error for the malformed archive: the stub does not read the body
 		conn.getResponseCode() == HTTP_NOT_IMPLEMENTED
-		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(conn.errorStream.text)
-		respJson['error'] != null
-		respJson['error'].toString().contains('RDF resource import is not yet implemented')
+		JSON_PARSER.parseText(conn.errorStream.text)['error'] == 'Resource ZIP import is not yet implemented'
+	}
+
+	def "POST /{context-id}/resource/{entry-id} with application/zip as guest should return Unauthorized 401"() {
+		given:
+		def zipContextId = 'res-zip-import-ctx'
+		getOrCreateContext([contextId: zipContextId])
+		def listEntryId = getOrCreateEntry(zipContextId, [id: 'res-zip-import-list', graphtype: 'list'])
+
+		when:
+		def conn = EntryStoreClient.postRequest('/' + zipContextId + '/resource/' + listEntryId,
+				'this is not a zip file', '', 'application/zip')
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(conn.errorStream.text)['error'] == 'Not authorized'
+	}
+
+	def "POST /{context-id}/resource/{entry-id} with application/zip as user without write access should return Forbidden 403"() {
+		given:
+		def zipContextId = 'res-zip-import-ctx'
+		getOrCreateContext([contextId: zipContextId])
+		def listEntryId = getOrCreateEntry(zipContextId, [id: 'res-zip-import-list', graphtype: 'list'])
+
+		when:
+		def conn = EntryStoreClient.postRequest('/' + zipContextId + '/resource/' + listEntryId,
+				'this is not a zip file', 'user', 'application/zip')
+
+		then:
+		conn.getResponseCode() == HTTP_FORBIDDEN
+		JSON_PARSER.parseText(conn.errorStream.text)['error'] == 'Not authorized'
 	}
 
 	def "GET /{context-id}/resource/{entry-id} with unsupported rdfFormat on Graph resource should return 406 Not Acceptable"() {

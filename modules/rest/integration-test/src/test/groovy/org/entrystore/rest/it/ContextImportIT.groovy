@@ -141,6 +141,16 @@ class ContextImportIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
+	def "POST /_principals/import as admin with a raw body should return Bad-Request 400"() {
+		when:
+		def connection = EntryStoreClient.postRequest('/_principals/import', 'dummyBody',
+			'admin', 'application/zip')
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		JSON_PARSER.parseText(connection.errorStream.text)['error'] == 'Context _principals cannot be replaced by an import'
+	}
+
 	def "POST /{context-id}/import as admin with invalid zip-file should return Bad-Request 400"() {
 		when:
 		def connection = EntryStoreClient.postRequest('/' + contextImportId + '/import', '[]',

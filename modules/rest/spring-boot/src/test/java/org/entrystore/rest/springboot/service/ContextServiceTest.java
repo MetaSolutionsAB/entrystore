@@ -16,11 +16,14 @@
 
 package org.entrystore.rest.springboot.service;
 
+import org.apache.commons.io.function.IOSupplier;
+import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -38,6 +41,7 @@ import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
@@ -115,10 +119,50 @@ class ContextServiceTest {
 		Entry principalsEntry = mock(Entry.class);
 		when(principals.getEntry()).thenReturn(principalsEntry);
 		when(principalsEntry.getId()).thenReturn("_principals");
-		InputStream upload = mock(InputStream.class);
+		IOSupplier<InputStream> upload = () -> {
+			throw new AssertionError("the upload was opened");
+		};
 
 		assertThrows(BadRequestException.class, () -> service.importContextDataFromFile(principals, upload));
 
-		verifyNoInteractions(repositoryManager, upload);
+		verifyNoInteractions(repositoryManager);
+	}
+
+	@Test
+	void importContextDataFromRequestBody_bodyBreaksOffWhileRead_isABadRequestWithoutCause() {
+		RepositoryManagerImpl repositoryManager = mock(RepositoryManagerImpl.class);
+		ContextService service = new ContextService(repositoryManager, mock(ReservedNamesService.class),
+				mock(PrincipalManager.class));
+
+		BadRequestException thrown = assertThrows(BadRequestException.class,
+				() -> service.importContextDataFromRequestBody(mock(Context.class), ContextServiceTest::unreadable));
+
+		// Without a cause the handler logs a client's broken upload at debug, not with a stack trace.
+		assertEquals("Failed to read the request body", thrown.getMessage());
+		assertNull(thrown.getCause());
+		verifyNoInteractions(repositoryManager);
+	}
+
+	@Test
+	void importContextDataFromFile_unreadableUploadedFile_isAnInternalError() {
+		RepositoryManagerImpl repositoryManager = mock(RepositoryManagerImpl.class);
+		ContextService service = new ContextService(repositoryManager, mock(ReservedNamesService.class),
+				mock(PrincipalManager.class));
+
+		InternalServerErrorException thrown = assertThrows(InternalServerErrorException.class,
+				() -> service.importContextDataFromFile(mock(Context.class), ContextServiceTest::unreadable));
+
+		// An uploaded file has already been received, so failing to read it is the server's fault.
+		assertInstanceOf(IOException.class, thrown.getCause());
+		verifyNoInteractions(repositoryManager);
+	}
+
+	private static InputStream unreadable() {
+		return new InputStream() {
+			@Override
+			public int read() throws IOException {
+				throw new IOException("Read failed");
+			}
+		};
 	}
 }

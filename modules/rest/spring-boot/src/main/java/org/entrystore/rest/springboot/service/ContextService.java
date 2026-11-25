@@ -18,6 +18,7 @@ package org.entrystore.rest.springboot.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.function.IOSupplier;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.rio.RDFWriter;
 import org.eclipse.rdf4j.rio.trig.TriGWriter;
@@ -29,7 +30,6 @@ import org.entrystore.User;
 import org.entrystore.impl.DataImpl;
 import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.URISplit;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
@@ -178,38 +178,55 @@ public class ContextService {
 	}
 
 	/**
-	 * Replaces the context's entries by the export in {@code input}. Refuses, before reading the upload, a context
-	 * that keeps entry names, such as {@code _principals}, whose entries an import does not replace.
+	 * Replaces the context's entries by the export sent as the request body, as {@link #importContextDataFromFile}
+	 * does; a body that cannot be read to its end is a bad request.
 	 */
-	public void importContextDataFromFile(Context context, InputStream input) {
+	public void importContextDataFromRequestBody(Context context, IOSupplier<InputStream> body) {
+		importContextDataFromFile(context, () -> {
+			try {
+				return new RequestBodyInputStream(body.get(), -1);
+			} catch (IOException e) {
+				throw new RequestBodyInputStream.RequestBodyReadException(e);
+			}
+		});
+	}
+
+	/**
+	 * Replaces the context's entries by the export in {@code upload}, copied to a temporary file first. Refuses,
+	 * before opening the upload, a context that keeps entry names, such as {@code _principals}, whose entries an
+	 * import does not replace.
+	 */
+	public void importContextDataFromFile(Context context, IOSupplier<InputStream> upload) {
 		if (context instanceof EntryNamesContext) {
 			throw new BadRequestException("Context " + context.getEntry().getId() + " cannot be replaced by an import");
 		}
 		File tmpFile = null;
 		try {
 			tmpFile = File.createTempFile("entrystore_context_import", ".zip");
-			if (input != null) {
-				try {
-					FileOperations.copyFile(input, Files.newOutputStream(tmpFile.toPath()));
-				} catch (IOException e) {
-					throw new InternalServerErrorException("Exception copying the data to a temporary file for context import", e);
-				}
-
-				try {
-					repositoryManager.getContextManager().importContext(context.getEntry(), tmpFile);
-				} catch (org.entrystore.repository.RepositoryException e) {
-					throw new BadRequestException("Failed to import context data from the uploaded file", e);
-				}
-
-			} else {
-				throw new BadRequestException("Unable to import file, received null data");
-			}
+			copyUpload(upload, tmpFile);
+			repositoryManager.getContextManager().importContext(context.getEntry(), tmpFile);
+		} catch (org.entrystore.repository.RepositoryException e) {
+			throw new BadRequestException("Failed to import context data from the uploaded file", e);
 		} catch (IOException e) {
 			throw new BadRequestException("Failed to import data", e);
 		} finally {
 			if (tmpFile != null) {
 				tmpFile.delete();
 			}
+		}
+	}
+
+	/**
+	 * A failure to read the request body, as {@link RequestBodyInputStream} reports it, is a bad request; any other
+	 * failure is an internal error.
+	 */
+	private static void copyUpload(IOSupplier<InputStream> upload, File target) {
+		try (InputStream in = upload.get(); OutputStream out = Files.newOutputStream(target.toPath())) {
+			in.transferTo(out);
+		} catch (RequestBodyInputStream.RequestBodyReadException e) {
+			throw new BadRequestException("Failed to read the request body");
+		} catch (IOException e) {
+			throw new InternalServerErrorException("Exception copying the data to a temporary file for context import", e);
 		}
 	}
 

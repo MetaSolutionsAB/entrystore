@@ -505,6 +505,16 @@ class ResourceServiceTest {
 	}
 
 	@Test
+	void importEntryResource_unauthorized_throwsBeforeTheGraphTypeCheck() {
+		doThrow(new AuthorizationException(null, null, AccessProperty.WriteResource))
+				.when(principalManager).checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
+
+		assertThrows(AuthorizationException.class, () -> service.importEntryResource(entry));
+
+		verifyNoInteractions(listResourceService);
+	}
+
+	@Test
 	void deleteResource_proxyTrueOnLink_deletesRemoteUrlOnly() {
 		assertProxyDeleteForEntryType(EntryType.Link);
 	}

@@ -21,6 +21,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.media.SchemaProperty;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Context;
@@ -48,12 +49,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartRequest;
 
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.util.List;
 
@@ -137,15 +135,20 @@ public class ContextController {
 	}
 
 	@Operation(summary = "Import of a single context")
+	@io.swagger.v3.oas.annotations.parameters.RequestBody(
+			content = @Content(
+					mediaType = "application/zip",
+					schema = @Schema(type = "string", format = "binary")))
 	@PostMapping(
 			path = "/{context-id}/import",
 			produces = MediaType.TEXT_HTML_VALUE)
 	public String importContextFromZipFile(
 			@PathVariable("context-id") String contextId,
-			@RequestBody byte[] zipFile) {
+			@Parameter(hidden = true) HttpServletRequest request) {
 
 		Context context = contextService.getContextOrThrow(contextId);
-		contextService.importContextDataFromFile(context, new ByteArrayInputStream(zipFile));
+		// Not request.getInputStream() here: Jetty answers Expect: 100-continue as soon as it is called.
+		contextService.importContextDataFromRequestBody(context, request::getInputStream);
 
 		return "<textarea></textarea>";
 	}
@@ -169,15 +172,13 @@ public class ContextController {
 			produces = MediaType.TEXT_HTML_VALUE)
 	public String importContextFromMultipartForm(
 			@PathVariable("context-id") String contextId,
-			@Parameter(hidden = true) MultipartRequest request) throws IOException {
+			@Parameter(hidden = true) MultipartRequest request) {
 
 		MultipartFile file = MultipartUtil.firstFilePart(request)
 				.orElseThrow(() -> new BadRequestException("Multipart request contains no file part"));
 
 		Context context = contextService.getContextOrThrow(contextId);
-		try (InputStream inputStream = file.getInputStream()) {
-			contextService.importContextDataFromFile(context, inputStream);
-		}
+		contextService.importContextDataFromFile(context, file::getInputStream);
 
 		return "<textarea></textarea>";
 	}

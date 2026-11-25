@@ -16,11 +16,8 @@
 
 package org.entrystore.rest.springboot.service;
 
-import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.IOUtils;
 import org.eclipse.rdf4j.model.Model;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -29,7 +26,6 @@ import org.entrystore.QuotaException;
 import org.entrystore.impl.ListImpl;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.URISplit;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.dto.ListParams;
@@ -41,26 +37,16 @@ import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.json.JSONArray;
 import org.json.JSONException;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.StringWriter;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.Vector;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 /**
  * Resource operations on List and Group entries: their children (a list of entry URIs, or a group's members),
@@ -72,10 +58,6 @@ import java.util.zip.ZipFile;
 public class ListResourceService {
 
 	private final RepositoryManagerImpl repositoryManager;
-
-	@Value("${entrystore.import.tmpdir:${java.io.tmpdir}}")
-	@Setter(AccessLevel.PACKAGE)
-	private File importTmpDir;
 
 	/**
 	 * Replaces the children of a List or Group entry with the entry ids given as a JSON array of strings, resolved
@@ -181,17 +163,14 @@ public class ListResourceService {
 	}
 
 	/**
-	 * Imports the RDF files of a ZIP archive into a List entry. Not implemented yet: a readable archive always ends
-	 * in {@link NotImplementedException}, an unreadable one in {@link InternalServerErrorException}; other graph
-	 * types are a bad request.
+	 * Would import the RDF files of a ZIP archive into a List entry. Not implemented: a List entry always answers
+	 * {@link NotImplementedException}, any other graph type is a bad request. The archive is not read.
 	 */
-	public void importFromZip(Entry entry, byte[] requestBody) {
+	public void importFromZip(Entry entry) {
 
 		GraphType graphType = entry.getGraphType();
 
 		if (graphType == GraphType.List) {
-			// Reads the ZIP; a .rdf entry throws from importRDFResource, otherwise the throw below signals not-implemented.
-			extractRdfEntries(requestBody);
 			throw new NotImplementedException("Resource ZIP import is not yet implemented");
 		} else {
 			throw new BadRequestException("Bad request: ZIP import supports only Entry graphType of List (given: " + graphType + ") with 'application/zip' format");
@@ -255,56 +234,5 @@ public class ListResourceService {
 			}
 		}
 		return array.toString();
-	}
-
-	private void extractRdfEntries(byte[] requestBody) {
-		File tmpFile = null;
-		try {
-			tmpFile = writeStreamToTmpFile(new ByteArrayInputStream(requestBody));
-			importZipFile(tmpFile);
-		} catch (IOException ioe) {
-			throw new InternalServerErrorException("Failed to process ZIP import", ioe);
-		} finally {
-			if (tmpFile != null) {
-				try {
-					Files.deleteIfExists(tmpFile.toPath());
-				} catch (IOException e) {
-					log.warn("[IMPORT] Failed to delete temporary ZIP file: {}", tmpFile, e);
-				}
-			}
-		}
-	}
-
-	private void importZipFile(File tmpFile) throws IOException {
-		try (ZipFile zipFile = new ZipFile(tmpFile)) {
-			Enumeration<? extends ZipEntry> zipEntries = zipFile.entries();
-			while (zipEntries.hasMoreElements()) {
-				ZipEntry entry = zipEntries.nextElement();
-				String name = entry.getName();
-				if (entry.isDirectory() || !name.endsWith(".rdf")) {
-					continue;
-				}
-				String fileString;
-				try (InputStream fileIS = zipFile.getInputStream(entry)) {
-					StringWriter writer = new StringWriter();
-					IOUtils.copy(fileIS, writer, StandardCharsets.UTF_8);
-					fileString = writer.toString();
-				}
-				importRDFResource(fileString);
-			}
-		}
-	}
-
-	private File writeStreamToTmpFile(InputStream is) throws IOException {
-		File tmpFile = File.createTempFile("entrystore_res_import", ".zip", importTmpDir);
-		log.info("[IMPORT] Created temporary file: {}", tmpFile);
-		try (OutputStream fos = Files.newOutputStream(tmpFile.toPath())) {
-			FileOperations.copyFile(is, fos);
-		}
-		return tmpFile;
-	}
-
-	private void importRDFResource(String rdfString) {
-		throw new NotImplementedException("RDF resource import is not yet implemented");
 	}
 }

@@ -54,7 +54,6 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -232,18 +231,22 @@ public class ResourceController {
 	}
 
 	@Operation(
-			summary = "Imports a ZIP file resource (not yet implemented).")
+			summary = "Imports a ZIP file resource (not yet implemented).",
+			description = "Answers 501 for a List entry and 400 for any other entry.")
+	@io.swagger.v3.oas.annotations.parameters.RequestBody(
+			content = @Content(
+					mediaType = "application/zip",
+					schema = @Schema(type = "string", format = "binary")))
 	@PostMapping(
 			path = "/{context-id}/resource/{entry-id}",
 			consumes = "application/zip")
 	public void importListResource(
 			@PathVariable("context-id") String contextId,
-			@PathVariable("entry-id") String entryId,
-			@RequestBody byte[] body
+			@PathVariable("entry-id") String entryId
 	) {
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		resourceService.importEntryResource(entry, body);
+		resourceService.importEntryResource(entry);
 	}
 
 	@Operation(
