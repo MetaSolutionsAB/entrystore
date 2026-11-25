@@ -468,7 +468,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	 *
 	 * <p>One case still takes {@code entry.repository}: if a scan keeps racing an overflowing buffer
 	 * there is no record of what was dropped, so this falls back to excluding writers. That needs
-	 * {@link #indexOpBufferLimit} un-read writes to a single context to happen at all.
+	 * {@link #indexOpBufferLimit} un-read writes to a single context, or an {@link #unpublishIndexes()} during the
+	 * scan, to happen at all.
 	 */
 	private Indexes loadIndexes() {
 		Indexes published = publishedIndexes();

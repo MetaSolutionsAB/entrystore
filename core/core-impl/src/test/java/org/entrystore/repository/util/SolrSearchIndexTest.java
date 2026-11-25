@@ -62,11 +62,13 @@ import javax.xml.datatype.XMLGregorianCalendar;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
 import java.util.LinkedHashMap;
@@ -86,6 +88,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 import static org.awaitility.Awaitility.await;
@@ -526,6 +529,23 @@ public class SolrSearchIndexTest {
 	}
 
 	@Test
+	public void reindexOfCorruptEntryKeepsItsDocumentBeingSent() throws Exception {
+		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", ENTRY_1_1);
+		// The reindex read the entry before its repair, whose document is being sent
+		when(cm.getEntry(ENTRY_1_1)).thenThrow(corruptEntryFailure(ENTRY_1_1));
+		postQueue().put(ENTRY_1_1, new SolrInputDocument());
+		Method drainPostQueue = SolrSearchIndex.SolrInputDocumentSubmitter.class.getDeclaredMethod("drainPostQueue");
+		drainPostQueue.setAccessible(true);
+		drainPostQueue.invoke(documentSubmitter());
+
+		index.reindexSync(CONTEXT_1);
+
+		assertTrue(deleteQueue().isEmpty(), "A document being sent must not be removed because of an earlier failure");
+	}
+
+	@Test
 	public void reindexDoesNotRestoreTheDocumentOfAnEntryDeletedConcurrently() throws Exception {
 		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
 		SolrSearchIndex indexWithoutDocuments = spy(index);
@@ -537,14 +557,17 @@ public class SolrSearchIndexTest {
 		when(entry.getEntryURI()).thenReturn(ENTRY_1_1);
 		when(entry.isDeleted()).thenAnswer(invocation -> deleted.get());
 		AtomicReference<Thread> deletion = new AtomicReference<>();
-		// Another thread deletes the entry after the reindex has checked the entry itself, and waits for the
-		// monitor of the submission queue if the reindex holds it
+		// Another thread deletes the entry after the reindex has checked the entry itself while holding the monitor
+		// of the submission queue, and waits for that monitor
+		Cache<URI, SolrInputDocument> postQueue = postQueue();
 		when(entry.getContext()).thenAnswer(invocation -> {
-			deletion.set(Thread.ofPlatform().start(() -> {
-				deleted.set(true);
-				index.removeEntry(entry);
-			}));
-			awaitFinishedOrBlocked(deletion.get());
+			if (Thread.holdsLock(postQueue) && deletion.get() == null) {
+				deletion.set(Thread.ofPlatform().start(() -> {
+					deleted.set(true);
+					index.removeEntry(entry);
+				}));
+				awaitFinishedOrBlocked(deletion.get());
+			}
 			return mock(Context.class);
 		});
 		when(cm.getEntry(ENTRY_1_1)).thenReturn(entry);
@@ -568,6 +591,288 @@ public class SolrSearchIndexTest {
 			}
 			Thread.yield();
 		}
+	}
+
+	/**
+	 * Returns a spy of the index whose document builds signal that they have started and then wait for the release.
+	 */
+	private SolrSearchIndex spyBlockingBuildsUntil(CountDownLatch building, CountDownLatch release) {
+		SolrSearchIndex spyIndex = spy(index);
+		doAnswer(invocation -> {
+			building.countDown();
+			awaitOrThrow(release);
+			return new SolrInputDocument();
+		}).when(spyIndex).constructSolrInputDocument(any(), anyBoolean());
+		return spyIndex;
+	}
+
+	/**
+	 * Waits until the threads have finished, and fails as soon as some of them deadlock on monitors.
+	 */
+	private static void awaitFinishedWithoutDeadlock(Thread... threads) throws InterruptedException {
+		ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+		Set<Long> threadIds = Arrays.stream(threads).map(Thread::threadId).collect(Collectors.toSet());
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		while (Arrays.stream(threads).anyMatch(Thread::isAlive)) {
+			long[] deadlocked = threadMXBean.findMonitorDeadlockedThreads();
+			if (deadlocked != null && LongStream.of(deadlocked).anyMatch(threadIds::contains)) {
+				throw new AssertionError("Threads deadlocked");
+			}
+			if (System.nanoTime() > deadline) {
+				throw new AssertionError("Threads did not finish");
+			}
+			Thread.sleep(10);
+		}
+	}
+
+	@Test
+	public void reindexBuildingADocumentDoesNotDeadlockWithAWriterHoldingTheRepositoryMonitor() throws Exception {
+		stopDocumentSubmitter(); // keeps posted documents in the submission queue
+		Object repository = new Object(); // stands in for the monitor of the store
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1));
+		Entry writtenEntry = postableEntry(ENTRY_1_2);
+		CountDownLatch reindexBuilding = new CountDownLatch(1);
+		CountDownLatch writerHoldsRepository = new CountDownLatch(1);
+		SolrSearchIndex spyIndex = spy(index);
+		doAnswer(invocation -> {
+			if (invocation.getArgument(0) != writtenEntry) {
+				// The reindex's build loads a cold index, which takes the monitor of the store
+				reindexBuilding.countDown();
+				awaitOrThrow(writerHoldsRepository);
+				synchronized (repository) {
+					return new SolrInputDocument();
+				}
+			}
+			return new SolrInputDocument();
+		}).when(spyIndex).constructSolrInputDocument(any(), anyBoolean());
+
+		Thread reindex = Thread.ofPlatform().daemon().start(() -> spyIndex.reindexSync(CONTEXT_1));
+		awaitOrThrow(reindexBuilding);
+		// As an entry write, which posts the entry while holding the monitor of the store
+		Thread writer = Thread.ofPlatform().daemon().start(() -> {
+			synchronized (repository) {
+				writerHoldsRepository.countDown();
+				spyIndex.postEntry(writtenEntry);
+			}
+		});
+
+		awaitFinishedWithoutDeadlock(reindex, writer);
+		assertEquals(Set.of(ENTRY_1_1, ENTRY_1_2), postQueue().asMap().keySet());
+	}
+
+	@Test
+	public void postEntryBuildsTheDocumentWithoutHoldingTheSubmissionQueueMonitors() throws Exception {
+		stopDocumentSubmitter(); // keeps posted documents in the submission queue
+		contextManagerListing();
+		Cache<URI, SolrInputDocument> postQueue = postQueue();
+		Set<URI> deleteQueue = deleteQueue();
+		AtomicBoolean heldAQueueMonitor = new AtomicBoolean();
+		SolrSearchIndex spyIndex = spy(index);
+		doAnswer(invocation -> {
+			heldAQueueMonitor.set(Thread.holdsLock(postQueue) || Thread.holdsLock(deleteQueue));
+			return new SolrInputDocument();
+		}).when(spyIndex).constructSolrInputDocument(any(), anyBoolean());
+
+		spyIndex.postEntry(postableEntry(ENTRY_1_1));
+
+		assertFalse(heldAQueueMonitor.get(),
+				"Building may take the monitor of the store, which entry writes hold while waiting for the queues");
+		assertEquals(Set.of(ENTRY_1_1), postQueue.asMap().keySet());
+	}
+
+	@Test
+	public void postEntryDuringTheBuildOfTheSameEntryKeepsTheNewerDocument() throws Exception {
+		stopDocumentSubmitter(); // keeps posted documents in the submission queue
+		contextManagerListing();
+		Entry entry = postableEntry(ENTRY_1_1);
+		SolrInputDocument olderDocument = new SolrInputDocument();
+		SolrInputDocument newerDocument = new SolrInputDocument();
+		AtomicInteger builds = new AtomicInteger();
+		SolrSearchIndex spyIndex = spy(index);
+		doAnswer(invocation -> {
+			if (builds.incrementAndGet() == 1) {
+				// The entry is changed while its document is built, and the change posts it again
+				spyIndex.postEntry(entry);
+				return olderDocument;
+			}
+			return newerDocument;
+		}).when(spyIndex).constructSolrInputDocument(any(), anyBoolean());
+
+		spyIndex.postEntry(entry);
+
+		assertSame(newerDocument, postQueue().getIfPresent(ENTRY_1_1));
+	}
+
+	@Test
+	public void newerBuildOfAnEntryReplacesTheDocumentOfAnOlderBuildQueuedFirst() throws Exception {
+		stopDocumentSubmitter(); // keeps posted documents in the submission queue
+		contextManagerListing();
+		Entry entry = postableEntry(ENTRY_1_1);
+		SolrInputDocument newerDocument = new SolrInputDocument();
+		CountDownLatch olderBuilding = new CountDownLatch(1);
+		CountDownLatch newerBuilding = new CountDownLatch(1);
+		CountDownLatch olderQueued = new CountDownLatch(1);
+		AtomicInteger builds = new AtomicInteger();
+		SolrSearchIndex spyIndex = spy(index);
+		doAnswer(invocation -> {
+			if (builds.incrementAndGet() == 1) {
+				olderBuilding.countDown();
+				awaitOrThrow(newerBuilding);
+				return new SolrInputDocument();
+			}
+			newerBuilding.countDown();
+			awaitOrThrow(olderQueued);
+			return newerDocument;
+		}).when(spyIndex).constructSolrInputDocument(any(), anyBoolean());
+		Thread older = Thread.ofPlatform().daemon().start(() -> spyIndex.postEntry(entry));
+		awaitOrThrow(olderBuilding);
+		// The entry is changed again while the older document is built
+		Thread newer = Thread.ofPlatform().daemon().start(() -> spyIndex.postEntry(entry));
+
+		awaitFinishedWithoutDeadlock(older);
+		assertNotNull(postQueue().getIfPresent(ENTRY_1_1), "The older document is queued while the newer one is built");
+		olderQueued.countDown();
+		awaitFinishedWithoutDeadlock(newer);
+
+		assertSame(newerDocument, postQueue().getIfPresent(ENTRY_1_1));
+	}
+
+	@Test
+	public void reindexOfContextAwaitsTheNewerDocumentOfAnEntryUpdatedWhileItWasBuilt() throws Exception {
+		stopDocumentSubmitter(); // keeps posted documents in the submission queue
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		Entry entry = postableEntry(ENTRY_1_1);
+		when(cm.getEntry(ENTRY_1_1)).thenReturn(entry);
+		resolvableContext(cm, "1", ENTRY_1_1);
+		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
+		SolrInputDocument updatedDocument = new SolrInputDocument();
+		CountDownLatch reindexBuilding = new CountDownLatch(1);
+		CountDownLatch updatePosted = new CountDownLatch(1);
+		AtomicInteger builds = new AtomicInteger();
+		SolrSearchIndex spyIndex = spy(index);
+		doAnswer(invocation -> {
+			if (builds.incrementAndGet() == 1) {
+				reindexBuilding.countDown();
+				awaitOrThrow(updatePosted);
+				return new SolrInputDocument();
+			}
+			return updatedDocument;
+		}).when(spyIndex).constructSolrInputDocument(any(), anyBoolean());
+		Thread reindex = Thread.ofPlatform().daemon().start(() -> spyIndex.reindexSync(CONTEXT_1));
+		awaitOrThrow(reindexBuilding);
+
+		Thread update = Thread.ofPlatform().daemon().start(() -> spyIndex.postEntry(entry));
+		awaitFinishedOrBlocked(update);
+		updatePosted.countDown();
+		awaitFinishedWithoutDeadlock(reindex, update);
+
+		assertSame(updatedDocument, postQueue().getIfPresent(ENTRY_1_1));
+		verify(solrServer, after(NO_PURGE_WINDOW_MILLIS).never()).request(any(), any());
+		postQueue().invalidate(ENTRY_1_1); // as the document submitter does when it takes the document
+		verify(solrServer, timeout(10_000)).request(argThat(SolrSearchIndexTest::isDeleteRequest), any());
+	}
+
+	@Test
+	public void entryDeletedWhileItsDocumentIsBeingBuiltStaysDeleted() throws Exception {
+		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
+		contextManagerListing();
+		// Not marked as deleted, as another instance of the deleted entry
+		Entry entry = postableEntry(ENTRY_1_1);
+		CountDownLatch building = new CountDownLatch(1);
+		CountDownLatch deleted = new CountDownLatch(1);
+		SolrSearchIndex spyIndex = spyBlockingBuildsUntil(building, deleted);
+		Thread write = Thread.ofPlatform().daemon().start(() -> spyIndex.postEntry(entry));
+		awaitOrThrow(building);
+
+		Thread deletion = Thread.ofPlatform().daemon().start(() -> index.removeEntry(entry));
+		awaitFinishedOrBlocked(deletion);
+		deleted.countDown();
+		awaitFinishedWithoutDeadlock(write, deletion);
+
+		assertEquals(List.of(ENTRY_1_1), List.copyOf(deleteQueue()));
+		assertTrue(postQueue().asMap().isEmpty(), "A document built before the deletion must not be queued after it");
+	}
+
+	@Test
+	public void removalOfACorruptEntrysDocumentDoesNotDropTheDocumentOfItsRepairBeingBuilt() throws Exception {
+		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
+		ContextManager cm = contextManagerListing(CONTEXT_1);
+		resolvableContext(cm, "1", ENTRY_1_1);
+		// The reindex finds the entry corrupt because it reads the entry before the repair
+		when(cm.getEntry(ENTRY_1_1)).thenThrow(corruptEntryFailure(ENTRY_1_1));
+		CountDownLatch repairBuilding = new CountDownLatch(1);
+		CountDownLatch reindexed = new CountDownLatch(1);
+		SolrSearchIndex spyIndex = spyBlockingBuildsUntil(repairBuilding, reindexed);
+		Entry repairedEntry = postableEntry(ENTRY_1_1);
+		Thread repair = Thread.ofPlatform().daemon().start(() -> spyIndex.postEntry(repairedEntry));
+		awaitOrThrow(repairBuilding);
+
+		Thread reindex = Thread.ofPlatform().daemon().start(() -> index.reindexSync(CONTEXT_1));
+		awaitFinishedOrBlocked(reindex);
+		reindexed.countDown();
+		awaitFinishedWithoutDeadlock(repair, reindex);
+
+		assertTrue(deleteQueue().isEmpty(), "The repair's document must win over the removal of the corrupt one");
+		assertEquals(Set.of(ENTRY_1_1), postQueue().asMap().keySet());
+	}
+
+	@Test
+	public void removeContextSupersedesTheDocumentOfAnEntryOfTheContextBeingBuilt() throws Exception {
+		stopDocumentSubmitter(); // keeps posted documents in the submission queue
+		contextManagerListing();
+		// Its context is not marked as deleted, as another instance of the removed context
+		Entry entry = postableEntry(ENTRY_1_1);
+		URI entryOfContext10 = URI.create("http://localhost:8181/10/entry/1"); // its URI starts with that of context 1
+		Entry entryOfAnotherContext = postableEntry(entryOfContext10);
+		CountDownLatch building = new CountDownLatch(2);
+		CountDownLatch contextRemoved = new CountDownLatch(1);
+		SolrSearchIndex spyIndex = spyBlockingBuildsUntil(building, contextRemoved);
+		Thread write = Thread.ofPlatform().daemon().start(() -> spyIndex.postEntry(entry));
+		Thread otherWrite = Thread.ofPlatform().daemon().start(() -> spyIndex.postEntry(entryOfAnotherContext));
+		awaitOrThrow(building);
+
+		Thread removal = Thread.ofPlatform().daemon()
+				.start(() -> index.removeContext(URI.create("http://localhost:8181/1")));
+		awaitFinishedOrBlocked(removal);
+		contextRemoved.countDown();
+		awaitFinishedWithoutDeadlock(write, otherWrite, removal);
+
+		assertEquals(Set.of(entryOfContext10), postQueue().asMap().keySet(),
+				"Only the documents of the removed context's entries must not be sent after its purge");
+	}
+
+	@Test
+	public void failedBuildDoesNotKeepWaitForQueueDrainWaiting() throws Exception {
+		contextManagerListing();
+		Entry entry = postableEntry(ENTRY_1_1);
+		SolrSearchIndex spyIndex = spy(index);
+		doThrow(new StackOverflowError()).when(spyIndex).constructSolrInputDocument(any(), anyBoolean());
+
+		assertThrows(StackOverflowError.class, () -> spyIndex.postEntry(entry));
+
+		assertTrue(CompletableFuture.supplyAsync(index::waitForQueueDrain).get(5, TimeUnit.SECONDS));
+	}
+
+	@Test
+	public void waitForQueueDrainWaitsForADocumentBeingBuilt() throws Exception {
+		contextManagerListing();
+		Entry entry = postableEntry(ENTRY_1_1);
+		CountDownLatch building = new CountDownLatch(1);
+		CountDownLatch built = new CountDownLatch(1);
+		SolrSearchIndex spyIndex = spyBlockingBuildsUntil(building, built);
+		Thread write = Thread.ofPlatform().daemon().start(() -> spyIndex.postEntry(entry));
+		awaitOrThrow(building);
+
+		AtomicBoolean drained = new AtomicBoolean();
+		Thread waiter = Thread.ofPlatform().daemon().name("drain-waiter")
+				.start(() -> drained.set(index.waitForQueueDrain()));
+		waiter.join(1000);
+		assertTrue(waiter.isAlive(), "Both queues are empty but a document is being built");
+		built.countDown();
+		awaitFinishedWithoutDeadlock(write, waiter);
+
+		assertTrue(drained.get());
 	}
 
 	@Test
@@ -1360,6 +1665,18 @@ public class SolrSearchIndexTest {
 		when(entry.getContext()).thenReturn(mock(Context.class));
 		when(cm.getEntry(entryURI)).thenReturn(entry);
 		return entryURI;
+	}
+
+	/**
+	 * Stubs an entry that an entry write posts with {@link SolrSearchIndex#postEntry(Entry)}; its principal manager
+	 * is the one {@link #contextManagerListing(URI...)} stubs.
+	 */
+	private Entry postableEntry(URI entryURI) {
+		Entry entry = mock(Entry.class);
+		when(entry.getEntryURI()).thenReturn(entryURI);
+		when(entry.getRepositoryManager()).thenReturn(rm);
+		when(entry.getContext()).thenReturn(mock(Context.class));
+		return entry;
 	}
 
 	private SolrSearchIndex.SolrInputDocumentSubmitter documentSubmitter() throws Exception {
