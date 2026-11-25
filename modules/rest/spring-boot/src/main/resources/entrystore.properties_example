@@ -501,11 +501,10 @@ entrystore.solr.extract-fulltext=off
 ## Application-level caps that DO exist: entrystore.data.max-file-size
 ## (resource uploads), entrystore.echo.max-file-size for /echo. POST /{context-id}/import
 ## (multipart variant) has NO application-level cap, so its upper bound is
-## whatever you set here. The non-multipart byte[] variant of /import
-## currently has no enforced server-side size cap (Spring's multipart caps
-## do not apply to @RequestBody byte[], and the configured
-## server.jetty.max-http-form-post-size only bounds form-urlencoded bodies)
-## and should be fronted by a reverse-proxy body limit if exposed externally.
+## whatever you set here. These limits apply only to multipart bodies: the
+## non-multipart variant of /import is copied to a temporary file in
+## java.io.tmpdir, not spring.servlet.multipart.location; limit its body size
+## at the reverse proxy.
 ##
 ## Rejection contract: a multipart body is parsed only after authentication and the access check, as in
 ## 5.x (spring.servlet.multipart.resolve-lazily=true; do not turn it off). Only PUT

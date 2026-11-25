@@ -21,7 +21,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.function.IOSupplier;
-import org.apache.commons.io.input.ProxyInputStream;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -96,9 +95,9 @@ public class FileResourceService {
 			}
 		} catch (QuotaException qe) {
 			throw new EntityTooLargeException(qe.getMessage(), qe);
-		} catch (SizeLimitExceededException e) {
+		} catch (RequestBodyInputStream.SizeLimitExceededException e) {
 			throw new EntityTooLargeException("Received file exceeds maximum allowed size of: " + maxFileSize + "b", e);
-		} catch (RequestBodyReadException e) {
+		} catch (RequestBodyInputStream.RequestBodyReadException e) {
 			throw new BadRequestException("Failed to read the request body", e);
 		} catch (DataImpl.EntryRemovedException e) {
 			throw new EntityNotFoundException("The entry was removed while its resource was uploaded", e);
@@ -223,48 +222,6 @@ public class FileResourceService {
 			}
 			throw new InternalServerErrorException("Unable to delete resource of entry " + entry.getEntryURI()
 					+ " (" + diagnostics + ")");
-		}
-	}
-
-	/** Thrown by {@link RequestBodyInputStream} once more than its limit has been read. */
-	private static final class SizeLimitExceededException extends IOException {
-	}
-
-	/** Thrown by {@link RequestBodyInputStream} when the body cannot be read, typically as the client went away. */
-	private static final class RequestBodyReadException extends IOException {
-		RequestBodyReadException(IOException cause) {
-			super(cause);
-		}
-	}
-
-	/**
-	 * Tells failures to read the body apart from failures to store it, and fails the read that takes the total
-	 * past {@code maxBytes} (-1 for no limit), so a body without Content-Length is capped too.
-	 */
-	private static final class RequestBodyInputStream extends ProxyInputStream {
-
-		private final long maxBytes;
-		private long count;
-
-		RequestBodyInputStream(InputStream in, long maxBytes) {
-			super(in);
-			this.maxBytes = maxBytes;
-		}
-
-		@Override
-		protected void afterRead(int n) throws IOException {
-			if (maxBytes != -1 && n > 0) {
-				count += n;
-				if (count > maxBytes) {
-					throw new SizeLimitExceededException();
-				}
-			}
-		}
-
-		@Override
-		protected void handleIOException(IOException e) throws IOException {
-			// Also receives what afterRead throws.
-			throw e instanceof SizeLimitExceededException ? e : new RequestBodyReadException(e);
 		}
 	}
 }
