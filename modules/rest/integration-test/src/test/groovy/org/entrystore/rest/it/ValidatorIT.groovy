@@ -65,6 +65,9 @@ class ValidatorIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(connection.errorStream.text).error == 'Not authorized'
+		// Answered by the security filter chain, which challenges for Basic login while it is enabled.
+		connection.getHeaderField('WWW-Authenticate')?.contains('Basic')
 	}
 
 	def "POST /validator as user with valid Turtle should return 200"() {
