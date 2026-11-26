@@ -627,6 +627,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		return rc;
 	}
 
+	/** Whether the current thread is inside {@link #inBatch}. Unlike {@link #getActiveBatchConnection}, counts no operation. */
+	boolean isInBatch() {
+		return activeBatchConnection.get() != null;
+	}
+
 	/**
 	 * Commits the batch so far and begins its next transaction. A failure of either is reported as a checkpoint
 	 * failure, not as a failure of the operation that happened to reach the checkpoint, and makes the batch
@@ -750,7 +755,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * list membership and copied ACL of an entry created into a list, commits at once on its own
 	 * connection. Such a write does not see the batch's uncommitted entries in the store and is not
 	 * rolled back with them, so a caller must not make one about an entry the same batch created
-	 * unless it accepts triples that name a missing entry after a rollback.
+	 * unless it accepts triples that name a missing entry after a rollback. A change of a resource
+	 * URI ({@link Entry#setResourceURI}) would write to both the batch's and its own connection, so
+	 * it is refused with an {@link IllegalStateException}.
 	 * <p>
 	 * Trade-offs: a rollback discards the changes the two joining operations made since the last
 	 * checkpoint, and removes the

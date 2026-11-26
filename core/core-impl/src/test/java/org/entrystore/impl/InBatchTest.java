@@ -223,6 +223,40 @@ public class InBatchTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void aResourceRenameInsideABatchIsRefused() {
+		URI oldResourceURI = URI.create("http://example.com/existing");
+		Entry existing = duck.createLink(null, oldResourceURI, null);
+		existing.getLocalMetadata().setGraph(titleOf(existing, "kept"));
+
+		assertThrows(IllegalStateException.class,
+				() -> rm.inBatch(() -> existing.setResourceURI(URI.create("http://example.com/renamed"))));
+
+		ValueFactory vf = rm.getValueFactory();
+		IRI oldResourceIRI = vf.createIRI(oldResourceURI.toString());
+		assertEquals(oldResourceURI, existing.getResourceURI());
+		assertTrue(existing.getLocalMetadata().getGraph().contains(oldResourceIRI, DCTERMS.TITLE, null),
+				"the metadata must not be moved to a resource URI the entry graph does not name");
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			IRI entryIRI = ((EntryImpl) existing).getSesameEntryURI();
+			assertTrue(rc.hasStatement(entryIRI, RepositoryProperties.resource, oldResourceIRI, false, entryIRI));
+		}
+	}
+
+	@Test
+	public void aRefusedRenameCaughtByTheWorkDoesNotFailTheBatch() {
+		Entry existing = duck.createLink(null, URI.create("http://example.com/existing"), null);
+		List<Entry> entries = new ArrayList<>();
+
+		rm.inBatch(() -> {
+			entries.add(duck.createLink(null, URI.create("http://example.com/a"), null));
+			assertThrows(IllegalStateException.class,
+					() -> existing.setResourceURI(URI.create("http://example.com/renamed")));
+		});
+
+		assertTrue(isStored(entries.getFirst()), "nothing was written for the refused rename, so the batch commits");
+	}
+
+	@Test
 	public void anEntryOfARolledBackBatchIsNotServedFromTheCache() {
 		List<Entry> entries = new ArrayList<>();
 

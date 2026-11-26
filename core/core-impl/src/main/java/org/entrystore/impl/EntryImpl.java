@@ -710,6 +710,10 @@ public class EntryImpl implements Entry {
 				}
 				checkAdministerRights();
 				checkResourceURIChange(newResourceURI);
+				// the metadata would move on the batch's connection, the entry graph on this method's own
+				if (repositoryManager.isInBatch()) {
+					throw new IllegalStateException("A resource URI cannot be changed inside inBatch");
+				}
 
 				// before the transaction, not outside the monitor: MetadataImpl.setGraph maintains other entries'
 				// relation caches, and resURI is still the old one, so a failure below leaves the rename retryable

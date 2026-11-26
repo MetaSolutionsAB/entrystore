@@ -296,6 +296,7 @@ public interface Entry {
 	 * @throws IllegalArgumentException for a Local entry of any other graph type, whose URI keys its own graph,
 	 * for an entry typed Context, SystemContext, User or Group, whose URI is an index or ACL key, or for a URI
 	 * equal to the entry's own entry, local metadata, relation or cached external metadata URI
+	 * @throws IllegalStateException inside a batch of the repository manager, which cannot hold the whole change
 	 * @throws org.entrystore.repository.RepositoryException if the store rejects the change
 	 */
 	void setResourceURI(URI resourceURI);
