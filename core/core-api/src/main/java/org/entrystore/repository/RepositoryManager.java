@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -99,10 +99,24 @@ public interface RepositoryManager {
 
 	long getMaximumFileSize();
 
+	/**
+	 * Registers {@code listener} for {@code event}, or for every event with {@link RepositoryEvent#All}. A listener
+	 * must be thread-safe, see {@link #fireRepositoryEvent(RepositoryEventObject)}. A dispatch already in progress
+	 * may or may not reach it.
+	 */
 	void registerListener(RepositoryListener listener, RepositoryEvent event);
 
+	/**
+	 * Unregisters {@code listener} from {@code event}. A dispatch that started before this returns may still reach
+	 * the listener.
+	 */
 	void unregisterListener(RepositoryListener listener, RepositoryEvent event);
 
+	/**
+	 * Calls the listeners of the event on the caller's thread. Events fired on different threads are dispatched
+	 * concurrently. Some callers hold the monitor of {@link #getRepository()} while firing and others do not, so no
+	 * lock that a listener takes may be held anywhere while waiting for that monitor.
+	 */
 	void fireRepositoryEvent(RepositoryEventObject eventObject);
 
 	SearchIndex getIndex();

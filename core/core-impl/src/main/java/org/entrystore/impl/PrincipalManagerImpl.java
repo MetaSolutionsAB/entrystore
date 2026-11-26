@@ -426,8 +426,8 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	 * EntryCreated, EntryUpdated, ResourceUpdated, RelationsUpdated and EntryDeleted: the post-commit events through
 	 * which a group's member list can change, including the ResourceUpdated {@code ListImpl} fires from a failed
 	 * member-list write. Metadata-only events cannot change membership and are not subscribed; ResourceDeleted
-	 * fires inside the transaction and is followed by EntryDeleted. Runs synchronously under the repository's
-	 * listener monitor, so it only touches the map and the counter and never reads the repository.
+	 * fires inside the transaction and is followed by EntryDeleted. Runs on the thread that fires the event,
+	 * concurrently with other dispatches, so it only touches the concurrent map and the atomic counter.
 	 * <p>
 	 * Never throws a RuntimeException: dispatch would only log it, and the change behind the event would then stay
 	 * unseen by the cache, so a revoked membership could keep granting access. A failure clears the whole cache.

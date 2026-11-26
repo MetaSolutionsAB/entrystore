@@ -80,11 +80,11 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.EnumMap;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.zip.GZIPOutputStream;
@@ -149,9 +149,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	@Getter
 	private long maximumFileSize = DEFAULT_MAXIMUM_FILE_SIZE;
 
-	//ThreadPoolExecutor listenerExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(15);
-
-	private final Map<RepositoryEvent, Set<RepositoryListener>> repositoryListeners = new EnumMap<>(RepositoryEvent.class);
+	/**
+	 * Has a set for every event and never changes itself. Each dispatch iterates a snapshot of a set and holds no
+	 * lock, see {@link #fireRepositoryEvent(RepositoryEventObject)}.
+	 */
+	private final Map<RepositoryEvent, Set<RepositoryListener>> repositoryListeners = newListenerSets();
 
 	private SolrClient solrServer;
 
@@ -487,9 +489,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					shutdownQuietly("context removal", contextManager.contextRemover::shutdown);
 					shutdownQuietly("list tree removal", contextManager.listTreeRemover::shutdown);
 				}
-				log.info("Shutting down repository listeners and executor");
-				//listenerExecutor.shutdown();
-				repositoryListeners.clear();
+				log.info("Shutting down repository listeners");
+				repositoryListeners.values().forEach(Set::clear);
 				if (softCache != null) {
 					shutdownQuietly("SoftCache", softCache::shutdown);
 				}
@@ -570,25 +571,28 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	/**
-	 * Dispatches {@code eventObject} synchronously to every listener registered for its event and for
-	 * {@link RepositoryEvent#All}. Dispatch is failure-isolated against a listener's RuntimeException: it is logged
-	 * and the remaining listeners still run, so callers never see one. An Error is not isolated — it propagates and
-	 * abandons the rest of the dispatch, which can leave the authorization cache invalidator unreached and its
-	 * cached group sets stale, since listener order is unspecified.
+	 * Dispatches {@code eventObject} to every listener registered for its event and for {@link RepositoryEvent#All},
+	 * holding no lock of its own, since a lock held across a dispatch could deadlock with the repository monitor, see
+	 * {@link RepositoryManager#fireRepositoryEvent(RepositoryEventObject)}. Dispatch is failure-isolated against a
+	 * listener's RuntimeException: it is logged and the remaining listeners still run, so callers never see one. An
+	 * Error is not isolated — it propagates and skips the listeners registered after the failing one, since the
+	 * listeners of an event run in registration order. The group-cache invalidator is registered first, in the
+	 * constructor, so it is never skipped.
 	 */
 	public void fireRepositoryEvent(RepositoryEventObject eventObject) {
-		// because of concurrency problems the events are fired synchronously,
-		// not sure whether this event has a negative impact on performance.
-		synchronized (repositoryListeners) {
-			dispatch(repositoryListeners.get(eventObject.getEvent()), eventObject);
-			dispatch(repositoryListeners.get(RepositoryEvent.All), eventObject);
+		dispatch(repositoryListeners.get(eventObject.getEvent()), eventObject);
+		dispatch(repositoryListeners.get(RepositoryEvent.All), eventObject);
+	}
+
+	private static Map<RepositoryEvent, Set<RepositoryListener>> newListenerSets() {
+		Map<RepositoryEvent, Set<RepositoryListener>> listenerSets = new EnumMap<>(RepositoryEvent.class);
+		for (RepositoryEvent event : RepositoryEvent.values()) {
+			listenerSets.put(event, new CopyOnWriteArraySet<>());
 		}
+		return Collections.unmodifiableMap(listenerSets);
 	}
 
 	private void dispatch(Set<RepositoryListener> listeners, RepositoryEventObject eventObject) {
-		if (listeners == null) {
-			return;
-		}
 		for (RepositoryListener repositoryListener : listeners) {
 			try {
 				repositoryListener.repositoryUpdated(eventObject);
@@ -601,26 +605,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	public void registerListener(RepositoryListener listener, RepositoryEvent event) {
-		synchronized (repositoryListeners) {
-			Set<RepositoryListener> listeners = repositoryListeners.get(event);
-			if (listeners == null) {
-				listeners = new HashSet<>();
-			}
-			listeners.add(listener);
-			repositoryListeners.put(event, listeners);
-			log.info("Registered new RepositoryListener: {}", listener);
-		}
+		repositoryListeners.get(event).add(listener);
+		log.info("Registered new RepositoryListener: {}", listener);
 	}
 
 	public void unregisterListener(RepositoryListener listener, RepositoryEvent event) {
-		synchronized (repositoryListeners) {
-			Set<RepositoryListener> listeners = repositoryListeners.get(event);
-			if (listeners != null) {
-				listeners.remove(listener);
-				repositoryListeners.put(event, listeners);
-				log.info("Unregistered RepositoryListener: {}", listener);
-			}
-		}
+		repositoryListeners.get(event).remove(listener);
+		log.info("Unregistered RepositoryListener: {}", listener);
 	}
 
 	private void initSolr() {

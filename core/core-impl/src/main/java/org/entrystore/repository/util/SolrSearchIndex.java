@@ -162,10 +162,9 @@ public class SolrSearchIndex implements SearchIndex {
 
 	/**
 	 * Documents waiting for submission, by entry URI. Its monitor also guards {@link #inFlightAdds} and
-	 * {@link #builds}. The lock order is the repository monitor, the repository listeners' monitor, this queue's
-	 * monitor, then {@link #deleteQueue}'s. Entry writes post their documents while holding the first two, so nothing
-	 * that may take the repository monitor, such as building a document or loading an entry, runs while this
-	 * queue's or the delete queue's monitor is held.
+	 * {@link #builds}. The lock order is the repository monitor, this queue's monitor, then {@link #deleteQueue}'s.
+	 * Entry writes may post their documents while holding the repository monitor, so nothing that may take it, such
+	 * as building a document or loading an entry, runs while this queue's or the delete queue's monitor is held.
 	 */
 	private final Cache<URI, SolrInputDocument> postQueue = Caffeine.newBuilder().build();
 
