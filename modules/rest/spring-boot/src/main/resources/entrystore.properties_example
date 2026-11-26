@@ -492,9 +492,11 @@ entrystore.solr.extract-fulltext=off
 ## are not affected. -1 removes the limit, as in 5.x. Units: k, M, G, T (powers of 1024).
 # entrystore.data.max-file-size=1G
 
-## Maximum size of the body of a raw PUT on a non-file resource (String, Graph, Pipeline, List, Group, User;
-## default: 10M); larger bodies are answered 413. -1 removes the limit, as in 5.x. Units: k, M, G (powers of
-## 1024), at most 2047M.
+## Maximum size of a request body that is read into memory whole (default: 10M): the body of a raw PUT on a
+## non-file resource (String, Graph, Pipeline, List, Group, User), and the RDF or JSON body of any other request,
+## such as metadata, entry information, merge and validator. Larger bodies are answered 413. -1 removes the
+## limit, as in 5.x. The JSON requests to /auth/pwreset and /auth/signup (and their /confirm) are limited to
+## 32 KB whatever this is set to. Units: k, M, G (powers of 1024), at most 2047M.
 # entrystore.data.max-resource-size=10M
 
 ## Multipart upload limits at the Spring servlet layer. -1B (the default) means no limit, as in 5.x.

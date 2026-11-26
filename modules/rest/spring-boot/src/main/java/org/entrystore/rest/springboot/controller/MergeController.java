@@ -17,7 +17,6 @@
 package org.entrystore.rest.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.entrystore.rest.springboot.service.MergeService;
 import org.entrystore.rest.springboot.util.GraphUtil;
@@ -36,8 +35,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class MergeController {
 
-	private static final int MAX_REQUEST_SIZE = 10_485_760; // 10 MB
-
 	private final MergeService mergeService;
 
 	@PreAuthorize("hasRole('ADMIN')")
@@ -48,11 +45,8 @@ public class MergeController {
 			@RequestParam(required = false) String resourceId,
 			@RequestParam(required = false) MediaType format,
 			@RequestHeader(value = "Content-Type", required = false) String contentType,
-			@RequestBody String body,
-			HttpServletRequest request
+			@RequestBody String body
 	) {
-		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
-
 		String mediaType = GraphUtil.validateRdfMediaType(
 				HttpUtil.determineMediaType(format, contentType),
 				HttpStatus.BAD_REQUEST

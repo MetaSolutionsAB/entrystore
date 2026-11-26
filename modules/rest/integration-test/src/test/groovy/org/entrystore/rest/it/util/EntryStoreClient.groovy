@@ -37,6 +37,12 @@ class EntryStoreClient {
 	private static final Set<HttpMethod> MUTATING_METHODS = Set.of(
 			HttpMethod.POST, HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE)
 
+	/** sendRequestAsStream sends a body chunked when the extra headers declare a Content-Length above this. */
+	private static final int CHUNKED_ABOVE = 8000
+
+	/** Extra headers that make sendRequestAsStream send the body chunked, without a Content-Length. */
+	static final Map<String, String> CHUNKED = Map.of('Content-Length', String.valueOf(CHUNKED_ABOVE + 1))
+
 	static String host = 'localhost'
 	static int port = 8181
 	static String origin = 'http://' + host + ':' + port
@@ -179,15 +185,21 @@ class EntryStoreClient {
 	 * of that size exists on either side of the client, with a Content-Length unless {@code chunked}.
 	 */
 	def static putRequestStreamed(String path, long size, boolean chunked = false, String asUser = 'admin') {
+		return requestStreamed(HttpMethod.PUT, path, size, chunked, asUser)
+	}
+
+	/** Like {@link #putRequestStreamed}, with any method and Content-Type. */
+	def static requestStreamed(HttpMethod method, String path, long size, boolean chunked = false,
+							   String asUser = 'admin', String contentType = 'application/octet-stream') {
 		def connection = createConnection(path)
-		connection.setRequestMethod(HttpMethod.PUT.name())
+		connection.setRequestMethod(method.name())
 		if (asUser?.trim()) {
 			connection.setRequestProperty('Cookie', cookieHeader(asUser))
 			if (csrfTokens[asUser] != null) {
 				connection.setRequestProperty('X-XSRF-TOKEN', csrfTokens[asUser].toString())
 			}
 		}
-		connection.setRequestProperty('Content-Type', 'application/octet-stream')
+		connection.setRequestProperty('Content-Type', contentType)
 		connection.setDoOutput(true)
 		if (chunked) {
 			connection.setChunkedStreamingMode(64 * 1024)
@@ -299,7 +311,7 @@ class EntryStoreClient {
 
 		if (inputStream != null) {
 			connection.setDoOutput(true)
-			if (extraHeaders.getOrDefault('Content-Length', "0").toInteger() > 8000) {
+			if (extraHeaders.getOrDefault('Content-Length', "0").toInteger() > CHUNKED_ABOVE) {
 				connection.setChunkedStreamingMode(8192)
 			}
 			connection.outputStream.withStream { output ->

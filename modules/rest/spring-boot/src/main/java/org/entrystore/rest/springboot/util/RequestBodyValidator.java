@@ -35,9 +35,8 @@ import java.util.Set;
  * <li>The form-encoded endpoint <em>cannot</em> use {@code @Valid} at all: a field named
  * {@code g-recaptcha-response} has no legal record-component equivalent, so that endpoint assembles the
  * body itself and Spring never validates it.</li>
- * <li>The JSON endpoint deliberately <em>must not</em>. {@code @Valid} runs during argument resolution,
- * ahead of the method body, so it would answer 400 before {@code HttpUtil.checkRequestSize} can answer
- * 413 — and it would answer in JSON, where these endpoints render HTML.</li>
+ * <li>The JSON endpoint deliberately <em>must not</em>: {@code @Valid} would answer in JSON, where these
+ * endpoints render HTML.</li>
  * </ul>
  *
  * <p>Running the same constraints here keeps one definition of what a valid body is, instead of a second

@@ -17,6 +17,7 @@
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.springframework.http.HttpMethod
 import spock.lang.Unroll
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -64,6 +65,9 @@ class ValidatorIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(connection.errorStream.text).error == 'Not authorized'
+		// Answered by the security filter chain, which challenges for Basic login while it is enabled.
+		connection.getHeaderField('WWW-Authenticate')?.contains('Basic')
 	}
 
 	def "POST /validator as user with valid Turtle should return 200"() {
@@ -159,17 +163,11 @@ class ValidatorIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_OK
 	}
 
-	def "POST /validator as admin with body larger than 10MB should return Payload-Too-Large 413"() {
-		given:
-		def size = 11 * 1024 * 1024
-		def builder = new StringBuilder(size)
-		def line = '<http://example.org/a> <http://example.org/p> <http://example.org/o> .\n'
-		while (builder.length() < size) {
-			builder.append(line)
-		}
-
-		when:
-		def connection = EntryStoreClient.postRequest('/validator', builder.toString(),
+	def "POST /validator as admin with a chunked body larger than 10MB should return Payload-Too-Large 413"() {
+		when: 'chunked, so the server reads up to the limit and discards the rest, and the client sees the 413'
+		// A Content-Length above the limit is answered before the body is read, and the client, still sending
+		// 11 MB, would see the connection close instead; that case is covered with a small limit in ZzzSizeLimitIT.
+		def connection = EntryStoreClient.requestStreamed(HttpMethod.POST, '/validator', 11 * 1024 * 1024, true,
 			'admin', 'application/n-triples')
 
 		then:

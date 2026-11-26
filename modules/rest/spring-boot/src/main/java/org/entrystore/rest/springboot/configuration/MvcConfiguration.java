@@ -20,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.entrystore.rest.springboot.filter.EndedSessionResponder;
 import org.entrystore.rest.springboot.filter.IfUnmodifiedSinceInterceptor;
 import org.entrystore.rest.springboot.filter.MultipartHandlerInterceptor;
+import org.entrystore.rest.springboot.filter.RequestBodySizeLimiter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -45,6 +46,8 @@ public class MvcConfiguration implements WebMvcConfigurer {
 
 	private final MultipartHandlerInterceptor multipartHandlerInterceptor;
 
+	private final RequestBodySizeLimiter requestBodySizeLimiter;
+
 	private final EndedSessionResponder endedSessionResponder;
 
 	/**
@@ -61,6 +64,7 @@ public class MvcConfiguration implements WebMvcConfigurer {
 	@Override
 	public void addInterceptors(InterceptorRegistry registry) {
 		registry.addInterceptor(multipartHandlerInterceptor);
+		registry.addInterceptor(requestBodySizeLimiter);
 		registry.addInterceptor(ifUnmodifiedSinceInterceptor)
 				.addPathPatterns(IfUnmodifiedSinceInterceptor.PATH_PATTERNS);
 	}
