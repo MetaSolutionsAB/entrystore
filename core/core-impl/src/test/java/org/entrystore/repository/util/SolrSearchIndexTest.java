@@ -62,13 +62,11 @@ import javax.xml.datatype.XMLGregorianCalendar;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
-import java.lang.management.ThreadMXBean;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
 import java.util.LinkedHashMap;
@@ -88,10 +86,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
-import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 import static org.awaitility.Awaitility.await;
+import static org.entrystore.repository.util.ThreadAssertions.awaitFinishedWithoutDeadlock;
+import static org.entrystore.repository.util.ThreadAssertions.awaitOrThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -604,25 +603,6 @@ public class SolrSearchIndexTest {
 			return new SolrInputDocument();
 		}).when(spyIndex).constructSolrInputDocument(any(), anyBoolean());
 		return spyIndex;
-	}
-
-	/**
-	 * Waits until the threads have finished, and fails as soon as some of them deadlock on monitors.
-	 */
-	private static void awaitFinishedWithoutDeadlock(Thread... threads) throws InterruptedException {
-		ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
-		Set<Long> threadIds = Arrays.stream(threads).map(Thread::threadId).collect(Collectors.toSet());
-		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-		while (Arrays.stream(threads).anyMatch(Thread::isAlive)) {
-			long[] deadlocked = threadMXBean.findMonitorDeadlockedThreads();
-			if (deadlocked != null && LongStream.of(deadlocked).anyMatch(threadIds::contains)) {
-				throw new AssertionError("Threads deadlocked");
-			}
-			if (System.nanoTime() > deadline) {
-				throw new AssertionError("Threads did not finish");
-			}
-			Thread.sleep(10);
-		}
 	}
 
 	@Test
@@ -1603,19 +1583,6 @@ public class SolrSearchIndexTest {
 	private Future<?> reindexingFutureOrCompleted(URI contextURI) {
 		Future<?> indexer = reindexingMap.get(contextURI);
 		return indexer != null ? indexer : CompletableFuture.completedFuture(null);
-	}
-
-	/**
-	 * Waits for the latch; an interrupt (from cancelling the reindex task) ends the wait with an exception.
-	 */
-	private static void awaitOrThrow(CountDownLatch latch) {
-		try {
-			if (!latch.await(10, TimeUnit.SECONDS)) {
-				throw new IllegalStateException("Latch was not released");
-			}
-		} catch (InterruptedException e) {
-			throw new IllegalStateException("Interrupted", e);
-		}
 	}
 
 	/**

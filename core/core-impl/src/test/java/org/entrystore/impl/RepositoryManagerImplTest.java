@@ -55,11 +55,15 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
 
+import static org.entrystore.repository.util.ThreadAssertions.awaitFinishedWithoutDeadlock;
+import static org.entrystore.repository.util.ThreadAssertions.awaitOrThrow;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -291,6 +295,80 @@ public class RepositoryManagerImplTest {
 
 			assertThrows(AssertionError.class, () -> rm.fireRepositoryEvent(
 					new RepositoryEventObject(mock(Entry.class), RepositoryEvent.ResourceUpdated)));
+		} finally {
+			deregisterInstance(baseUrl);
+		}
+	}
+
+	@Test
+	public void fireRepositoryEvent_doesNotDeadlockWithAWriterHoldingTheRepositoryMonitor() throws Exception {
+		String baseUrl = "http://localhost:8181/";
+		RepositoryManagerImpl rm = newMinimalRepositoryManager(baseUrl);
+		try {
+			Repository repository = rm.getRepository();
+			Entry unlockedWrite = mock(Entry.class);
+			Entry lockedWrite = mock(Entry.class);
+			CountDownLatch listenerRunning = new CountDownLatch(1);
+			CountDownLatch writerHoldsRepository = new CountDownLatch(1);
+			AtomicBoolean lockedWriteDelivered = new AtomicBoolean();
+			AtomicBoolean lockedWriteDeliveredMeanwhile = new AtomicBoolean();
+			rm.registerListener(new RepositoryListener() {
+				@Override
+				public void repositoryUpdated(RepositoryEventObject eventObject) {
+					if (eventObject.getSource() == lockedWrite) {
+						lockedWriteDelivered.set(true);
+						return;
+					}
+					// As a Solr document build reaching a cold index, which takes the repository monitor
+					listenerRunning.countDown();
+					awaitOrThrow(writerHoldsRepository);
+					synchronized (repository) {
+						// The locked writer holds the monitor until its dispatch has returned
+						lockedWriteDeliveredMeanwhile.set(lockedWriteDelivered.get());
+					}
+				}
+			}, RepositoryEvent.ResourceUpdated);
+
+			// As RDFResource.setGraph, which fires without holding the repository monitor
+			Thread unlocked = Thread.ofPlatform().daemon().start(() -> rm.fireRepositoryEvent(
+					new RepositoryEventObject(unlockedWrite, RepositoryEvent.ResourceUpdated)));
+			awaitOrThrow(listenerRunning);
+			// As EntryImpl.setGraph, which fires while holding it
+			Thread locked = Thread.ofPlatform().daemon().start(() -> {
+				synchronized (repository) {
+					writerHoldsRepository.countDown();
+					rm.fireRepositoryEvent(new RepositoryEventObject(lockedWrite, RepositoryEvent.ResourceUpdated));
+				}
+			});
+
+			awaitFinishedWithoutDeadlock(unlocked, locked);
+			assertTrue(lockedWriteDeliveredMeanwhile.get(),
+					"the locked writer's event must be dispatched while the other dispatch is still running");
+		} finally {
+			deregisterInstance(baseUrl);
+		}
+	}
+
+	@Test
+	public void unregisterListener_stopsDeliveringTheEvent() throws Exception {
+		String baseUrl = "http://localhost:8181/";
+		RepositoryManagerImpl rm = newMinimalRepositoryManager(baseUrl);
+		try {
+			AtomicInteger deliveries = new AtomicInteger();
+			RepositoryListener listener = new RepositoryListener() {
+				@Override
+				public void repositoryUpdated(RepositoryEventObject eventObject) {
+					deliveries.incrementAndGet();
+				}
+			};
+			RepositoryEventObject event = new RepositoryEventObject(mock(Entry.class), RepositoryEvent.ResourceUpdated);
+			rm.registerListener(listener, RepositoryEvent.ResourceUpdated);
+			rm.fireRepositoryEvent(event);
+
+			rm.unregisterListener(listener, RepositoryEvent.ResourceUpdated);
+			rm.fireRepositoryEvent(event);
+
+			assertEquals(1, deliveries.get(), "only the event fired while the listener was registered may reach it");
 		} finally {
 			deregisterInstance(baseUrl);
 		}
@@ -608,12 +686,6 @@ public class RepositoryManagerImplTest {
 	@Disabled("To be implemented")
 	@Test
 	public void testRegisterListener() throws Exception {
-		// TODO
-	}
-
-	@Disabled("To be implemented")
-	@Test
-	public void testUnregisterListener() throws Exception {
 		// TODO
 	}
 
