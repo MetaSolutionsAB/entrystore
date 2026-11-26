@@ -85,7 +85,7 @@ class SignupResourceIT extends BaseSpec {
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
-	def "POST /auth/signup should fail if the data sent to server is larger then 32KB or unknown"() {
+	def "POST /auth/signup should fail if the data sent to server is larger than 32KB"() {
 		given:
 		def username = RandomStringUtils.secure().nextAlphabetic(32769)
 		def requestBody = signupBody(username)
@@ -95,6 +95,45 @@ class SignupResourceIT extends BaseSpec {
 
 		then:
 		signupConn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+	}
+
+	def "POST /auth/signup/confirm should fail if the JSON data sent to server is larger than 32KB"() {
+		given:
+		def requestBody = JsonOutput.toJson([confirm: 'x' * 32769, email: 'userSignup@test.com', password: newPassword])
+
+		when:
+		def confirmConn = EntryStoreClient.postRequest('/auth/signup/confirm', requestBody)
+
+		then:
+		confirmConn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+	}
+
+	def "POST /auth/signup/confirm should fail if the form data sent to server is larger than 32KB"() {
+		given:
+		def requestBody = createFormBody([confirm: 'x' * 32769, email: 'userSignup@test.com', password: newPassword])
+
+		when:
+		def confirmConn = EntryStoreClient.postRequest('/auth/signup/confirm', requestBody, 'admin',
+			'application/x-www-form-urlencoded')
+
+		then:
+		confirmConn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+	}
+
+	def "POST /auth/signup should accept a chunked body within 32KB"() {
+		given:
+		def username = 'userSignupChunked@test.com'
+		def requestBody = signupBody(username)
+
+		when:
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, 'admin', 'application/json',
+			EntryStoreClient.CHUNKED)
+
+		then:
+		signupConn.getResponseCode() == HTTP_OK
+		signupConn.inputStream.text.contains('<div>A confirmation message was sent to ' + username.toLowerCase() + '</div>')
+		// The mail is sent asynchronously; wait for it so that it does not land in the next test's mailbox.
+		greenMail.waitForIncomingEmail(5000, 1)
 	}
 
 	def "POST /auth/signup should send an email with generated token to a new user"() {

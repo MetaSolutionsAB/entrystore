@@ -19,6 +19,7 @@ package org.entrystore.rest.springboot.util;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.entrystore.rest.springboot.filter.CacheControlFilter;
+import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -32,12 +33,18 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -49,6 +56,60 @@ class HttpUtilTest {
 	@AfterEach
 	void clearSecurityContext() {
 		SecurityContextHolder.clearContext();
+	}
+
+	@Test
+	void rejectContentLengthAbove_lengthAboveTheLimit_throwsNamingTheSubject() {
+		EntityTooLargeException e = assertThrows(EntityTooLargeException.class,
+				() -> HttpUtil.rejectContentLengthAbove(1025, 1024, "Request body"));
+
+		assertEquals("Request body size (of 1025b) exceeds maximum allowed size of: 1024b", e.getMessage());
+	}
+
+	@Test
+	void rejectContentLengthAbove_lengthAtTheLimit_passes() {
+		assertDoesNotThrow(() -> HttpUtil.rejectContentLengthAbove(1024, 1024, "Request body"));
+	}
+
+	@Test
+	void rejectContentLengthAbove_unknownLength_passes() {
+		assertDoesNotThrow(() -> HttpUtil.rejectContentLengthAbove(-1, 1024, "Request body"));
+	}
+
+	@Test
+	void rejectContentLengthAbove_noLimit_passesAnyLength() {
+		assertDoesNotThrow(() -> HttpUtil.rejectContentLengthAbove(Long.MAX_VALUE, -1, "Request body"));
+	}
+
+	@Test
+	void readAtMost_streamAboveTheLimit_isNotReadPastTheLimit() {
+		EndlessStream endlessStream = new EndlessStream();
+
+		EntityTooLargeException e = assertThrows(EntityTooLargeException.class,
+				() -> HttpUtil.readAtMost(endlessStream, 1024, "Request body"));
+
+		assertEquals("Request body exceeds maximum allowed size of: 1024b", e.getMessage());
+		// One byte past the limit is what tells a body at the limit from one above it.
+		assertEquals(1025, endlessStream.bytesRead);
+	}
+
+	@Test
+	void readAtMost_streamAtTheLimit_isReturnedWhole() throws Exception {
+		byte[] body = "a".repeat(1024).getBytes(StandardCharsets.UTF_8);
+
+		assertArrayEquals(body, HttpUtil.readAtMost(new ByteArrayInputStream(body), 1024, "Request body"));
+	}
+
+	/** A stream that never ends, counting the bytes read from it. */
+	private static final class EndlessStream extends InputStream {
+
+		long bytesRead;
+
+		@Override
+		public int read() {
+			bytesRead++;
+			return 'a';
+		}
 	}
 
 	@Test

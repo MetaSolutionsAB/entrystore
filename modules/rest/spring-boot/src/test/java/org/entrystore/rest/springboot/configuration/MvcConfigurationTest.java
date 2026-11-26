@@ -19,6 +19,7 @@ package org.entrystore.rest.springboot.configuration;
 import org.entrystore.rest.springboot.filter.EndedSessionResponder;
 import org.entrystore.rest.springboot.filter.IfUnmodifiedSinceInterceptor;
 import org.entrystore.rest.springboot.filter.MultipartHandlerInterceptor;
+import org.entrystore.rest.springboot.filter.RequestBodySizeLimiter;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.JettySessionExceptions;
 import org.junit.jupiter.api.Test;
@@ -50,6 +51,7 @@ class MvcConfigurationTest {
 			.withBean(MvcAsyncConfiguration.class, () -> new MvcAsyncConfiguration(8, 32, 16, 15000L))
 			.withBean(IfUnmodifiedSinceInterceptor.class, () -> mock(IfUnmodifiedSinceInterceptor.class))
 			.withBean(MultipartHandlerInterceptor.class)
+			.withBean(RequestBodySizeLimiter.class, () -> new RequestBodySizeLimiter(new MaxResourceSize("10M")))
 			.withBean(EndedSessionResponder.class, MvcConfigurationTest::endedSessionResponder)
 			.withUserConfiguration(MvcConfiguration.class);
 
@@ -113,7 +115,8 @@ class MvcConfigurationTest {
 
 	private static MvcConfiguration mvcConfiguration() {
 		return new MvcConfiguration(new MvcAsyncConfiguration(8, 32, 16, 15000L),
-				mock(IfUnmodifiedSinceInterceptor.class), new MultipartHandlerInterceptor(), endedSessionResponder());
+				mock(IfUnmodifiedSinceInterceptor.class), new MultipartHandlerInterceptor(),
+				new RequestBodySizeLimiter(new MaxResourceSize("10M")), endedSessionResponder());
 	}
 
 	private static EndedSessionResponder endedSessionResponder() {

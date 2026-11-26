@@ -32,6 +32,7 @@ import org.entrystore.ResourceType;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.StringResource;
+import org.entrystore.rest.springboot.configuration.MaxResourceSize;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.api.ResourceQuery;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
@@ -44,8 +45,6 @@ import org.entrystore.rest.springboot.util.RDFJSON;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -108,9 +107,14 @@ class ResourceServiceTest {
 
 	@BeforeEach
 	void setUp() {
+		service = serviceWithMaxResourceSize("10M");
+	}
+
+	private ResourceService serviceWithMaxResourceSize(String maxResourceSize) {
 		var contextService = new ContextService(repositoryManager, reservedNamesService, principalManager);
-		service = new ResourceService(resourceSerializationService, principalManager, syndicationService,
-				listResourceService, fileResourceService, userService, proxyService, contextService);
+		return new ResourceService(resourceSerializationService, principalManager, syndicationService,
+				listResourceService, fileResourceService, userService, proxyService, contextService,
+				new MaxResourceSize(maxResourceSize));
 	}
 
 	@Test
@@ -358,7 +362,7 @@ class ResourceServiceTest {
 
 	@Test
 	void setEntryResource_contentLengthAboveMaxResourceSize_isRejectedBeforeTheBodyIsOpened() {
-		service.setMaxResourceSize("1k");
+		service = serviceWithMaxResourceSize("1k");
 		when(entry.getGraphType()).thenReturn(GraphType.String);
 
 		EntityTooLargeException e = assertThrows(EntityTooLargeException.class, () -> service.setEntryResource(entry,
@@ -370,7 +374,7 @@ class ResourceServiceTest {
 
 	@Test
 	void setEntryResource_bodyWithoutContentLengthAboveMaxResourceSize_isNotReadPastTheLimit() {
-		service.setMaxResourceSize("1k");
+		service = serviceWithMaxResourceSize("1k");
 		when(entry.getGraphType()).thenReturn(GraphType.String);
 		EndlessBody endlessBody = new EndlessBody();
 
@@ -385,7 +389,7 @@ class ResourceServiceTest {
 
 	@Test
 	void setEntryResource_bodyAtMaxResourceSizeWithoutContentLength_isStored() {
-		service.setMaxResourceSize("1k");
+		service = serviceWithMaxResourceSize("1k");
 		StringResource resource = mock(StringResource.class);
 		when(entry.getGraphType()).thenReturn(GraphType.String);
 		when(entry.getResource()).thenReturn(resource);
@@ -400,7 +404,7 @@ class ResourceServiceTest {
 
 	@Test
 	void setEntryResource_maxResourceSizeMinusOne_acceptsAContentLengthAboveTheDefault() {
-		service.setMaxResourceSize("-1");
+		service = serviceWithMaxResourceSize("-1");
 		StringResource resource = mock(StringResource.class);
 		when(entry.getGraphType()).thenReturn(GraphType.String);
 		when(entry.getResource()).thenReturn(resource);
@@ -410,12 +414,6 @@ class ResourceServiceTest {
 
 		assertEquals(CompletionState.UPDATED, state);
 		verify(resource).setString("text");
-	}
-
-	@ParameterizedTest(name = "\"{0}\"")
-	@ValueSource(strings = {"0", "-2", "10MB", "abc", "", "3G"})
-	void setMaxResourceSize_valueNotMinusOneOrWithinAnArray_isRejected(String value) {
-		assertThrows(IllegalArgumentException.class, () -> service.setMaxResourceSize(value));
 	}
 
 	@Test

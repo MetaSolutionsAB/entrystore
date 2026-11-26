@@ -251,6 +251,7 @@ public class AuthController {
 	}
 
 	@Operation(summary = "Generates new link for password change confirmation and sends an email to the User.")
+	@MaxRequestBodySize(MAX_REQUEST_SIZE)
 	@PostMapping(path = "/auth/pwreset",
 			consumes = {MediaType.APPLICATION_JSON_VALUE}
 	)
@@ -258,7 +259,6 @@ public class AuthController {
 			HttpServletRequest request,
 			Model model,
 			@RequestBody PwResetRequestBody pwResetRequestBody) {
-		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
 		String message = authService.pwReset(request, pwResetRequestBody, PASSWORD_RESET_TITLE);
 		model.addAttribute("title", PASSWORD_RESET_TITLE);
 		model.addAttribute("message", message);
@@ -312,6 +312,7 @@ public class AuthController {
 	}
 
 	@Operation(summary = "Confirms a password change after the user re-enters the email and chosen password.")
+	@MaxRequestBodySize(MAX_REQUEST_SIZE)
 	@PostMapping(path = "/auth/pwreset/confirm", consumes = {MediaType.APPLICATION_JSON_VALUE})
 	public String confirmPasswordResetSubmit(
 			HttpServletRequest request,
@@ -330,11 +331,13 @@ public class AuthController {
 			Model model,
 			@RequestParam MultiValueMap<String, String> paramMap) {
 
+		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
 		return submitPasswordResetConfirmation(request, response, model, paramMap.getFirst("confirm"),
 				paramMap.getFirst("email"), paramMap.getFirst("password"));
 	}
 
 	@Operation(summary = "Sends a sign-up confirmation link, or an account-exists notice when the address has an account, to the provided email address.")
+	@MaxRequestBodySize(MAX_REQUEST_SIZE)
 	@PostMapping(path = "/auth/signup",
 			consumes = {MediaType.APPLICATION_JSON_VALUE}
 	)
@@ -344,14 +347,10 @@ public class AuthController {
 			Model model,
 			@RequestBody SignupRequestBody signupRequestBody) {
 
-		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
-
 		response.setContentType(MediaType.TEXT_HTML_VALUE);
 
-		// Validated here rather than with @Valid so the size limit above still decides first. @Valid runs
-		// during argument resolution, which precedes the method body, so an oversized body whose fields
-		// are also invalid would answer 400 instead of 413 — and an oversized sign-up body almost always
-		// is invalid, since the bulk has to go in one of these fields.
+		// Validated here rather than with @Valid, which would answer a violation in JSON where this endpoint
+		// renders HTML.
 		requestBodyValidator.assertValid(signupRequestBody, SIGNUP_TITLE);
 
 		String message = authService.signup(request, signupRequestBody, SIGNUP_TITLE);
@@ -408,6 +407,7 @@ public class AuthController {
 	}
 
 	@Operation(summary = "Confirms new user creation after the user re-enters the email and chosen password.")
+	@MaxRequestBodySize(MAX_REQUEST_SIZE)
 	@PostMapping(path = "/auth/signup/confirm", consumes = {MediaType.APPLICATION_JSON_VALUE})
 	public String confirmSignupSubmit(
 			HttpServletRequest request,
@@ -426,20 +426,19 @@ public class AuthController {
 			Model model,
 			@RequestParam MultiValueMap<String, String> paramMap) {
 
+		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
 		return submitSignupConfirmation(request, response, model, paramMap.getFirst("confirm"),
 				paramMap.getFirst("email"), paramMap.getFirst("password"));
 	}
 
 	private String submitSignupConfirmation(HttpServletRequest request, HttpServletResponse response, Model model,
 											String confirm, String email, String password) {
-		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
 		ConfirmationResult result = authService.confirmSignup(request, confirm, email, password, SIGNUP_TITLE);
 		return renderConfirmation(model, response, result, SIGNUP_FORM, confirm, HttpStatus.CREATED.value());
 	}
 
 	private String submitPasswordResetConfirmation(HttpServletRequest request, HttpServletResponse response, Model model,
 												   String confirm, String email, String password) {
-		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
 		ConfirmationResult result = authService.confirmPassword(request, confirm, email, password, PASSWORD_RESET_TITLE);
 		return renderConfirmation(model, response, result, PWRESET_FORM, confirm, HttpStatus.OK.value());
 	}

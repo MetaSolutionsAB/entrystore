@@ -224,6 +224,35 @@ public class HttpUtil {
 		}
 	}
 
+	/**
+	 * Throws {@link EntityTooLargeException} when {@code contentLength} exceeds {@code limit}. A {@code limit} of -1
+	 * means none, and a {@code contentLength} of -1 (unknown) passes, to be limited while it is read.
+	 *
+	 * @param subject what is too large, the start of the message, e.g. "Request body"
+	 */
+	public static void rejectContentLengthAbove(long contentLength, long limit, String subject) {
+		if (limit != -1 && contentLength > limit) {
+			throw new EntityTooLargeException(subject + " size (of " + contentLength
+					+ "b) exceeds maximum allowed size of: " + limit + "b");
+		}
+	}
+
+	/**
+	 * Reads {@code in} whole, or throws {@link EntityTooLargeException} once it has more than {@code limit} bytes. It
+	 * reads at most one byte past the limit, which tells a body at the limit from one above it, so a body without
+	 * Content-Length, or with one that understates it, is limited too. {@code limit} must be below
+	 * {@code Integer.MAX_VALUE - 8}, the longest array the JVM allocates.
+	 *
+	 * @param subject what is too large, the start of the message, e.g. "Request body"
+	 */
+	public static byte[] readAtMost(InputStream in, long limit, String subject) throws IOException {
+		byte[] bytes = in.readNBytes((int) limit + 1);
+		if (bytes.length > limit) {
+			throw new EntityTooLargeException(subject + " exceeds maximum allowed size of: " + limit + "b");
+		}
+		return bytes;
+	}
+
 	/** How much of a rejected request body {@link #discardRejectedBody} reads at most. */
 	public static final long MAX_DRAIN_BYTES = 4L * 1024 * 1024;
 

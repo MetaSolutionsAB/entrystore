@@ -28,7 +28,7 @@ import org.entrystore.ResourceType;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.util.StringUtils;
+import org.entrystore.rest.springboot.configuration.MaxResourceSize;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.api.ResourceQuery;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
@@ -36,11 +36,10 @@ import org.entrystore.rest.springboot.model.dto.RenderedFeed;
 import org.entrystore.rest.springboot.model.dto.ResourceRepresentation;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
-import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.springboot.util.GraphUtil;
-import org.springframework.beans.factory.annotation.Value;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -62,10 +61,7 @@ public class ResourceService {
 
 	private static final String EMPTY_REPRESENTATION = "";
 
-	private static final long DEFAULT_MAX_RESOURCE_SIZE = 10L * 1024 * 1024;
-
-	/** The longest array the JVM allocates, so the longest body that can be read into one. */
-	private static final long MAX_RESOURCE_SIZE_CEILING = Integer.MAX_VALUE - 8;
+	private static final String RESOURCE_SUBJECT = "Received resource";
 
 	private final ResourceSerializationService resourceSerializationService;
 	private final PrincipalManager principalManager;
@@ -75,28 +71,7 @@ public class ResourceService {
 	private final UserService userService;
 	private final ProxyService proxyService;
 	private final ContextService contextService;
-
-	private long maxResourceSize = DEFAULT_MAX_RESOURCE_SIZE;
-
-	/**
-	 * Sets the cap on non-file resource bodies, in the units of {@code entrystore.data.max-file-size}; -1 removes it.
-	 * Any other value that is not positive, or above the longest array a body can be read into, fails startup.
-	 */
-	@Value("${entrystore.data.max-resource-size:10M}")
-	void setMaxResourceSize(String value) {
-		long size;
-		try {
-			size = StringUtils.convertUnitStringToByteSize(value);
-		} catch (IllegalArgumentException e) {
-			throw new IllegalArgumentException("entrystore.data.max-resource-size must be a size such as 10M, got "
-					+ value, e);
-		}
-		if (size != -1 && (size < 1 || size > MAX_RESOURCE_SIZE_CEILING)) {
-			throw new IllegalArgumentException("entrystore.data.max-resource-size must be -1 or between 1 and "
-					+ MAX_RESOURCE_SIZE_CEILING + " bytes, got " + value);
-		}
-		maxResourceSize = size;
-	}
+	private final MaxResourceSize maxResourceSize;
 
 	/**
 	 * Chooses the representation a GET on the resource URI answers with. A syndication request is served before
@@ -273,27 +248,18 @@ public class ResourceService {
 	}
 
 	/**
-	 * Reads at most one byte past {@link #maxResourceSize}, so a body without Content-Length, or with one that
-	 * understates it, is capped too. An over-long Content-Length is rejected before the body is opened, as opening
-	 * it makes Jetty answer Expect: 100-continue.
+	 * Reads the body within {@link MaxResourceSize}. An over-long Content-Length is rejected before the body is
+	 * opened, as opening it makes Jetty answer Expect: 100-continue.
 	 */
 	private byte[] readBody(IOSupplier<InputStream> body, long contentLength) {
-		if (maxResourceSize != -1 && contentLength > maxResourceSize) {
-			throw new EntityTooLargeException("Received resource size (of " + contentLength
-					+ "b) exceeds maximum allowed size of: " + maxResourceSize + "b");
-		}
-		byte[] requestBody;
+		long limit = maxResourceSize.getLimit();
+		HttpUtil.rejectContentLengthAbove(contentLength, limit, RESOURCE_SUBJECT);
 		try {
 			InputStream in = body.get();
-			requestBody = maxResourceSize == -1 ? in.readAllBytes() : in.readNBytes((int) maxResourceSize + 1);
+			return maxResourceSize.isLimited() ? HttpUtil.readAtMost(in, limit, RESOURCE_SUBJECT) : in.readAllBytes();
 		} catch (IOException e) {
 			throw new BadRequestException("Failed to read the request body", e);
 		}
-		if (maxResourceSize != -1 && requestBody.length > maxResourceSize) {
-			throw new EntityTooLargeException("Received resource exceeds maximum allowed size of: " + maxResourceSize
-					+ "b");
-		}
-		return requestBody;
 	}
 
 	private static void setString(Entry entry, byte[] requestBody) {

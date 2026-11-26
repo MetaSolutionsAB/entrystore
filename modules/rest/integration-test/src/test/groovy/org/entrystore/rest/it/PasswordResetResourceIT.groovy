@@ -78,7 +78,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
-	def "POST /auth/pwreset should fail if the data sent to server is larger then 32KB or unknown"() {
+	def "POST /auth/pwreset should fail if the data sent to server is larger than 32KB"() {
 		given:
 		def username = RandomStringUtils.secure().nextAlphabetic(32769)
 		def requestBody = createPwResetBody(username)
@@ -88,6 +88,43 @@ class PasswordResetResourceIT extends BaseSpec {
 
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+	}
+
+	def "POST /auth/pwreset/confirm should fail if the JSON data sent to server is larger than 32KB"() {
+		given:
+		def requestBody = JsonOutput.toJson([confirm: 'x' * 32769, email: 'user@test.com', password: newPassword])
+
+		when:
+		def confirmConn = EntryStoreClient.postRequest('/auth/pwreset/confirm', requestBody)
+
+		then:
+		confirmConn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+	}
+
+	def "POST /auth/pwreset/confirm should fail if the form data sent to server is larger than 32KB"() {
+		given:
+		def requestBody = createFormBody([confirm: 'x' * 32769, email: 'user@test.com', password: newPassword])
+
+		when:
+		def confirmConn = EntryStoreClient.postRequest('/auth/pwreset/confirm', requestBody, 'admin',
+			'application/x-www-form-urlencoded')
+
+		then:
+		confirmConn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+	}
+
+	def "POST /auth/pwreset should accept a chunked body within 32KB"() {
+		given:
+		def username = 'noSuchUserChunked@test.com'
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', createPwResetBody(username), 'admin',
+			'application/json', EntryStoreClient.CHUNKED)
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_OK
+		resetPasswordConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase()
+			+ ', if the user exists.')
 	}
 
 	def "POST /auth/pwreset should send an email with generated token to an existing user"() {

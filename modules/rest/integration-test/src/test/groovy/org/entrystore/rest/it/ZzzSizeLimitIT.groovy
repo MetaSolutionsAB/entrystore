@@ -18,14 +18,16 @@ package org.entrystore.rest.it
 
 import com.sun.net.httpserver.HttpServer
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.springframework.http.HttpMethod
 
 import static java.net.HttpURLConnection.HTTP_BAD_GATEWAY
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.nio.charset.StandardCharsets.UTF_8
 
-// Configured size limits on uploads and on proxied responses, sharing one app start.
+// Configured size limits on uploads, on request bodies and on proxied responses, sharing one app start.
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 class ZzzSizeLimitIT extends BaseSpec {
 
@@ -37,7 +39,8 @@ class ZzzSizeLimitIT extends BaseSpec {
 	// Applies to raw PUT bodies; above the 1 KB multipart upload below, which must still succeed.
 	static final int DATA_CAP = 1536
 
-	// Applies to raw PUT bodies of non-file resources. Below DATA_CAP, so a body between the two pins the cap applied.
+	// Applies to raw PUT bodies of non-file resources and to RDF and JSON request bodies. Below DATA_CAP, so a body
+	// between the two pins the cap applied.
 	static final int RESOURCE_CAP = 1024
 
 	// Far above DATA_CAP, but within the 4 MB the server reads and discards so that a client that reads the
@@ -369,6 +372,60 @@ class ZzzSizeLimitIT extends BaseSpec {
 		def conn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
 		assert conn.getResponseCode() == HTTP_OK
 		return conn.inputStream.text
+	}
+
+	def "#method #route with #lengthKind above entrystore.data.max-resource-size is answered 413"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+
+		when: 'for an entry that does not exist, without a login'
+		def conn = EntryStoreClient.requestStreamed(method, '/' + contextId + path, OVERSIZED_BODY, chunked, '',
+			contentType)
+
+		then:
+		conn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+		JSON_PARSER.parseText(readErrorBody(conn)).error == error
+
+		where:
+		method          | route                               | path                    | contentType        | chunked
+		HttpMethod.PUT  | '/{context-id}/metadata/{entry-id}' | '/metadata/noSuchEntry' | 'text/turtle'      | false
+		HttpMethod.PUT  | '/{context-id}/metadata/{entry-id}' | '/metadata/noSuchEntry' | 'text/turtle'      | true
+		HttpMethod.PUT  | '/{context-id}/entry/{entry-id}'    | '/entry/noSuchEntry'    | 'application/json' | false
+		HttpMethod.PUT  | '/{context-id}/entry/{entry-id}'    | '/entry/noSuchEntry'    | 'application/json' | true
+		HttpMethod.POST | '/{context-id}'                     | ''                      | 'application/json' | false
+		HttpMethod.POST | '/{context-id}'                     | ''                      | 'application/json' | true
+
+		lengthKind = chunked ? 'a chunked body' : 'a Content-Length'
+		// Without Content-Length the limit is only found while the body is read.
+		error = chunked ? "Request body exceeds maximum allowed size of: ${RESOURCE_CAP}b".toString() :
+			"Request body size (of ${OVERSIZED_BODY}b) exceeds maximum allowed size of: ${RESOURCE_CAP}b".toString()
+	}
+
+	def "PUT /{context-id}/metadata/{entry-id} with Expect: 100-continue and a Content-Length above entrystore.data.max-resource-size is answered 413 instead of 100 Continue"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/metadata/noSuchEntry', '',
+				RESOURCE_CAP + 1, 'text/turtle') == HTTP_ENTITY_TOO_LARGE
+	}
+
+	def "PUT /{context-id}/metadata/{entry-id} exactly at entrystore.data.max-resource-size is stored"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		def entryId = getOrCreateEntry(contextId, [id: 'metadataAtCapId'])
+		def resourceUri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryId
+		def head = '<' + resourceUri + '> <http://purl.org/dc/terms/title> "'
+		def tail = '" .'
+		def turtle = head + 'a' * (RESOURCE_CAP - head.length() - tail.length()) + tail
+		assert turtle.getBytes(UTF_8).length == RESOURCE_CAP
+
+		when:
+		def conn = EntryStoreClient.putRequest('/' + contextId + '/metadata/' + entryId, turtle, 'admin',
+			'text/turtle')
+
+		then:
+		conn.getResponseCode() == HTTP_NO_CONTENT
 	}
 
 	def "POST /echo multipart upload above max-file-size cap answers 413 in a textarea, as 5.x did"() {
