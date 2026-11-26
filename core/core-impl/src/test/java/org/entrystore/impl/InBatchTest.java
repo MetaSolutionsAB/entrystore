@@ -192,20 +192,18 @@ public class InBatchTest extends AbstractCoreTest {
 
 		assertThrows(org.entrystore.repository.RepositoryException.class, () -> rm.inBatch(() -> {
 			entries.add(duck.createLink(null, URI.create("http://example.com/a"), null));
-			entries.add(duck.createLink(null, URI.create("http://example.com/b"), null));
-			// the third operation commits the two before it at the checkpoint, then fails
 			try {
 				existing.getLocalMetadata().setGraph(unreadableGraph());
 			} catch (org.entrystore.repository.RepositoryException skipped) {
 				// the work goes on
 			}
+			// the third operation would reach the checkpoint, and so commit the cleared graph
 			duck.createLink(null, URI.create("http://example.com/c"), null);
 			operationsAfterTheFailure.incrementAndGet();
 		}));
 
 		assertEquals(0, operationsAfterTheFailure.get(), "an operation in a rollback-only batch must fail");
-		assertTrue(isStored(entries.get(0)));
-		assertTrue(isStored(entries.get(1)));
+		assertFalse(isStored(entries.getFirst()), "the checkpoint must not commit a rollback-only batch");
 		assertTrue(hasTitle(existing, "kept"), "the cleared graph must not be committed");
 	}
 
