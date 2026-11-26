@@ -122,6 +122,8 @@ public class MetadataImpl implements Metadata {
 			synchronized (this.entry.repository) {
 				RepositoryConnection batchRc = this.entry.repositoryManager.getActiveBatchConnection();
 				if (batchRc != null) {
+					// the write changes the cached entry's dates and contributors, which a rollback does not undo
+					this.entry.repositoryManager.runAfterBatchRollback(this::reloadEntryFromStore);
 					doSetGraph(batchRc, graph, newResourceUri, false);
 					return;
 				}
@@ -135,6 +137,12 @@ public class MetadataImpl implements Metadata {
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+		}
+	}
+
+	private void reloadEntryFromStore() {
+		try (RepositoryConnection rc = this.entry.repository.getConnection()) {
+			this.entry.refreshFromRepository(rc);
 		}
 	}
 

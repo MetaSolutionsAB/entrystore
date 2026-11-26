@@ -39,6 +39,7 @@ import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -445,6 +446,47 @@ public class InBatchTest extends AbstractCoreTest {
 
 		assertFalse(hasTitle(existing, "new"));
 		assertEquals(0, updates.size());
+	}
+
+	@Test
+	public void aContributorOfARolledBackBatchIsRecordedOnTheNextWrite() {
+		Entry existing = duck.createLink(null, URI.create("http://example.com/existing"), null);
+		User editor = (User) pm.createResource(null, GraphType.User, null, null).getResource();
+		existing.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, editor.getURI());
+
+		asUser(editor, () -> {
+			assertThrows(IllegalStateException.class, () -> rm.inBatch(() -> {
+				existing.getLocalMetadata().setGraph(titleOf(existing, "discarded"));
+				throw new IllegalStateException("boom");
+			}));
+			existing.getLocalMetadata().setGraph(titleOf(existing, "kept"));
+			return null;
+		});
+
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			IRI entryIRI = ((EntryImpl) existing).getSesameEntryURI();
+			IRI editorIRI = rm.getValueFactory().createIRI(editor.getURI().toString());
+			assertTrue(rc.hasStatement(entryIRI, RepositoryProperties.Contributor, editorIRI, false, entryIRI),
+					"the rolled-back write must not leave the editor cached as a contributor the store does not have");
+		}
+	}
+
+	@Test
+	public void aMetadataWriteOfARolledBackBatchLeavesTheStoredModifiedDate() {
+		Entry existing = duck.createLink(null, URI.create("http://example.com/existing"), null);
+		existing.getLocalMetadata().setGraph(titleOf(existing, "kept"));
+		Date storedModified = existing.getModifiedDate();
+		// so that the write in the batch cannot stamp the same millisecond
+		while (System.currentTimeMillis() <= storedModified.getTime()) {
+			Thread.onSpinWait();
+		}
+
+		assertThrows(IllegalStateException.class, () -> rm.inBatch(() -> {
+			existing.getLocalMetadata().setGraph(titleOf(existing, "discarded"));
+			throw new IllegalStateException("boom");
+		}));
+
+		assertEquals(storedModified, existing.getModifiedDate());
 	}
 
 	@Test

@@ -151,7 +151,8 @@ java -Xmx2g -jar $jar -s memory -u 10000 -m 2000 -B true `
 
 - Only `createNewMinimalItem` and `setGraph` join the batch. An `inBatch`
   rollback discards what they wrote since the last checkpoint, evicts the
-  entries created since then from `SoftCache`, and drops their events.
+  entries created since then from `SoftCache`, reloads the entries whose
+  metadata was written from the store, and drops their events.
   Every other write (ACL, list or group membership, entry name) commits at
   once on its own connection and is **not** rolled back.
 - The synchronized block in `inBatch` (`synchronized(repository)`) is

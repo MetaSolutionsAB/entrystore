@@ -760,8 +760,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * it is refused with an {@link IllegalStateException}.
 	 * <p>
 	 * Trade-offs: a rollback discards the changes the two joining operations made since the last
-	 * checkpoint, and removes the
-	 * entries created in it from the {@code SoftCache}; a reference the caller kept to such an
+	 * checkpoint, removes the
+	 * entries created in it from the {@code SoftCache}, and reloads the entries whose metadata it
+	 * wrote from the store; a reference the caller kept to a created
 	 * entry is not invalidated. Repository events of the writes that
 	 * join the batch, and every event about an entry the batch created, are held back like work
 	 * registered via {@link #runAfterBatchCommit}: they reach listeners once the commit lands, in the
