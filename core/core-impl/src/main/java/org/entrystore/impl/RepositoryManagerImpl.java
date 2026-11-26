@@ -755,7 +755,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * list membership and copied ACL of an entry created into a list, commits at once on its own
 	 * connection. Such a write does not see the batch's uncommitted entries in the store and is not
 	 * rolled back with them, so a caller must not make one about an entry the same batch created
-	 * unless it accepts triples that name a missing entry after a rollback. A change of a resource
+	 * unless it accepts what a rollback leaves: its triples name a missing entry, and as the rollback
+	 * also takes back the context's id counter, the id can be issued again. The new entry then
+	 * inherits the triples kept outside its entry graph, such as a list membership. A change of a resource
 	 * URI ({@link Entry#setResourceURI}) would write to both the batch's and its own connection, so
 	 * it is refused with an {@link IllegalStateException}.
 	 * <p>
@@ -771,7 +773,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * <p>
 	 * The transaction is bounded, not the call: after {@link Settings#REPOSITORY_BATCH_MAX_OPERATIONS}
 	 * batch-aware operations (default 10 000) it commits and begins again, so a rollback discards
-	 * only the work since the last such checkpoint, and an entry id handed out before it stays used.
+	 * only the work since the last such checkpoint, and an entry id handed out before it stays used,
+	 * while one handed out after it may be issued again.
 	 * The repository monitor is held for the whole call regardless, so a caller with a large
 	 * workload should run several batches rather than one.
 	 *

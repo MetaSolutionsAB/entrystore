@@ -154,7 +154,11 @@ java -Xmx2g -jar $jar -s memory -u 10000 -m 2000 -B true `
   entries created since then from `SoftCache`, reloads the entries whose
   metadata was written from the store, and drops their events.
   Every other write (ACL, list or group membership, entry name) commits at
-  once on its own connection and is **not** rolled back.
+  once on its own connection and is **not** rolled back. After a rollback
+  such a write about an entry the batch created names a missing entry. The
+  rollback also takes back the context's id counter, so the id can be
+  issued again, and the new entry then inherits what is kept outside its
+  entry graph, such as a list membership.
 - The synchronized block in `inBatch` (`synchronized(repository)`) is
   held for the entire batch duration. For multi-threaded callers,
   that serialises all other writes against the same repository. Choose
