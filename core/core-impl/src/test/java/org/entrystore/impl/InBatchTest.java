@@ -183,6 +183,25 @@ public class InBatchTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void aCreateThatFailsAfterWritingAndIsCaughtByTheWorkRollsTheBatchBack() {
+		List<Entry> entries = new ArrayList<>();
+
+		assertThrows(org.entrystore.repository.RepositoryException.class, () -> rm.inBatch(() -> {
+			entries.add(duck.createLink(null, URI.create("http://example.com/a"), null));
+			try {
+				// no class is registered for the id, so the create fails after the entry graph is written
+				cm.createResource("partial", GraphType.SystemContext, null, null);
+			} catch (org.entrystore.repository.RepositoryException skipped) {
+				// the work goes on
+			}
+		}));
+
+		assertFalse(hasGraph(URI.create(rm.getRepositoryURL() + "_contexts/entry/partial")),
+				"the half-written entry must not be committed");
+		assertFalse(isStored(entries.getFirst()));
+	}
+
+	@Test
 	public void anOperationAfterAFailedOneFailsInsteadOfReachingTheCheckpoint() {
 		rm.setBatchMaxOperations(2);
 		Entry existing = duck.createLink(null, URI.create("http://example.com/existing"), null);
@@ -316,6 +335,31 @@ public class InBatchTest extends AbstractCoreTest {
 		assertTrue(existing.getAllowedPrincipalsFor(AccessProperty.ReadMetadata).contains(pm.getGuestUser().getURI()));
 		assertTrue(updates.stream().anyMatch(event -> event.getSource() == existing),
 				"the Solr ACL fields follow this event, and the ACL change is stored");
+	}
+
+	@Test
+	public void anAclChangeToAnEntryCommittedAtACheckpointReachesListenersWhenTheRestFails() {
+		rm.setBatchMaxOperations(1);
+		List<RepositoryEventObject> updates = new ArrayList<>();
+		RepositoryListener recording = recording(updates);
+		rm.registerListener(recording, RepositoryEvent.EntryUpdated);
+		List<Entry> entries = new ArrayList<>();
+		try {
+			assertThrows(IllegalStateException.class, () -> rm.inBatch(() -> {
+				entries.add(duck.createLink(null, URI.create("http://example.com/a"), null));
+				// the second operation reaches the checkpoint first, which commits the first entry
+				entries.add(duck.createLink(null, URI.create("http://example.com/b"), null));
+				entries.get(0).addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
+				throw new IllegalStateException("boom");
+			}));
+		} finally {
+			rm.unregisterListener(recording, RepositoryEvent.EntryUpdated);
+		}
+
+		assertTrue(isStored(entries.get(0)));
+		assertFalse(isStored(entries.get(1)));
+		assertTrue(updates.stream().anyMatch(event -> event.getSource() == entries.get(0)),
+				"the entry is no longer one a rollback removes, so the event of its stored ACL change must not wait");
 	}
 
 	@Test
