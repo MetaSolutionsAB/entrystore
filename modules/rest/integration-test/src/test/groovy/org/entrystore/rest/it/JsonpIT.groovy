@@ -19,9 +19,14 @@ package org.entrystore.rest.it
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
+import java.security.DigestInputStream
+import java.security.MessageDigest
+
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_NOT_MODIFIED
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_PARTIAL
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class JsonpIT extends BaseSpec {
@@ -32,8 +37,13 @@ class JsonpIT extends BaseSpec {
 	// The title of one entry in each of the two contexts, so that one search matches both
 	private static final String SEARCH_MARKER = 'jsonpguestmarker'
 	private static final String SEARCH_QUERY = literalField(NameSpaceConst.DC_TERM_TITLE) + ':' + SEARCH_MARKER
+	// Every byte value, so that a body decoded and re-encoded as text on the way would not compare equal
+	private static final byte[] BINARY_FILE = (0..255).collect { it as byte } as byte[]
+	private static final String JSON_FILE = '{"stored":"as a file"}'
 
 	private static String entryUrl
+	private static String binaryFilePath
+	private static String jsonFilePath
 	private static Map<String, String> jsonpPaths
 	// Each value ends where the callback parameter is appended.
 	private static Map<String, String> guestComparisonPaths
@@ -66,6 +76,13 @@ class JsonpIT extends BaseSpec {
 		def body = createTitleMetadataBody(resourceIri, 'JSONP entry')
 		def entryId = createEntry(CONTEXT_ID, params, body)
 		entryUrl = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/entry/' + entryId
+
+		binaryFilePath = '/' + CONTEXT_ID + '/resource/' + createEntry(CONTEXT_ID, [:])
+		assert EntryStoreClient.putRequestFile(binaryFilePath, createTempBinaryFile('jsonp', '.bin', BINARY_FILE))
+				.getResponseCode() == HTTP_CREATED
+		jsonFilePath = '/' + CONTEXT_ID + '/resource/' + createEntry(CONTEXT_ID, [:])
+		assert EntryStoreClient.putRequestFile(jsonFilePath, createTempBinaryFile('jsonp', '.json', JSON_FILE.bytes),
+				'admin', 'application/json').getResponseCode() == HTTP_CREATED
 
 		def listId = createEntry(CONTEXT_ID, [graphtype: 'list'], [resource: [entryId]])
 		def graphId = createEntry(CONTEXT_ID, [graphtype: 'graph'])
@@ -230,6 +247,62 @@ class JsonpIT extends BaseSpec {
 		'list resource'  | List
 		'graph resource' | Map
 		'user resource'  | Map
+	}
+
+	def "JSONP GET of a binary file should answer the file as it is and not stored"() {
+		when:
+		def conn = EntryStoreClient.getRequest(binaryFilePath + '?callback=cb', '', '*/*')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().startsWith('application/octet-stream')
+		conn.getHeaderFieldLong('Content-Length', -1) == BINARY_FILE.length
+		conn.getHeaderField('Cache-Control') == 'no-store'
+		conn.getInputStream().bytes == BINARY_FILE
+	}
+
+	def "JSONP GET of a file stored as JSON should wrap it, with the length of the wrapped body and no digest"() {
+		given:
+		assert EntryStoreClient.getRequest(jsonFilePath, '', '*/*').getHeaderField('Digest') != null
+
+		when:
+		def conn = EntryStoreClient.getRequest(jsonFilePath + '?callback=cb', '', '*/*')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().startsWith('application/javascript')
+		conn.getHeaderFieldLong('Content-Length', -1) == ('cb(' + JSON_FILE + ')').length()
+		conn.getHeaderField('Digest') == null
+		conn.getInputStream().text == 'cb(' + JSON_FILE + ')'
+	}
+
+	def "JSONP GET of a byte range of a file stored as JSON should answer the range as it is"() {
+		when:
+		def conn = EntryStoreClient.getRequest(jsonFilePath + '?callback=cb', '', '*/*', [Range: 'bytes=0-3'])
+
+		then:
+		conn.getResponseCode() == HTTP_PARTIAL
+		conn.getHeaderField('Content-Range') == 'bytes 0-3/' + JSON_FILE.length()
+		conn.getInputStream().text == JSON_FILE.substring(0, 4)
+	}
+
+	def "JSONP GET of a 32 MB file should answer the whole file as it is"() {
+		given:
+		long fileSize = 32L * 1024 * 1024
+		def path = '/' + CONTEXT_ID + '/resource/' + createEntry(CONTEXT_ID, [:])
+		assert EntryStoreClient.putRequestStreamed(path, fileSize).getResponseCode() == HTTP_CREATED
+
+		when:
+		def conn = EntryStoreClient.getRequest(path + '?callback=cb', '', '*/*')
+		def sha256 = MessageDigest.getInstance('SHA-256')
+		def received = new DigestInputStream(conn.getInputStream(), sha256).transferTo(OutputStream.nullOutputStream())
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getHeaderFieldLong('Content-Length', -1) == fileSize
+		received == fileSize
+		// The digest the server stored at the upload
+		conn.getHeaderField('Digest') == 'sha-256=' + sha256.digest().encodeHex().toString()
 	}
 
 	def "GET entry without ?callback= should return plain JSON"() {

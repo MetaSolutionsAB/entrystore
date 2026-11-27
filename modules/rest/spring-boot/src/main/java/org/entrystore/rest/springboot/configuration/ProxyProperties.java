@@ -37,8 +37,8 @@ import java.time.temporal.ChronoUnit;
  * {@code (maxRedirects + 1) × connectTimeout}; {@code readTimeout} bounds each socket read rather than the exchange,
  * so total wall time is <b>not</b> bounded by it — a slow-drip upstream can hold a request thread for as long as it
  * keeps sending, or until {@code maxResponseSize} is reached. Plus DNS resolution, which no timeout here covers.
- * {@code maxResponseSize} is unlimited when negative; the body is streamed, so the cap bounds transfer size and thread
- * time, not heap. A JSONP response is the exception: it is buffered to be wrapped, so there the cap also bounds heap.
+ * {@code maxResponseSize} is unlimited when negative; the body is streamed, also when it is wrapped as JSONP, so the
+ * cap bounds transfer size and thread time, not heap.
  * It applies to {@code GET /proxy} only — the resource-DELETE path never reads a response body.
  */
 @ConfigurationProperties(prefix = "entrystore.proxy")

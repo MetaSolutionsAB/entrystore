@@ -611,9 +611,9 @@ entrystore.solr.extract-fulltext=off
 ## max-response-size — lowering the timeouts alone does not create a bound.
 ##
 ## max-response-size caps the upstream body that GET /proxy passes through (default 100MB); negative
-## means no limit, as in 5.x. The body is streamed, not held in memory, except for JSONP, which is
-## buffered to be wrapped. A larger Content-Length is answered 502; a body without Content-Length is cut
-## off once it exceeds the cap.
+## means no limit, as in 5.x. The body is streamed, not held in memory, also when it is wrapped as
+## JSONP. A larger Content-Length is answered 502; a body without Content-Length is cut off once it
+## exceeds the cap.
 # entrystore.proxy.max-response-size=100MB
 # entrystore.proxy.max-redirects=15
 # entrystore.proxy.connect-timeout=30s

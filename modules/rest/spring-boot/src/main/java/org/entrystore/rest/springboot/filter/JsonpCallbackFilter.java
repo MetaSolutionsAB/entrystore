@@ -18,10 +18,8 @@ package org.entrystore.rest.springboot.filter;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.util.ErrorResponseWriter;
 import org.entrystore.rest.springboot.util.HttpUtil;
@@ -30,23 +28,20 @@ import org.jetbrains.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import org.springframework.web.util.ContentCachingResponseWrapper;
 
 import java.io.IOException;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
  * Wraps JSON {@code GET} responses in a JSONP callback (<code>callback(&lt;json&gt;)</code>) when a
  * {@code ?callback=} parameter is present, porting the Restlet {@code JSCallbackFilter}. Gated by
  * {@code entrystore.jsonp} (default {@code true}). JSONP is legacy — CORS is the preferred mechanism.
+ * <p>
+ * No body is buffered: {@link JsonpResponseWrapper} decides at the first write of the body whether to wrap it, and
+ * writes it through between the parentheses of the callback.
  * <p>
  * A request that asks for JSONP is served as guest whatever session cookie or HTTP Basic credentials it carries, see
  * {@link IgnoreAuthFilter} and {@link org.entrystore.rest.springboot.configuration.IgnoreAuthHandlerCustomizer}, so
@@ -61,12 +56,10 @@ import java.util.regex.Pattern;
  * so the response is marked {@code Cache-Control: no-store} to prevent revalidation against a stale
  * validator.
  * <p>
- * Ordered to run outside {@link CacheControlFilter} so its cache-control headers are applied before
- * this filter writes the wrapped body, and inside Spring Security and {@code ModificationLockOutFilter}
- * so those short-circuit before any response buffering happens here. The relative order is expressed
- * via {@code @Order} below; if it matters and any of those filters' ordering changes, re-verify.
+ * Ordered to run outside {@link CacheControlFilter}, so the {@code Cache-Control} it sets is in place when the
+ * response is decided. The relative order is expressed via {@code @Order} below; if that filter's ordering changes,
+ * re-verify.
  */
-@Slf4j
 @Component
 @Order(Ordered.LOWEST_PRECEDENCE - 10)
 public class JsonpCallbackFilter extends OncePerRequestFilter {
@@ -75,20 +68,6 @@ public class JsonpCallbackFilter extends OncePerRequestFilter {
 	// Fallback function name when ?callback= is present but blank. The literal happens to match
 	// CALLBACK_PARAM but is independent of it (one is a query-param key, the other a JS identifier).
 	private static final String DEFAULT_CALLBACK = "callback";
-	private static final String JSONP_CONTENT_TYPE = "application/javascript";
-
-	// JSON media types the original Restlet JSCallbackFilter wrapped. SPARQL results
-	// (application/sparql-results+json) were never in this set and are additionally excluded as a
-	// streaming endpoint (see isStreamingPath).
-	private static final Set<String> JSON_MEDIA_TYPES = Set.of(
-			MediaType.APPLICATION_JSON_VALUE,
-			"application/ld+json",
-			"application/rdf+json");
-
-	// No-body HTTP statuses never carry an entity to wrap.
-	private static final Set<Integer> NO_BODY_STATUSES = Set.of(
-			HttpStatus.NO_CONTENT.value(),
-			HttpStatus.NOT_MODIFIED.value());
 
 	// A JSONP callback must be a JavaScript identifier or a dotted member expression of up to 32
 	// segments (e.g. angular.callbacks._0). Anchored, ASCII-only; rejects "1foo", ".foo", "foo.",
@@ -97,11 +76,9 @@ public class JsonpCallbackFilter extends OncePerRequestFilter {
 	private static final Pattern VALID_CALLBACK = Pattern.compile(
 			"^[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*){0,31}$");
 
-	// Streaming endpoints: /sparql and /{ctx}/sparql. They return StreamingResponseBody via async
-	// dispatch; buffering them to wrap would break the stream and risk OOM (and they emit
-	// application/sparql-results+json, which was never JSONP-wrapped). Any future streaming endpoint
-	// must be added here.
-	private static final Pattern STREAMING_PATHS = Pattern.compile("/(?:[^/]+/)?sparql");
+	// /sparql and /{ctx}/sparql return StreamingResponseBody, which may write after this filter returns, so a wrapped
+	// body could not be closed (SPARQL JSON was never wrapped). Add any future async endpoint here.
+	private static final Pattern ASYNC_PATHS = Pattern.compile("/(?:[^/]+/)?sparql");
 
 	private final boolean enabled;
 	private final ErrorResponseWriter errorResponseWriter;
@@ -136,16 +113,16 @@ public class JsonpCallbackFilter extends OncePerRequestFilter {
 									@NotNull FilterChain filterChain) throws ServletException, IOException {
 
 		String rawCallback = enabled ? requestedCallback(request) : null;
-		// JSONP off or not requested (the overwhelming majority), or a streaming endpoint (e.g. /sparql) that
-		// must not be buffered: pass straight through. isStreamingPath is only evaluated for a ?callback= request.
-		if (rawCallback == null || isStreamingPath(request)) {
+		// JSONP off or not requested (the overwhelming majority), or an async endpoint (e.g. /sparql) that is never
+		// wrapped: pass straight through. isAsyncPath is only evaluated for a ?callback= request.
+		if (rawCallback == null || isAsyncPath(request)) {
 			filterChain.doFilter(request, response);
 			return;
 		}
 
 		String callback = rawCallback.isBlank() ? DEFAULT_CALLBACK : rawCallback;
 		if (callback.length() > MAX_CALLBACK_LENGTH || !VALID_CALLBACK.matcher(callback).matches()) {
-			// Reject malicious callback syntax before any downstream work or buffering.
+			// Reject malicious callback syntax before any downstream work.
 			errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
 					.status(HttpStatus.BAD_REQUEST.value())
 					.path(request.getRequestURI())
@@ -154,80 +131,17 @@ public class JsonpCallbackFilter extends OncePerRequestFilter {
 			return;
 		}
 
-		ContentCachingResponseWrapper wrapper = new ContentCachingResponseWrapper(response);
+		JsonpResponseWrapper wrapper = new JsonpResponseWrapper(response, callback);
 		filterChain.doFilter(request, wrapper);
-
-		if (isAsyncStarted(request) || response.isCommitted()) {
-			wrapper.copyBodyToResponse();
-			return;
-		}
-		// Every callback response, wrapped or not (incl. a 304), so a validator of a wrapped body is never reused.
-		preventStorage(response);
-		if (!shouldWrap(wrapper)) {
-			wrapper.copyBodyToResponse();
-			return;
-		}
-
-		writeJsonpResponse(response, wrapper, callback);
-	}
-
-	/**
-	 * Applied to every {@code ?callback=} response, wrapped or not: a wrapped body no longer matches the controller's
-	 * strong ETag / Last-Modified, so caches and clients must not revalidate against a stale validator. Keeps the {@code private} that {@link CacheControlFilter} stamps on
-	 * authenticated responses, and any value a controller set other than the revalidation it asks of anonymous
-	 * clients.
-	 */
-	private static void preventStorage(HttpServletResponse response) {
-		String cacheControl = response.getHeader(HttpHeaders.CACHE_CONTROL);
-		if (cacheControl == null || CacheControlFilter.CACHE_CONTROL_ANONYMOUS.equals(cacheControl)) {
-			response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
-		} else if (CacheControlFilter.CACHE_CONTROL_AUTHENTICATED.equals(cacheControl)) {
-			response.setHeader(HttpHeaders.CACHE_CONTROL, "private, no-store");
+		if (isAsyncStarted(request)) {
+			wrapper.passThrough();
+		} else {
+			wrapper.finish();
 		}
 	}
 
-	private static boolean isStreamingPath(HttpServletRequest request) {
+	private static boolean isAsyncPath(HttpServletRequest request) {
 		String path = request.getServletPath();
-		return path != null && STREAMING_PATHS.matcher(path).matches();
-	}
-
-	private static boolean shouldWrap(ContentCachingResponseWrapper wrapper) {
-		// HttpUtil.normalizeMediaType strips any ";charset=" suffix, lowercases, and returns null for a
-		// null/unparseable content type — all handled by the JSON_MEDIA_TYPES lookup below.
-		return !NO_BODY_STATUSES.contains(wrapper.getStatus())
-				&& JSON_MEDIA_TYPES.contains(HttpUtil.normalizeMediaType(wrapper.getContentType()));
-	}
-
-	private static void writeJsonpResponse(HttpServletResponse response,
-										   ContentCachingResponseWrapper wrapper,
-										   String callback) throws IOException {
-		Charset charset = resolveCharset(wrapper.getContentType());
-		byte[] body = wrapper.getContentAsByteArray();
-		// callback( and ) are ASCII-safe; the body bytes pass through untouched, so any charset is
-		// preserved regardless of what the JSON was encoded in.
-		byte[] prefix = (callback + "(").getBytes(charset);
-		byte[] suffix = ")".getBytes(charset);
-
-		response.setContentType(JSONP_CONTENT_TYPE);
-		response.setCharacterEncoding(charset.name());
-		response.setHeader("X-Content-Type-Options", "nosniff");
-		response.setContentLengthLong((long) prefix.length + body.length + suffix.length);
-
-		// Three writes avoid allocating a fourth body-sized array just to concatenate.
-		ServletOutputStream out = response.getOutputStream();
-		out.write(prefix);
-		out.write(body);
-		out.write(suffix);
-	}
-
-	private static Charset resolveCharset(String contentType) {
-		try {
-			Charset charset = MediaType.parseMediaType(contentType).getCharset();
-			return charset != null ? charset : StandardCharsets.UTF_8;
-		} catch (IllegalArgumentException e) {
-			log.debug("Could not parse charset from content-type '{}', defaulting to UTF-8: {}",
-					contentType, e.getMessage());
-			return StandardCharsets.UTF_8;
-		}
+		return path != null && ASYNC_PATHS.matcher(path).matches();
 	}
 }
