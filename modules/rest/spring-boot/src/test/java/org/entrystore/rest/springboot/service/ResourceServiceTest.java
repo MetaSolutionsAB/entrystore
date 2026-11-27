@@ -41,6 +41,7 @@ import org.entrystore.rest.springboot.model.dto.ResourceRepresentation;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
+import org.entrystore.rest.springboot.util.EndlessStream;
 import org.entrystore.rest.springboot.util.RDFJSON;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -376,7 +377,7 @@ class ResourceServiceTest {
 	void setEntryResource_bodyWithoutContentLengthAboveMaxResourceSize_isNotReadPastTheLimit() {
 		service = serviceWithMaxResourceSize("1k");
 		when(entry.getGraphType()).thenReturn(GraphType.String);
-		EndlessBody endlessBody = new EndlessBody();
+		EndlessStream endlessBody = new EndlessStream();
 
 		EntityTooLargeException e = assertThrows(EntityTooLargeException.class, () -> service.setEntryResource(entry,
 				() -> endlessBody, -1, "text/plain", null, null, "session-1"));
@@ -453,18 +454,6 @@ class ResourceServiceTest {
 		return () -> {
 			throw new AssertionError("the request body was opened");
 		};
-	}
-
-	/** A request body that never ends, counting the bytes read from it. */
-	private static final class EndlessBody extends InputStream {
-
-		long bytesRead;
-
-		@Override
-		public int read() {
-			bytesRead++;
-			return 'a';
-		}
 	}
 
 	@Test

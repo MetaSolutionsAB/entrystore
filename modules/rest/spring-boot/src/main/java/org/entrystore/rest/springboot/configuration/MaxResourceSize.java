@@ -23,9 +23,10 @@ import org.springframework.stereotype.Component;
 
 /**
  * The limit {@code entrystore.data.max-resource-size} sets on a request body that is read into memory whole: the raw
- * PUT body of a non-file resource, and every body bound by a message converter for a handler without
- * {@code @MaxRequestBodySize}. Written in the units of {@code entrystore.data.max-file-size}; -1 removes the limit.
- * Any other value that is not positive, or above the longest array a body can be read into, fails startup.
+ * PUT body of a non-file resource, the RDF body of a metadata or entry-information PUT, and every body bound by a
+ * message converter for a handler without {@code @MaxRequestBodySize}. Written in the units of
+ * {@code entrystore.data.max-file-size}; -1 removes the limit. Any other value that is not positive, or above the
+ * longest array a body can be read into, fails startup.
  */
 @Getter
 @Component
@@ -53,10 +54,5 @@ public class MaxResourceSize {
 					+ CEILING + " bytes, got " + value);
 		}
 		this.limit = size;
-	}
-
-	/** Whether a limit is set, i.e. the setting is not -1. */
-	public boolean isLimited() {
-		return limit != -1;
 	}
 }

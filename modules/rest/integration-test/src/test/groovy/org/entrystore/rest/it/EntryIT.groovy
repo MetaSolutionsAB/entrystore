@@ -21,6 +21,7 @@ import groovy.xml.XmlParser
 import org.entrystore.repository.util.NS
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
+import org.springframework.http.HttpMethod
 
 import java.text.SimpleDateFormat
 import java.time.Year
@@ -35,6 +36,7 @@ import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
+import static java.nio.charset.StandardCharsets.ISO_8859_1
 import static org.awaitility.Awaitility.await
 
 class EntryIT extends BaseSpec {
@@ -45,6 +47,9 @@ class EntryIT extends BaseSpec {
 
 	// Its own context, as several specs assert an exact entry count in contextId.
 	static final String RDF_FORMAT_CONTEXT_ID = 'entryRdfFormatContext'
+
+	// Its own context, for the same reason.
+	static final String BODY_CHECK_CONTEXT_ID = 'entryBodyCheckContext'
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
@@ -2694,6 +2699,69 @@ class EntryIT extends BaseSpec {
 		entryRespJson['rights'].collect() == ['administer']
 		entryRespJson['relations'] != null
 		entryRespJson['relations'] as Map == [:]
+	}
+
+	// Jetty answers Expect: 100-continue with 100 only once the application reads the body.
+	def "PUT /{context-id}/entry/{entry-id} with Expect: 100-continue from an administrator of the entry is answered 100 Continue"() {
+		given:
+		def entryId = getOrCreateBodyCheckEntry('expectContinueEntryId')
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + BODY_CHECK_CONTEXT_ID + '/entry/' + entryId, 'admin',
+			1024, 'text/turtle') == 100
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} with Expect: 100-continue from a guest is answered 401 instead of 100 Continue"() {
+		given:
+		def entryId = getOrCreateBodyCheckEntry('expectContinueEntryId')
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + BODY_CHECK_CONTEXT_ID + '/entry/' + entryId, '',
+			1024, 'text/turtle') == HTTP_UNAUTHORIZED
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} with Expect: 100-continue from a user without administer access is answered 403 instead of 100 Continue"() {
+		given:
+		def entryId = getOrCreateBodyCheckEntry('expectContinueEntryId')
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + BODY_CHECK_CONTEXT_ID + '/entry/' + entryId, 'user',
+			1024, 'text/turtle') == HTTP_FORBIDDEN
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} with an empty body should return Bad-Request 400 and keep the entry information"() {
+		given:
+		def entryId = getOrCreateBodyCheckEntry('emptyBodyEntryId')
+		def infoBefore = entryInfo(BODY_CHECK_CONTEXT_ID, entryId)
+
+		when:
+		def conn = EntryStoreClient.putRequest('/' + BODY_CHECK_CONTEXT_ID + '/entry/' + entryId, '', 'admin',
+			'text/turtle')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		entryInfo(BODY_CHECK_CONTEXT_ID, entryId) == infoBefore
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} in the charset named by Content-Type should be stored as sent"() {
+		given:
+		def entryId = getOrCreateBodyCheckEntry('charsetEntryId')
+		def entryUri = EntryStoreClient.baseUrl + '/' + BODY_CHECK_CONTEXT_ID + '/entry/' + entryId
+		def turtle = '<' + entryUri + '> <' + NameSpaceConst.DC_TERM_TITLE + '> "Café" .'
+
+		when:
+		def conn = EntryStoreClient.sendRequestAsStream(HttpMethod.PUT,
+			'/' + BODY_CHECK_CONTEXT_ID + '/entry/' + entryId, new ByteArrayInputStream(turtle.getBytes(ISO_8859_1)),
+			'admin', 'text/turtle; charset=ISO-8859-1')
+
+		then:
+		conn.getResponseCode() == HTTP_NO_CONTENT
+		entryInfo(BODY_CHECK_CONTEXT_ID, entryId)[entryUri][NameSpaceConst.DC_TERM_TITLE]*.value == ['Café']
+	}
+
+	private String getOrCreateBodyCheckEntry(String entryId) {
+		getOrCreateContext([contextId: BODY_CHECK_CONTEXT_ID])
+		return getOrCreateEntry(BODY_CHECK_CONTEXT_ID, [id: entryId])
 	}
 
 	def "PUT /{context-id}/entry/{entry-id} as guest, should not edit the entry"() {

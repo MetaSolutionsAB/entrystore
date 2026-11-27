@@ -45,7 +45,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
@@ -217,7 +216,7 @@ public class ResourceService {
 			entry.updateModificationDate();
 			return CompletionState.CREATED;
 		}
-		byte[] requestBody = readBody(body, contentLength);
+		byte[] requestBody = HttpUtil.readWithin(body, contentLength, maxResourceSize.getLimit(), RESOURCE_SUBJECT);
 		CompletionState state = switch (entry.getGraphType()) {
 			case List, Group -> {
 				if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType)) {
@@ -245,21 +244,6 @@ public class ResourceService {
 			entry.updateModificationDate();
 		}
 		return state;
-	}
-
-	/**
-	 * Reads the body within {@link MaxResourceSize}. An over-long Content-Length is rejected before the body is
-	 * opened, as opening it makes Jetty answer Expect: 100-continue.
-	 */
-	private byte[] readBody(IOSupplier<InputStream> body, long contentLength) {
-		long limit = maxResourceSize.getLimit();
-		HttpUtil.rejectContentLengthAbove(contentLength, limit, RESOURCE_SUBJECT);
-		try {
-			InputStream in = body.get();
-			return maxResourceSize.isLimited() ? HttpUtil.readAtMost(in, limit, RESOURCE_SUBJECT) : in.readAllBytes();
-		} catch (IOException e) {
-			throw new BadRequestException("Failed to read the request body", e);
-		}
 	}
 
 	private static void setString(Entry entry, byte[] requestBody) {

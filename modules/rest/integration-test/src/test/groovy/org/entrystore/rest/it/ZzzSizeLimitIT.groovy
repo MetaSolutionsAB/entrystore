@@ -25,6 +25,7 @@ import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static java.nio.charset.StandardCharsets.UTF_8
 
 // Configured size limits on uploads, on request bodies and on proxied responses, sharing one app start.
@@ -374,12 +375,16 @@ class ZzzSizeLimitIT extends BaseSpec {
 		return conn.inputStream.text
 	}
 
-	def "#method #route with #lengthKind above entrystore.data.max-resource-size is answered 413"() {
+	// A local entry, so that it has local metadata to write.
+	static final String SIZE_LIMIT_TARGET_ID = 'sizeLimitTargetId'
+
+	def "#method /{context-id}#path as '#user' with #lengthKind above entrystore.data.max-resource-size is answered 413"() {
 		given:
 		getOrCreateContext([contextId: contextId])
+		getOrCreateEntry(contextId, [id: SIZE_LIMIT_TARGET_ID])
 
-		when: 'for an entry that does not exist, without a login'
-		def conn = EntryStoreClient.requestStreamed(method, '/' + contextId + path, OVERSIZED_BODY, chunked, '',
+		when:
+		def conn = EntryStoreClient.requestStreamed(method, '/' + contextId + path, OVERSIZED_BODY, chunked, user,
 			contentType)
 
 		then:
@@ -387,13 +392,13 @@ class ZzzSizeLimitIT extends BaseSpec {
 		JSON_PARSER.parseText(readErrorBody(conn)).error == error
 
 		where:
-		method          | route                               | path                    | contentType        | chunked
-		HttpMethod.PUT  | '/{context-id}/metadata/{entry-id}' | '/metadata/noSuchEntry' | 'text/turtle'      | false
-		HttpMethod.PUT  | '/{context-id}/metadata/{entry-id}' | '/metadata/noSuchEntry' | 'text/turtle'      | true
-		HttpMethod.PUT  | '/{context-id}/entry/{entry-id}'    | '/entry/noSuchEntry'    | 'application/json' | false
-		HttpMethod.PUT  | '/{context-id}/entry/{entry-id}'    | '/entry/noSuchEntry'    | 'application/json' | true
-		HttpMethod.POST | '/{context-id}'                     | ''                      | 'application/json' | false
-		HttpMethod.POST | '/{context-id}'                     | ''                      | 'application/json' | true
+		method          | path                                | user    | contentType        | chunked
+		HttpMethod.PUT  | '/metadata/' + SIZE_LIMIT_TARGET_ID | 'admin' | 'text/turtle'      | false
+		HttpMethod.PUT  | '/metadata/' + SIZE_LIMIT_TARGET_ID | 'admin' | 'text/turtle'      | true
+		HttpMethod.PUT  | '/entry/' + SIZE_LIMIT_TARGET_ID    | 'admin' | 'application/json' | false
+		HttpMethod.PUT  | '/entry/' + SIZE_LIMIT_TARGET_ID    | 'admin' | 'application/json' | true
+		HttpMethod.POST | ''                                  | ''      | 'application/json' | false
+		HttpMethod.POST | ''                                  | ''      | 'application/json' | true
 
 		lengthKind = chunked ? 'a chunked body' : 'a Content-Length'
 		// Without Content-Length the limit is only found while the body is read.
@@ -401,13 +406,50 @@ class ZzzSizeLimitIT extends BaseSpec {
 			"Request body size (of ${OVERSIZED_BODY}b) exceeds maximum allowed size of: ${RESOURCE_CAP}b".toString()
 	}
 
+	def "PUT /{context-id}/metadata/{entry-id} from a guest with a Content-Length above entrystore.data.max-resource-size is answered 401"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		getOrCreateEntry(contextId, [id: SIZE_LIMIT_TARGET_ID])
+
+		when:
+		def conn = EntryStoreClient.requestStreamed(HttpMethod.PUT,
+			'/' + contextId + '/metadata/' + SIZE_LIMIT_TARGET_ID, OVERSIZED_BODY, false, '', 'text/turtle')
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} from a guest with a Content-Length above entrystore.data.max-resource-size is answered 401"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		getOrCreateEntry(contextId, [id: SIZE_LIMIT_TARGET_ID])
+
+		when:
+		def conn = EntryStoreClient.requestStreamed(HttpMethod.PUT,
+			'/' + contextId + '/entry/' + SIZE_LIMIT_TARGET_ID, OVERSIZED_BODY, false, '', 'application/json')
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
 	def "PUT /{context-id}/metadata/{entry-id} with Expect: 100-continue and a Content-Length above entrystore.data.max-resource-size is answered 413 instead of 100 Continue"() {
 		given:
 		getOrCreateContext([contextId: contextId])
+		getOrCreateEntry(contextId, [id: SIZE_LIMIT_TARGET_ID])
 
 		expect:
-		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/metadata/noSuchEntry', '',
-				RESOURCE_CAP + 1, 'text/turtle') == HTTP_ENTITY_TOO_LARGE
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/metadata/' + SIZE_LIMIT_TARGET_ID,
+				'admin', RESOURCE_CAP + 1, 'text/turtle') == HTTP_ENTITY_TOO_LARGE
+	}
+
+	def "PUT /{context-id}/metadata/{entry-id} from a guest with Expect: 100-continue and a Content-Length above entrystore.data.max-resource-size is answered 401 instead of 100 Continue"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		getOrCreateEntry(contextId, [id: SIZE_LIMIT_TARGET_ID])
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/metadata/' + SIZE_LIMIT_TARGET_ID,
+				'', RESOURCE_CAP + 1, 'text/turtle') == HTTP_UNAUTHORIZED
 	}
 
 	def "PUT /{context-id}/metadata/{entry-id} exactly at entrystore.data.max-resource-size is stored"() {

@@ -22,10 +22,14 @@ import jakarta.servlet.http.HttpSession;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.function.IOSupplier;
 import org.entrystore.rest.springboot.filter.CacheControlFilter;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.jetbrains.annotations.Nullable;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -34,6 +38,7 @@ import org.springframework.util.DigestUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLDecoder;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -81,6 +86,19 @@ public class HttpUtil {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * The {@code charset} parameter of a Content-Type header, or UTF-8 when it has none, as Spring's String converter
+	 * decodes a body. An unsupported charset or an unparseable header is answered 415.
+	 */
+	public static Charset charsetOf(String contentType) {
+		try {
+			Charset charset = MediaType.parseMediaType(contentType).getCharset();
+			return (charset != null) ? charset : StandardCharsets.UTF_8;
+		} catch (IllegalArgumentException e) {
+			throw new CustomResponseException("Unsupported media type", HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+		}
 	}
 
 	/**
@@ -251,6 +269,24 @@ public class HttpUtil {
 			throw new EntityTooLargeException(subject + " exceeds maximum allowed size of: " + limit + "b");
 		}
 		return bytes;
+	}
+
+	/**
+	 * Reads a request body that has not been opened yet within {@code limit} bytes (-1 for none). An over-long
+	 * {@code contentLength} (-1 when unknown) is rejected before the body is opened, as opening it makes Jetty answer
+	 * {@code Expect: 100-continue}; a longer body while it is read. The stream is left open, so that a rejected body
+	 * can still be discarded.
+	 *
+	 * @param subject what is too large, the start of the message, e.g. "Request body"
+	 */
+	public static byte[] readWithin(IOSupplier<InputStream> body, long contentLength, long limit, String subject) {
+		rejectContentLengthAbove(contentLength, limit, subject);
+		try {
+			InputStream in = body.get();
+			return (limit == -1) ? in.readAllBytes() : readAtMost(in, limit, subject);
+		} catch (IOException e) {
+			throw new BadRequestException("Failed to read the request body", e);
+		}
 	}
 
 	/** How much of a rejected request body {@link #discardRejectedBody} reads at most. */

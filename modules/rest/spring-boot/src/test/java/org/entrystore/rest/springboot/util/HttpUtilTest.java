@@ -19,12 +19,16 @@ package org.entrystore.rest.springboot.util;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.entrystore.rest.springboot.filter.CacheControlFilter;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -34,7 +38,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.io.ByteArrayInputStream;
-import java.io.InputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
@@ -44,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doThrow;
@@ -56,6 +61,24 @@ class HttpUtilTest {
 	@AfterEach
 	void clearSecurityContext() {
 		SecurityContextHolder.clearContext();
+	}
+
+	@Test
+	void charsetOf_contentTypeWithCharset_returnsIt() {
+		assertEquals(StandardCharsets.ISO_8859_1, HttpUtil.charsetOf("text/turtle; charset=ISO-8859-1"));
+	}
+
+	@Test
+	void charsetOf_contentTypeWithoutCharset_defaultsToUtf8() {
+		assertEquals(StandardCharsets.UTF_8, HttpUtil.charsetOf("text/turtle"));
+	}
+
+	@ParameterizedTest(name = "\"{0}\"")
+	@ValueSource(strings = {"text/turtle; charset=no-such-charset", "not a media type", ""})
+	void charsetOf_unsupportedCharsetOrUnparseableContentType_isAnsweredUnsupportedMediaType(String contentType) {
+		CustomResponseException e = assertThrows(CustomResponseException.class, () -> HttpUtil.charsetOf(contentType));
+
+		assertEquals(HttpStatus.UNSUPPORTED_MEDIA_TYPE, e.getStatus());
 	}
 
 	@Test
@@ -100,16 +123,42 @@ class HttpUtilTest {
 		assertArrayEquals(body, HttpUtil.readAtMost(new ByteArrayInputStream(body), 1024, "Request body"));
 	}
 
-	/** A stream that never ends, counting the bytes read from it. */
-	private static final class EndlessStream extends InputStream {
+	@Test
+	void readWithin_contentLengthAboveTheLimit_isRejectedBeforeTheBodyIsOpened() {
+		EntityTooLargeException e = assertThrows(EntityTooLargeException.class, () -> HttpUtil.readWithin(() -> {
+			throw new AssertionError("the request body was opened");
+		}, 1025, 1024, "Request body"));
 
-		long bytesRead;
+		assertEquals("Request body size (of 1025b) exceeds maximum allowed size of: 1024b", e.getMessage());
+	}
 
-		@Override
-		public int read() {
-			bytesRead++;
-			return 'a';
-		}
+	@Test
+	void readWithin_bodyWithoutContentLengthAboveTheLimit_isNotReadPastTheLimit() {
+		EndlessStream endlessStream = new EndlessStream();
+
+		assertThrows(EntityTooLargeException.class,
+				() -> HttpUtil.readWithin(() -> endlessStream, -1, 1024, "Request body"));
+
+		assertEquals(1025, endlessStream.bytesRead);
+	}
+
+	@Test
+	void readWithin_noLimit_readsTheWholeBody() {
+		byte[] body = "a".repeat(2048).getBytes(StandardCharsets.UTF_8);
+
+		assertArrayEquals(body, HttpUtil.readWithin(() -> new ByteArrayInputStream(body), -1, -1, "Request body"));
+	}
+
+	@Test
+	void readWithin_failedRead_isABadRequestKeepingTheCause() {
+		IOException failure = new IOException("connection reset");
+
+		BadRequestException e = assertThrows(BadRequestException.class, () -> HttpUtil.readWithin(() -> {
+			throw failure;
+		}, -1, 1024, "Request body"));
+
+		assertEquals("Failed to read the request body", e.getMessage());
+		assertSame(failure, e.getCause());
 	}
 
 	@Test

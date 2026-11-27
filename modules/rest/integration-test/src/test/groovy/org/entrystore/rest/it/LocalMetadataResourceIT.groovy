@@ -19,6 +19,7 @@ package org.entrystore.rest.it
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
+import org.springframework.http.HttpMethod
 
 import java.text.SimpleDateFormat
 
@@ -30,6 +31,7 @@ import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
+import static java.nio.charset.StandardCharsets.ISO_8859_1
 
 class LocalMetadataResourceIT extends BaseSpec {
 
@@ -250,6 +252,67 @@ class LocalMetadataResourceIT extends BaseSpec {
 		then:
 		editEntryConn.getResponseCode() == HTTP_UNAUTHORIZED
 		JSON_PARSER.parseText(editEntryConn.errorStream.text)['error'] == 'Not authorized'
+	}
+
+	// Jetty answers Expect: 100-continue with 100 only once the application reads the body.
+	def "PUT /{context-id}/metadata/{entry-id} with Expect: 100-continue from a writer is answered 100 Continue"() {
+		given:
+		def (entryId, metadataUri) = createEntryWithTitle()
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/metadata/' + entryId, 'admin', 1024,
+			'text/turtle') == 100
+	}
+
+	def "PUT /{context-id}/metadata/{entry-id} with Expect: 100-continue from a guest is answered 401 instead of 100 Continue"() {
+		given:
+		def (entryId, metadataUri) = createEntryWithTitle()
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/metadata/' + entryId, '', 1024,
+			'text/turtle') == HTTP_UNAUTHORIZED
+	}
+
+	def "PUT /{context-id}/metadata/{entry-id} with Expect: 100-continue from a user without write access is answered 403 instead of 100 Continue"() {
+		given:
+		def (entryId, metadataUri) = createEntryWithTitle()
+
+		expect:
+		EntryStoreClient.firstStatusOfPutExpectingContinue('/' + contextId + '/metadata/' + entryId, 'user', 1024,
+			'text/turtle') == HTTP_FORBIDDEN
+	}
+
+	def "PUT /{context-id}/metadata/{entry-id} with an empty body should return Bad-Request 400 and keep the metadata"() {
+		given:
+		def (entryId, metadataUri) = createEntryWithTitle('Kept title')
+
+		when:
+		def conn = EntryStoreClient.putRequest('/' + contextId + '/metadata/' + entryId, '', 'admin', 'text/turtle')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		storedTitles(metadataUri) == ['Kept title']
+	}
+
+	def "PUT /{context-id}/metadata/{entry-id} in the charset named by Content-Type should be stored as sent"() {
+		given:
+		def (entryId, metadataUri) = createEntryWithTitle()
+		def turtle = '<' + resourceUrl + '> <' + NameSpaceConst.DC_TERM_TITLE + '> "Café" .'
+
+		when:
+		def conn = EntryStoreClient.sendRequestAsStream(HttpMethod.PUT, '/' + contextId + '/metadata/' + entryId,
+			new ByteArrayInputStream(turtle.getBytes(ISO_8859_1)), 'admin', 'text/turtle; charset=ISO-8859-1')
+
+		then:
+		conn.getResponseCode() == HTTP_NO_CONTENT
+		storedTitles(metadataUri) == ['Café']
+	}
+
+	private static List storedTitles(String metadataUri) {
+		def conn = EntryStoreClient.getRequest(metadataUri)
+		assert conn.getResponseCode() == HTTP_OK
+		def graph = JSON_PARSER.parseText(conn.inputStream.text) as Map
+		return graph.values().collectMany { it[NameSpaceConst.DC_TERM_TITLE]*.value ?: [] }
 	}
 
 	def "PUT /{context-id}/metadata/{entry-id} should not update the metadata of the non-existing entry"() {

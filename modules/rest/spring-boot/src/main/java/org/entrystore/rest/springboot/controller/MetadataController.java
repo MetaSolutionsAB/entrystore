@@ -17,15 +17,18 @@
 package org.entrystore.rest.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.rdf4j.model.Model;
-import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.Entry;
 import org.entrystore.rest.springboot.model.api.MetadataType;
 import org.entrystore.rest.springboot.model.dto.MetadataResult;
+import org.entrystore.rest.springboot.model.dto.UnreadRdfBody;
 import org.entrystore.rest.springboot.service.EntryService;
 import org.entrystore.rest.springboot.service.MetadataService;
 import org.entrystore.rest.springboot.util.GraphUtil;
@@ -39,11 +42,11 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Date;
@@ -107,7 +110,15 @@ public class MetadataController {
 			summary = "Sets an entry's metadata graph.",
 			description = "Replaces the entry's local or cached external metadata with the graph in the request " +
 					"body; the merged graph is read-only. 'rev' is not supported on writes: with provenance enabled " +
-					"the request fails, without it the parameter is ignored and the current graph is replaced.")
+					"the request is answered 400 (405 for an unknown revision), without it the parameter is ignored " +
+					"and the current graph is replaced.")
+	@io.swagger.v3.oas.annotations.parameters.RequestBody(
+			required = true,
+			description = "The graph, in an RDF format such as RDF/JSON (also as application/json), Turtle or RDF/XML.",
+			content = {
+					@Content(mediaType = "application/rdf+json", schema = @Schema(type = "string")),
+					@Content(mediaType = "text/turtle", schema = @Schema(type = "string")),
+					@Content(mediaType = "application/rdf+xml", schema = @Schema(type = "string"))})
 	@PutMapping(path = "/{context-id}/{type:metadata|cached-external-metadata|merged-metadata}/{entry-id}")
 	public ResponseEntity<Void> setMetadata(
 			@PathVariable("context-id") String contextId,
@@ -116,15 +127,18 @@ public class MetadataController {
 			@RequestParam(required = false) MediaType format,
 			@RequestParam(name = "rev", required = false) String revision,
 			@RequestHeader("Content-Type") String contentType,
-			@RequestBody String body
+			@Parameter(hidden = true) HttpServletRequest request
 	) {
 
 		String mediaType = GraphUtil.validateRdfMediaType(
 				determineMediaType(format, contentType), HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+		Charset charset = HttpUtil.charsetOf(contentType);
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		Model deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
-		metadataService.setEntryMetadata(entry, metadataType, deserializedGraph, revision);
+		// Not request.getInputStream() here: Jetty answers Expect: 100-continue as soon as it is called.
+		UnreadRdfBody body =
+				new UnreadRdfBody(request::getInputStream, request.getContentLengthLong(), mediaType, charset);
+		metadataService.setEntryMetadata(entry, metadataType, body, revision);
 
 		Date modificationDate = getModificationDate(entry, metadataType);
 		return HttpUtil.updateResponseWithModificationDateAndETag(
@@ -136,8 +150,9 @@ public class MetadataController {
 	@Operation(
 			summary = "Deletes an entry's metadata graph.",
 			description = "Clears the entry's local or cached external metadata graph; the merged graph cannot be " +
-					"deleted. 'rev' is not supported on writes: with provenance enabled the request fails, without " +
-					"it the parameter is ignored and the current graph is replaced.")
+					"deleted. 'rev' is not supported on writes: with provenance enabled the request is answered 400 " +
+					"(405 for an unknown revision), without it the parameter is ignored and the current graph is " +
+					"replaced.")
 	@DeleteMapping(path = "/{context-id}/{type:metadata|cached-external-metadata|merged-metadata}/{entry-id}")
 	public ResponseEntity<Void> deleteMetadata(
 			@PathVariable("context-id") String contextId,
@@ -146,7 +161,7 @@ public class MetadataController {
 			@RequestParam(name = "rev", required = false) String revision) {
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		metadataService.setEntryMetadata(entry, metadataType, new LinkedHashModel(), revision);
+		metadataService.clearEntryMetadata(entry, metadataType, revision);
 
 		return ResponseEntity.noContent().build();
 	}

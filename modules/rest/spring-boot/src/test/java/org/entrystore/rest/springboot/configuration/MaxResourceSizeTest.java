@@ -22,9 +22,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MaxResourceSizeTest {
 
@@ -36,18 +34,12 @@ class MaxResourceSizeTest {
 
 	@Test
 	void sizeWithAUnit_isConvertedToBytes() {
-		MaxResourceSize maxResourceSize = new MaxResourceSize("1k");
-
-		assertEquals(1024, maxResourceSize.getLimit());
-		assertTrue(maxResourceSize.isLimited());
+		assertEquals(1024, new MaxResourceSize("1k").getLimit());
 	}
 
 	@Test
 	void minusOne_removesTheLimit() {
-		MaxResourceSize maxResourceSize = new MaxResourceSize("-1");
-
-		assertEquals(-1, maxResourceSize.getLimit());
-		assertFalse(maxResourceSize.isLimited());
+		assertEquals(-1, new MaxResourceSize("-1").getLimit());
 	}
 
 	@Test

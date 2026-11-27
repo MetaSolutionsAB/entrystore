@@ -20,6 +20,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.entrystore.rest.springboot.configuration.MaxResourceSize;
 import org.entrystore.rest.springboot.controller.MaxRequestBodySize;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
+import org.entrystore.rest.springboot.util.EndlessStream;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpEntity;
@@ -31,7 +32,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.method.HandlerMethod;
 
-import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -118,7 +118,7 @@ class RequestBodySizeLimiterTest {
 
 	@Test
 	void beforeBodyRead_bodyAboveTheLimit_isNotReadPastTheLimit() throws Exception {
-		EndlessBody endlessBody = new EndlessBody();
+		EndlessStream endlessBody = new EndlessStream();
 
 		EntityTooLargeException e = assertThrows(EntityTooLargeException.class, () -> limiter.beforeBodyRead(
 				new MockHttpInputMessage(endlessBody), bodyOf("text"), String.class, StringHttpMessageConverter.class));
@@ -143,7 +143,7 @@ class RequestBodySizeLimiterTest {
 
 	@Test
 	void beforeBodyRead_annotatedHandler_isLimitedByItsAnnotation() {
-		EndlessBody endlessBody = new EndlessBody();
+		EndlessStream endlessBody = new EndlessStream();
 
 		assertThrows(EntityTooLargeException.class, () -> unlimited.beforeBodyRead(
 				new MockHttpInputMessage(endlessBody), bodyOf("small"), String.class, StringHttpMessageConverter.class));
@@ -153,7 +153,7 @@ class RequestBodySizeLimiterTest {
 
 	@Test
 	void beforeBodyRead_settingMinusOne_leavesTheBodyToTheConverter() throws Exception {
-		EndlessBody endlessBody = new EndlessBody();
+		EndlessStream endlessBody = new EndlessStream();
 		MockHttpInputMessage message = new MockHttpInputMessage(endlessBody);
 
 		assertSame(message, unlimited.beforeBodyRead(message, bodyOf("text"), String.class,
@@ -192,18 +192,6 @@ class RequestBodySizeLimiterTest {
 		}
 
 		public void noBody(@RequestParam String name) {
-		}
-	}
-
-	/** A request body that never ends, counting the bytes read from it. */
-	private static final class EndlessBody extends InputStream {
-
-		long bytesRead;
-
-		@Override
-		public int read() {
-			bytesRead++;
-			return 'a';
 		}
 	}
 }

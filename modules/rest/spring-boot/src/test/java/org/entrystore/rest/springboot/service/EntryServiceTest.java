@@ -18,6 +18,7 @@ package org.entrystore.rest.springboot.service;
 
 import tools.jackson.databind.json.JsonMapper;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
@@ -29,9 +30,12 @@ import org.entrystore.User;
 import org.entrystore.impl.ContextImpl;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryException;
+import org.entrystore.rest.springboot.configuration.MaxResourceSize;
 import org.entrystore.rest.springboot.model.api.CreateEntryRequestBody;
 import org.entrystore.rest.springboot.model.api.GetEntryResponse;
+import org.entrystore.rest.springboot.model.dto.UnreadRdfBody;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,7 +44,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import tools.jackson.core.JacksonException;
 
+import java.io.ByteArrayInputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -51,6 +57,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -61,6 +68,9 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class EntryServiceTest {
+
+	private static final String ENTRY_INFO_TURTLE =
+			"<http://localhost:8181/1/entry/5> <http://purl.org/dc/terms/modified> \"2026\" .";
 
 	@Mock
 	private PrincipalManager principalManager;
@@ -92,7 +102,7 @@ class EntryServiceTest {
 	void setUp() {
 		service = new EntryService(
 				principalManager, repositoryManager, contextService,
-				reservedNamesService, resourceSerializationService, new JsonMapper());
+				reservedNamesService, resourceSerializationService, new JsonMapper(), new MaxResourceSize("1k"));
 	}
 
 	@Test
@@ -144,10 +154,44 @@ class EntryServiceTest {
 				.when(entry).setGraph(any());
 
 		BadRequestException thrown = assertThrows(BadRequestException.class,
-				() -> service.modifyEntry(entry, "", "text/turtle", false));
+				() -> service.modifyEntry(entry, turtle(ENTRY_INFO_TURTLE), false));
 
 		assertEquals("The resource URI of a local entry of graph type List cannot be changed", thrown.getMessage());
 		assertNull(thrown.getCause());
+	}
+
+	@Test
+	void modifyEntry_withoutAdministerAccess_isDeniedBeforeTheBodyIsOpened() {
+		doThrow(new AuthorizationException(null, null, PrincipalManager.AccessProperty.Administer))
+				.when(principalManager)
+				.checkAuthenticatedUserAuthorized(entry, PrincipalManager.AccessProperty.Administer);
+
+		assertThrows(AuthorizationException.class, () -> service.modifyEntry(entry, new UnreadRdfBody(() -> {
+			throw new AssertionError("the request body was opened");
+		}, 3, "text/turtle", StandardCharsets.UTF_8), false));
+
+		verify(entry, never()).setGraph(any());
+	}
+
+	@Test
+	void modifyEntry_bodyWithinTheLimit_replacesTheEntryInformation() {
+		service.modifyEntry(entry, turtle(ENTRY_INFO_TURTLE), false);
+
+		verify(entry).setGraph(argThat(graph -> graph.size() == 1));
+	}
+
+	@Test
+	void modifyEntry_contentLengthAboveTheLimit_isRejectedWithoutReplacingTheEntryInformation() {
+		assertThrows(EntityTooLargeException.class, () -> service.modifyEntry(entry, new UnreadRdfBody(
+				() -> new ByteArrayInputStream(new byte[0]), 1025, "text/turtle", StandardCharsets.UTF_8), false));
+
+		verify(entry, never()).setGraph(any());
+	}
+
+	private static UnreadRdfBody turtle(String text) {
+		byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+		return new UnreadRdfBody(() -> new ByteArrayInputStream(bytes), bytes.length, "text/turtle",
+				StandardCharsets.UTF_8);
 	}
 
 	@Test

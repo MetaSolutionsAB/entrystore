@@ -38,14 +38,18 @@ import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphEntity;
 import org.entrystore.Metadata;
+import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.Provenance;
 import org.entrystore.ProvenanceType;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.NS;
+import org.entrystore.rest.springboot.configuration.MaxResourceSize;
 import org.entrystore.rest.springboot.configuration.TraversalProperties;
 import org.entrystore.rest.springboot.model.api.MetadataType;
 import org.entrystore.rest.springboot.model.dto.MetadataResult;
+import org.entrystore.rest.springboot.model.dto.UnreadRdfBody;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
@@ -70,6 +74,8 @@ public class MetadataService {
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final TraversalProperties traversalProperties;
+	private final PrincipalManager principalManager;
+	private final MaxResourceSize maxResourceSize;
 
 	public MetadataResult getMetadata(Entry entry, MetadataType metadataType, String format, String graphQuery, Integer depth, String recursive, String scope, String revision) {
 
@@ -112,27 +118,36 @@ public class MetadataService {
 	}
 
 	/**
-	 * Sets the metadata of entry to graphString.
-	 *
-	 * @param entry            Entry
-	 * @param metadataType     Metadata type
-	 * @param newMetadataGraph New metadata to be set
-	 * @param revision         Revision
+	 * Replaces the entry's local or cached external metadata with the graph in {@code body}. The body is opened only
+	 * once the caller is found to have WriteMetadata, and is read within {@code entrystore.data.max-resource-size}.
 	 */
-	public void setEntryMetadata(Entry entry, MetadataType metadataType, Model newMetadataGraph, String revision) {
+	public void setEntryMetadata(Entry entry, MetadataType metadataType, UnreadRdfBody body, String revision) {
+		Metadata metadata = writableMetadata(entry, metadataType, revision);
+		principalManager.checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteMetadata);
+		metadata.setGraph(GraphUtil.readGraph(body, maxResourceSize.getLimit()));
+	}
 
+	/**
+	 * Empties the entry's local or cached external metadata.
+	 */
+	public void clearEntryMetadata(Entry entry, MetadataType metadataType, String revision) {
+		writableMetadata(entry, metadataType, revision).setGraph(new LinkedHashModel());
+	}
+
+	private Metadata writableMetadata(Entry entry, MetadataType metadataType, String revision) {
 		Metadata metadata = switch (metadataType) {
 			case LOCAL_METADATA -> getEntryLocalMetadata(entry, revision);
 			case CACHED_EXTERNAL_METADATA -> getEntryCachedExternalMetadata(entry);
 			case MERGED_METADATA ->
 					throw new BadRequestException("Unable to set Merged Metadata on entry: " + entry.getEntryURI());
 		};
-
-		if (metadata != null && newMetadataGraph != null) {
-			metadata.setGraph(newMetadataGraph);
-			return;
+		if (metadata == null) {
+			throw new MethodNotAllowedException("Metadata is empty for entry: " + entry.getEntryURI());
 		}
-		throw new MethodNotAllowedException("Metadata is empty for entry: " + entry.getEntryURI());
+		if (metadata instanceof GraphEntity) {
+			throw new BadRequestException("A metadata revision cannot be written");
+		}
+		return metadata;
 	}
 
 	private Metadata getEntryLocalMetadata(Entry entry, String revision) {

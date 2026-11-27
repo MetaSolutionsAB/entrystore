@@ -24,7 +24,10 @@ import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.rio.RDFHandlerException;
 import org.eclipse.rdf4j.rio.jsonld.JSONLDWriter;
 import org.eclipse.rdf4j.rio.turtle.TurtleWriter;
+import org.entrystore.rest.springboot.model.dto.UnreadRdfBody;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
+import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
@@ -36,10 +39,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StringWriter;
 import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.Set;
 
@@ -50,6 +56,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GraphUtilTest {
+
+	private static final String TITLE_TURTLE = "<http://example.com/s> <http://purl.org/dc/terms/title> \"%s\" .";
 
 	@ParameterizedTest
 	@ValueSource(strings = {
@@ -488,5 +496,36 @@ class GraphUtilTest {
 		model.add(vf.createIRI("http://example.com/s"), vf.createIRI("http://purl.org/dc/terms/title"),
 				vf.createLiteral("Sample"));
 		return model;
+	}
+
+	@Test
+	void readGraph_bodyInTheGivenCharset_isDecodedWithIt() {
+		byte[] latin1 = TITLE_TURTLE.formatted("café").getBytes(StandardCharsets.ISO_8859_1);
+
+		Model graph = GraphUtil.readGraph(new UnreadRdfBody(() -> new ByteArrayInputStream(latin1), latin1.length,
+				"text/turtle", StandardCharsets.ISO_8859_1), 1024);
+
+		assertEquals("café", graph.iterator().next().getObject().stringValue());
+	}
+
+	@Test
+	void readGraph_contentLengthAboveTheLimit_isRejectedBeforeTheBodyIsOpened() {
+		EntityTooLargeException e = assertThrows(EntityTooLargeException.class, () -> GraphUtil.readGraph(
+				new UnreadRdfBody(GraphUtilTest::unopenable, 1025, "text/turtle", StandardCharsets.UTF_8), 1024));
+
+		assertEquals("Request body size (of 1025b) exceeds maximum allowed size of: 1024b", e.getMessage());
+	}
+
+	@Test
+	void readGraph_emptyBody_isRejectedRatherThanReadAsAnEmptyGraph() {
+		BadRequestException e = assertThrows(BadRequestException.class, () -> GraphUtil.readGraph(
+				new UnreadRdfBody(() -> new ByteArrayInputStream(new byte[0]), 0, "text/turtle",
+						StandardCharsets.UTF_8), 1024));
+
+		assertEquals("Bad Request", e.getMessage());
+	}
+
+	private static InputStream unopenable() {
+		throw new AssertionError("the request body was opened");
 	}
 }

@@ -55,11 +55,13 @@ import org.entrystore.repository.util.ModelUtil;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.repository.util.URISplit;
+import org.entrystore.rest.springboot.configuration.MaxResourceSize;
 import org.entrystore.rest.springboot.model.api.CreateEntryRequestBody;
 import org.entrystore.rest.springboot.model.api.EntryResourceJson;
 import org.entrystore.rest.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.dto.ListParams;
+import org.entrystore.rest.springboot.model.dto.UnreadRdfBody;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
@@ -103,6 +105,7 @@ public class EntryService {
 	private final ResourceSerializationService resourceSerializationService;
 
 	private final ObjectMapper objectMapper;
+	private final MaxResourceSize maxResourceSize;
 
 	/**
 	 * Checks whether the provided ID contains only allowed characters.
@@ -566,9 +569,14 @@ public class EntryService {
 		}
 	}
 
-	public Entry modifyEntry(Entry entry, String body, String mediaType, boolean applyACLtoChildren) throws AuthorizationException {
-
-		Model deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
+	/**
+	 * Replaces the entry information with the graph in {@code body}. The body is opened only once the caller is found
+	 * to have Administer, and is read within {@code entrystore.data.max-resource-size}.
+	 */
+	public Entry modifyEntry(Entry entry, UnreadRdfBody body, boolean applyACLtoChildren)
+			throws AuthorizationException {
+		checkEntryUserAccess(entry, PrincipalManager.AccessProperty.Administer);
+		Model deserializedGraph = GraphUtil.readGraph(body, maxResourceSize.getLimit());
 		try {
 			entry.setGraph(deserializedGraph);
 		} catch (IllegalArgumentException iae) {

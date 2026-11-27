@@ -50,6 +50,7 @@ import org.eclipse.rdf4j.rio.turtle.TurtleParser;
 import org.eclipse.rdf4j.rio.turtle.TurtleWriter;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.springboot.model.api.converter.MediaTypeConverter;
+import org.entrystore.rest.springboot.model.dto.UnreadRdfBody;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
@@ -88,6 +89,8 @@ public class GraphUtil {
 	public static final String DEFAULT_RDF_MEDIA_TYPE = "application/rdf+xml";
 
 	private static final String LEGACY_N3_MEDIA_TYPE = "text/rdf+n3";
+
+	private static final String REQUEST_BODY = "Request body";
 
 	private static final String JSON_LD_VALUE = RDFFormat.JSONLD.getDefaultMIMEType();
 
@@ -283,6 +286,19 @@ public class GraphUtil {
 		} catch (RDFHandlerException | IOException e) {
 			throw new BadRequestException("Unable to process the RDF graph from the request body", e);
 		}
+	}
+
+	/**
+	 * Reads and parses a request body that has not been opened yet, within {@code limit} bytes (-1 for none), as
+	 * {@link HttpUtil#readWithin} reads it. An empty body is answered 400, as Spring answers a missing
+	 * {@code @RequestBody}.
+	 */
+	public static Model readGraph(UnreadRdfBody body, long limit) {
+		byte[] bytes = HttpUtil.readWithin(body.stream(), body.contentLength(), limit, REQUEST_BODY);
+		if (bytes.length == 0) {
+			throw new BadRequestException(HttpStatus.BAD_REQUEST.getReasonPhrase());
+		}
+		return deserializeGraph(new String(bytes, body.charset()), body.mediaType());
 	}
 
 	private static Model parseWith(RDFParser parser, String graphString)

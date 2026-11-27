@@ -32,6 +32,7 @@ import org.entrystore.rest.springboot.model.api.GetEntryNameResponse;
 import org.entrystore.rest.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.api.SetEntryNameRequestBody;
+import org.entrystore.rest.springboot.model.dto.UnreadRdfBody;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.service.EntryService;
@@ -56,6 +57,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.ObjectMapper;
 
+import java.nio.charset.Charset;
 import java.util.Map;
 
 import static org.entrystore.rest.springboot.util.HttpUtil.determineMediaType;
@@ -191,6 +193,14 @@ public class EntryController {
 	@Operation(
 			summary = "Sets the entry information.",
 			description = "Overrides entry data with data in the request body.")
+	@io.swagger.v3.oas.annotations.parameters.RequestBody(
+			required = true,
+			description = "The entry information, in an RDF format such as RDF/JSON (also as application/json), " +
+					"Turtle or RDF/XML.",
+			content = {
+					@Content(mediaType = "application/rdf+json", schema = @Schema(type = "string")),
+					@Content(mediaType = "text/turtle", schema = @Schema(type = "string")),
+					@Content(mediaType = "application/rdf+xml", schema = @Schema(type = "string"))})
 	@PutMapping(path = "/{context-id}/entry/{entry-id}")
 	public ResponseEntity<Void> modifyEntry(
 			@PathVariable("context-id") String contextId,
@@ -198,14 +208,18 @@ public class EntryController {
 			@RequestParam(required = false) MediaType format,
 			@RequestParam(required = false) String applyACLtoChildren,
 			@RequestHeader("Content-Type") String contentType,
-			@RequestBody String body
+			@Parameter(hidden = true) HttpServletRequest request
 	) {
 
 		String mediaType = GraphUtil.validateRdfMediaType(
 				determineMediaType(format, contentType), HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+		Charset charset = HttpUtil.charsetOf(contentType);
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		Entry modifiedEntry = entryService.modifyEntry(entry, body, mediaType, applyACLtoChildren != null);
+		// Not request.getInputStream() here: Jetty answers Expect: 100-continue as soon as it is called.
+		UnreadRdfBody body =
+				new UnreadRdfBody(request::getInputStream, request.getContentLengthLong(), mediaType, charset);
+		Entry modifiedEntry = entryService.modifyEntry(entry, body, applyACLtoChildren != null);
 
 		return HttpUtil.updateResponseWithModificationDateAndETag(
 						ResponseEntity.noContent(),
