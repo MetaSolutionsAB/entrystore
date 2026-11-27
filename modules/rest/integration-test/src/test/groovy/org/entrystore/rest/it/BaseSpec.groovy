@@ -96,8 +96,10 @@ abstract class BaseSpec extends Specification {
 		.withCopyFileToContainer(MountableFile.forClasspathResource('solr/'), '/entrystore-core/conf')
 
 	// Shared WireMock server used to stub external HTTP services so ITs never hit the live network.
+	// Idle connections stay open for the whole suite: one closed just as a client's pool reuses it fails that
+	// client's POST, which is not retried.
 	static WireMockServer wireMockServer = new WireMockServer(
-		options().dynamicPort().usingFilesUnderClasspath('wiremock'))
+		options().dynamicPort().usingFilesUnderClasspath('wiremock').jettyIdleTimeout(TimeUnit.HOURS.toMillis(1)))
 
 	static String getRecaptchaStubUrl() {
 		return 'http://localhost:' + wireMockServer.port() + '/recaptcha/api/siteverify'
