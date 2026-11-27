@@ -44,6 +44,9 @@ class SolrManagementIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		JSON_PARSER.parseText(conn.errorStream.text).error == 'Not authorized'
+		// Answered by the security filter chain, which challenges for Basic login while it is enabled.
+		conn.getHeaderField('WWW-Authenticate')?.contains('Basic')
 	}
 
 	def "POST /management/solr full reindex as non-admin user should respond with 403 Forbidden"() {

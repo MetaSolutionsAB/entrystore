@@ -281,6 +281,7 @@ public class SecurityConfig {
 						.requestMatchers(HttpMethod.POST, "/*/merge").hasRole(UserAuthRole.ADMIN.name())
 						.requestMatchers(HttpMethod.POST, "/validator")
 								.hasAnyRole(UserAuthRole.USER.name(), UserAuthRole.ADMIN.name())
+						.requestMatchers(HttpMethod.POST, "/management/solr").authenticated()
 						.requestMatchers("/auth/tokens").hasAnyRole(UserAuthRole.USER.name(), UserAuthRole.ADMIN.name())
 						.anyRequest().permitAll()
 				)
